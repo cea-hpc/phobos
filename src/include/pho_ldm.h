@@ -488,6 +488,7 @@ struct pho_fs_adapter_module_ops {
                  json_t **message);
     int (*fs_get_label)(const char *mnt_path, char *fs_label, size_t llen,
                         json_t **message);
+    int (*fs_release)(const char *dev_path, json_t **message);
 };
 
 struct fs_adapter_module {
@@ -571,6 +572,25 @@ static inline int ldm_fs_format(const struct fs_adapter_module *fsa,
         return 0;
     }
     return fsa->ops->fs_format(dev_path, label, fs_spc, message);
+}
+
+/**
+ * Clear a device reservation.
+ * @param[in]  fsa      File system adapter module.
+ * @param[in]  dev_path Path to the device.
+ * @param[out] message  Json message allocated in case of error, NULL otherwise.
+ *                      Must be freed by the caller
+ *
+ * @return 0 on success, negative error code on failure.
+ */
+static inline int ldm_fs_release(const struct fs_adapter_module *fsa,
+                                 const char *dev_path, json_t **message)
+{
+    assert(fsa != NULL);
+    assert(fsa->ops != NULL);
+    if (fsa->ops->fs_release == NULL)
+        return 0;
+    return fsa->ops->fs_release(dev_path, message);
 }
 
 /**

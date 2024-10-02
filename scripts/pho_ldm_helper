@@ -3,7 +3,7 @@
 # -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
-# (c) 2014-2022 CEA/DAM
+# (c) 2014-2024 CEA/DAM
 # Licensed under the terms of the GNU Lesser GPL License version 2.1
 
 function mount_ltfs
@@ -54,6 +54,13 @@ function format_ltfs
     mkltfs -f -d "$drive" -n "$label" -s "$serial" || exit 1
 }
 
+function release_ltfs
+{
+    local drive=$(readlink -m "$1") # convert link to the actual device path
+
+    ltfs -o release_device -o devname="$drive"
+}
+
 function usage
 {
     bin=$(basename $0)
@@ -62,6 +69,7 @@ function usage
     echo "    $bin mount_ltfs   <drive> <path>"
     echo "    $bin umount_ltfs <drive> <path>"
     echo "    $bin format_ltfs <drive> <label>"
+    echo "    $bin release_ltfs <drive>"
     exit 1
 }
 
@@ -93,6 +101,11 @@ case $verb in
         label=$3
         [ -e "$drive" ] || usage
                 format_ltfs "$drive" "$label"
+        ;;
+    release_ltfs)
+        drive=$2
+        [ -e "$drive" ] || usage
+                release_ltfs "$drive"
         ;;
     *)
         usage

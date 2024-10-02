@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -56,6 +56,7 @@ enum pho_cfg_params_ltfs {
     PHO_CFG_LTFS_cmd_mount,
     PHO_CFG_LTFS_cmd_umount,
     PHO_CFG_LTFS_cmd_format,
+    PHO_CFG_LTFS_cmd_release,
     PHO_CFG_LTFS_tape_full_threshold,
 
     /* Delimiters, update when modifying options */
@@ -79,6 +80,11 @@ const struct pho_config_item cfg_ltfs[] = {
         .section = "ltfs",
         .name    = "cmd_format",
         .value   = PHO_LDM_HELPER" format_ltfs \"%s\" \"%s\""
+    },
+    [PHO_CFG_LTFS_cmd_release] = {
+        .section = "ltfs",
+        .name    = "cmd_release",
+        .value   = PHO_LDM_HELPER" release_ltfs \"%s\""
     },
     [PHO_CFG_LTFS_tape_full_threshold] = {
         .section = "ltfs",
@@ -127,6 +133,21 @@ char *ltfs_format_cmd(const char *device, const char *label)
         return NULL;
 
     if (asprintf(&cmd_out, cmd_cfg, device, label) < 0)
+        return NULL;
+
+    return cmd_out;
+}
+
+static char *ltfs_release_cmd(const char *device)
+{
+    const char *cmd_cfg;
+    char *cmd_out;
+
+    cmd_cfg = PHO_CFG_GET(cfg_ltfs, PHO_CFG_LTFS, cmd_release);
+    if (cmd_cfg == NULL)
+        return NULL;
+
+    if (asprintf(&cmd_out, cmd_cfg, device) < 0)
         return NULL;
 
     return cmd_out;
@@ -317,6 +338,36 @@ out_free:
     return rc;
 }
 
+static int ltfs_release(const char *dev_path, json_t **message)
+{
+    struct phobos_global_context *context = phobos_context();
+    char *cmd = NULL;
+    int rc;
+
+    ENTRY;
+
+    if (message)
+        *message = NULL;
+
+    cmd = ltfs_release_cmd(dev_path);
+    if (!cmd)
+        LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build %s command",
+                 __func__);
+
+    /* Release the drive */
+    rc = context->mock_ltfs.mock_command_call(cmd, ltfs_collect_output, NULL);
+    if (rc) {
+        if (message)
+            *message = json_pack("{s:s+}", "release",
+                                 "Release command failed: ", cmd);
+        LOG_GOTO(out_free, rc, "Release command failed: '%s'", cmd);
+    }
+
+out_free:
+    free(cmd);
+    return rc;
+}
+
 struct mntent_check_info {
     const char *device;
     char       *mnt_dir;
@@ -457,6 +508,7 @@ struct pho_fs_adapter_module_ops FS_ADAPTER_LTFS_OPS = {
     .fs_mounted   = ltfs_mounted,
     .fs_df        = ltfs_df,
     .fs_get_label = ltfs_get_label,
+    .fs_release   = ltfs_release,
 };
 
 /** FS adapter module registration entry point */

@@ -212,6 +212,7 @@ enum operation_type {
     PHO_LTFS_FORMAT,
     PHO_LTFS_DF,
     PHO_LTFS_SYNC,
+    PHO_LTFS_RELEASE,
     PHO_OPERATION_LAST,
 };
 
@@ -227,6 +228,7 @@ static const char * const OPERATION_TYPE_NAMES[] = {
     [PHO_LTFS_FORMAT]   = "LTFS format",
     [PHO_LTFS_DF]       = "LTFS df",
     [PHO_LTFS_SYNC]     = "LTFS sync",
+    [PHO_LTFS_RELEASE]  = "LTFS release",
 };
 
 static inline const char *operation_type2str(enum operation_type op)
@@ -297,6 +299,7 @@ static inline bool should_log(struct pho_log *log, enum operation_type action)
     case PHO_LTFS_UMOUNT:
     case PHO_LTFS_FORMAT:
     case PHO_LTFS_DF:
+    case PHO_LTFS_RELEASE:
         return log->message != NULL;
     case PHO_DEVICE_LOAD:
     case PHO_DEVICE_UNLOAD:

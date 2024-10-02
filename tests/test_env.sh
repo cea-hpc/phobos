@@ -59,6 +59,7 @@ export PHOBOS_CFG_FILE="$test_bin_dir/phobos.conf"
 export PHOBOS_LTFS_cmd_format="$ldm_helper format_ltfs '%s' '%s'"
 export PHOBOS_LTFS_cmd_mount="$ldm_helper mount_ltfs '%s' '%s'"
 export PHOBOS_LTFS_cmd_umount="$ldm_helper umount_ltfs '%s' '%s'"
+export PHOBOS_LTFS_cmd_release="$ldm_helper release_ltfs '%s'"
 
 phobos="$cli_dir/scripts/phobos"
 [ x$DEBUG = x1 ] && phobos="$phobos -vvv"
