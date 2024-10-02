@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -140,6 +140,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['delete', 'oid1', 'oid2', 'oid3'])
         self.check_cmdline_valid(['del', 'oid'])
         self.check_cmdline_valid(['del', 'oid1', 'oid2', 'oid3'])
+        self.check_cmdline_valid(['del', 'oid', '--hard'])
         self.check_cmdline_valid(['undelete', 'uuid', 'uuid1'])
         self.check_cmdline_valid(['undelete', 'uuid', 'uuid1', 'uuid2'])
         self.check_cmdline_valid(['undelete', 'oid', 'oid1'])

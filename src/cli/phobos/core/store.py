@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -33,6 +33,7 @@ from ctypes import (byref, c_bool, c_char_p, c_int, c_ssize_t, c_void_p, cast,
 
 from phobos.core.ffi import LIBPHOBOS, DeprecatedObjectInfo, ObjectInfo, Tags
 from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OBJ_BEST_HOST, # pylint: disable=no-name-in-module
+                               PHO_XFER_OBJ_HARD_DEL,
                                PHO_XFER_OP_GET, PHO_XFER_OP_GETMD,
                                PHO_XFER_OP_PUT, PHO_RSC_INVAL, str2rsc_family)
 from phobos.core.dss import dss_sort
@@ -441,7 +442,7 @@ class UtilClient:
         self.logger = logging.getLogger(__name__)
 
     @staticmethod
-    def object_delete(oids):
+    def object_delete(oids, hard_delete):
         """Delete objects."""
         n_xfers = c_int(len(oids))
         xfer_array_type = XferDescriptor * len(oids)
@@ -449,6 +450,7 @@ class UtilClient:
 
         for i, oid in enumerate(oids):
             xfers[i].xd_objid = oid
+            xfers[i].xd_flags = PHO_XFER_OBJ_HARD_DEL if hard_delete else 0
 
         rc = LIBPHOBOS.phobos_delete(xfers, n_xfers)
         if rc:

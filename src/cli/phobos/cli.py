@@ -879,13 +879,16 @@ class DeleteOptHandler(BaseOptHandler):
 
         parser.add_argument('oids', nargs='+',
                             help='Object IDs to delete')
+        parser.add_argument('--hard', action='store_true',
+                            help='Require a hardware remove of the object')
         parser.set_defaults(verb=cls.label)
 
     def exec_delete(self):
         """Delete objects."""
         client = UtilClient()
         try:
-            client.object_delete(self.params.get('oids'))
+            client.object_delete(self.params.get('oids'),
+                                 self.params.get('hard'))
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
