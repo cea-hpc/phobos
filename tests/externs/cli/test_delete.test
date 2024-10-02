@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -24,18 +24,20 @@
 #
 
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../test_launch_daemon.sh
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
 
 set -xe
 
 function dir_setup
 {
-    dirs="$(mktemp -d /tmp/test.pho.XXXX)"
-    echo "adding directories $dirs"
-    $phobos dir add $dirs
-    $phobos dir format --fs posix --unlock $dirs
+    setup_test_dirs
+    setup_dummy_files 1
+
+    $phobos dir add "$DIR_TEST_OUT"
+    $phobos dir format --fs posix --unlock "$DIR_TEST_OUT"
 }
 
 function setup
@@ -45,34 +47,46 @@ function setup
     dir_setup
 }
 
+function dir_cleanup
+{
+    cleanup_dummy_files
+    cleanup_test_dirs
+}
+
 function cleanup
 {
     waive_lrs
+    dir_cleanup
     drop_tables
-    rm -rf $dirs
 }
 
 function test_delete
 {
-    $phobos put --family dir /etc/hosts oid1 ||
+    local prefix=$(generate_prefix_id)
+
+    local oid=${prefix}_id
+
+    $phobos put --family dir "${FILES[0]}" $oid ||
         error "Object should be put"
-    $valg_phobos delete oid1 ||
+    $valg_phobos delete $oid ||
         error "Object should be deleted"
-    $phobos get oid1 test_tmp &&
+    $phobos get $oid test_tmp &&
         error "Object should not be got"
 
-    [ -z $($phobos object list oid1) ] ||
+    [ -z $($phobos object list $oid) ] ||
         error "Object should not be listed, because deleted"
-    [ -z $($phobos object list --deprecated oid1) ] &&
+    [ -z $($phobos object list --deprecated $oid) ] &&
         error "Object should be listed with the deprecated option"
-    [ -z $($phobos object list --deprecated --output uuid oid1) ] &&
+    [ -z $($phobos object list --deprecated --output uuid $oid) ] &&
         error "Object should be listed with the deprecated option and "\
               "the uuid output filter"
 
     return 0
 }
 
-trap cleanup EXIT
-setup
+TEST_SETUP=setup
+TEST_CLEANUP=cleanup
 
-test_delete
+TESTS=(
+    test_delete
+)
