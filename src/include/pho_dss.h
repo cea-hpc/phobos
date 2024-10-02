@@ -501,6 +501,18 @@ int dss_layout_get(struct dss_handle *handle, const struct dss_filter *filter,
                    struct layout_info **layouts, int *layout_count);
 
 /**
+ * Delete information for one or many layouts in DSS.
+ *
+ * @param[in]  handle        valid connection handle
+ * @param[in]  layout_list   array of entries to delete
+ * @param[in]  layout_count  number of items in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_layout_delete(struct dss_handle *handle,
+                      struct layout_info *layout_list, int layout_count);
+
+/**
  * Retrieve layout + extents information from DSS
  * @param[in]  hdl           valid connection handle
  * @param[in]  object        assembled DSS filtering criteria on objects

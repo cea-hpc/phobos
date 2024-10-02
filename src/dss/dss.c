@@ -496,6 +496,13 @@ int dss_layout_insert(struct dss_handle *handle,
                            layout_count, DSS_SET_INSERT, 0);
 }
 
+int dss_layout_delete(struct dss_handle *handle,
+                      struct layout_info *layout_list, int layout_count)
+{
+    return dss_generic_set(handle, DSS_LAYOUT, (void *)layout_list,
+                           layout_count, DSS_SET_DELETE, 0);
+}
+
 /*
  * FULL LAYOUT FUNCTIONS
  */

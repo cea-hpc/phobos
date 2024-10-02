@@ -177,6 +177,22 @@ static int layout_select_query(GString **conditions, int n_conditions,
     return 0;
 }
 
+static int layout_delete_query(void *void_layout, int item_cnt,
+                               GString *request)
+{
+    for (int i = 0; i < item_cnt; ++i) {
+        struct layout_info *layout = ((struct layout_info *) void_layout) + i;
+
+        g_string_append_printf(request,
+                               "DELETE FROM layout"
+                               " WHERE object_uuid = '%s'"
+                               "  AND version = '%d';",
+                               layout->uuid, layout->version);
+    }
+
+    return 0;
+}
+
 int layout_desc_decode(struct module_desc *desc, const char *json)
 {
     json_error_t json_error;
@@ -297,7 +313,7 @@ const struct dss_resource_ops layout_ops = {
     .insert_query = layout_insert_query,
     .update_query = NULL,
     .select_query = layout_select_query,
-    .delete_query = NULL,
+    .delete_query = layout_delete_query,
     .create       = layout_from_pg_row,
     .free         = layout_result_free,
     .size         = sizeof(struct layout_info),
