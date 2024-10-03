@@ -953,6 +953,78 @@ out_free:
     return rc;
 }
 
+int phobos_admin_drive_scsi_release(struct admin_handle *adm,
+                                    struct pho_id *dev_ids,
+                                    int num_dev, int *num_released_dev)
+{
+    struct pho_id media = { .family = PHO_RSC_TAPE, .name = "", .library = ""};
+    struct fs_adapter_module *fsa;
+    struct dev_info *dev_res;
+    int released_dev = 0;
+    struct pho_log log;
+    int rc = 0;
+    int rc2;
+    int i;
+
+    rc = get_fs_adapter(PHO_FS_LTFS, &fsa);
+    if (rc)
+        LOG_RETURN(-EINVAL, "Invalid filesystem type");
+
+    for (i = 0; i < num_dev; i++) {
+        rc2 = _get_device_by_path_or_serial(adm, dev_ids + i, &dev_res);
+        if (rc2) {
+            pho_error(-rc2,
+                      "Unable to find device (family '%s', name '%s', library "
+                      "'%s') in DSS", rsc_family2str(dev_ids[i].family),
+                      dev_ids[i].name, dev_ids[i].library);
+            rc = rc ? : rc2;
+            continue;
+        }
+
+        rc2 = dss_lock(&adm->dss, DSS_DEVICE, dev_res, 1);
+        if (rc2) {
+            pho_error(-rc2,
+                      "Device (family '%s', name '%s', library '%s') cannot be "
+                      "locked, so cannot be released",
+                      rsc_family2str(dev_ids[i].family), dev_ids[i].name,
+                      dev_ids[i].library);
+            dss_res_free(dev_res, 1);
+            rc = rc ? : (rc2 == -EEXIST ? -EBUSY : rc2);
+            continue;
+        }
+
+        init_pho_log(&log, dev_ids + i, &media, PHO_LTFS_RELEASE);
+        rc2 = ldm_fs_release(fsa, dev_res->path, &log.message);
+        emit_log_after_action(&adm->dss, &log, PHO_LTFS_RELEASE, rc2);
+        if (rc2) {
+            pho_error(-rc2, "Cannot release the LTFS reservation of the drive "
+                      "(family '%s', name '%s', library '%s')",
+                      rsc_family2str(dev_ids[i].family), dev_ids[i].name,
+                      dev_ids[i].library);
+            dss_unlock(&adm->dss, DSS_DEVICE, dev_res, 1, false);
+            dss_res_free(dev_res, 1);
+            rc = rc ? : rc2;
+            continue;
+        }
+
+        rc2 = dss_unlock(&adm->dss, DSS_DEVICE, dev_res, 1, false);
+        if (rc2) {
+            pho_error(-rc2,
+                      "Device (family '%s', name '%s', library '%s') cannot be "
+                      "unlocked", rsc_family2str(dev_ids[i].family),
+                      dev_ids[i].name, dev_ids[i].library);
+            dss_res_free(dev_res, 1);
+            rc = rc ? : rc2;
+            continue;
+        }
+        dss_res_free(dev_res, 1);
+        released_dev++;
+    }
+    *num_released_dev = released_dev;
+
+    return rc;
+}
+
 static int receive_format_response(struct admin_handle *adm,
                                    const struct pho_id *ids,
                                    bool *awaiting_resps,

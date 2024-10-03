@@ -231,6 +231,24 @@ int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
                                unsigned int *num_migrated_dev);
 
 /**
+ * Release the scsi reservation of given devices.
+ *
+ * A device can only be released by the same host that reserved it.
+ *
+ * \param[in]   adm              Admin module handler.
+ * \param[in]   dev_ids          Device IDs to release.
+ * \param[in]   num_dev          Number of devices to release.
+ * \param[out]  num_released_dev Number of released device.
+ *
+ * \return                       0      on succes,
+ *                               -errno on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
+ */
+int phobos_admin_drive_scsi_release(struct admin_handle *adm,
+                                    struct pho_id *dev_ids,
+                                    int num_dev, int *num_released_dev);
+/**
  * Load and format media to the given fs type.
  *
  * \param[in]       adm             Admin module handler.
