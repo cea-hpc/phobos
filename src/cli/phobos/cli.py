@@ -1195,6 +1195,21 @@ class DriveMigrateOptHandler(DSSInteractHandler):
                                  "new library. We can here only change the "
                                  "host.)")
 
+class DriveScsiReleaseOptHandler(DSSInteractHandler):
+    """Release the SCSI reservation of an existing drive"""
+    label = 'scsi_release'
+    descr = 'release the SCSI reservation of an existing drive'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(DriveScsiReleaseOptHandler, cls).add_options(parser)
+        parser.add_argument('res', nargs='+',
+                            help="Drive(s) with a SCSI reservation to release"
+                                 "and a mounted tape into.")
+        parser.add_argument('--library',
+                            help="Library containing the drives to release")
+
 class FormatOptHandler(DSSInteractHandler):
     """Format a resource."""
     label = 'format'
@@ -2294,7 +2309,27 @@ class DriveOptHandler(DeviceOptHandler):
         DriveLookupOptHandler,
         DriveLoadOptHandler,
         DriveUnloadOptHandler,
+        DriveScsiReleaseOptHandler,
     ]
+
+    library = None
+
+    def exec_scsi_release(self):
+        """Release SCSI reservation of given drive(s)"""
+        resources = self.params.get('res')
+        set_library(self)
+
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                count = adm.device_scsi_release(resources, self.library)
+
+        except EnvironmentError as err:
+            self.logger.error("%s", env_error_format(err))
+            sys.exit(abs(err.errno))
+
+        if count > 0:
+            self.logger.info("Release SCSI reservation of %d drive(s)"
+                             " successfully", count)
 
     def exec_migrate(self):
         """Migrate devices host"""

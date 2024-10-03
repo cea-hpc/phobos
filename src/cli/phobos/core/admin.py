@@ -146,6 +146,22 @@ class Client: # pylint: disable=too-many-public-methods
             raise EnvironmentError(rc, "Failed to add device(s) '%s'" %
                                    dev_names)
 
+    def device_scsi_release(self, dev_names, library):
+        """Release LTFS reservation of devices (for now, only tape drives)."""
+        c_id = Id * len(dev_names)
+        dev_ids = [Id(PHO_RSC_TAPE, name=name, library=library)
+                   for name in dev_names]
+        count = c_int(0)
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_drive_scsi_release(byref(self.handle),
+                                                             c_id(*dev_ids),
+                                                             len(dev_ids),
+                                                             byref(count))
+        if rc:
+            raise EnvironmentError(rc, "Failed to release SCSI reservation of"
+                                   " device(s) '%s'" % dev_names)
+        return count.value
+
     def device_migrate(self, dev_names, library, host):
         """Migrate devices (for now, only tape drives)."""
         c_id = Id * len(dev_names)
