@@ -291,10 +291,12 @@ static const char *pho_log2str(struct pho_log *log)
 
     message = json_dumps(log->message, 0);
 
-    rc = asprintf(&repr, "%s: '%s', '%s' (rc=%d): %s: %s",
+    rc = asprintf(&repr, "%s: '%s', '%s', '%s' ,'%s' (rc=%d): %s: %s",
                   operation_type2str(log->cause),
+                  rsc_family2str(log->device.family),
                   log->device.name,
                   log->medium.name,
+                  log->medium.library,
                   log->error_number,
                   strerror(log->error_number),
                   message);
