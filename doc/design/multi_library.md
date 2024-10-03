@@ -59,10 +59,6 @@ configuration will be used.
 
 We add a new admin command to change the library id of a device or a medium.
 
-We add a new admin command to change a library name to a new one. All devices
-and media with the library name value will have the new library name. This
-command must be secured against any running LRS by checking existing DSS locks.
-
 At put, we will add a new optional library parameter to fix the library on
 which the object must be created. This new "put" option will also be taken into
 account by the alias layer.
