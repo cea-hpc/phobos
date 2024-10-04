@@ -255,3 +255,12 @@ $ phobos object list --output oid,user_md
 
 The `--output` option describes which field will be output. `all` can be used as
 a special field to select them all.
+
+## Additionnal features
+### Autocomplete
+Phobos has autocomplete enabled for the commands you can use and their options.
+To take advantage of this, install the `python3-argcomplete` package, the
+`argcomplete` Python module, and then source the following file:
+```
+source /etc/bash_completion.d/phobos-argcomplete.sh
+```

@@ -1,5 +1,7 @@
+# PYTHON_ARGCOMPLETE_OK
+
 #
-#  All rights reserved (c) 2014-2024 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -27,6 +29,13 @@ import errno
 import logging
 from logging.handlers import SysLogHandler
 import os
+
+try:
+    import argcomplete
+except Exception as _: # pylint: disable-broad-except
+    ARGCOMPLETE_AVAILABLE = False
+else:
+    ARGCOMPLETE_AVAILABLE = True
 
 from phobos.core import cfg
 from phobos.core.dss import Client as DSSClient
@@ -184,6 +193,9 @@ class PhobosActionContext:
         self.supported_handlers = handlers
 
         self.install_arg_parser()
+
+        if ARGCOMPLETE_AVAILABLE:
+            argcomplete.autocomplete(self.parser)
 
         self.args = self.parser.parse_args(args)
         self.parameters = vars(self.args)

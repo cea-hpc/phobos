@@ -44,6 +44,7 @@ BuildRequires: openssl-devel >= 0.9.7
 BuildRequires: xxhash-devel
 BuildRequires: libcmocka-devel
 BuildRequires: libuuid-devel
+BuildRequires: python3-argcomplete
 
 Requires: %{postgres_prefix}-server
 Requires: %{postgres_prefix}-contrib
@@ -138,6 +139,9 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_*.la
 mkdir -p %{buildroot}/%{_sysconfdir}/ld.so.conf.d/
 echo "%{_libdir}/phobos" > %{buildroot}/%{_sysconfdir}/ld.so.conf.d/phobos.conf
 
+mkdir %{buildroot}/%{_sysconfdir}/bash_completion.d
+register-python-argcomplete phobos > %{buildroot}/%{_sysconfdir}/bash_completion.d/phobos-argcomplete.sh
+
 %files
 
 %{_libdir}/libphobos_store.so*
@@ -165,6 +169,7 @@ echo "%{_libdir}/phobos" > %{buildroot}/%{_sysconfdir}/ld.so.conf.d/phobos.conf
 %{_unitdir}/phobos_tlc.service
 
 %config(noreplace) %{_sysconfdir}/phobos.conf
+%config(noreplace) %{_sysconfdir}/bash_completion.d/phobos-argcomplete.sh
 %dir %{phobosdocdir}
 %doc %{phobosdocdir}/README.md
 %doc %{phobosdocdir}/template.conf
