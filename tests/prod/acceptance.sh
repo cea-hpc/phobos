@@ -51,10 +51,10 @@ if [ ! -z ${EXEC_NONREGRESSION+x} ]; then
     exec_nonregression=true
 else
     phobos="phobos"
-    start_tlc="systemctl start tlc"
+    start_tlc="systemctl start phobos_tlc"
     start_phobosd="systemctl start phobosd"
     stop_phobosd="systemctl stop phobosd"
-    stop_tlc="systemctl stop tlc"
+    stop_tlc="systemctl stop phobos_tlc"
 
     start_phobosdb="phobos_db setup_tables"
     stop_phobosdb="phobos_db drop_tables"

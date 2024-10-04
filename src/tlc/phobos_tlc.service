@@ -1,5 +1,5 @@
 [Unit]
-Description=Tape Library Controler (TLC) daemon
+Description=Phobos Tape Library Controler (TLC) daemon
 After=network-online.target
 
 [Service]

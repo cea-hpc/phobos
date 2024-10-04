@@ -67,7 +67,7 @@ phobos="$cli_dir/scripts/phobos"
 valg_phobos="$LOG_COMPILER $phobos"
 
 phobosd="$lrs_dir/phobosd"
-tlc="$tlc_dir/tlc"
+tlc="$tlc_dir/phobos_tlc"
 
 # utils function
 # display error message and exits
