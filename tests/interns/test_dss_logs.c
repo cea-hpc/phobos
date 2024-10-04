@@ -188,12 +188,16 @@ static void check_logs_with_filter(struct dss_handle *handle,
         pho_id_copy(&filter.device, device);
     } else {
         filter.device.family = PHO_RSC_NONE;
+        filter.device.name[0] = '\0';
+        filter.device.library[0] = '\0';
     }
 
     if (medium) {
         pho_id_copy(&filter.medium, medium);
     } else {
         filter.medium.family = PHO_RSC_NONE;
+        filter.medium.name[0] = '\0';
+        filter.medium.library[0] = '\0';
     }
 
     if (type)

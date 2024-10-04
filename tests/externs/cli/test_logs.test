@@ -42,9 +42,27 @@ function setup
     invoke_daemons
 }
 
+function setup_bis
+{
+    export PHOBOS_STORE_default_family="tape"
+
+    drain_all_drives
+    setup_tables
+    invoke_tlc_bis
+    invoke_daemons
+}
+
 function cleanup
 {
     waive_daemons
+    drop_tables
+    drain_all_drives
+}
+
+function cleanup_bis
+{
+    waive_daemons
+    waive_tlc_bis
     drop_tables
     drain_all_drives
 }
@@ -179,6 +197,8 @@ function test_dump_filters
 {
     local lto6_tapes=($(get_tapes L6 3 | nodeset -e))
     local lto6_drives=($(get_lto_drives 6 2 | nodeset -e))
+    local lto6_tape_bis=$(get_tapes_bis L6 1)
+    local lto6_drive_bis=$(get_lto_drives_bis 6 1)
 
     $phobos drive add --unlock ${lto6_drives[0]} ${lto6_drives[1]} ||
         error "Drives $lto6_drives should have been added"
@@ -236,6 +256,18 @@ function test_dump_filters
               "them at '$new_date'"
     fi
 
+    # Test library dump filter
+    $phobos drive add --unlock --library library_bis ${lto6_drive_bis} ||
+        error "Drive $lto6_drive_bis should have been added"
+
+    $phobos tape add -t lto6 --library library_bis ${lto6_tape_bis} ||
+        error "Tape ${lto6_tape_bis} should have been added"
+
+    $phobos tape format --unlock --library library_bis ${lto6_tape_bis} ||
+        error "Tapes $lto6_tape_bis should have been formated"
+
+    _test_filter "--library" "library_bis" "${lto6_tape_bis}" 1
+
     clear_logs
 }
 
@@ -243,6 +275,8 @@ function test_clear_filters
 {
     local lto6_tapes=($(get_tapes L6 4 | nodeset -e))
     local lto6_drives=($(get_lto_drives 6 1 | nodeset -e))
+    local lto6_tape_bis=$(get_tapes_bis L6 1)
+    local lto6_drive_bis=$(get_lto_drives_bis 6 1)
 
     $phobos drive add --unlock ${lto6_drives[0]} ||
         error "Drive ${lto6_drives[0]} should have been added"
@@ -307,6 +341,20 @@ function test_clear_filters
     # --clear-all is present
     check_number_of_logs 1
 
+    # Test library clear filter
+    $phobos drive add --unlock --library library_bis ${lto6_drive_bis} ||
+        error "Drive $lto6_drive_bis should have been added"
+
+    $phobos tape add -t lto6 --library library_bis ${lto6_tape_bis} ||
+        error "Tape ${lto6_tape_bis} should have been added"
+
+    $phobos tape format --unlock --library library_bis ${lto6_tape_bis} ||
+        error "Tapes $lto6_tape_bis should have been formated"
+
+    $valg_phobos logs clear --library library_bis ||
+        error "Logs for library 'library_bis' should have been cleared"
+    check_number_of_logs 1
+
     $valg_phobos logs clear --clear-all ||
         error "All logs should have been cleared using --clear-all"
 
@@ -318,5 +366,5 @@ function test_clear_filters
 
 TESTS=("setup; test_device_load; cleanup"
        "setup; test_device_unload; cleanup"
-       "setup; test_dump_filters; cleanup"
-       "setup; test_clear_filters; cleanup")
+       "setup_bis; test_dump_filters; cleanup_bis"
+       "setup_bis; test_clear_filters; cleanup_bis")

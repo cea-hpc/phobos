@@ -184,9 +184,12 @@ int create_logs_filter(struct pho_log_filter *log_filter,
     }
 
     /* Check if multiple conditions are demanded */
-    if (log_filter->device.family != PHO_RSC_NONE)
+    if (log_filter->device.name[0] != '\0')
         remaining_criteria++;
-    if (log_filter->medium.family != PHO_RSC_NONE)
+    if (log_filter->medium.name[0] != '\0')
+        remaining_criteria++;
+    if (log_filter->device.library[0] != '\0' ||
+        log_filter->medium.library[0] != '\0')
         remaining_criteria++;
     if (log_filter->error_number != NULL)
         remaining_criteria++;
@@ -216,7 +219,7 @@ int create_logs_filter(struct pho_log_filter *log_filter,
                                family);
     }
 
-    if (log_filter->device.family != PHO_RSC_NONE) {
+    if (log_filter->device.name[0] != '\0') {
         remaining_criteria--;
         g_string_append_printf(filter_str,
                                "{\"DSS::LOG::device\": \"%s\"}%s",
@@ -224,12 +227,24 @@ int create_logs_filter(struct pho_log_filter *log_filter,
                                remaining_criteria ? "," : "");
     }
 
-    if (log_filter->medium.family != PHO_RSC_NONE) {
+    if (log_filter->medium.name[0] != '\0') {
         remaining_criteria--;
         g_string_append_printf(filter_str,
                                "{\"DSS::LOG::medium\": \"%s\"}%s",
                                log_filter->medium.name,
                                remaining_criteria ? "," : "");
+    }
+
+    if (log_filter->device.library[0] != '\0' ||
+        log_filter->medium.library[0] != '\0') {
+        const char *library = log_filter->device.library[0] != '\0' ?
+                             log_filter->device.library :
+                             log_filter->medium.library;
+
+        remaining_criteria--;
+        g_string_append_printf(filter_str,
+                               "{\"DSS::LOG::library\": \"%s\"}%s",
+                               library, remaining_criteria ? "," : "");
     }
 
     if (log_filter->error_number != NULL) {

@@ -1489,6 +1489,8 @@ class LogsDumpOptHandler(BaseOptHandler):
                             help='drive ID of the logs to dump')
         parser.add_argument('-T', '--tape',
                             help='tape ID of the logs to dump')
+        parser.add_argument('--library',
+                            help="Library containing the target drive and tape")
         parser.add_argument('-e', '--errno', type=int,
                             help='error number of the logs to dump')
         parser.add_argument('-c', '--cause',
@@ -1526,6 +1528,8 @@ class LogsClearOptHandler(BaseOptHandler):
                             help='drive ID of the logs to dump')
         parser.add_argument('-T', '--tape',
                             help='tape ID of the logs to dump')
+        parser.add_argument('--library',
+                            help="Library containing the target drive and tape")
         parser.add_argument('-e', '--errno', type=int,
                             help='error number of the logs to dump')
         parser.add_argument('-c', '--cause',
@@ -1546,12 +1550,14 @@ class LogsClearOptHandler(BaseOptHandler):
                                  'have no effect, if any of the other '
                                  'arguments is specified')
 
-def create_log_filter(device, medium, _errno, cause, start, end): # pylint: disable=too-many-arguments
+def create_log_filter(library, device, medium, _errno, cause, start, end): # pylint: disable=too-many-arguments
     """Create a log filter structure with the given parameters."""
-    device_id = (Id(PHO_RSC_TAPE, name=device, library="legacy") if device
-                 else Id(PHO_RSC_NONE, name="", library="legacy"))
-    medium_id = (Id(PHO_RSC_TAPE, name=medium, library="legacy") if medium
-                 else Id(PHO_RSC_NONE, name="", library="legacy"))
+    device_id = Id(PHO_RSC_TAPE if (device or library) else PHO_RSC_NONE,
+                   name=device if device else "",
+                   library=library if library else "")
+    medium_id = Id(PHO_RSC_TAPE if (medium or library) else PHO_RSC_NONE,
+                   name=medium if medium else "",
+                   library=library if library else "")
     c_errno = (pointer(c_int(int(_errno))) if _errno else None)
     c_cause = (c_int(str2operation_type(cause)) if cause else
                c_int(PHO_OPERATION_INVALID))
@@ -1560,7 +1566,8 @@ def create_log_filter(device, medium, _errno, cause, start, end): # pylint: disa
 
     return (byref(LogFilter(device_id, medium_id, c_errno, c_cause, c_start,
                             c_end))
-            if device or medium or _errno or cause or start or end else None)
+            if device or medium or library or _errno or cause or start or
+               end else None)
 
 
 class LogsOptHandler(BaseOptHandler):
@@ -1571,6 +1578,8 @@ class LogsOptHandler(BaseOptHandler):
         LogsDumpOptHandler,
         LogsClearOptHandler
     ]
+    family = ResourceFamily(ResourceFamily.RSC_TAPE)
+    library = None
 
     def __enter__(self):
         return self
@@ -1586,9 +1595,15 @@ class LogsOptHandler(BaseOptHandler):
         cause = self.params.get('cause')
         start = self.params.get('start')
         end = self.params.get('end')
+        if (device or medium):
+            #if we have a resource we need the library otion or the default
+            set_library(self)
+        else:
+            #if we have no resource the library could be None if not set
+            self.library = self.params.get('library')
 
-        log_filter = create_log_filter(device, medium, _errno, cause, start,
-                                       end)
+        log_filter = create_log_filter(self.library, device, medium, _errno,
+                                       cause, start, end)
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.dump_logs(sys.stdout.fileno(), log_filter)
@@ -1605,9 +1620,15 @@ class LogsOptHandler(BaseOptHandler):
         cause = self.params.get('cause')
         start = self.params.get('start')
         end = self.params.get('end')
+        if (device or medium):
+            #if we have a resource we need the library otion or the default
+            set_library(self)
+        else:
+            #if we have no resource the library could be None if not set
+            self.library = self.params.get('library')
 
-        log_filter = create_log_filter(device, medium, _errno, cause, start,
-                                       end)
+        log_filter = create_log_filter(self.library, device, medium, _errno,
+                                       cause, start, end)
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.clear_logs(log_filter, self.params.get('clear_all'))
@@ -2374,7 +2395,7 @@ class DriveOptHandler(DeviceOptHandler):
         relativ_address = drive_info.ldi_addr.lia_addr - \
                           drive_info.ldi_first_addr
         print("Drive %d: address %s" % (relativ_address,
-              hex(drive_info.ldi_addr.lia_addr)))
+                                        hex(drive_info.ldi_addr.lia_addr)))
         print("State: %s" % ("full" if drive_info.ldi_full else "empty"))
 
         if drive_info.ldi_full:
