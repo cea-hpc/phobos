@@ -741,7 +741,7 @@ int phobos_admin_device_delete(struct admin_handle *adm, struct pho_id *dev_ids,
     for (i = 0; i < num_dev; ++i) {
         rc = _get_device_by_path_or_serial(adm, dev_ids + i, &dev_res);
         if (rc)
-            goto out_free;
+            continue;
 
         rc = dss_lock(&adm->dss, DSS_DEVICE, dev_res, 1);
         if (rc) {
@@ -769,17 +769,11 @@ int phobos_admin_device_delete(struct admin_handle *adm, struct pho_id *dev_ids,
 
     *num_removed_dev = avail_devices;
 
-out_free:
-    // In case an error occured when copying device information
-    if (i != num_dev) {
-        dss_unlock(&adm->dss, DSS_DEVICE, dev_res, 1, false);
-        dss_res_free(dev_res, 1);
-    }
-
     dss_unlock(&adm->dss, DSS_DEVICE, devices, avail_devices, false);
     for (i = 0; i < avail_devices; ++i)
         dev_info_free(devices + i, false);
 
+out_free:
     free(devices);
 
     return rc;
