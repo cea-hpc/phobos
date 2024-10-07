@@ -26,13 +26,17 @@
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
 . $test_dir/setup_db.sh
+. $test_dir/tape_drive.sh
 . $test_dir/test_launch_daemon.sh
 . $test_dir/utils_generation.sh
 
 set -xe
 
-function dir_setup
+function setup_dir
 {
+    setup_tables
+    invoke_lrs
+
     setup_test_dirs
     setup_dummy_files 1
 
@@ -40,23 +44,40 @@ function dir_setup
     $phobos dir format --fs posix --unlock "$DIR_TEST_OUT"
 }
 
-function setup
+function setup_tape
 {
     setup_tables
-    invoke_lrs
-    dir_setup
+    invoke_daemons
+
+    setup_test_dirs
+    setup_dummy_files 1
+
+    export drive="$(get_lto_drives 5 1)"
+    export medium="$(get_tapes L5 1)"
+
+    $phobos drive add --unlock $drive
+    $phobos tape add -t lto5 $medium
+    $phobos tape format --unlock $medium
 }
 
-function dir_cleanup
-{
-    cleanup_dummy_files
-    cleanup_test_dirs
-}
-
-function cleanup
+function cleanup_dir
 {
     waive_lrs
-    dir_cleanup
+
+    cleanup_dummy_files
+    cleanup_test_dirs
+
+    drop_tables
+}
+
+function cleanup_tape
+{
+    waive_daemons
+
+    drain_all_drives
+    cleanup_dummy_files
+    cleanup_test_dirs
+
     drop_tables
 }
 
@@ -84,9 +105,35 @@ function test_delete
     return 0
 }
 
-TEST_SETUP=setup
-TEST_CLEANUP=cleanup
+function test_tape_hard_delete
+{
+    local prefix=$(generate_prefix_id)
+    local oid=${prefix}_id
+
+    $phobos put "${FILES[0]}" $oid ||
+        error "Object should be put"
+    $valg_phobos delete --hard $oid ||
+        error "Object should be deleted"
+
+    [ -z $($phobos object list $oid) ] ||
+        error "Object should not be listed, because deleted"
+    [ -z $($phobos object list --deprecated $oid) ] ||
+        error "Object should not be listed, because hard deleted"
+
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM layout;")
+    if [ $nb -ne 0 ]; then
+        error "Hard delete should have delete layout info on tape"
+    fi
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM extent WHERE state='orphan';")
+    if [ $nb -ne 1 ]; then
+        error "Hard delete should have keep the extent info on tape"
+    fi
+}
 
 TESTS=(
-    test_delete
+    "setup_dir; test_delete; cleanup_dir"
 )
+
+if [[ -w /dev/changer ]]; then
+    TESTS+=("setup_tape; test_tape_hard_delete; cleanup_tape")
+fi
