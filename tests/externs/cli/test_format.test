@@ -3,7 +3,7 @@
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -23,13 +23,11 @@
 
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../test_launch_daemon.sh
-. $test_dir/../../tape_drive.sh
-lrs_simple_client="$test_dir/lrs_simple_client"
-
-set -xe
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+lrs_simple_client="./lrs_simple_client"
 
 function setup
 {
@@ -136,16 +134,16 @@ function test_force_format
 {
     local tape=$(get_tapes L6 1)
     local drive=$(get_lto_drives 6 1)
+    local file=$(mktemp /tmp/test_pho_get.XXXX)
 
     $phobos tape add --type lto6 ${tape}
     $phobos drive add --unlock ${drive}
     $phobos tape format --unlock ${tape}
 
     $phobos put /etc/hosts forced_obj1
-    trap "rm -f tmp; cleanup" EXIT
-    $phobos get forced_obj1 tmp ||
+    rm $file
+    $phobos get forced_obj1 $file ||
         error "Getting forced_obj1 before format should have succeeded"
-    rm tmp
 
     $phobos tape format ${tape} &&
         error "Formatting without force should have failed"
@@ -155,12 +153,12 @@ function test_force_format
     assert_formated "$output" "${tape}"
 
     $phobos put /etc/hosts forced_obj2
-    $phobos get forced_obj1 tmp &&
+    rm $file
+    $phobos get forced_obj1 $file &&
         error "Getting forced_obj1 after format should have failed"
-    $phobos get forced_obj2 tmp ||
+    $phobos get forced_obj2 $file ||
         error "Getting forced_obj2 should have succeeded"
-    rm tmp
-    trap cleanup EXIT
+    rm $file
 }
 
 function format_check_selected_device
@@ -229,7 +227,6 @@ function test_drive_selection_format
 function test_multiple_formats
 {
     local dirs=($(mktemp -d /tmp/test.pho.XXXX) $(mktemp -d /tmp/test.pho.XXXX))
-    trap "rm -rf ${dirs[0]} ${dirs[1]}; cleanup" EXIT
 
     $phobos dir add ${dirs[@]}
 
@@ -242,7 +239,6 @@ function test_multiple_formats
     assert_formated "$output" "${dirs[1]}"
 
     dirs+=($(mktemp -d /tmp/test.pho.XXXX))
-    trap "rm -rf ${dirs[0]} ${dirs[1]} ${dirs[2]}; cleanup" EXIT
 
     # Test formatting 3 dirs with 2 already formatted and 1 non-existing
     $valg_phobos dir format --unlock ${dirs[@]} &&
@@ -275,7 +271,6 @@ function test_multiple_formats
 #    assert_formated "$output" "${dirs[0]}"
 
     rm -rf ${dirs[@]}
-    trap cleanup EXIT
 }
 
 function test_format_nb_streams_loop
@@ -312,7 +307,6 @@ function test_format_nb_streams_loop
     if (( done != nb_dirs )); then
         error "Not all $nb_dirs dir format ended. Done: $done"
     fi
-
 }
 
 function test_format_nb_streams
@@ -347,14 +341,11 @@ function test_format_nb_streams
     test_format_nb_streams_loop 3 1 ${dirs3[@]}
 
     rm -rf ${dirs1[@]} ${dirs2[@]}
-    trap cleanup EXIT
 }
 
 function test_format_lib()
 {
     local dir=$(mktemp -d /tmp/test.pho.XXXX)
-
-    trap "rm -rf $dir; cleanup" EXIT
 
     $phobos dir add --unlock --library lib1 $dir
 
@@ -363,32 +354,30 @@ function test_format_lib()
     $valg_phobos dir format --library lib1 $dir ||
         error "Dir should be formated"
     rm -rf $dir
-    trap cleanup EXIT
 }
 
+function test_format_relative_path
+{
+    local dirs=(
+        $(mktemp -d ./test.pho.XXXX)
+        $(mktemp -d ./test.pho.XXXX)
+    )
+    local dirname=$(basename ${dirs[1]})
 
-trap cleanup EXIT
+    $phobos dir add ${dirs[@]}
+    $valg_phobos dir format "${dirs[0]}/" "./$dirname"
 
-setup
-test_double_format
-cleanup
-setup
-test_multiple_formats
-cleanup
-setup
-test_format_nb_streams
-cleanup
-setup
-test_format_lib
+    rm -rf ${dirs[@]}
+}
+
+TESTS=("setup; test_double_format; cleanup"
+       "setup; test_multiple_formats; cleanup"
+       "setup; test_format_nb_streams; cleanup"
+       "setup; test_format_lib; cleanup"
+       "setup; test_format_relative_path; cleanup")
 
 if [[ -w /dev/changer ]]; then
-    cleanup
-    setup
-    test_eagain_format
-    cleanup
-    setup
-    test_drive_selection_format
-    cleanup
-    setup
-    test_force_format
+    TESTS+=("setup; test_eagain_format; cleanup"
+            "setup; test_drive_selection_format; cleanup"
+            "setup; test_force_format; cleanup")
 fi
