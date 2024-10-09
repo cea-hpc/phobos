@@ -65,7 +65,7 @@ check_SCRIPTS=acceptance.test \
               test_lrs.test \
               test_lrs_drive_status.sh \
               test_lrs_scheduling.test \
-              test_media.sh \
+              test_media.test \
               test_media_delete.test \
               test_multilibrary.test \
               test_object_list.sh \
