@@ -282,6 +282,27 @@ void lowerstr(char *str)
        str[i] = tolower(str[i]);
 }
 
+int _normalize_path(char *path)
+{
+    char norm_path[PATH_MAX];
+    size_t len_path;
+    char *norm_ptr;
+
+    norm_ptr = realpath(path, norm_path);
+    if (norm_ptr == NULL)
+        LOG_RETURN(-EINVAL, "Failed to normalize path '%s'", path);
+
+    norm_path[PATH_MAX - 1] = '\0';
+    len_path = strlen(norm_path);
+    if (len_path >= PHO_URI_MAX)
+        LOG_RETURN(-EINVAL, "Normalized path is too large '%s'", norm_path);
+
+    memcpy(path, norm_path, len_path);
+    path[len_path] = '\0';
+
+    return 0;
+}
+
 int64_t str2int64(const char *str)
 {
     char     *endptr;

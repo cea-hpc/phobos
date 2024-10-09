@@ -88,7 +88,7 @@ static void paml_enoent(void **state)
  * phobos_admin_medium_locate returns -EACCES on an admin locked medium
  */
 static struct pho_id admin_locked_medium = {
-    .family = PHO_RSC_DIR,
+    .family = PHO_RSC_TAPE,
     .name = "admin_locked_medium",
     .library = "legacy",
 };
@@ -124,7 +124,7 @@ static void paml_eacces(void **state)
  * phobos_admin_medium_locate returns -EPERM on a medium with get flag to false
  */
 static struct pho_id false_get_medium = {
-    .family = PHO_RSC_DIR,
+    .family = PHO_RSC_TAPE,
     .name = "false_get_medium",
     .library = "legacy",
 };
@@ -200,7 +200,7 @@ static void paml_ok_free(void **state)
 
     /* -ENODEV on free dir */
     rc = phobos_admin_medium_locate(adm, &dir_free_medium, &hostname);
-    assert_int_equal(rc, -ENODEV);
+    assert_int_equal(rc, -EINVAL);
 
     /* NULL on free tape */
     rc = phobos_admin_medium_locate(adm, &tape_free_medium, &hostname);
@@ -212,7 +212,7 @@ static void paml_ok_free(void **state)
  * successfull phobos_admin_medium_locate on a locked medium
  */
 static struct pho_id locked_medium = {
-    .family = PHO_RSC_DIR,
+    .family = PHO_RSC_TAPE,
     .name = "locked_medium",
     .library = "legacy",
 };

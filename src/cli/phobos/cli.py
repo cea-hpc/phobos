@@ -1764,8 +1764,6 @@ class MediaOptHandler(BaseResourceOptHandler):
         try:
             with AdminClient(lrs_required=False) as adm:
                 for path in resources:
-                    # Remove any trailing slash
-                    path = path.rstrip('/')
                     medium_is_added = False
 
                     try:
@@ -1827,8 +1825,6 @@ class MediaOptHandler(BaseResourceOptHandler):
         try:
             with AdminClient(lrs_required=False) as adm:
                 for path in resources:
-                    # Remove any trailing slash
-                    path = path.rstrip('/')
                     device_is_del = False
                     try:
                         rc = adm.device_delete(self.family, [path],
@@ -1873,6 +1869,7 @@ class MediaOptHandler(BaseResourceOptHandler):
             tags = []
 
         uids = NodeSet.fromlist(self.params.get('res'))
+
         media = [MediaInfo(family=self.family, name=uid, tags=tags,
                            library=self.library)
                  for uid in uids]

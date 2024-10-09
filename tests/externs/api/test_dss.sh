@@ -32,12 +32,20 @@ function setup
 {
     setup_tables
     insert_examples
+    mkdir -p "/tmp/pho_testdir1" "/tmp/pho_testdir2" "/tmp/pho_testdir3" \
+        "/tmp/pho_testdir4" "/tmp/pho_testdir5"
+    mkdir -p "/tmp/pho_testdir1COPY" "/tmp/pho_testdir2COPY" \
+        "/tmp/pho_testdir3COPY" "/tmp/pho_testdir4COPY" "/tmp/pho_testdir5COPY"
 }
 
 function cleanup
 {
     echo "cleaning..."
     drop_tables
+    rm -rf "/tmp/pho_testdir1" "/tmp/pho_testdir2" "/tmp/pho_testdir3" \
+        "/tmp/pho_testdir4" "/tmp/pho_testdir5"
+    rm -rf "/tmp/pho_testdir1COPY" "/tmp/pho_testdir2COPY" \
+        "/tmp/pho_testdir3COPY" "/tmp/pho_testdir4COPY" "/tmp/pho_testdir5COPY"
 }
 
 function check_rc
@@ -186,7 +194,9 @@ test_check_set "device" "delete"
 test_check_get "device" '{"$LIKE": {"DSS::DEV::serial": "%COPY%"}}'
 echo "**** TEST: DSS_SET MEDIA  ****"
 test_check_set "media" "insert"
+psql phobos_test phobos -c "SELECT * FROM MEDIA;"
 test_check_get "media" '{"$LIKE": {"DSS::MDA::id": "%COPY%"}}'
+psql phobos_test phobos -c "SELECT * FROM MEDIA;"
 test_check_set "media" "update"
 test_check_get "media" '{"$GT": {"DSS::MDA::nb_obj": "1002"}}'
 test_check_get "media" '{"$NOT": {"$GT": {"DSS::MDA::nb_obj": "1002"}}}'

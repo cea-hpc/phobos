@@ -402,6 +402,9 @@ void upperstr(char *str);
 /** convert to lower case (in place) */
 void lowerstr(char *str);
 
+/** Normalize a path by resolving all symbolic link */
+int _normalize_path(char *path);
+
 /** Return a pointer to the final '\0' character of a string */
 static inline char *end_of_string(char *str)
 {

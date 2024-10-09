@@ -74,19 +74,19 @@ class DSSClientTest(unittest.TestCase):
     def test_list_media_by_tags(self):
         """List media with tags."""
         with AdminClient(lrs_required=False) as admclient:
-            blank_medium = MediaInfo(family=PHO_RSC_DIR, name='m0', model=None,
-                                     library='legacy')
-            admclient.medium_add([blank_medium], 'POSIX')
+            blank_medium = MediaInfo(family=PHO_RSC_TAPE, name='m0',
+                                     model="lto8", library='legacy')
+            admclient.medium_add([blank_medium], 'LTFS')
             blank_medium.name = 'm1'
-            admclient.medium_add([blank_medium], 'POSIX', tags=['foo'])
+            admclient.medium_add([blank_medium], 'LTFS', tags=['foo'])
             blank_medium.name = 'm2'
-            admclient.medium_add([blank_medium], 'POSIX', tags=['foo', 'bar'])
+            admclient.medium_add([blank_medium], 'LTFS', tags=['foo', 'bar'])
             blank_medium.name = 'm3'
-            admclient.medium_add([blank_medium], 'POSIX', tags=['goo', 'foo'])
+            admclient.medium_add([blank_medium], 'LTFS', tags=['goo', 'foo'])
             blank_medium.name = 'm4'
-            admclient.medium_add([blank_medium], 'POSIX', tags=['bar', 'goo'])
+            admclient.medium_add([blank_medium], 'LTFS', tags=['bar', 'goo'])
             blank_medium.name = 'm5'
-            admclient.medium_add([blank_medium], 'POSIX',
+            admclient.medium_add([blank_medium], 'LTFS',
                                  tags=['foo', 'bar', 'goo'])
             n_tags = {'foo': 4, 'bar': 3, 'goo': 3}
             n_bar_foo = 2
@@ -149,10 +149,10 @@ class DSSClientTest(unittest.TestCase):
         """Test media lock and unlock wrappers"""
         with AdminClient(lrs_required=False) as admclient:
             # Create a dummy media in db
-            medium = MediaInfo(name='/some/path_%d' % randint(0, 1000000),
-                               family=PHO_RSC_DIR, model=None,
+            medium = MediaInfo(name='m%d' % randint(0, 1000000),
+                               family=PHO_RSC_TAPE, model="lto8",
                                is_adm_locked=False, library='legacy')
-            admclient.medium_add([medium], 'POSIX')
+            admclient.medium_add([medium], 'LTFS')
 
         with Client() as client:
             # Get the created media from db

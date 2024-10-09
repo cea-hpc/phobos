@@ -481,6 +481,10 @@ int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
         for (i = 0; i < num_dev; i++) {
             struct stat st;
 
+            rc = _normalize_path(dev_ids[i].name);
+            if (rc)
+                return rc;
+
             if (stat(dev_ids[i].name, &st) != 0)
                 LOG_RETURN(-errno, "stat() failed on '%s'", dev_ids[i].name);
 
@@ -739,6 +743,12 @@ int phobos_admin_device_delete(struct admin_handle *adm, struct pho_id *dev_ids,
     devices = xcalloc(num_dev, sizeof(*devices));
 
     for (i = 0; i < num_dev; ++i) {
+        if (dev_ids[i].family == PHO_RSC_DIR) {
+            rc = _normalize_path(dev_ids[i].name);
+            if (rc)
+                continue;
+        }
+
         rc = _get_device_by_path_or_serial(adm, dev_ids + i, &dev_res);
         if (rc)
             continue;
@@ -785,6 +795,14 @@ int phobos_admin_device_lock(struct admin_handle *adm, struct pho_id *dev_ids,
     int rc = 0;
     int i;
 
+    for (i = 0; i < num_dev; i++) {
+        if (dev_ids[i].family == PHO_RSC_DIR) {
+            rc = _normalize_path(dev_ids[i].name);
+            if (rc)
+                return rc;
+        }
+    }
+
     rc = _device_update_adm_status(adm, dev_ids, num_dev,
                                    PHO_RSC_ADM_ST_LOCKED, true);
     if (!adm->phobosd_is_online || rc)
@@ -813,6 +831,14 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
 {
     int rc;
     int i;
+
+    for (i = 0; i < num_dev; i++) {
+        if (dev_ids[i].family == PHO_RSC_DIR) {
+            rc = _normalize_path(dev_ids[i].name);
+            if (rc)
+                return rc;
+        }
+    }
 
     rc = _device_update_adm_status(adm, dev_ids, num_dev,
                                    PHO_RSC_ADM_ST_UNLOCKED, is_forced);
@@ -1125,6 +1151,14 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
     awaiting_resps = xmalloc(n_ids * sizeof(*awaiting_resps));
 
     for (i = 0; i < n_ids; i++) {
+        if (ids[i].family == PHO_RSC_DIR) {
+            rc2 = _normalize_path((char *) ids[i].name);
+            if (rc2) {
+                rc = rc ? : rc2;
+                continue;
+            }
+        }
+
         awaiting_resps[i] = false;
 
         pho_srl_request_format_alloc(&req);
@@ -1790,6 +1824,12 @@ int phobos_admin_medium_locate(struct admin_handle *adm,
 
     *node_name = NULL;
 
+    if (medium_id->family == PHO_RSC_DIR) {
+        rc = _normalize_path((char *) medium_id->name);
+        if (rc)
+            return rc;
+    }
+
     /* get hostname if locked */
     rc = dss_medium_locate(&adm->dss, medium_id, node_name, NULL);
     if (rc)
@@ -1866,6 +1906,20 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
 int phobos_admin_media_add(struct admin_handle *adm, struct media_info *med_ls,
                            int med_cnt)
 {
+    int rc;
+    int i;
+
+    if (!med_cnt)
+        LOG_RETURN(-EINVAL, "No media were given");
+
+    if (med_ls[0].rsc.id.family == PHO_RSC_DIR) {
+        for (i = 0; i < med_cnt; i++) {
+            rc = _normalize_path(med_ls[i].rsc.id.name);
+            if (rc)
+                return rc;
+        }
+    }
+
     return dss_media_insert(&adm->dss, med_ls, med_cnt);
 }
 
@@ -1885,6 +1939,12 @@ int phobos_admin_media_delete(struct admin_handle *adm, struct pho_id *med_ids,
     media = xcalloc(num_med, sizeof(*media));
 
     for (i = 0; i < num_med; ++i) {
+        if (med_ids[i].family == PHO_RSC_DIR) {
+            rc = _normalize_path(med_ids[i].name);
+            if (rc)
+                goto out_free;
+        }
+
         rc = dss_one_medium_get_from_id(&adm->dss, med_ids + i, &media_res);
         if (rc)
             goto out_free;
@@ -1958,6 +2018,12 @@ int phobos_admin_media_import(struct admin_handle *adm,
 
     for (i = 0; i < med_cnt; i++) {
         const struct pho_id *medium = &med_ls[i].rsc.id;
+
+        if (medium->family == PHO_RSC_DIR) {
+            rc = _normalize_path((char *) medium->name);
+            if (rc)
+                return rc;
+        }
 
         med_ls[i].fs.status = PHO_FS_STATUS_IMPORTING;
 
@@ -2614,6 +2680,14 @@ int phobos_admin_notify_media_update(struct admin_handle *adm,
 
     if (!on_conflict)
         on_conflict = default_conflict_handler;
+
+    for (i = 0; i < count; i++) {
+        if (ids[i].family == PHO_RSC_DIR) {
+            rc = _normalize_path(ids[i].name);
+            if (rc)
+                return rc;
+        }
+    }
 
     media = media_from_id_list(ids, count);
     locks = xmalloc(sizeof(*locks) * count);

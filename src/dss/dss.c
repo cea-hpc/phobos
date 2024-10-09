@@ -380,10 +380,19 @@ int dss_media_update(struct dss_handle *handle, struct media_info *media_list,
                      int media_count, uint64_t fields)
 {
     int rc;
+    int i;
 
     if (!fields) {
         pho_warn("Tried updating media without specifying any field");
         return 0;
+    }
+
+    for (i = 0; i < media_count; i++) {
+        if (media_list[i].rsc.id.family == PHO_RSC_DIR) {
+            rc = _normalize_path(media_list[i].rsc.id.name);
+            if (rc)
+                return rc;
+        }
     }
 
     /**
@@ -395,7 +404,6 @@ int dss_media_update(struct dss_handle *handle, struct media_info *media_list,
      * atomic SQL requests and don't need any lock and prefetch.
      */
     if (IS_STAT(fields)) {
-        int i;
 
         rc = media_update_lock_retry(handle, media_list, media_count);
         if (rc)

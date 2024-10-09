@@ -27,11 +27,12 @@ clean API to access it.
 
 import json
 import logging
+import os
 from ctypes import byref, c_int, c_void_p, c_char_p, c_bool, POINTER, Structure
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 from phobos.core.const import DSS_MEDIA # pylint: disable=no-name-in-module
-from phobos.core.ffi import (DevInfo, MediaInfo, LIBPHOBOS)
+from phobos.core.ffi import (DevInfo, MediaInfo, LIBPHOBOS, ResourceFamily)
 
 # Valid filter suffix and associated operators.
 FILTER_OPERATORS = (
@@ -240,6 +241,12 @@ class BaseEntityManager:
         """Retrieve objects from DSS."""
         res = POINTER(self.wrapped_class)()
         res_cnt = c_int()
+
+        try:
+            if kwargs['family'] == ResourceFamily.RSC_DIR:
+                kwargs['id'] = os.path.realpath(kwargs['id'])
+        except KeyError:
+            pass
 
         # transform the family attribute into a string
         try:
