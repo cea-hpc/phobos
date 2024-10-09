@@ -556,7 +556,8 @@ out_unlock:
     return rc;
 }
 
-static int object_hard_delete(struct dss_handle *dss, struct object_info *obj)
+static int object_hard_delete(struct dss_handle *dss, struct object_info *obj,
+                              bool is_deprec)
 {
     struct layout_info *layouts;
     struct dss_filter filter;
@@ -626,7 +627,10 @@ static int object_hard_delete(struct dss_handle *dss, struct object_info *obj)
         LOG_RETURN(rc, "Unable to update object '%s:%d' extents state",
                    obj->uuid, obj->version);
 
-    rc = dss_object_delete(dss, obj, 1);
+    if (is_deprec)
+        rc = dss_deprecated_object_delete(dss, obj, 1);
+    else
+        rc = dss_object_delete(dss, obj, 1);
     if (rc)
         pho_error(rc, "Unable to delete object '%s:%d'",
                   obj->uuid, obj->version);
@@ -657,9 +661,10 @@ static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         LOG_GOTO(out_unlock, rc, "Unable to build oid filter in object delete");
 
     rc = dss_object_get(dss, &filter, &objs, &obj_cnt, NULL);
+    dss_filter_free(&filter);
     if (rc)
-        LOG_GOTO(out_filter, rc, "Cannot fetch objid in object delete:'%s'",
-                                 obj.oid);
+        LOG_GOTO(out_unlock, rc, "Cannot fetch objid in object delete:'%s'",
+                 obj.oid);
 
     if (obj_cnt != 1) {
         rc = -ENOENT;
@@ -668,10 +673,38 @@ static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     }
 
     if (xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL) {
-        rc = object_hard_delete(dss, objs);
+        struct object_info *deprec_objs;
+        int deprec_obj_cnt;
+        int i;
+
+        rc = object_hard_delete(dss, objs, false);
         if (rc)
             LOG_GOTO(out_free, rc,
-                     "Unable to hard delete object '%s'", obj.oid);
+                     "Unable to hard delete object '%s'", objs->oid);
+
+        rc = dss_filter_build(&filter, "{\"DSS::OBJ::uuid\": \"%s\"}",
+                              objs->uuid);
+        if (rc)
+            LOG_GOTO(out_free, rc,
+                     "Unable to build uuid filter in object delete");
+
+        rc = dss_deprecated_object_get(dss, &filter, &deprec_objs,
+                                       &deprec_obj_cnt, NULL);
+        dss_filter_free(&filter);
+        if (rc)
+            LOG_GOTO(out_free, rc,
+                     "Unable to retrieve deprec objects '%s'", objs->uuid);
+
+        for (i = 0; i < deprec_obj_cnt; ++i) {
+            rc = object_hard_delete(dss, &deprec_objs[i], true);
+            if (rc) {
+                pho_error(rc, "Unable to hard delete object '%s:%d'",
+                          deprec_objs[i].uuid, deprec_objs[i].version);
+                break;
+            }
+        }
+
+        dss_res_free(deprec_objs, deprec_obj_cnt);
     } else {
         /* move from object table to deprecated object table */
         rc = dss_move_object_to_deprecated(dss, &obj, 1);
@@ -683,8 +716,6 @@ static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 
 out_free:
     dss_res_free(objs, obj_cnt);
-out_filter:
-    dss_filter_free(&filter);
 out_unlock:
     /* releasing oid lock */
     rc2 = dss_unlock(dss, DSS_OBJECT, &obj, 1, false);

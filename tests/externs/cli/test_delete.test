@@ -130,10 +130,37 @@ function test_tape_hard_delete
     fi
 }
 
+function test_tape_hard_delete_with_deprec
+{
+    local prefix=$(generate_prefix_id)
+    local oid=${prefix}_id
+
+    $phobos put "${FILES[0]}" $oid || error "Object should be put"
+    $phobos put --overwrite "${FILES[0]}" $oid ||
+        error "Object should be overwritten"
+    $valg_phobos delete --hard $oid ||
+        error "Object souhld be delete"
+
+    [ -z $($phobos object list $oid) ] ||
+        error "Object should not be listed, because deleted"
+    [ -z $($phobos object list --deprecated $oid) ] ||
+        error "Object should not be listed, because hard deleted"
+
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM layout;")
+    if [ $nb -ne 0 ]; then
+        error "Hard delete should have delete layout info on tape"
+    fi
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM extent WHERE state='orphan';")
+    if [ $nb -ne 2 ]; then
+        error "Hard delete should have keep the extent info on tape"
+    fi
+}
+
 TESTS=(
     "setup_dir; test_delete; cleanup_dir"
 )
 
 if [[ -w /dev/changer ]]; then
-    TESTS+=("setup_tape; test_tape_hard_delete; cleanup_tape")
+    TESTS+=("setup_tape; test_tape_hard_delete; cleanup_tape"
+            "setup_tape; test_tape_hard_delete_with_deprec; cleanup_tape")
 fi
