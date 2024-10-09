@@ -146,8 +146,24 @@ function test_dir_delete_lib()
     $valg_phobos dir del --library lib1 $DIR || error "Dir should be deleted"
 }
 
+function test_dir_delete_relative_path()
+{
+    local dirs=(
+        $(mktemp -d ./test.pho.XXXX)
+        $(mktemp -d ./test.pho.XXXX)
+    )
+    local dirname=$(basename ${dirs[1]})
+
+    $phobos dir add ${dirs[@]}
+
+    $valg_phobos dir delete "${dirs[0]}/" "./$dirname"
+
+    rm -rf ${dirs[@]}
+}
+
 TESTS=("setup_dir; test_dir_delete; cleanup_dir"
-       "setup_dir; test_dir_delete_lib; cleanup_dir")
+       "setup_dir; test_dir_delete_lib; cleanup_dir"
+       "setup_dir; test_dir_delete_relative_path; cleanup_dir")
 
 if [[ -w /dev/changer ]]; then
     TESTS+=("setup; test_tape_delete; cleanup")

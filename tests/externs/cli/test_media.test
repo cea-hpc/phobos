@@ -59,19 +59,25 @@ function setup_dir()
 {
     setup
     umask 000
-    setup_test_dirs
+    export dirs=(
+                 $(mktemp -d "$PWD/pho.test.XXXX")
+                 $(mktemp -d "$PWD/pho.test.XXXX")
+                )
 
-    $phobos dir add --unlock $DIR_TEST_IN $DIR_TEST_OUT
-    $phobos dir format --fs POSIX --unlock $DIR_TEST_IN $DIR_TEST_OUT
+    $phobos dir add --unlock ${dirs[@]}
+    $phobos dir format --fs POSIX --unlock ${dirs[@]}
 }
 
 function setup_dir_bis()
 {
     setup
-    setup_test_dirs
+    export dirs=(
+                 $(mktemp -d "$PWD/pho.test.XXXX")
+                 $(mktemp -d "$PWD/pho.test.XXXX")
+                )
 
-    $phobos dir add $DIR_TEST_IN --library lib1
-    $phobos dir add $DIR_TEST_OUT --library lib2
+    $phobos dir add ${dirs[0]} --library lib1
+    $phobos dir add ${dirs[1]} --library lib2
 }
 
 function setup_tape()
@@ -98,7 +104,7 @@ function setup_tape_bis()
 function cleanup_dir()
 {
     cleanup
-    cleanup_test_dirs
+    rm -rf ${dirs[@]}
 }
 
 function cleanup_tape()
@@ -133,12 +139,23 @@ function test_put_update()
 
 function test_put_update_dir()
 {
-    test_put_update "dir" "$DIR_TEST_IN" "dir_obj"
+    test_put_update "dir" "${dirs[0]}" "dir_obj"
 }
 
 function test_put_update_tape()
 {
     test_put_update "tape" "$medium" "tape_obj"
+}
+
+function test_put_update_dir_relative_path()
+{
+    local name=$(basename ${dirs[1]})
+    test_put_update "dir" "./$name" "dir_obj"
+}
+
+function test_put_update_dir_path()
+{
+    test_put_update "dir" "${dirs[0]}/" "dir_obj"
 }
 
 ################################################################################
@@ -171,32 +188,55 @@ function test_dir_operation_flags()
 
 function test_set_access_bad_syntax()
 {
-    $valg_phobos dir set-access p $DIR_TEST_IN &&
+    $valg_phobos dir set-access p ${dirs[0]} &&
         error "p should be a bad FLAG"
-    $valg_phobos dir set-access -- -PGJ $DIR_TEST_IN &&
+    $valg_phobos dir set-access -- -PGJ ${dirs[1]} &&
         error "-PGJ should be a bad FLAG"
     return 0
 }
 
 function test_set_access()
 {
-    $valg_phobos dir set-access P $DIR_TEST_IN
-    test_dir_operation_flags $DIR_TEST_IN True False False
+    $valg_phobos dir set-access P ${dirs[0]}
+    test_dir_operation_flags ${dirs[0]} True False False
 
-    $valg_phobos dir set-access +G $DIR_TEST_IN
-    test_dir_operation_flags $DIR_TEST_IN True True False
+    $valg_phobos dir set-access +G ${dirs[0]}
+    test_dir_operation_flags ${dirs[0]} True True False
 
-    $valg_phobos dir set-access -- -PD $DIR_TEST_IN
-    test_dir_operation_flags $DIR_TEST_IN False True False
+    $valg_phobos dir set-access -- -PD ${dirs[0]}
+    test_dir_operation_flags ${dirs[0]} False True False
 
-    $valg_phobos dir set-access +PD $DIR_TEST_IN
-    test_dir_operation_flags $DIR_TEST_IN True True True
+    $valg_phobos dir set-access +PD ${dirs[0]}
+    test_dir_operation_flags ${dirs[0]} True True True
+}
+
+function test_set_access_path()
+{
+    # remove all dir put access
+    $valg_phobos dir set-access -- -P ${dirs[@]}
+    waive_lrs
+    invoke_lrs
+
+    local name=$(basename ${dirs[1]})
+    $valg_phobos dir set-access +P "./$name"
+    local output=$($phobos dir list -o put_access ${dirs[1]})
+    if [[ "$output" != "True" ]]; then
+        error "Error: True was expected for put operation flag for " \
+              "${dirs[1]}"
+    fi
+
+    $valg_phobos dir set-access +P "${dirs[0]}/"
+    output=$($phobos dir list -o put_access ${dirs[0]})
+    if [[ "$output" != "True" ]]; then
+        error "Error: True was expected for put operation flag for " \
+              "${dirs[0]}"
+    fi
 }
 
 function test_put_access()
 {
     # remove all dir put access
-    $valg_phobos dir set-access -- -P $DIR_TEST_IN $DIR_TEST_OUT
+    $valg_phobos dir set-access -- -P ${dirs[@]}
     waive_lrs
     invoke_lrs
 
@@ -205,7 +245,7 @@ function test_put_access()
         error "Put without any medium with 'P' operation flag should fail"
 
     # set one put access
-    $valg_phobos dir set-access +P $DIR_TEST_OUT
+    $valg_phobos dir set-access +P ${dirs[1]}
     waive_lrs
     invoke_lrs
 
@@ -213,7 +253,7 @@ function test_put_access()
     $phobos put --family dir /etc/hosts host2
     # check the used dir corresponds to the one with the put access
     if [[ $($phobos extent list --output media_name host2) != \
-        "['$DIR_TEST_OUT']" ]]
+        "['${dirs[1]}']" ]]
     then
         error "Extent should be on the only medium with put access"
     fi
@@ -225,7 +265,7 @@ function test_get_access()
     $phobos put --family dir /etc/hosts obj_to_get
 
     # remove all dir get access
-    $valg_phobos dir set-access -- -G $DIR_TEST_IN $DIR_TEST_OUT
+    $valg_phobos dir set-access -- -G ${dirs[@]}
     waive_lrs
     invoke_lrs
 
@@ -234,7 +274,7 @@ function test_get_access()
         error "Get without any medium with 'G' operation flag should fail"
 
     # set get access on all dir
-    $valg_phobos dir set-access +G $DIR_TEST_IN $DIR_TEST_OUT
+    $valg_phobos dir set-access +G ${dirs[@]}
     waive_lrs
     invoke_lrs
 
@@ -249,12 +289,12 @@ function test_get_access()
 function test_dir_list_library()
 {
     local output=$($phobos dir list --library lib1)
-    echo "$output" | grep "$DIR_TEST_IN" && ! echo "$output" | grep \
-        "$DIR_TEST_OUT"
+    echo "$output" | grep "${dirs[0]}" && ! echo "$output" | grep \
+        "${dirs[1]}"
 
     output=$($phobos dir list --library lib2)
-    echo "$output" | grep "$DIR_TEST_OUT" && ! echo "$output" | grep \
-        "$DIR_TEST_IN"
+    echo "$output" | grep "${dirs[1]}" && ! echo "$output" | grep \
+        "${dirs[0]}"
 }
 
 function test_tape_list_library()
@@ -268,13 +308,63 @@ function test_tape_list_library()
         "${tapes[0]}"
 }
 
+function test_dir_list_path()
+{
+    local name=$(basename ${dirs[1]})
+    $valg_phobos dir list "./$name" | grep "${dirs[1]}"
+
+    $valg_phobos dir list "${dirs[0]}/" | grep "${dirs[0]}"
+}
+
+################################################################################
+#                              TEST MEDIA LOCK                                 #
+################################################################################
+
+function test_dir_lock_path()
+{
+    local name=$(basename ${dirs[1]})
+    $valg_phobos dir lock "./$name"
+    $phobos dir list -o adm_status ${dirs[1]} | grep "locked"
+    $valg_phobos dir unlock "./$name"
+    $phobos dir list -o adm_status ${dirs[1]} | grep "unlocked"
+
+    $valg_phobos dir lock "${dirs[0]}/"
+    $phobos dir list -o adm_status ${dirs[0]} | grep "locked"
+    $valg_phobos dir unlock "${dirs[0]}/"
+    $phobos dir list -o adm_status ${dirs[0]} | grep "unlocked"
+}
+
+################################################################################
+#                              TEST MEDIA LOCK                                 #
+################################################################################
+
+function test_dir_add_path()
+{
+    setup_test_dirs
+
+    local name=$(basename ${dirs[1]})
+    $valg_phobos dir add "./$name"
+    $phobos dir list ${dirs[1]} | grep "${dirs[1]}"
+
+    $valg_phobos dir add --unlock "${dirs[0]}/"
+    $phobos dir list ${dirs[0]} | grep "${dirs[0]}"
+
+    cleanup_test_dirs
+}
+
 TESTS=("setup_dir; \
             test_put_update_dir; \
             test_set_access_bad_syntax; \
             test_set_access; \
+            test_set_access_path; \
             test_put_access; \
             test_get_access; \
+            test_dir_list_path; \
+            test_dir_lock_path; \
         cleanup_dir"
+       "setup; test_dir_add_path; cleanup"
+       "setup_dir; test_put_update_dir_path; cleanup_dir"
+       "setup_dir; test_put_update_dir_relative_path; cleanup_dir"
        "setup_dir_bis; \
             test_dir_list_library; \
         cleanup_dir")

@@ -91,6 +91,15 @@ function test_medium_locate
     # set medium to test
     local medium=$(echo ${!media_name} | nodeset -e | awk '{print $1;}')
 
+    # test with relative path
+    if [ "$family" == "dir" ]; then
+        $valg_phobos $family locate "$medium/" ||
+            error "Error while locating $medium/"
+        medium_name=$(basename $medium)
+        $valg_phobos $family locate "./$medium_name" ||
+            error "Error while locating ./$medium_name"
+    fi
+
     # test error on an admin locked medium
     $phobos $family lock $medium ||
         error "Error while locking before locate"

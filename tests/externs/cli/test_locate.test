@@ -39,11 +39,10 @@ function dir_setup
     invoke_lrs
 
     export PHOBOS_STORE_default_family="dir"
-
     export dirs="
-        $(mktemp -d /tmp/test.pho.XXXX)
-        $(mktemp -d /tmp/test.pho.XXXX)
-        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d "$PWD/test.pho.XXXX")
+        $(mktemp -d "$PWD/test.pho.XXXX")
+        $(mktemp -d "$PWD/test.pho.XXXX")
     "
     echo "adding directories $dirs"
     $phobos dir add $dirs
