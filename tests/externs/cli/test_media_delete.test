@@ -137,7 +137,17 @@ function test_dir_delete()
     fi
 }
 
-TESTS=("setup_dir; test_dir_delete; cleanup_dir")
+function test_dir_delete_lib()
+{
+    $phobos dir add --unlock --library lib1 $DIR
+
+    $valg_phobos dir del --library lib2 $DIR && error "phobos dir delete" \
+        "--library lib2 $DIR should have failed, invalid library"
+    $valg_phobos dir del --library lib1 $DIR || error "Dir should be deleted"
+}
+
+TESTS=("setup_dir; test_dir_delete; cleanup_dir"
+       "setup_dir; test_dir_delete_lib; cleanup_dir")
 
 if [[ -w /dev/changer ]]; then
     TESTS+=("setup; test_tape_delete; cleanup")

@@ -350,6 +350,23 @@ function test_format_nb_streams
     trap cleanup EXIT
 }
 
+function test_format_lib()
+{
+    local dir=$(mktemp -d /tmp/test.pho.XXXX)
+
+    trap "rm -rf $dir; cleanup" EXIT
+
+    $phobos dir add --unlock --library lib1 $dir
+
+    $valg_phobos dir format --library lib2 $dir && error "phobos dir format" \
+        "--library lib2 $dir should failed, invalid library"
+    $valg_phobos dir format --library lib1 $dir ||
+        error "Dir should be formated"
+    rm -rf $dir
+    trap cleanup EXIT
+}
+
+
 trap cleanup EXIT
 
 setup
@@ -360,6 +377,9 @@ test_multiple_formats
 cleanup
 setup
 test_format_nb_streams
+cleanup
+setup
+test_format_lib
 
 if [[ -w /dev/changer ]]; then
     cleanup
