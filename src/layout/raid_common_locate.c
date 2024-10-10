@@ -183,7 +183,7 @@ static int locate_all_extents(struct dss_handle *dss,
 
         if (!one_locate_succeeded)
             LOG_GOTO(cleanup, rc = -ENODEV,
-                     "DSS locate failed for every extent");
+                     "DSS locate failed for every extent of the split %d", i);
 
     }
 
@@ -207,6 +207,9 @@ static size_t count_compatible_devices(GPtrArray *devices,
         struct dev_info *device = devices->pdata[i];
         bool compatible;
         int rc;
+
+        if (strcmp(device->rsc.id.library, loc->medium->rsc.id.library))
+            continue;
 
         if (!device->rsc.model) {
             /* devices without model are always compatible */
@@ -240,6 +243,9 @@ static bool has_compatible_devices(GPtrArray *devices,
         struct dev_info *device = devices->pdata[i];
         bool compatible;
         int rc;
+
+        if (strcmp(device->rsc.id.library, loc->medium->rsc.id.library))
+            continue;
 
         if (!device->rsc.model)
             /* devices without model are always compatible */
@@ -303,7 +309,7 @@ static void set_host_extent_accessibility(GHashTable *hosts, GPtrArray *extents)
     }
 }
 
-static void filter_inaccessible_media(GHashTable *hosts, GPtrArray *extents)
+static void filter_inaccessible_extents(GHashTable *hosts, GPtrArray *extents)
 {
     int i;
 
@@ -610,7 +616,7 @@ int raid_locate(struct dss_handle *dss, struct layout_info *layout,
         GOTO(clean, rc);
 
     set_host_extent_accessibility(hosts, extents);
-    filter_inaccessible_media(hosts, extents);
+    filter_inaccessible_extents(hosts, extents);
     if (unaccessible_split(extents, n_data_extents + n_parity_extents))
         GOTO(clean, rc = -EAGAIN);
 

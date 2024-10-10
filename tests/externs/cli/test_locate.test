@@ -53,6 +53,7 @@ function dir_setup
 function tape_init_setup
 {
     setup_tables
+    invoke_tlc_bis
     invoke_daemons
 }
 
@@ -151,6 +152,7 @@ function dir_cleanup
 function tape_cleanup
 {
     waive_daemons
+    waive_tlc_bis
     drop_tables
     drain_all_drives
     rm -rf /tmp/out*
@@ -308,6 +310,42 @@ EOF
               "device and $self_hostname has a lock on a replica"
     fi
 }
+function test_locate_library
+{
+    local drive_bis=$(get_lto_drives_bis 6 1)
+    local tape_bis=$(get_tapes_bis L6 1)
+    local drive=$(get_lto_drives 6 1)
+    local tape=$(get_tapes L6 1)
+    local self_hostname="$(hostname -s)"
+    local other_hostname="blob"
+
+    $phobos drive add --unlock ${drive}
+    $phobos drive add --unlock --library library_bis ${drive_bis}
+    $phobos tape add --type lto6 ${tape}
+    $phobos tape add --type lto6 --library library_bis ${tape_bis}
+    $phobos tape format --unlock ${tape}
+    $phobos tape format --unlock --library library_bis ${tape_bis}
+
+    $phobos put --library legacy /etc/hosts legacy_obj
+
+    waive_daemons
+    waive_tlc_bis
+    drain_all_drives
+
+    # change the host of drive to $other_hostname
+    $PSQL << EOF
+UPDATE device SET host = '$other_hostname' WHERE path = '${drive}';
+EOF
+
+    invoke_tlc_bis
+    invoke_daemons
+
+    local locate_hostname=$($valg_phobos locate legacy_obj)
+    if [ "${locate_hostname}" != "${other_hostname}" ]; then
+        error "locate should returned ${other_hostname} that owns a drive in" \
+              "the good library instead of ${locate_hostname}"
+    fi
+}
 
 TEST_CLEANUP=cleanup
 
@@ -323,10 +361,14 @@ TESTS+=("dir_locked_splits_setup; \
 
 if [[ -w /dev/changer ]]; then
     TESTS+=("tape_setup; \
-             test_medium_locate tape; test_locate_cli tape; \
+             test_medium_locate tape; \
+             test_locate_cli tape; \
              test_get_locate_cli tape; \
              tape_cleanup")
     TESTS+=("tape_init_setup; \
              test_locate_compatibility; \
+             tape_cleanup")
+    TESTS+=("tape_init_setup; \
+             test_locate_library; \
              tape_cleanup")
 fi
