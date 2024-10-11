@@ -250,12 +250,9 @@ out:
     return rc;
 }
 
-/**
- * fields is only used by DSS_SET_UPDATE on DSS_MEDIA
- */
 static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
                            void *item_list, int item_cnt,
-                           enum dss_set_action action, uint64_t fields)
+                           enum dss_set_action action)
 {
     PGconn *conn = handle->dh_conn;
     GString *request;
@@ -279,9 +276,6 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         rc = get_insert_query(type, conn, item_list, item_cnt,
                               INSERT_FULL_OBJECT, request);
         break;
-    case DSS_SET_UPDATE:
-        rc = get_update_query(type, conn, item_list, item_cnt, fields, request);
-        break;
     case DSS_SET_DELETE:
         rc = get_delete_query(type, item_list, item_cnt, request);
         break;
@@ -291,7 +285,34 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
     }
 
     if (rc)
-        LOG_GOTO(out_cleanup, rc, "SQL request failed");
+        LOG_GOTO(out_cleanup, rc, "SQL request build failed");
+
+    rc = execute_and_commit_or_rollback(conn, request, NULL, PGRES_COMMAND_OK);
+
+out_cleanup:
+    g_string_free(request, true);
+    return rc;
+}
+
+static int dss_generic_update(struct dss_handle *handle, enum dss_type type,
+                              void *item_list, int item_cnt, uint64_t fields)
+{
+    PGconn *conn = handle->dh_conn;
+    GString *request;
+    int rc = 0;
+
+    ENTRY;
+
+    if (conn == NULL ||
+        (type != DSS_LOGS && (item_list == NULL || item_cnt == 0)))
+        LOG_RETURN(-EINVAL, "conn: %p, item_list: %p, item_cnt: %d",
+                   conn, item_list, item_cnt);
+
+    request = g_string_new("BEGIN;");
+
+    rc = get_update_query(type, conn, item_list, item_cnt, fields, request);
+    if (rc)
+        LOG_GOTO(out_cleanup, rc, "SQL request build failed");
 
     rc = execute_and_commit_or_rollback(conn, request, NULL, PGRES_COMMAND_OK);
 
@@ -319,14 +340,14 @@ int dss_device_insert(struct dss_handle *handle, struct dev_info *device_list,
                       int device_count)
 {
     return dss_generic_set(handle, DSS_DEVICE, (void *) device_list,
-                           device_count, DSS_SET_INSERT, 0);
+                           device_count, DSS_SET_INSERT);
 }
 
 int dss_device_update(struct dss_handle *handle, struct dev_info *device_list,
                       int device_count, int64_t fields)
 {
-    return dss_generic_set(handle, DSS_DEVICE, (void *) device_list,
-                           device_count, DSS_SET_UPDATE, fields);
+    return dss_generic_update(handle, DSS_DEVICE, (void *) device_list,
+                              device_count, fields);
 }
 
 int dss_device_get(struct dss_handle *handle, const struct dss_filter *filter,
@@ -342,7 +363,7 @@ int dss_device_delete(struct dss_handle *handle, struct dev_info *device_list,
                       int device_count)
 {
     return dss_generic_set(handle, DSS_DEVICE, (void *)device_list,
-                           device_count, DSS_SET_DELETE, 0);
+                           device_count, DSS_SET_DELETE);
 }
 
 /*
@@ -373,7 +394,7 @@ int dss_media_insert(struct dss_handle *handle, struct media_info *media_list,
                      int media_count)
 {
     return dss_generic_set(handle, DSS_MEDIA, (void *) media_list,
-                           media_count, DSS_SET_INSERT, 0);
+                           media_count, DSS_SET_INSERT);
 }
 
 int dss_media_update(struct dss_handle *handle, struct media_info *media_list,
@@ -449,8 +470,8 @@ int dss_media_update(struct dss_handle *handle, struct media_info *media_list,
         }
     }
 
-    rc = dss_generic_set(handle, DSS_MEDIA, (void *)media_list, media_count,
-                         DSS_SET_UPDATE, fields);
+    rc = dss_generic_update(handle, DSS_MEDIA, (void *)media_list, media_count,
+                            fields);
 
 clean:
     if (IS_STAT(fields)) {
@@ -481,7 +502,7 @@ int dss_media_delete(struct dss_handle *handle, struct media_info *media_list,
                      int media_count)
 {
     return dss_generic_set(handle, DSS_MEDIA, (void *) media_list,
-                           media_count, DSS_SET_DELETE, 0);
+                           media_count, DSS_SET_DELETE);
 }
 
 /*
@@ -501,14 +522,14 @@ int dss_layout_insert(struct dss_handle *handle,
                       int layout_count)
 {
     return dss_generic_set(handle, DSS_LAYOUT, (void *)layout_list,
-                           layout_count, DSS_SET_INSERT, 0);
+                           layout_count, DSS_SET_INSERT);
 }
 
 int dss_layout_delete(struct dss_handle *handle,
                       struct layout_info *layout_list, int layout_count)
 {
     return dss_generic_set(handle, DSS_LAYOUT, (void *)layout_list,
-                           layout_count, DSS_SET_DELETE, 0);
+                           layout_count, DSS_SET_DELETE);
 }
 
 /*
@@ -541,21 +562,21 @@ int dss_extent_insert(struct dss_handle *handle, struct extent *extents,
                    int extent_count)
 {
     return dss_generic_set(handle, DSS_EXTENT, (void *)extents, extent_count,
-                           DSS_SET_INSERT, 0);
+                           DSS_SET_INSERT);
 }
 
 int dss_extent_update(struct dss_handle *handle, struct extent *extents,
                    int extent_count)
 {
-    return dss_generic_set(handle, DSS_EXTENT, (void *)extents, extent_count,
-                           DSS_SET_UPDATE, 0);
+    return dss_generic_update(handle, DSS_EXTENT, (void *)extents,
+                              extent_count, 0);
 }
 
 int dss_extent_delete(struct dss_handle *handle, struct extent *extents,
                       int extent_count)
 {
     return dss_generic_set(handle, DSS_EXTENT, (void *)extents, extent_count,
-                           DSS_SET_DELETE, 0);
+                           DSS_SET_DELETE);
 }
 
 /*
@@ -572,15 +593,15 @@ int dss_object_insert(struct dss_handle *handle,
                    "and full insert");
 
     return dss_generic_set(handle, DSS_OBJECT, (void *)object_list,
-                           object_count, action, 0);
+                           object_count, action);
 }
 
 int dss_object_update(struct dss_handle *handle,
                       struct object_info *object_list,
                       int object_count, int64_t fields)
 {
-    return dss_generic_set(handle, DSS_OBJECT, (void *)object_list,
-                           object_count, DSS_SET_UPDATE, fields);
+    return dss_generic_update(handle, DSS_OBJECT, (void *)object_list,
+                              object_count, fields);
 }
 
 int dss_object_get(struct dss_handle *handle, const struct dss_filter *filter,
@@ -597,7 +618,7 @@ int dss_object_delete(struct dss_handle *handle,
                       int object_count)
 {
     return dss_generic_set(handle, DSS_OBJECT, (void *)object_list,
-                           object_count, DSS_SET_DELETE, 0);
+                           object_count, DSS_SET_DELETE);
 }
 
 int dss_object_rename(struct dss_handle *handle,
@@ -676,15 +697,15 @@ int dss_deprecated_object_insert(struct dss_handle *handle,
                                  int object_count)
 {
     return dss_generic_set(handle, DSS_DEPREC, (void *) object_list,
-                           object_count, DSS_SET_INSERT, 0);
+                           object_count, DSS_SET_INSERT);
 }
 
 int dss_deprecated_object_update(struct dss_handle *handle,
                                  struct object_info *object_list,
                                  int object_count, int64_t fields)
 {
-    return dss_generic_set(handle, DSS_DEPREC, (void *) object_list,
-                           object_count, DSS_SET_UPDATE, fields);
+    return dss_generic_update(handle, DSS_DEPREC, (void *) object_list,
+                              object_count, fields);
 }
 
 int dss_deprecated_object_get(struct dss_handle *handle,
@@ -702,7 +723,7 @@ int dss_deprecated_object_delete(struct dss_handle *handle,
                                  int object_count)
 {
     return dss_generic_set(handle, DSS_DEPREC, (void *)object_list,
-                           object_count, DSS_SET_DELETE, 0);
+                           object_count, DSS_SET_DELETE);
 }
 
 /*
@@ -720,7 +741,7 @@ int dss_logs_get(struct dss_handle *hdl, const struct dss_filter *filter,
 int dss_logs_insert(struct dss_handle *hdl, struct pho_log *logs, int log_cnt)
 {
     return dss_generic_set(hdl, DSS_LOGS, (void *) logs, log_cnt,
-                           DSS_SET_INSERT, 0);
+                           DSS_SET_INSERT);
 }
 
 int dss_logs_delete(struct dss_handle *handle, const struct dss_filter *filter)
@@ -729,7 +750,7 @@ int dss_logs_delete(struct dss_handle *handle, const struct dss_filter *filter)
     int rc;
 
     if (filter == NULL)
-        return dss_generic_set(handle, DSS_LOGS, NULL, 0, DSS_SET_DELETE, 0);
+        return dss_generic_set(handle, DSS_LOGS, NULL, 0, DSS_SET_DELETE);
 
     clause = g_string_new(NULL);
 
@@ -739,8 +760,7 @@ int dss_logs_delete(struct dss_handle *handle, const struct dss_filter *filter)
         return rc;
     }
 
-    rc = dss_generic_set(handle, DSS_LOGS, (void *) clause, 0, DSS_SET_DELETE,
-                         0);
+    rc = dss_generic_set(handle, DSS_LOGS, (void *) clause, 0, DSS_SET_DELETE);
     g_string_free(clause, true);
 
     return rc;
