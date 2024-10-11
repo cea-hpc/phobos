@@ -91,9 +91,15 @@ static inline const char *_get_host(void *dev)
     return ((struct dev_info *) dev)->host;
 }
 
+static inline const char *_get_library(void *dev)
+{
+    return ((struct dev_info *) dev)->rsc.id.library;
+}
+
 static struct dss_field FIELDS[] = {
     { DSS_DEVICE_UPDATE_ADM_STATUS, "adm_status = '%s'", _get_adm_status },
-    { DSS_DEVICE_UPDATE_HOST, "host = '%s'", _get_host }
+    { DSS_DEVICE_UPDATE_HOST, "host = '%s'", _get_host },
+    { DSS_DEVICE_UPDATE_LIBRARY, "library = '%s'", _get_library },
 };
 
 static int device_update_query(PGconn *conn, void *src_dev, void *dst_dev,
@@ -104,12 +110,11 @@ static int device_update_query(PGconn *conn, void *src_dev, void *dst_dev,
     for (int i = 0; i < item_cnt; ++i) {
         struct dev_info *src = ((struct dev_info *) src_dev) + i;
         struct dev_info *dst = ((struct dev_info *) dst_dev) + i;
-        enum dss_device_operations _fields = fields;
         GString *sub_request = g_string_new(NULL);
 
         g_string_append(sub_request, "UPDATE device SET ");
 
-        update_fields(dst, _fields, FIELDS, 2, sub_request);
+        update_fields(dst, fields, FIELDS, 3, sub_request);
 
         g_string_append_printf(sub_request,
                                " WHERE family = '%s' AND id = '%s' AND "

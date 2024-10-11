@@ -91,13 +91,12 @@ static int deprecated_update_query(PGconn *conn, void *src_deprecated,
     for (int i = 0; i < item_cnt; ++i) {
         struct object_info *src = ((struct object_info *) src_deprecated) + i;
         struct object_info *dst = ((struct object_info *) dst_deprecated) + i;
-        enum dss_object_operations _fields = fields;
 
         GString *sub_request = g_string_new(NULL);
 
         g_string_append(sub_request, "UPDATE deprecated_object SET ");
 
-        update_fields(dst, _fields, FIELDS, 3, sub_request);
+        update_fields(dst, fields, FIELDS, 3, sub_request);
 
         g_string_append_printf(sub_request,
                                " WHERE object_uuid = '%s' AND version = %d;",

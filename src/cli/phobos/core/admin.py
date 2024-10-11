@@ -173,7 +173,7 @@ class Client: # pylint: disable=too-many-public-methods
         rc = LIBPHOBOS_ADMIN.phobos_admin_drive_migrate(byref(self.handle),
                                                         c_id(*dev_ids),
                                                         len(dev_ids), c_host,
-                                                        byref(count))
+                                                        None, byref(count))
         if rc:
             raise EnvironmentError(rc, "Failed to migrate device(s) '%s'" %
                                    dev_names)

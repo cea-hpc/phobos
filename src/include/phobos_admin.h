@@ -216,6 +216,7 @@ int phobos_admin_device_status(struct admin_handle *adm, enum rsc_family family,
  *                                   name.
  * \param[in]       num_dev          Number of devices to update.
  * \param[in]       host             New host of devices.
+ * \param[in]       library          New library of devices.
  * \param[out]      num_migrated_dev Number of updated device.
  *
  * \return                           0     on success,
@@ -228,6 +229,7 @@ int phobos_admin_device_status(struct admin_handle *adm, enum rsc_family family,
  */
 int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
                                unsigned int num_dev, const char *host,
+                               const char *library,
                                unsigned int *num_migrated_dev);
 
 /**

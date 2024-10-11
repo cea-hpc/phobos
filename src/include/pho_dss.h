@@ -73,6 +73,7 @@ static const char * const dss_type_names[] = {
 enum dss_device_operations {
     DSS_DEVICE_UPDATE_ADM_STATUS = (1 << 0),
     DSS_DEVICE_UPDATE_HOST = (1 << 1),
+    DSS_DEVICE_UPDATE_LIBRARY = (1 << 2),
 };
 
 /** The different types of update allowed for objects */

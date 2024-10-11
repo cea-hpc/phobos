@@ -94,12 +94,11 @@ static int object_update_query(PGconn *conn, void *src_object, void *dst_object,
     for (int i = 0; i < item_cnt; ++i) {
         struct object_info *src = ((struct object_info *) src_object) + i;
         struct object_info *dst = ((struct object_info *) dst_object) + i;
-        enum dss_object_operations _fields = fields;
         GString *sub_request = g_string_new(NULL);
 
         g_string_append(sub_request, " UPDATE object SET ");
 
-        update_fields(dst, _fields, FIELDS, 4, sub_request);
+        update_fields(dst, fields, FIELDS, 4, sub_request);
 
         if (fields == DSS_OBJECT_UPDATE_OID)
             g_string_append_printf(sub_request, " WHERE object_uuid = '%s';",

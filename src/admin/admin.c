@@ -899,31 +899,55 @@ int phobos_admin_device_status(struct admin_handle *adm,
 
 int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
                                unsigned int num_dev, const char *host,
+                               const char *library,
                                unsigned int *num_migrated_dev)
 {
-    struct dev_info *devices;
+    struct dev_info *dst_devices;
+    struct dev_info *src_devices;
     struct dev_info *dev_res;
     char *host_cpy = NULL;
+    char *lib_cpy = NULL;
     int avail_devices = 0;
+    int64_t fields = 0;
+    size_t len;
     int rc = 0;
     int rc2;
     int i;
 
     *num_migrated_dev = 0;
 
-    host_cpy = xstrdup_safe(host);
-    devices = xcalloc(num_dev, sizeof(*devices));
+    if (host != NULL) {
+        host_cpy = xstrdup(host);
+        fields |= DSS_DEVICE_UPDATE_HOST;
+    }
+
+    if (library != NULL) {
+        lib_cpy = xstrdup(library);
+        fields |= DSS_DEVICE_UPDATE_LIBRARY;
+    }
+
+    src_devices = xcalloc(num_dev, sizeof(*src_devices));
+    dst_devices = xcalloc(num_dev, sizeof(*dst_devices));
 
     for (i = 0; i < num_dev; ++i) {
-        char *old_host;
-
         rc2 = _get_device_by_path_or_serial(adm, dev_ids + i, &dev_res);
         if (rc2) {
             rc = rc ? : rc2;
             continue;
         }
 
-        if (strcmp(host_cpy, dev_res->host) == 0) {
+        if (host != NULL && strcmp(host_cpy, dev_res->host) == 0) {
+            pho_info("Device (family '%s', name '%s', library '%s') is already "
+                     "located on '%s'",
+                     rsc_family2str(dev_ids[i].family), dev_ids[i].name,
+                     dev_ids[i].library, host_cpy);
+            if (library == NULL) {
+                dss_res_free(dev_res, 1);
+                continue;
+            }
+        }
+
+        if (library != NULL && strcmp(lib_cpy, dev_res->rsc.id.library) == 0) {
             pho_info("Device (family '%s', name '%s', library '%s') is already "
                      "located on '%s'",
                      rsc_family2str(dev_ids[i].family), dev_ids[i].name,
@@ -944,10 +968,19 @@ int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
             continue;
         }
 
-        old_host = dev_res->host;
-        dev_res->host = host_cpy;
-        dev_info_cpy(&devices[avail_devices], dev_res);
-        dev_res->host = old_host;
+        dev_info_cpy(&src_devices[avail_devices], dev_res);
+        dev_info_cpy(&dst_devices[avail_devices], dev_res);
+
+        if (host != NULL) {
+            free((&dst_devices[avail_devices])->host);
+            (&dst_devices[avail_devices])->host = xstrdup(host_cpy);
+        }
+
+        if (library != NULL) {
+            len = strnlen(lib_cpy, PHO_URI_MAX);
+            memcpy((&dst_devices[avail_devices])->rsc.id.library, lib_cpy, len);
+            (&dst_devices[avail_devices])->rsc.id.library[len] = '\0';
+        }
 
         dss_res_free(dev_res, 1);
         avail_devices++;
@@ -956,8 +989,9 @@ int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
     if (avail_devices == 0)
         LOG_GOTO(out_free, rc, "There are no available devices to migrate");
 
-    rc2 = dss_device_update(&adm->dss, devices, devices, avail_devices,
-                            DSS_DEVICE_UPDATE_HOST);
+    rc2 = dss_device_update(&adm->dss, src_devices, dst_devices, avail_devices,
+                            fields);
+
     if (rc2)
         pho_error(rc2, "Failed to migrate devices");
     else
@@ -970,11 +1004,19 @@ out_free:
         dss_res_free(dev_res, 1);
     }
 
-    dss_unlock(&adm->dss, DSS_DEVICE, devices, avail_devices, false);
-    for (i = 0; i < avail_devices; ++i)
-        dev_info_free(devices + i, false);
-    free(devices);
-    free(host_cpy);
+    dss_unlock(&adm->dss, DSS_DEVICE, src_devices, avail_devices, false);
+    for (i = 0; i < avail_devices; ++i) {
+        dev_info_free(src_devices + i, false);
+        dev_info_free(dst_devices + i, false);
+    }
+
+    free(src_devices);
+    free(dst_devices);
+    if (host != NULL)
+        free(host_cpy);
+
+    if (library != NULL)
+        free(lib_cpy);
 
     return rc;
 }
