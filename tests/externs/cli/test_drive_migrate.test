@@ -58,7 +58,7 @@ function test_drive_migrate
     invoke_lrs
 
     set +e
-    $valg_phobos drive migrate other_host ${drive}
+    $valg_phobos drive migrate --host other_host ${drive}
     rc=$?
     set -e
     EBUSY="16"
@@ -67,7 +67,7 @@ function test_drive_migrate
               "locked, instead we got ${rc}."
     fi
 
-    $valg_phobos drive migrate ${myself} ${drive} || \
+    $valg_phobos drive migrate --host ${myself} ${drive} || \
         error "Drive migrate should be successful even if locked when we set" \
               "existing hostname"
 
@@ -75,7 +75,7 @@ function test_drive_migrate
     waive_tlc
     waive_lrs
 
-    $valg_phobos drive migrate ${new_host} ${drive} || \
+    $valg_phobos drive migrate --host ${new_host} ${drive} || \
         error "Drive migrate should be successful."
 
     local seen_new_host=$($phobos drive list -o host ${drive})
@@ -90,7 +90,7 @@ function test_drive_migrate_library
     local new_host="new_host"
 
     set +e
-    $valg_phobos drive migrate ${new_host} --library library_bis ${drive}
+    $valg_phobos drive migrate --host ${new_host} --library library_bis ${drive}
     rc=$?
     set -e
     ENXIO=6
@@ -99,10 +99,45 @@ function test_drive_migrate_library
               "not in the asked library, instead we got ${rc}."
     fi
 
-    $valg_phobos drive migrate ${new_host} --library library_bis \
+    $valg_phobos drive migrate --host ${new_host} --library library_bis \
         ${drive_bis} || \
         error "Drive migrate should be successful when setting the good other" \
               "library"
+}
+
+function test_drive_migrate_new_library
+{
+    local new_host="new_host"
+
+    $valg_phobos drive migrate --new-library library_bis ${drive} ||
+        error "Drive migrate should be successful."
+    local seen_new_library=$($phobos drive list -o library ${drive})
+    if [[ ${seen_new_library} != "library_bis" ]]; then
+        error "After drive migration, library must be library_bis, instead we" \
+              "got ${seen_new_library}"
+    fi
+
+    $valg_phobos drive migrate --library library_bis --host ${new_host} \
+        --new-library legacy ${drive_bis} ||
+        error "Drive migrate should be successful."
+
+    local seen_new_host=$($phobos drive list -o host ${drive_bis})
+    if [[ ${seen_new_host} != "new_host" ]]; then
+        error "After drive migration, host must be new_host, instead we got" \
+              "${seen_new_host_lib}"
+    fi
+
+    seen_new_library=$($phobos drive list -o library ${drive_bis})
+    if [[ ${seen_new_library} != "legacy" ]]; then
+        error "After drive migration, library must be legacy, instead we got" \
+              "${seen_new_library}"
+    fi
+}
+
+function test_drive_migrate_empty
+{
+    $valg_phobos drive migrate ${drive} 2>&1 | grep "No migrate to be performed"
+    return 0
 }
 
 if [[ ! -w /dev/changer ]]; then
@@ -110,5 +145,6 @@ if [[ ! -w /dev/changer ]]; then
 fi
 
 TEST_SETUP=setup
-TESTS=("test_drive_migrate" "test_drive_migrate_library")
+TESTS=("test_drive_migrate" "test_drive_migrate_empty"
+       "test_drive_migrate_library" "test_drive_migrate_new_library")
 TEST_CLEANUP=cleanup

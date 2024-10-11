@@ -181,6 +181,13 @@ class CLIParametersTest(unittest.TestCase):
                                   'C'])
         self.check_cmdline_valid(['tape', 'import', '-t', 'lto5',
                                   '--unlock', 'A'])
+        self.check_cmdline_valid(['drive', 'migrate', '--host', 'vm0',
+                                  'drive_serial_or_path'])
+        self.check_cmdline_valid(['drive', 'migrate', '--new-library', 'blob',
+                                  'drive_serial_or_path'])
+        self.check_cmdline_valid(['drive', 'migrate', '--host', 'vm0',
+                                  'new-library', 'blob',
+                                  'drive_serial_or_path'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['get', '--version', 'nan', 'objid', 'file'],
@@ -211,6 +218,9 @@ class CLIParametersTest(unittest.TestCase):
                                  'tape-label'], code=2)
         self.check_cmdline_exit(['tape', 'import'], code=2)
         self.check_cmdline_exit(['tape', 'import', 'A'], code=2)
+        self.check_cmdline_exit(['drive', 'migrate', '--host', 'vm0'], code=2)
+        self.check_cmdline_exit(['drive', 'migrate', '--new-library', 'blob'],
+                                code=2)
 
     def test_cli_logs_command(self): # pylint: disable=too-many-statements
         """Check logs specific commands"""

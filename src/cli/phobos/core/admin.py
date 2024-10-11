@@ -162,18 +162,20 @@ class Client: # pylint: disable=too-many-public-methods
                                    " device(s) '%s'" % dev_names)
         return count.value
 
-    def device_migrate(self, dev_names, library, host):
+    def device_migrate(self, dev_names, library, host, new_lib):
         """Migrate devices (for now, only tape drives)."""
         c_id = Id * len(dev_names)
         dev_ids = [Id(PHO_RSC_TAPE, name=name, library=library)
                    for name in dev_names]
-        c_host = c_char_p(host.encode('utf-8'))
+
+        c_host = c_char_p(host.encode('utf-8')) if host else None
+        c_new_lib = c_char_p(new_lib.encode('utf-8')) if new_lib else None
         count = c_int(0)
 
         rc = LIBPHOBOS_ADMIN.phobos_admin_drive_migrate(byref(self.handle),
                                                         c_id(*dev_ids),
                                                         len(dev_ids), c_host,
-                                                        None, byref(count))
+                                                        c_new_lib, byref(count))
         if rc:
             raise EnvironmentError(rc, "Failed to migrate device(s) '%s'" %
                                    dev_names)
