@@ -55,9 +55,7 @@ static inline int tape_drive_compat(const struct media_info *tape,
 /**
  * Media with ongoing format scheduled requests
  *
- * "media_name" keys and values contains "struct media_info *" rsc.id.name
- * This structure doesn't "own" these rsc.id.name references and never
- * frees them. They must be freed elsewhere.
+ * "media" keys and values contains "struct pho_id *" of the formatted media.
  *
  * - The scheduler thread checks existing in progress format media to avoid
  *   launching the same format twice.
@@ -66,7 +64,7 @@ static inline int tape_drive_compat(const struct media_info *tape,
  */
 struct format_media {
     pthread_mutex_t mutex;
-    GHashTable *media_name;
+    GHashTable *media;
 };
 
 /**

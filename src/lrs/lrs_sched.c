@@ -67,7 +67,8 @@ static int format_media_init(struct format_media *format_media)
     if (rc)
         LOG_RETURN(rc, "Error on initializing format_media mutex");
 
-    format_media->media_name = g_hash_table_new(g_str_hash, g_str_equal);
+    format_media->media = g_hash_table_new_full(g_pho_id_hash, g_pho_id_equal,
+                                                free, free);
     return 0;
 }
 
@@ -79,9 +80,9 @@ static void format_media_clean(struct format_media *format_media)
     if (rc)
         pho_error(rc, "Error on destroying format_media mutex");
 
-    if (format_media->media_name) {
-        g_hash_table_unref(format_media->media_name);
-        format_media->media_name = NULL;
+    if (format_media->media) {
+        g_hash_table_unref(format_media->media);
+        format_media->media = NULL;
     }
 }
 
@@ -94,12 +95,13 @@ static bool format_medium_add(struct format_media *format_media,
                               struct media_info *medium)
 {
     pthread_mutex_lock(&format_media->mutex);
-    if (g_hash_table_contains(format_media->media_name, medium->rsc.id.name)) {
+    if (g_hash_table_contains(format_media->media, &medium->rsc.id)) {
         pthread_mutex_unlock(&format_media->mutex);
         return false;
     }
 
-    g_hash_table_add(format_media->media_name, medium->rsc.id.name);
+    g_hash_table_insert(format_media->media, pho_id_dup(&medium->rsc.id),
+                        pho_id_dup(&medium->rsc.id));
     pthread_mutex_unlock(&format_media->mutex);
     return true;
 }
@@ -108,7 +110,7 @@ void format_medium_remove(struct format_media *format_media,
                           struct media_info *medium)
 {
     pthread_mutex_lock(&format_media->mutex);
-    g_hash_table_remove(format_media->media_name, medium->rsc.id.name);
+    g_hash_table_remove(format_media->media, &medium->rsc.id);
     pthread_mutex_unlock(&format_media->mutex);
 }
 
