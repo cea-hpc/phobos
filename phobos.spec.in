@@ -193,6 +193,24 @@ ldconfig
 %endif
 
 %changelog
+* Mon Oct 14 2024 - Patrice Lucas <patrice.lucas@cea.fr> - 2.1.0-1
+ - WARNING: the db schema moves from 2.0 to 2.1 and a migration is needed
+ - Multilibrary: Resource (tape or drive for example) can now belong to
+   different libraries. Default libraries per family must be set in phobos.conf.
+ - Rename: we can change the object id of an existing object.
+ - Repack: we can copy non deprecated object of one tape
+   to a new one and format the old tape to remove deprecated objects.
+ - RAID4: a new 2+1 layout is available. Object is split on two media and a
+   third one contains XOR.
+ - --sort/--rsort: phobos extent/media/drive/object lists can be sorted.
+ - Empty dir/tape/rados_pool deletion: medium without any extent can be deleted.
+ - LTFS release: a phobos cli command is available to release the ltfs lock
+   of one drive.
+ - Hard deletion: --hard option is added to the delete command.
+ - Object creation and access times are managed by phobos.
+ - path normalization: dir path normalization (trailing "/" or relative path
+   for example) are managed by phobos CLI and API.
+
 * Fri May 17 2024 - Patrice Lucas <patrice.lucas@cea.fr> - 2.0.0-1
 - WARNING: the db schema moves from 1.95 to 2.0 and a migration is needed
 - Device, medium: errors are now logged into the DSS and managed through a
