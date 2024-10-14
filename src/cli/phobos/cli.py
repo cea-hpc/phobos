@@ -1186,6 +1186,22 @@ class MediaUpdateOptHandler(DSSInteractHandler):
                                  'tags, new tags list overwrite current tags')
         parser.add_argument('res', nargs='+', help='Resource(s) to update')
 
+class MediaRenameOptHandler(DSSInteractHandler):
+    """Rename an existing media"""
+    label = 'rename'
+    descr = ('for now, change only the library of an existing medium '
+             '(only the DSS is modified)')
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(MediaRenameOptHandler, cls).add_options(parser)
+        parser.add_argument('--library',
+                            help="Library containing the medium to rename")
+        parser.add_argument('--new-library',
+                            help="New library for these medium(s)")
+        parser.add_argument('res', nargs='+', help="Resource(s) to rename")
+
 class DriveMigrateOptHandler(DSSInteractHandler):
     """Migrate an existing drive"""
     label = 'migrate'
@@ -1755,6 +1771,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         MediaSetAccessOptHandler,
         MediumLocateOptHandler,
         ResourceDeleteOptHandler,
+        MediaRenameOptHandler,
     ]
     library = None
 
@@ -2069,6 +2086,27 @@ class MediaOptHandler(BaseResourceOptHandler):
             self.logger.warning("Failed to delete %d/%d media(s)",
                                 num2delete - num_deleted, num2delete)
 
+    def exec_rename(self):
+        """Rename a medium"""
+        resources = self.params.get('res')
+        new_lib = self.params.get('new_library')
+        set_library(self)
+
+        if new_lib is None:
+            self.logger.info("No rename to be performed")
+            return
+
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                count = adm.medium_rename(self.family, resources, self.library,
+                                          new_lib)
+        except EnvironmentError as err:
+            self.logger.error("%s", env_error_format(err))
+            sys.exit(abs(err.errno))
+
+        if count > 0:
+            self.logger.info("Rename %d media(s) successfully", count)
+
 class PhobosdPingOptHandler(BaseOptHandler):
     """Phobosd ping"""
     label = 'phobosd'
@@ -2162,6 +2200,7 @@ class DirOptHandler(MediaOptHandler):
         DirSetAccessOptHandler,
         MediumLocateOptHandler,
         ResourceDeleteOptHandler,
+        MediaRenameOptHandler,
     ]
 
     def add_medium(self, adm, medium, tags):
@@ -2496,6 +2535,7 @@ class TapeOptHandler(MediaOptHandler):
         TapeImportOptHandler,
         RepackOptHandler,
         ResourceDeleteOptHandler,
+        MediaRenameOptHandler,
     ]
 
 class RadosPoolOptHandler(MediaOptHandler):
@@ -2513,6 +2553,7 @@ class RadosPoolOptHandler(MediaOptHandler):
         RadosPoolFormatOptHandler,
         MediumLocateOptHandler,
         ResourceDeleteOptHandler,
+        MediaRenameOptHandler,
     ]
 
     def add_medium(self, adm, medium, tags):

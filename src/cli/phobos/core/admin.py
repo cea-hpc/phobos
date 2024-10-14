@@ -490,6 +490,22 @@ class Client: # pylint: disable=too-many-public-methods
             raise EnvironmentError(rc, f"Failed to repack {medium} from "
                                        f"library {library}")
 
+    def medium_rename(self, family, media, library, new_lib):
+        """Rename medium (for now, only the library)."""
+        c_id = Id * len(media)
+        med_ids = [Id(family=family, name=med, library=library)
+                   for med in media]
+        count = c_int(0)
+        c_new_lib = c_char_p(new_lib.encode('utf-8'))
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_media_library_rename( \
+                                byref(self.handle), c_id(*med_ids),
+                                len(med_ids), c_new_lib, byref(count))
+        if rc:
+            raise EnvironmentError(rc, "Failed to rename media(s) '%s'" % media)
+
+        return count.value
+
     @staticmethod
     def layout_list_free(layouts, n_layouts):
         """Free a previously obtained layout list."""
