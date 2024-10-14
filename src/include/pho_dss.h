@@ -248,6 +248,7 @@ static inline const char *dss_fields_pub2implem(const char *public_name)
 #define DELETE_ACCESS       (1<<10)
 #define NB_OBJ              (1<<11)
 #define LOGC_SPC_USED       (1<<12)
+#define LIBRARY             (1<<13)
 
 #define IS_STAT(_f) ((NB_OBJ | NB_OBJ_ADD | LOGC_SPC_USED | LOGC_SPC_USED_ADD |\
                       PHYS_SPC_USED | PHYS_SPC_FREE) & (_f))

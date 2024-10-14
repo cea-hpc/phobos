@@ -458,6 +458,25 @@ int phobos_admin_media_import(struct admin_handle *adm,
                               bool check_hash);
 
 /**
+ * Change the library of media.
+ *
+ * \param[in]      adm             Admin module handler.
+ * \param[in]      med_ids         List of media to rename.
+ * \param[in]      num_med         Number of media to rename.
+ * \param[in]      library         New library of media.
+ * \param[out]     num_removed_med Number of renamed media.
+ *
+ * \return                         0      on success,
+ *                                 -errno on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
+ */
+int phobos_admin_media_library_rename(struct admin_handle *adm,
+                                      struct pho_id *med_ids,
+                                      int num_med, const char *library,
+                                      int *num_renamed_med);
+
+/**
  * Open and scan a library, and generate a json array with unstructured
  * information. Output information may vary, depending on the library.
  *

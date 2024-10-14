@@ -2134,6 +2134,121 @@ int phobos_admin_media_import(struct admin_handle *adm,
     return rc;
 }
 
+int phobos_admin_media_library_rename(struct admin_handle *adm,
+                                      struct pho_id *med_ids,
+                                      int num_med, const char *library,
+                                      int *num_renamed_med)
+{
+    struct media_info *src_media;
+    struct media_info *dst_media;
+    struct media_info *med_res;
+    GArray *extents = NULL;
+    struct extent *ext_res;
+    char *lib_cpy = NULL;
+    int avail_medias = 0;
+    int ext_cnt;
+    size_t len;
+    int rc = 0;
+    int i, j;
+    int rc2;
+
+    *num_renamed_med = 0;
+
+    src_media = xcalloc(num_med, sizeof(*src_media));
+    dst_media = xcalloc(num_med, sizeof(*dst_media));
+    extents = g_array_new(FALSE, TRUE, sizeof(*ext_res));
+    lib_cpy = xstrdup_safe(library);
+
+    for (i = 0; i < num_med; i++) {
+        rc2 = dss_one_medium_get_from_id(&adm->dss, med_ids + i, &med_res);
+        if (rc2) {
+            rc = rc ? : rc2;
+            continue;
+        }
+
+        if (strcmp(lib_cpy, med_res->rsc.id.library) == 0) {
+            pho_info("Media (family '%s', name '%s', library '%s') is already "
+                     "located on '%s'",
+                     rsc_family2str(med_ids[i].family), med_ids[i].name,
+                     med_ids[i].library, lib_cpy);
+            dss_res_free(med_res, 1);
+            continue;
+        }
+
+        rc2 = dss_lock(&adm->dss, DSS_MEDIA, med_res, 1);
+        if (rc2) {
+            pho_error(rc2,
+                      "Media (family '%s', name '%s', library '%s') cannot be "
+                      "locked, so cannot be renamed",
+                      rsc_family2str(med_ids[i].family), med_ids[i].name,
+                      med_ids[i].library);
+            dss_res_free(med_res, 1);
+            rc = rc ? : rc2;
+            continue;
+        }
+
+        rc2 = _get_extents(adm, med_ids + i, &ext_res, &ext_cnt, false);
+        if (rc2) {
+            dss_unlock(&adm->dss, DSS_MEDIA, med_res, 1, false);
+            dss_res_free(med_res, 1);
+            rc = rc ? : rc2;
+            continue;
+        }
+
+        if (ext_cnt > 0) {
+            /* Change library in all extents presents on the media */
+            len = strnlen(lib_cpy, PHO_URI_MAX);
+            for (j = 0; j < ext_cnt; j++) {
+                memcpy(ext_res[j].media.library, lib_cpy, len);
+                ext_res[j].media.library[len] = '\0';
+            }
+            g_array_append_vals(extents, ext_res, ext_cnt);
+            dss_res_free(ext_res, ext_cnt);
+        }
+
+        media_info_copy(&src_media[avail_medias], med_res);
+        media_info_copy(&dst_media[avail_medias], med_res);
+        len = strnlen(lib_cpy, PHO_URI_MAX);
+        memcpy((&dst_media[avail_medias])->rsc.id.library, lib_cpy, len);
+        (&dst_media[avail_medias])->rsc.id.library[len] = '\0';
+
+        dss_res_free(med_res, 1);
+        avail_medias++;
+    }
+
+    if (avail_medias == 0)
+        LOG_GOTO(out_free, rc, "There are no available medias to rename");
+
+    if (extents->len > 0) {
+        rc = dss_extent_update(&adm->dss, (struct extent *) extents->data,
+                               (struct extent *) extents->data, extents->len);
+        if (rc)
+            LOG_GOTO(out_free, rc, "Update of extents has failed");
+    }
+
+    rc = dss_media_update(&adm->dss, src_media, dst_media, avail_medias,
+                          LIBRARY);
+
+    if (rc)
+        pho_error(rc, "Failed to rename medias");
+    else
+        *num_renamed_med = avail_medias;
+
+out_free:
+    dss_unlock(&adm->dss, DSS_MEDIA, src_media, avail_medias, false);
+    for (i = 0; i < avail_medias; ++i) {
+        media_info_cleanup(src_media + i);
+        media_info_cleanup(dst_media + i);
+    }
+
+    g_array_free(extents, TRUE);
+    free(src_media);
+    free(dst_media);
+    free(lib_cpy);
+
+    return rc;
+}
+
 int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
                           bool refresh, json_t **lib_data)
 {

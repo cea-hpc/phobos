@@ -444,10 +444,11 @@ int dss_media_update(struct dss_handle *handle, struct media_info *src_list,
                                             &medium_info);
             if (rc)
                 LOG_GOTO(clean, rc,
-                         "Error on getting medium_info (family %s, name %s) to "
-                         "update stats",
+                         "Error on getting medium_info "
+                         "(family %s, name %s, library %s) to update stats",
                          rsc_family2str(src_list[i].rsc.id.family),
-                         src_list[i].rsc.id.name);
+                         src_list[i].rsc.id.name,
+                         src_list[i].rsc.id.library);
 
             if (NB_OBJ & fields)
                 medium_info->stats.nb_obj = dst_list[i].stats.nb_obj;

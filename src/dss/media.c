@@ -518,6 +518,12 @@ static int media_update_query(PGconn *conn, void *src_med, void *dst_med,
             fields = 0;
         }
 
+        if (LIBRARY & fields)
+            append_update_request(sub_request,
+                                  "library = '%s'",
+                                  dst->rsc.id.library,
+                                  (fields ^= LIBRARY) != 0);
+
 
         g_string_append_printf(sub_request,
                                " WHERE family = '%s' AND id = '%s' AND "
