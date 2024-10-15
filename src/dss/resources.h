@@ -47,8 +47,8 @@
 struct dss_resource_ops {
     int (*insert_query)(PGconn *conn, void *void_resource, int item_count,
                         int64_t fields, GString *request);
-    int (*update_query)(PGconn *conn, void *void_resource, int item_count,
-                        int64_t fields, GString *request);
+    int (*update_query)(PGconn *conn, void *src_resource, void *dst_resource,
+                        int item_count, int64_t fields, GString *request);
     int (*select_query)(GString **conditions, int n_conditions,
                         GString *request, struct dss_sort *sort);
     int (*delete_query)(void *void_resource, int item_count, GString *request);
@@ -87,7 +87,8 @@ int get_insert_query(enum dss_type type, PGconn *conn, void *void_resource,
  *                            should be called
  * \param[in]  conn           The database connection, mainly used for string
  *                            escaping
- * \param[in]  void_resource  The resources to create the update query with
+ * \param[in]  src_resource   The resources to select with the query
+ * \param[in]  dst_resource   The resources to create the update query with
  * \param[in]  item_count     The number of resources to create the update query
  *                            with
  * \param[in]  fields         Additionnal fields used to specify the type of
@@ -98,8 +99,9 @@ int get_insert_query(enum dss_type type, PGconn *conn, void *void_resource,
  *                                values
  *                       negative error code otherwise
  */
-int get_update_query(enum dss_type type, PGconn *conn, void *void_resource,
-                     int item_count, int64_t fields, GString *request);
+int get_update_query(enum dss_type type, PGconn *conn, void *src_resource,
+                     void *dst_resource, int item_count, int64_t fields,
+                     GString *request);
 
 /**
  * Get the select query of a resource into \p request.

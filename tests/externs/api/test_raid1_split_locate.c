@@ -86,8 +86,8 @@ static int rsl_clean_all_media(void **state)
         /* admin unlock and get flag to true */
         rsl_state->media[i]->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
         rsl_state->media[i]->flags.get = true;
-        rc = dss_media_update(rsl_state->dss, rsl_state->media[i], 1,
-                              ADM_STATUS | GET_ACCESS);
+        rc = dss_media_update(rsl_state->dss, rsl_state->media[i],
+                              rsl_state->media[i], 1, ADM_STATUS | GET_ACCESS);
         assert_return_code(rc, -rc);
     }
 
@@ -332,7 +332,8 @@ static void rsl_loss(void **state)
 
     /* locate with admin locked first extent of first split */
     rsl_state->media[0]->rsc.adm_status = PHO_RSC_ADM_ST_LOCKED;
-    rc = dss_media_update(rsl_state->dss, rsl_state->media[0], 1, ADM_STATUS);
+    rc = dss_media_update(rsl_state->dss, rsl_state->media[0],
+                          rsl_state->media[0], 1, ADM_STATUS);
     assert_return_code(rc, -rc);
     rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
                              &hostname, &nb_new_lock);
@@ -345,6 +346,7 @@ static void rsl_loss(void **state)
     /* locate with no get permission on the first extent of the second split */
     rsl_state->media[rsl_state->repl_count]->flags.get = false;
     rc = dss_media_update(rsl_state->dss,
+                          rsl_state->media[rsl_state->repl_count],
                           rsl_state->media[rsl_state->repl_count],
                           1, GET_ACCESS);
     assert_return_code(rc, -rc);
@@ -519,8 +521,8 @@ static void rsl_one_lock(void **state)
 
         /* admin lock this medium and check my_hostname */
         rsl_state->media[i]->rsc.adm_status = PHO_RSC_ADM_ST_LOCKED;
-        rc = dss_media_update(rsl_state->dss, rsl_state->media[i], 1,
-                              ADM_STATUS);
+        rc = dss_media_update(rsl_state->dss, rsl_state->media[i],
+                              rsl_state->media[i], 1, ADM_STATUS);
         assert_return_code(rc, -rc);
 
         /* check locate */
@@ -547,8 +549,8 @@ static void rsl_one_lock(void **state)
 
         /* set operation get flag to false and check NULL hostname */
         rsl_state->media[i]->flags.get = false;
-        rc = dss_media_update(rsl_state->dss, rsl_state->media[i], 1,
-                              GET_ACCESS);
+        rc = dss_media_update(rsl_state->dss, rsl_state->media[i],
+                              rsl_state->media[i], 1, GET_ACCESS);
         assert_return_code(rc, -rc);
 
         /* check locate */
@@ -606,6 +608,7 @@ static void rsl_one_lock_one_not_avail(void **state)
         /* operation get flag to false on second split medium */
         rsl_state->media[i + rsl_state->repl_count]->flags.get = false;
         rc = dss_media_update(rsl_state->dss,
+                              rsl_state->media[i + rsl_state->repl_count],
                               rsl_state->media[i + rsl_state->repl_count], 1,
                               GET_ACCESS);
         assert_return_code(rc, -rc);
@@ -633,6 +636,7 @@ static void rsl_one_lock_one_not_avail(void **state)
             assert_return_code(rc, -rc);
             rsl_state->media[i + rsl_state->repl_count]->flags.get = false;
             rc = dss_media_update(rsl_state->dss,
+                                  rsl_state->media[i + rsl_state->repl_count],
                                   rsl_state->media[i + rsl_state->repl_count],
                                   1, GET_ACCESS);
             assert_return_code(rc, -rc);
@@ -664,7 +668,7 @@ static void rsl_one_lock_one_not_avail(void **state)
                 if (j != i) {
                     rsl_state->media[j]->flags.get = false;
                     rc = dss_media_update(rsl_state->dss, rsl_state->media[j],
-                                          1, GET_ACCESS);
+                                          rsl_state->media[j], 1, GET_ACCESS);
                     assert_return_code(rc, -rc);
                 }
             }

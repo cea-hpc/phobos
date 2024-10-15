@@ -81,7 +81,8 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
             return dss_object_insert(handle, (struct object_info *)item_list, n,
                                      DSS_SET_INSERT);
         case DSS_SET_UPDATE:
-            return dss_object_update(handle, (struct object_info *)item_list, n,
+            return dss_object_update(handle, (struct object_info *)item_list,
+                                     (struct object_info *) item_list, n,
                                      DSS_OBJECT_UPDATE_USER_MD);
         case DSS_SET_DELETE:
         default:
@@ -105,8 +106,8 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
     case DSS_DEVICE:
         switch (action) {
         case DSS_SET_UPDATE:
-            return dss_device_update(handle, (struct dev_info *)item_list, n,
-                                     fields);
+            return dss_device_update(handle, (struct dev_info *)item_list,
+                                     (struct dev_info *) item_list, n, fields);
         case DSS_SET_INSERT:
             return dss_device_insert(handle, (struct dev_info *)item_list, n);
         case DSS_SET_DELETE:
@@ -117,8 +118,8 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
     case DSS_MEDIA:
         switch (action) {
         case DSS_SET_UPDATE:
-            return dss_media_update(handle, (struct media_info *)item_list, n,
-                                    fields);
+            return dss_media_update(handle, (struct media_info *)item_list,
+                                    (struct media_info *) item_list, n, fields);
         case DSS_SET_INSERT:
             return dss_media_insert(handle, (struct media_info *)item_list, n);
         case DSS_SET_DELETE:

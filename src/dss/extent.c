@@ -155,26 +155,27 @@ static int extent_insert_query(PGconn *conn, void *void_extent, int item_cnt,
     return 0;
 }
 
-static int extent_update_query(PGconn *conn, void *void_extent, int item_cnt,
-                               int64_t fields, GString *request)
+static int extent_update_query(PGconn *conn, void *src_extent, void *dst_extent,
+                               int item_cnt, int64_t fields, GString *request)
 {
     (void) fields;
     (void) conn;
 
     for (int i = 0; i < item_cnt; ++i) {
-        struct extent *extent = ((struct extent *) void_extent) + i;
+        struct extent *src = ((struct extent *) src_extent) + i;
+        struct extent *dst = ((struct extent *) dst_extent) + i;
 
         g_string_append_printf(
             request,
             "UPDATE extent SET state = '%s', medium_family = '%s', "
             "medium_id = '%s', medium_library = '%s', address = '%s' "
             "WHERE extent_uuid = '%s';",
-            extent_state2str(extent->state),
-            rsc_family2str(extent->media.family),
-            extent->media.name,
-            extent->media.library,
-            extent->address.buff,
-            extent->uuid
+            extent_state2str(dst->state),
+            rsc_family2str(dst->media.family),
+            dst->media.name,
+            dst->media.library,
+            dst->address.buff,
+            src->uuid
         );
     }
 

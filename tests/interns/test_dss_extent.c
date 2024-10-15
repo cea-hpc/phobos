@@ -83,7 +83,7 @@ static void de_simple_ok(void **state)
     /* media.name is a buffer larger than the size of check_media_name */
     ext_res->media.name[strlen(ext_res->media.name)] = '2';
     ext_res->address.buff[0] = 'c';
-    rc = dss_extent_update(handle, ext_res, ext_cnt);
+    rc = dss_extent_update(handle, ext_res, ext_res, ext_cnt);
     assert_return_code(rc, -rc);
     dss_res_free(ext_res, ext_cnt);
 

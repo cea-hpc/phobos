@@ -621,7 +621,7 @@ static int object_hard_delete(struct dss_handle *dss, struct object_info *obj,
     for (i = 0; i < count; ++i)
         extents[i].state = PHO_EXT_ST_ORPHAN;
 
-    rc = dss_extent_update(dss, extents, count);
+    rc = dss_extent_update(dss, extents, extents, count);
     dss_res_free(extents, count);
     if (rc)
         LOG_RETURN(rc, "Unable to update object '%s:%d' extents state",
@@ -1047,7 +1047,8 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
                     enc->layout->extents[i].state = PHO_EXT_ST_ORPHAN;
 
                 rc2 = dss_extent_update(&pho->dss, enc->layout->extents,
-                                     enc->layout->ext_count);
+                                        enc->layout->extents,
+                                        enc->layout->ext_count);
 
                 if (rc2)
                     pho_error(rc2, "Error while updating extents to orphan");
@@ -1057,7 +1058,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
                     .obj_status = PHO_OBJ_STATUS_COMPLETE,
                 };
 
-                rc = dss_object_update(&pho->dss, &obj, 1,
+                rc = dss_object_update(&pho->dss, &obj, &obj, 1,
                                        DSS_OBJECT_UPDATE_OBJ_STATUS);
                 if (rc)
                     pho_error(rc,
@@ -1086,10 +1087,10 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
         }
 
         if (obj->deprec_time.tv_sec == 0 && obj->deprec_time.tv_usec == 0)
-            rc = dss_object_update(&pho->dss, obj, 1,
+            rc = dss_object_update(&pho->dss, obj, obj, 1,
                                    DSS_OBJECT_UPDATE_ACCESS_TIME);
         else
-            rc = dss_deprecated_object_update(&pho->dss, obj, 1,
+            rc = dss_deprecated_object_update(&pho->dss, obj, obj, 1,
                                               DSS_OBJECT_UPDATE_ACCESS_TIME);
 
         object_info_free(obj);

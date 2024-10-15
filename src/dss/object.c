@@ -86,26 +86,27 @@ static struct dss_field FIELDS[] = {
     { DSS_OBJECT_UPDATE_OID, "oid = '%s'", get_oid },
 };
 
-static int object_update_query(PGconn *conn, void *void_object, int item_cnt,
-                               int64_t fields, GString *request)
+static int object_update_query(PGconn *conn, void *src_object, void *dst_object,
+                               int item_cnt, int64_t fields, GString *request)
 {
     (void) conn;
 
     for (int i = 0; i < item_cnt; ++i) {
-        struct object_info *object = ((struct object_info *) void_object) + i;
+        struct object_info *src = ((struct object_info *) src_object) + i;
+        struct object_info *dst = ((struct object_info *) dst_object) + i;
         enum dss_object_operations _fields = fields;
         GString *sub_request = g_string_new(NULL);
 
         g_string_append(sub_request, " UPDATE object SET ");
 
-        update_fields(object, _fields, FIELDS, 4, sub_request);
+        update_fields(dst, _fields, FIELDS, 4, sub_request);
 
         if (fields == DSS_OBJECT_UPDATE_OID)
             g_string_append_printf(sub_request, " WHERE object_uuid = '%s';",
-                                   object->uuid);
+                                   src->uuid);
         else
             g_string_append_printf(sub_request, " WHERE oid = '%s';",
-                                   object->oid);
+                                   src->oid);
 
         g_string_append(request, sub_request->str);
         g_string_free(sub_request, true);

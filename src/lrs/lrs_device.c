@@ -855,7 +855,7 @@ static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
     /* TODO update nb_load, nb_errors, last_load */
 
     assert(fields);
-    rc2 = dss_media_update(dss, media_info, 1, fields);
+    rc2 = dss_media_update(dss, media_info, media_info, 1, fields);
     if (rc2)
         rc = rc ? : rc2;
 
@@ -1085,7 +1085,7 @@ static int dss_set_medium_to_failed(struct dss_handle *dss,
               rsc_family2str(media_info->rsc.id.family),
               media_info->rsc.id.name, media_info->rsc.id.library);
     media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
-    return dss_media_update(dss, media_info, 1, ADM_STATUS);
+    return dss_media_update(dss, media_info, media_info, 1, ADM_STATUS);
 }
 
 void fail_release_medium(struct lrs_dev *dev, struct media_info *medium)
@@ -1227,7 +1227,8 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
      * no concurrent modifications can be done. So this is thread safe since we
      * have a reference on the medium.
      */
-    rc = dss_media_update(&dev->ld_device_thread.dss, medium, 1, fields);
+    rc = dss_media_update(&dev->ld_device_thread.dss, medium, medium, 1,
+                          fields);
     if (rc)
         LOG_RETURN(rc,
                    "Successful format of medium (family '%s', name '%s', "
@@ -1825,7 +1826,8 @@ static void cancel_pending_format(struct lrs_dev *device)
                           medium_to_format->rsc.id.library);
                 medium_to_format->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
                 rc = dss_media_update(&device->ld_device_thread.dss,
-                                      medium_to_format, 1, ADM_STATUS);
+                                      medium_to_format, medium_to_format, 1,
+                                      ADM_STATUS);
                 if (rc)
                     pho_error(rc,
                               "Unable to set medium (family '%s', name '%s', "
@@ -1936,7 +1938,8 @@ static void fail_release_device(struct lrs_dev *dev)
               "setting device (family '%s', name '%s', library '%s') to failed",
               rsc_family2str(dev_id->family), dev_id->name, dev_id->library);
 
-    rc = dss_device_update(&dev->ld_device_thread.dss, dev->ld_dss_dev_info, 1,
+    rc = dss_device_update(&dev->ld_device_thread.dss, dev->ld_dss_dev_info,
+                           dev->ld_dss_dev_info, 1,
                            DSS_DEVICE_UPDATE_ADM_STATUS);
     if (rc) {
         const struct pho_id *dev_id = lrs_dev_id(dev);
@@ -2415,7 +2418,8 @@ static int dev_medium_switch_mount(struct lrs_dev *dev,
         dev->ld_dss_media_info->fs.status = PHO_FS_STATUS_FULL;
         MUTEX_UNLOCK(&dev->ld_mutex);
         rc2 = dss_media_update(&dev->ld_device_thread.dss,
-                               dev->ld_dss_media_info, 1, FS_STATUS);
+                               dev->ld_dss_media_info, dev->ld_dss_media_info,
+                               1, FS_STATUS);
         if (rc2) {
             rc = rc2;
             context->failure_on_device = true;

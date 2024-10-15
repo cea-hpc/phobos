@@ -87,8 +87,9 @@ int get_insert_query(enum dss_type type, PGconn *conn, void *void_resource,
                                       request);
 }
 
-int get_update_query(enum dss_type type, PGconn *conn, void *void_resource,
-                     int item_count, int64_t fields, GString *request)
+int get_update_query(enum dss_type type, PGconn *conn, void *src_resource,
+                     void *dst_resource, int item_count, int64_t fields,
+                     GString *request)
 {
     const struct dss_resource_ops *resource_ops = get_resource_ops(type);
 
@@ -97,8 +98,8 @@ int get_update_query(enum dss_type type, PGconn *conn, void *void_resource,
 
     assert(resource_ops->update_query != NULL);
 
-    return resource_ops->update_query(conn, void_resource, item_count, fields,
-                                      request);
+    return resource_ops->update_query(conn, src_resource, dst_resource,
+                                      item_count, fields, request);
 }
 
 int get_select_query(enum dss_type type, GString **conditions, int n_conditions,

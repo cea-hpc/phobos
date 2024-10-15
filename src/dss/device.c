@@ -96,26 +96,27 @@ static struct dss_field FIELDS[] = {
     { DSS_DEVICE_UPDATE_HOST, "host = '%s'", _get_host }
 };
 
-static int device_update_query(PGconn *conn, void *void_dev, int item_cnt,
-                               int64_t fields, GString *request)
+static int device_update_query(PGconn *conn, void *src_dev, void *dst_dev,
+                               int item_cnt, int64_t fields, GString *request)
 {
     (void) conn;
 
     for (int i = 0; i < item_cnt; ++i) {
-        struct dev_info *device = ((struct dev_info *) void_dev) + i;
+        struct dev_info *src = ((struct dev_info *) src_dev) + i;
+        struct dev_info *dst = ((struct dev_info *) dst_dev) + i;
         enum dss_device_operations _fields = fields;
         GString *sub_request = g_string_new(NULL);
 
         g_string_append(sub_request, "UPDATE device SET ");
 
-        update_fields(device, _fields, FIELDS, 2, sub_request);
+        update_fields(dst, _fields, FIELDS, 2, sub_request);
 
         g_string_append_printf(sub_request,
-                               "WHERE family = '%s' AND id = '%s' AND "
+                               " WHERE family = '%s' AND id = '%s' AND "
                                "library = '%s'; ",
-                               rsc_family2str(device->rsc.id.family),
-                               device->rsc.id.name,
-                               device->rsc.id.library);
+                               rsc_family2str(src->rsc.id.family),
+                               src->rsc.id.name,
+                               src->rsc.id.library);
 
         g_string_append(request, sub_request->str);
         g_string_free(sub_request, true);

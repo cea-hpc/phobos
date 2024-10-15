@@ -449,14 +449,16 @@ static int append_stat_update_request(PGconn *conn, GString *request,
 
 // XXX: feels like updates could be managed the same as filters, with the caller
 // specifying what to update and the value directly
-static int media_update_query(PGconn *conn, void *void_med, int item_cnt,
-                              int64_t update_fields, GString *request)
+static int media_update_query(PGconn *conn, void *src_med, void *dst_med,
+                              int item_cnt, int64_t update_fields,
+                              GString *request)
 {
     if (update_fields == 0)
         return -EINVAL;
 
     for (int i = 0; i < item_cnt; ++i) {
-        struct media_info *medium = ((struct media_info *) void_med) + i;
+        struct media_info *src = ((struct media_info *) src_med) + i;
+        struct media_info *dst = ((struct media_info *) dst_med) + i;
         GString *sub_request = g_string_new(NULL);
         int64_t fields = update_fields;
         int rc;
@@ -467,24 +469,24 @@ static int media_update_query(PGconn *conn, void *void_med, int item_cnt,
         if (ADM_STATUS & fields)
             append_update_request(sub_request,
                                   "adm_status = '%s'",
-                                  rsc_adm_status2str(medium->rsc.adm_status),
+                                  rsc_adm_status2str(dst->rsc.adm_status),
                                   (fields ^= ADM_STATUS) != 0);
 
         if (FS_STATUS & fields)
             append_update_request(sub_request,
                                   "fs_status = '%s'",
-                                  fs_status2str(medium->fs.status),
+                                  fs_status2str(dst->fs.status),
                                   (fields ^= FS_STATUS) != 0);
 
         if (FS_LABEL & fields) {
-            rc = append_label_update_request(conn, sub_request, medium,
+            rc = append_label_update_request(conn, sub_request, dst,
                                              (fields ^= FS_LABEL) != 0);
             if (rc)
                 return rc;
         }
 
         if (TAGS & fields) {
-            rc = append_tags_update_request(conn, sub_request, medium,
+            rc = append_tags_update_request(conn, sub_request, dst,
                                             (fields ^= TAGS) != 0);
             if (rc)
                 return rc;
@@ -493,23 +495,23 @@ static int media_update_query(PGconn *conn, void *void_med, int item_cnt,
         if (PUT_ACCESS & fields)
             append_update_request(sub_request,
                                   "put = %s",
-                                  bool2sqlbool(medium->flags.put),
+                                  bool2sqlbool(dst->flags.put),
                                   (fields ^= PUT_ACCESS) != 0);
 
         if (GET_ACCESS & fields)
             append_update_request(sub_request,
                                   "get = %s",
-                                  bool2sqlbool(medium->flags.get),
+                                  bool2sqlbool(dst->flags.get),
                                   (fields ^= GET_ACCESS) != 0);
 
         if (DELETE_ACCESS & fields)
             append_update_request(sub_request,
                                   "delete = %s",
-                                  bool2sqlbool(medium->flags.delete),
+                                  bool2sqlbool(dst->flags.delete),
                                   (fields ^= DELETE_ACCESS) != 0);
 
         if (IS_STAT(fields)) {
-            rc = append_stat_update_request(conn, sub_request, medium, false);
+            rc = append_stat_update_request(conn, sub_request, dst, false);
             if (rc)
                 return rc;
 
@@ -520,8 +522,8 @@ static int media_update_query(PGconn *conn, void *void_med, int item_cnt,
         g_string_append_printf(sub_request,
                                " WHERE family = '%s' AND id = '%s' AND "
                                "library = '%s';",
-                               rsc_family2str(medium->rsc.id.family),
-                               medium->rsc.id.name, medium->rsc.id.library);
+                               rsc_family2str(src->rsc.id.family),
+                               src->rsc.id.name, src->rsc.id.library);
 
         g_string_append(request, sub_request->str);
         g_string_free(sub_request, true);

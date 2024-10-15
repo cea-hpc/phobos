@@ -325,8 +325,8 @@ class MediaManager(BaseEntityManager):
             return
 
         med, med_cnt = self._generic_set(media)
-        rc = LIBPHOBOS.dss_media_update(byref(self.client.handle), med, med_cnt,
-                                        fields)
+        rc = LIBPHOBOS.dss_media_update(byref(self.client.handle), med, med,
+                                        med_cnt, fields)
         if rc:
             raise EnvironmentError(rc, "Cannot issue update request")
 

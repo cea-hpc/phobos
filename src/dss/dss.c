@@ -295,7 +295,8 @@ out_cleanup:
 }
 
 static int dss_generic_update(struct dss_handle *handle, enum dss_type type,
-                              void *item_list, int item_cnt, uint64_t fields)
+                              void *src_list, void *dst_list, int item_cnt,
+                              uint64_t fields)
 {
     PGconn *conn = handle->dh_conn;
     GString *request;
@@ -304,13 +305,16 @@ static int dss_generic_update(struct dss_handle *handle, enum dss_type type,
     ENTRY;
 
     if (conn == NULL ||
-        (type != DSS_LOGS && (item_list == NULL || item_cnt == 0)))
-        LOG_RETURN(-EINVAL, "conn: %p, item_list: %p, item_cnt: %d",
-                   conn, item_list, item_cnt);
+        (type != DSS_LOGS &&
+         (src_list == NULL || dst_list == NULL || item_cnt == 0)))
+        LOG_RETURN(-EINVAL,
+                   "conn: %p, src_list: %p, dst_list: %p, item_cnt: %d",
+                   conn, src_list, dst_list, item_cnt);
 
     request = g_string_new("BEGIN;");
 
-    rc = get_update_query(type, conn, item_list, item_cnt, fields, request);
+    rc = get_update_query(type, conn, src_list, dst_list,  item_cnt,
+                          fields, request);
     if (rc)
         LOG_GOTO(out_cleanup, rc, "SQL request build failed");
 
@@ -343,11 +347,12 @@ int dss_device_insert(struct dss_handle *handle, struct dev_info *device_list,
                            device_count, DSS_SET_INSERT);
 }
 
-int dss_device_update(struct dss_handle *handle, struct dev_info *device_list,
-                      int device_count, int64_t fields)
+int dss_device_update(struct dss_handle *handle, struct dev_info *src_list,
+                      struct dev_info *dst_list, int device_count,
+                      int64_t fields)
 {
-    return dss_generic_update(handle, DSS_DEVICE, (void *) device_list,
-                              device_count, fields);
+    return dss_generic_update(handle, DSS_DEVICE, (void *) src_list,
+                              (void *) dst_list, device_count, fields);
 }
 
 int dss_device_get(struct dss_handle *handle, const struct dss_filter *filter,
@@ -397,8 +402,9 @@ int dss_media_insert(struct dss_handle *handle, struct media_info *media_list,
                            media_count, DSS_SET_INSERT);
 }
 
-int dss_media_update(struct dss_handle *handle, struct media_info *media_list,
-                     int media_count, uint64_t fields)
+int dss_media_update(struct dss_handle *handle, struct media_info *src_list,
+                     struct media_info *dst_list, int media_count,
+                     uint64_t fields)
 {
     int rc;
     int i;
@@ -409,8 +415,8 @@ int dss_media_update(struct dss_handle *handle, struct media_info *media_list,
     }
 
     for (i = 0; i < media_count; i++) {
-        if (media_list[i].rsc.id.family == PHO_RSC_DIR) {
-            rc = _normalize_path(media_list[i].rsc.id.name);
+        if (src_list[i].rsc.id.family == PHO_RSC_DIR) {
+            rc = _normalize_path(src_list[i].rsc.id.name);
             if (rc)
                 return rc;
         }
@@ -426,7 +432,7 @@ int dss_media_update(struct dss_handle *handle, struct media_info *media_list,
      */
     if (IS_STAT(fields)) {
 
-        rc = media_update_lock_retry(handle, media_list, media_count);
+        rc = media_update_lock_retry(handle, src_list, media_count);
         if (rc)
             LOG_RETURN(rc, "Error when locking media to %s",
                        dss_set_actions_names[DSS_SET_UPDATE]);
@@ -434,50 +440,50 @@ int dss_media_update(struct dss_handle *handle, struct media_info *media_list,
         for (i = 0; i < media_count; i++) {
             struct media_info *medium_info;
 
-            rc = dss_one_medium_get_from_id(handle, &media_list[i].rsc.id,
+            rc = dss_one_medium_get_from_id(handle, &src_list[i].rsc.id,
                                             &medium_info);
             if (rc)
                 LOG_GOTO(clean, rc,
                          "Error on getting medium_info (family %s, name %s) to "
                          "update stats",
-                         rsc_family2str(media_list[i].rsc.id.family),
-                         media_list[i].rsc.id.name);
+                         rsc_family2str(src_list[i].rsc.id.family),
+                         src_list[i].rsc.id.name);
 
             if (NB_OBJ & fields)
-                medium_info->stats.nb_obj = media_list[i].stats.nb_obj;
+                medium_info->stats.nb_obj = dst_list[i].stats.nb_obj;
 
             if (NB_OBJ_ADD & fields)
-                medium_info->stats.nb_obj += media_list[i].stats.nb_obj;
+                medium_info->stats.nb_obj += dst_list[i].stats.nb_obj;
 
             if (LOGC_SPC_USED & fields)
                 medium_info->stats.logc_spc_used =
-                    media_list[i].stats.logc_spc_used;
+                    dst_list[i].stats.logc_spc_used;
 
             if (LOGC_SPC_USED_ADD & fields)
                 medium_info->stats.logc_spc_used +=
-                    media_list[i].stats.logc_spc_used;
+                    dst_list[i].stats.logc_spc_used;
 
             if (PHYS_SPC_USED & fields)
                 medium_info->stats.phys_spc_used =
-                    media_list[i].stats.phys_spc_used;
+                    dst_list[i].stats.phys_spc_used;
 
             if (PHYS_SPC_FREE & fields)
                 medium_info->stats.phys_spc_free =
-                    media_list[i].stats.phys_spc_free;
+                    dst_list[i].stats.phys_spc_free;
 
-            media_list[i].stats = medium_info->stats;
+            dst_list[i].stats = medium_info->stats;
             dss_res_free(medium_info, 1);
         }
     }
 
-    rc = dss_generic_update(handle, DSS_MEDIA, (void *)media_list, media_count,
-                            fields);
+    rc = dss_generic_update(handle, DSS_MEDIA, (void *)src_list,
+                            (void *)dst_list, media_count, fields);
 
 clean:
     if (IS_STAT(fields)) {
         int rc2;
 
-        rc2 = dss_unlock(handle, DSS_MEDIA_UPDATE_LOCK, media_list, media_count,
+        rc2 = dss_unlock(handle, DSS_MEDIA_UPDATE_LOCK, src_list, media_count,
                          false);
         if (rc2) {
             pho_error(rc2, "Error when unlocking media at end of %s",
@@ -565,11 +571,11 @@ int dss_extent_insert(struct dss_handle *handle, struct extent *extents,
                            DSS_SET_INSERT);
 }
 
-int dss_extent_update(struct dss_handle *handle, struct extent *extents,
-                   int extent_count)
+int dss_extent_update(struct dss_handle *handle, struct extent *src_extents,
+                      struct extent *dst_extents, int extent_count)
 {
-    return dss_generic_update(handle, DSS_EXTENT, (void *)extents,
-                              extent_count, 0);
+    return dss_generic_update(handle, DSS_EXTENT, (void *) src_extents,
+                              (void *) dst_extents, extent_count, 0);
 }
 
 int dss_extent_delete(struct dss_handle *handle, struct extent *extents,
@@ -596,12 +602,12 @@ int dss_object_insert(struct dss_handle *handle,
                            object_count, action);
 }
 
-int dss_object_update(struct dss_handle *handle,
-                      struct object_info *object_list,
-                      int object_count, int64_t fields)
+int dss_object_update(struct dss_handle *handle, struct object_info *src_list,
+                      struct object_info *dst_list, int object_count,
+                      int64_t fields)
 {
-    return dss_generic_update(handle, DSS_OBJECT, (void *)object_list,
-                              object_count, fields);
+    return dss_generic_update(handle, DSS_OBJECT, (void *)src_list,
+                              (void *)dst_list, object_count, fields);
 }
 
 int dss_object_get(struct dss_handle *handle, const struct dss_filter *filter,
@@ -652,15 +658,16 @@ int dss_object_rename(struct dss_handle *handle,
     for (int i = 0; i < deprec_count; i++)
         deprec_objects[i].oid = strdup(new_oid);
 
-    rc = get_update_query(DSS_OBJECT, handle->dh_conn, objects, objects_count,
-                          DSS_OBJECT_UPDATE_OID, request);
+    rc = get_update_query(DSS_OBJECT, handle->dh_conn, objects, objects,
+                          objects_count, DSS_OBJECT_UPDATE_OID, request);
     if (rc)
         LOG_GOTO(out_unlock, rc,
                  "Failed to create update query for '%d' object(s)",
                  objects_count);
 
     rc = get_update_query(DSS_DEPREC, handle->dh_conn, deprec_objects,
-                          deprec_count, DSS_OBJECT_UPDATE_OID, request);
+                          deprec_objects, deprec_count, DSS_OBJECT_UPDATE_OID,
+                          request);
     if (rc)
         LOG_GOTO(out_unlock, rc,
                  "Failed to create update query for '%d' deprec object(s)",
@@ -701,11 +708,12 @@ int dss_deprecated_object_insert(struct dss_handle *handle,
 }
 
 int dss_deprecated_object_update(struct dss_handle *handle,
-                                 struct object_info *object_list,
+                                 struct object_info *src_list,
+                                 struct object_info *dst_list,
                                  int object_count, int64_t fields)
 {
-    return dss_generic_update(handle, DSS_DEPREC, (void *) object_list,
-                              object_count, fields);
+    return dss_generic_update(handle, DSS_DEPREC, (void *) src_list,
+                              (void *) dst_list, object_count, fields);
 }
 
 int dss_deprecated_object_get(struct dss_handle *handle,

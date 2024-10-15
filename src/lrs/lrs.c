@@ -491,7 +491,8 @@ static int update_phys_spc_free(struct dss_handle *dss,
 {
     if (written_size > 0) {
         dss_media_info->stats.phys_spc_free -= written_size;
-        return dss_media_update(dss, dss_media_info, 1, PHYS_SPC_FREE);
+        return dss_media_update(dss, dss_media_info, dss_media_info, 1,
+                                PHYS_SPC_FREE);
     }
 
     return 0;

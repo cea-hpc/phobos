@@ -335,13 +335,15 @@ int dss_device_insert(struct dss_handle *handle, struct dev_info *device_list,
  * Update the information of one or many devices in DSS.
  *
  * @param[in]  handle        valid connection handle
- * @param[in]  device_list   array of entries to update
+ * @param[in]  src_list      array of entries to select
+ * @param[in]  dst_list      array of entries to update
  * @param[in]  device_count  number of items in the list
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_device_update(struct dss_handle *handle, struct dev_info *device_list,
-                      int device_count, int64_t fields);
+int dss_device_update(struct dss_handle *handle, struct dev_info *src_list,
+                      struct dev_info *dst_list, int device_count,
+                      int64_t fields);
 
 /**
  * Retrieve devices information from DSS.
@@ -386,14 +388,16 @@ int dss_media_insert(struct dss_handle *handle, struct media_info *media_list,
  * Update information for one or many media in DSS.
  *
  * @param[in]  handle       valid connection handle
- * @param[in]  media_list   array of entries to update
+ * @param[in]  src_list     array of entries to select
+ * @param[in]  dst_list     array of entries to update
  * @param[in]  media_count  number of items in the list
  * @param[in]  fields       fields to update (ignored for insert and delete)
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_media_update(struct dss_handle *handle, struct media_info *media_list,
-                     int media_count, uint64_t fields);
+int dss_media_update(struct dss_handle *handle, struct media_info *src_list,
+                     struct media_info *dst_list, int media_count,
+                     uint64_t fields);
 
 /**
  * Retrieve media information from DSS.
@@ -439,13 +443,14 @@ int dss_extent_insert(struct dss_handle *handle, struct extent *extents,
  * Update information for one or many extents in DSS.
  *
  * @param[in]  handle        valid connection handle
- * @param[in]  extents       array of entries to update
+ * @param[in]  src_extents   array of entries to select
+ * @param[in]  dst_extents   array of entries to update
  * @param[in]  extent_count  number of items in the list
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_extent_update(struct dss_handle *handle, struct extent *extents,
-                      int extent_count);
+int dss_extent_update(struct dss_handle *handle, struct extent *src_extents,
+                      struct extent *dst_extents, int extent_count);
 
 /**
  * Retrieve extent information from DSS.
@@ -546,15 +551,16 @@ int dss_object_insert(struct dss_handle *handle,
  * Update the information of one or many objects in DSS.
  *
  * @param[in]  handle        valid connection handle
- * @param[in]  object_list   array of entries to update
+ * @param[in]  src_list      array of entries to select
+ * @param[in]  dst_list      array of entries to update
  * @param[in]  object_count  number of items in the list
  * @param[in]  fields        fields to update
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_object_update(struct dss_handle *handle,
-                      struct object_info *object_list,
-                      int object_count, int64_t fields);
+int dss_object_update(struct dss_handle *handle, struct object_info *src_list,
+                      struct object_info *dst_list, int object_count,
+                      int64_t fields);
 
 /**
  * Retrieve object information from DSS.
@@ -620,14 +626,16 @@ int dss_deprecated_object_insert(struct dss_handle *handle,
  * Update information for one or many deprecated objects in DSS.
  *
  * @param[in] handle        valid connection handle
- * @param[in] object_list   array of entries to update
+ * @param[in] src_list      array of entries to select
+ * @param[in] dst_list      array of entries to update
  * @param[in] object_count  number of items in the list
  * @param[in] fields        fields to update
  *
  * @return 0 on success, negated errno on failure
  */
 int dss_deprecated_object_update(struct dss_handle *handle,
-                              struct object_info *object_list,
+                              struct object_info *src_list,
+                              struct object_info *dst_list,
                               int object_count, int64_t fields);
 
 /**
