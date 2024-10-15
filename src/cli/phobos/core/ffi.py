@@ -755,6 +755,7 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
             'ext_count': None,
             'ext_uuid': None,
             'media_name': None,
+            'media_library': None,
             'family': None,
             'address': None,
             'size': None,
@@ -801,6 +802,11 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     def media_name(self):
         """Wrapper to get medium name."""
         return [self.extents[i].media.name for i in range(self.ext_count)]
+
+    @property
+    def media_library(self):
+        """Wrapper to get medium library."""
+        return [self.extents[i].media.library for i in range(self.ext_count)]
 
     @property
     def family(self):

@@ -340,8 +340,10 @@ function test_dir_lock_path()
 
 function test_dir_add_path()
 {
-    setup_test_dirs
-
+    local dirs=(
+                $(mktemp -d $PWD/test.pho.XXXX)
+                $(mktemp -d $PWD/test.pho.XXXX)
+               )
     local name=$(basename ${dirs[1]})
     $valg_phobos dir add "./$name"
     $phobos dir list ${dirs[1]} | grep "${dirs[1]}"
@@ -349,7 +351,43 @@ function test_dir_add_path()
     $valg_phobos dir add --unlock "${dirs[0]}/"
     $phobos dir list ${dirs[0]} | grep "${dirs[0]}"
 
-    cleanup_test_dirs
+    rm -rf ${dirs[@]}
+}
+
+################################################################################
+#                              TEST MEDIA RENAME                               #
+################################################################################
+
+function test_dir_rename_lib_with_extent()
+{
+    $phobos dir lock ${dirs[1]}
+    $phobos put -f dir /etc/hosts oid
+    waive_lrs
+    $valg_phobos dir rename --new-library blob ${dirs[0]}
+    local lib=$($phobos dir list -o library ${dirs[0]})
+    if [[ $lib != "blob" ]]; then
+        error "Library should be 'blob', instead we got $lib"
+    fi
+    local extent_lib=$($phobos extent list -o media_library oid)
+    if [[ "$extent_lib" != "['blob']" ]]; then
+        error "Extent's library should be 'blob', instead we got $extent_lib"
+    fi
+}
+
+function test_tape_rename_lib_with_extent()
+{
+    $phobos put -f tape /etc/hosts oid
+    $phobos drive unload $drive
+
+    $valg_phobos tape rename --new-library blob $medium
+    local lib=$($phobos tape list -o library $medium)
+    if [[ $lib != "blob" ]]; then
+        error "Library should be 'blob', instead we got $lib"
+    fi
+    local extent_lib=$($phobos extent list -o media_library oid)
+    if [[ "$extent_lib" != "['blob']" ]]; then
+        error "Extent's library should be 'blob', instead we got $extent_lib"
+    fi
 }
 
 TESTS=("setup_dir; \
@@ -365,11 +403,13 @@ TESTS=("setup_dir; \
        "setup; test_dir_add_path; cleanup"
        "setup_dir; test_put_update_dir_path; cleanup_dir"
        "setup_dir; test_put_update_dir_relative_path; cleanup_dir"
+       "setup_dir; test_dir_rename_lib_with_extent; cleanup_dir"
        "setup_dir_bis; \
             test_dir_list_library; \
         cleanup_dir")
 
 if [[ -w /dev/changer ]]; then
     TESTS+=("setup_tape; test_put_update_tape; cleanup_tape"
-            "setup_tape_bis; test_tape_list_library; cleanup_tape")
+            "setup_tape_bis; test_tape_list_library; cleanup_tape"
+            "setup_tape; test_tape_rename_lib_with_extent; cleanup_tape")
 fi

@@ -188,6 +188,14 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['drive', 'migrate', '--host', 'vm0',
                                   'new-library', 'blob',
                                   'drive_serial_or_path'])
+        self.check_cmdline_valid(['tape', 'rename', '--new-library', 'blob',
+                                  'name'])
+        self.check_cmdline_valid(['tape', 'rename', '--library', 'legacy',
+                                  '--new-library', 'blob', 'name'])
+        self.check_cmdline_valid(['dir', 'rename', '--new-library', 'blob',
+                                  'name'])
+        self.check_cmdline_valid(['dir', 'rename', '--library', 'legacy',
+                                  '--new-library', 'blob', 'name'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['get', '--version', 'nan', 'objid', 'file'],
@@ -220,6 +228,10 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['tape', 'import', 'A'], code=2)
         self.check_cmdline_exit(['drive', 'migrate', '--host', 'vm0'], code=2)
         self.check_cmdline_exit(['drive', 'migrate', '--new-library', 'blob'],
+                                code=2)
+        self.check_cmdline_exit(['tape', 'rename', '--new-library', 'blob'],
+                                code=2)
+        self.check_cmdline_exit(['dir', 'rename', '--new-library', 'blob'],
                                 code=2)
 
     def test_cli_logs_command(self): # pylint: disable=too-many-statements
