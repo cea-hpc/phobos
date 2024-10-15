@@ -365,7 +365,8 @@ class StoreGenericPutHandler(XferOptHandler):
 class StorePutHandler(StoreGenericPutHandler):
     """Insert objects into backend."""
     label = 'put'
-    descr = 'insert object into backend'
+    descr = 'insert object into backend. Either "--file" or "src_file" and '\
+            '"oid" must be provided.'
 
     @classmethod
     def add_options(cls, parser):
@@ -375,13 +376,34 @@ class StorePutHandler(StoreGenericPutHandler):
                             help='Comma-separated list of key=value')
         parser.add_argument('--overwrite', action='store_true',
                             help='Allow object update')
-        parser.add_argument('src_file', help='File to insert')
-        parser.add_argument('object_id', help='Desired object ID')
+        parser.add_argument('--file',
+                            help='File containing lines like: '\
+                                 '<src_file>  <object_id>  <metadata|->')
+        parser.add_argument('src_file', help='File to insert', nargs='?')
+        parser.add_argument('object_id', help='Desired object ID', nargs='?')
 
     def exec_put(self):
         """Insert an object into backend."""
         src = self.params.get('src_file')
         oid = self.params.get('object_id')
+        mput_file = self.params.get('file')
+
+        if not mput_file and (not src and not oid):
+            self.logger.error("either '--file' or 'src_file'/'oid' must be "
+                              "provided")
+            sys.exit(os.EX_USAGE)
+        elif mput_file and (src or oid):
+            self.logger.error("only one of '--file' or 'src_file'/'oid' must "
+                              "be provided")
+            sys.exit(os.EX_USAGE)
+
+        if not mput_file and not (src and oid):
+            self.logger.error("both src and oid must be provided")
+            sys.exit(os.EX_USAGE)
+
+        if mput_file is not None:
+            self.logger.error("Not implemented yet")
+            sys.exit(os.EX_USAGE)
 
         attrs = self.params.get('metadata')
         if attrs is not None:
@@ -1585,7 +1607,7 @@ def create_log_filter(library, device, medium, _errno, cause, start, end): # pyl
     return (byref(LogFilter(device_id, medium_id, c_errno, c_cause, c_start,
                             c_end))
             if device or medium or library or _errno or cause or start or
-               end else None)
+            end else None)
 
 
 class LogsOptHandler(BaseOptHandler):
