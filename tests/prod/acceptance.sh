@@ -319,7 +319,7 @@ function test_put_delete
     rm $out_file
 }
 
-function test_mput
+function test_multi_put
 {
     ENTRY
     local prefix=$(generate_prefix_id)
@@ -329,21 +329,22 @@ function test_mput
              "${FILES[2]} $prefix/id2 a=1,b=2,c=3")
     local out_file=$DIR_TEST_OUT/out
 
-    # create mput input file
+    # create multi_put input file
     echo "${OBJECTS[0]}
           ${OBJECTS[1]}
-          ${OBJECTS[2]}" > $DIR_TEST_IN/mput_list
+          ${OBJECTS[2]}" > $DIR_TEST_IN/multi_put_list
 
-    # phobos execute mput command
-    $phobos mput $DIR_TEST_IN/mput_list ||
-        { rm $DIR_TEST_IN/mput_list; exit_error "Mput should have worked"; }
+    # phobos execute multi_put command
+    $phobos put --file $DIR_TEST_IN/multi_put_list ||
+        { rm $DIR_TEST_IN/multi_put_list;
+          exit_error "Mput should have worked"; }
 
-    rm $DIR_TEST_IN/mput_list
+    rm $DIR_TEST_IN/multi_put_list
 
     # modify metadata of first entry as '-' is interpreted as no metadata
     OBJECTS[0]="${FILES[0]} $prefix/id0 "
 
-    # check mput correct behavior
+    # check multi_put correct behavior
     for object in "${OBJECTS[@]}"
     do
         src=$(echo "$object" | cut -d ' ' -f 1)
@@ -449,7 +450,7 @@ setup_test
 
 test_put_get
 test_put_delete
-test_mput
+test_multi_put
 test_concurrent_put_get_retry
 
 if ! $database_online; then

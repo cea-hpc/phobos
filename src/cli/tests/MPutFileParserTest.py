@@ -21,14 +21,14 @@
 """
 Unit tests for mput file parser
 
-This file is for testing the parser used for the "mput" command line.
+This file is for testing the parser used for the "put --file" command line.
 """
 
 import unittest
 
 from phobos.cli import mput_file_line_parser
 
-class CliTestMPutParser(unittest.TestCase):
+class CliTestMultiPutParser(unittest.TestCase):
     """Try to parse a mput line entry to detect broken strings."""
     def _conv_check(self, line, exp_result):
         """Parse the given string and compare to the expected result."""
@@ -40,7 +40,7 @@ class CliTestMPutParser(unittest.TestCase):
         self.assertRaises(ValueError, mput_file_line_parser, line)
 
     def test_valid(self):
-        """Test valid strings for the mput file lines parser"""
+        """Test valid strings for the put --file lines parser"""
         self._conv_check('a b c', ['a', 'b', 'c'])
         self._conv_check('a/b c -', ['a/b', 'c', '-'])
         self._conv_check(r'a\ b c\ d e', ['a b', 'c d', 'e'])

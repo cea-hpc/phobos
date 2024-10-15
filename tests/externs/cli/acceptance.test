@@ -393,8 +393,8 @@ function put_alias
     export PHOBOS_LAYOUT_RAID1_repl_count=repl_count
 }
 
-# Test mput command
-function mput
+# Test put --file command
+function multi_put
 {
     local filenames=("$(mktemp)" "$(mktemp)" "$(mktemp)")
 
@@ -402,25 +402,25 @@ function mput
     echo "test2" > ${filenames[1]}
     echo "test3" > ${filenames[2]}
 
-    OBJECTS=("${filenames[0]} mput_oid_1 -" \
-             "${filenames[1]} mput_oid_2 foo=1" \
-             "${filenames[2]} mput_oid_3 a=1,b=2,c=3")
+    OBJECTS=("${filenames[0]} multi_put_oid_1 -" \
+             "${filenames[1]} multi_put_oid_2 foo=1" \
+             "${filenames[2]} multi_put_oid_3 a=1,b=2,c=3")
 
-    # create mput input file
+    # create multi_put input file
     echo "${OBJECTS[0]}
           ${OBJECTS[1]}
-          ${OBJECTS[2]}" > mput_list
+          ${OBJECTS[2]}" > multi_put_list
 
-    # phobos execute mput command
-    $valg_phobos mput mput_list ||
-        (rm mput_list; error "Mput should have worked")
+    # phobos execute multi_put command
+    $valg_phobos put --file multi_put_list ||
+        (rm multi_put_list; error "Mput should have worked")
 
-    rm mput_list
+    rm multi_put_list
 
     # modify metadata of first entry as '-' is interpreted as no metadata
-    OBJECTS[0]="${filenames[0]} mput_oid_1 "
+    OBJECTS[0]="${filenames[0]} multi_put_oid_1 "
 
-    # check mput correct behavior
+    # check multi put correct behavior
     for object in "${OBJECTS[@]}"
     do
         src=$(echo "$object" | cut -d ' ' -f 1)
@@ -635,7 +635,7 @@ TESTS=("dir_setup; \
         put_layout; \
         put_tags; \
         put_alias; \
-        mput; \
+        multi_put; \
         concurrent_put; \
         check_status dir $dirs; \
         concurrent_put_get_retry; \
@@ -647,7 +647,7 @@ if  [[ -w /dev/changer ]]; then
              put_get_test; \
              put_family tape; \
              put_tags; \
-             mput; \
+             multi_put; \
              concurrent_put; \
              check_status tape $tapes; \
              concurrent_put_get_retry; \
