@@ -382,6 +382,44 @@ class StorePutHandler(StoreGenericPutHandler):
         parser.add_argument('src_file', help='File to insert', nargs='?')
         parser.add_argument('object_id', help='Desired object ID', nargs='?')
 
+    def register_multi_puts(self, mput_file, put_params):
+        """Register the put requests from the given file"""
+        if mput_file == '-':
+            fin = sys.stdin
+        else:
+            fin = open(mput_file)
+
+        for i, line in enumerate(fin):
+            # Skip empty lines and comments
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+
+            try:
+                match = mput_file_line_parser(line)
+            except ValueError as err:
+                self.logger.error("Format error on line %d: %s: %s", i + 1,
+                                  str(err), line)
+                sys.exit(os.EX_DATAERR)
+
+            src = match[0]
+            oid = match[1]
+            attrs = match[2]
+
+            if attrs == '-':
+                attrs = None
+            else:
+                attrs = attr_convert(attrs)
+                self.logger.debug("Loaded attributes set %r", attrs)
+
+            self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
+            self.client.put_register(oid, src, attrs=attrs,
+                                     put_params=put_params)
+
+        if fin is not sys.stdin:
+            fin.close()
+
+
     def exec_put(self):
         """Insert an object into backend."""
         src = self.params.get('src_file')
@@ -399,10 +437,6 @@ class StorePutHandler(StoreGenericPutHandler):
 
         if not mput_file and not (src and oid):
             self.logger.error("both src and oid must be provided")
-            sys.exit(os.EX_USAGE)
-
-        if mput_file is not None:
-            self.logger.error("Not implemented yet")
             sys.exit(os.EX_USAGE)
 
         attrs = self.params.get('metadata')
@@ -423,9 +457,13 @@ class StorePutHandler(StoreGenericPutHandler):
                                overwrite=self.params.get('overwrite'),
                                tags=self.params.get('tags', []))
 
-        self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
+        if mput_file:
+            self.register_multi_puts(mput_file, put_params)
+        else:
+            self.client.put_register(oid, src, attrs=attrs,
+                                     put_params=put_params)
+            self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
 
-        self.client.put_register(oid, src, attrs=attrs, put_params=put_params)
         try:
             self.client.run()
         except IOError as err:
