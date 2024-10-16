@@ -472,75 +472,21 @@ class StorePutHandler(StoreGenericPutHandler):
 
 
 class StoreMPutHandler(StoreGenericPutHandler):
-    """Insert objects into backend."""
+    """Deprecated, use 'put --file' instead."""
     label = 'mput'
-    descr = 'insert multiple objects into backend'
+    descr = "Deprecated, use 'put --file' instead."
 
     @classmethod
     def add_options(cls, parser):
-        """Add options for the MPUT command."""
-        super(StoreMPutHandler, cls).add_options(parser)
-        parser.add_argument('xfer_list',
-                            help='File containing lines like: '\
-                                 '<src_file>  <object_id>  <metadata|->')
+        """Add options for the PUT command."""
+        #super(StoreMPutHandler, cls).add_options(parser)
+        parser.description = "Deprecated, use 'put --file' instead."
 
     def exec_mput(self):
-        """Insert objects into backend."""
-        path = self.params.get('xfer_list')
-        if path == '-':
-            fin = sys.stdin
-        else:
-            fin = open(path)
-
-        lyt_attrs = self.params.get('layout_params')
-        if lyt_attrs is not None:
-            lyt_attrs = attr_convert(lyt_attrs)
-            self.logger.debug("Loaded layout params set %r", lyt_attrs)
-
-        put_params = PutParams(alias=self.params.get('alias'),
-                               family=self.params.get('family'),
-                               library=self.params.get('library'),
-                               layout=self.params.get('layout'),
-                               lyt_params=lyt_attrs,
-                               overwrite=self.params.get('overwrite'),
-                               tags=self.params.get('tags', []))
-
-        for i, line in enumerate(fin):
-            # Skip empty lines and comments
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-
-            try:
-                match = mput_file_line_parser(line)
-            except ValueError as err:
-                self.logger.error("Format error on line %d: %s: %s", i + 1,
-                                  str(err), line)
-                sys.exit(os.EX_DATAERR)
-
-            src = match[0]
-            oid = match[1]
-            attrs = match[2]
-
-            if attrs == '-':
-                attrs = None
-            else:
-                attrs = attr_convert(attrs)
-                self.logger.debug("Loaded attributes set %r", attrs)
-
-            self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
-            self.client.put_register(oid, src, attrs=attrs,
-                                     put_params=put_params)
-
-        if fin is not sys.stdin:
-            fin.close()
-
-        try:
-            self.client.run()
-        except IOError as err:
-            self.logger.error("Failed to MPUT: %s",
-                              env_error_format(err))
-            sys.exit(abs(err.errno))
+        """Deprecated, use 'put --file' instead."""
+        self.logger.error("'mput' is a deprecated command, use 'put --file' "
+                          "instead")
+        sys.exit(os.EX_USAGE)
 
 class AddOptHandler(DSSInteractHandler):
     """Insert a new resource into the system."""
