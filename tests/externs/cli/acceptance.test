@@ -3,7 +3,7 @@
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -183,11 +183,38 @@ function dir_setup
     done
 }
 
+function dir_setup_bis
+{
+    setup_tables
+    invoke_lrs
+
+    export PHOBOS_STORE_default_family="dir"
+    echo "POSIX test mode"
+
+    export dirs=(
+                 $(mktemp -d /tmp/test.pho.XXXX)
+                 $(mktemp -d /tmp/test.pho.XXXX)
+                )
+
+    echo "adding directories ${dirs[@]}"
+    $phobos dir add --tags $TAGS ${dirs[0]}
+    $phobos dir add --tags $TAGS --library blob ${dirs[1]}
+    $phobos dir format --fs posix --unlock ${dirs[0]}
+    $phobos dir format --fs posix --unlock --library blob ${dirs[1]}
+}
+
 function dir_cleanup
 {
     waive_lrs
     drop_tables
     rm -rf /tmp/test.pho.1 /tmp/test.pho.2
+}
+
+function dir_cleanup_bis
+{
+    waive_lrs
+    drop_tables
+    rm -rf ${dirs[@]}
 }
 
 function dir_lock_test
@@ -316,7 +343,8 @@ function test_single_alias_put
     local id=$2
     local expected_fam=$3
     local expected_layout=$4
-    local extra_arguments=$5
+    local expected_library=$5
+    local extra_arguments=$6
 
     $valg_phobos put --alias "$alias" $extra_arguments /etc/hosts "$id" ||
         error "Put with alias $alias should have worked"
@@ -328,6 +356,10 @@ function test_single_alias_put
     $phobos extent list -o layout "$id" | grep "$expected_layout" ||
         error "Put with alias \"$alias\" should have used " \
               "\"$expected_layout\" layout"
+
+    $phobos extent list -o media_library "$id" | grep "[$expected_library]" ||
+        error "Put with alias \"$alias\" should have used " \
+              "\"$expected_library\" library"
 }
 
 # Test alias replacement
@@ -356,29 +388,32 @@ function put_alias
     local repl_count=$PHOBOS_LAYOUT_RAID1_repl_count
     export PHOBOS_LAYOUT_RAID1_repl_count=1
 
-    # phobos put with full alias - expect alias family and layout
-    test_single_alias_put $alias_full $id_full "dir" "raid1"
+    # phobos put with full alias - expect alias family, layout and library
+    test_single_alias_put $alias_full $id_full "dir" "raid1" "legacy"
 
     # phobos put with reduced aliases - expect default for empty parameters
     test_single_alias_put $alias_empty_family $id_empty_family \
-        $PHOBOS_STORE_default_family "raid1"
-    test_single_alias_put $alias_empty_layout $id_empty_layout "dir" "raid1"
-    test_single_alias_put $alias_empty_tags $id_empty_tags "dir" "raid1"
+        $PHOBOS_STORE_default_family "raid1" "legacy"
+    test_single_alias_put $alias_empty_layout $id_empty_layout "dir" "raid1" \
+        "legacy"
+    test_single_alias_put $alias_empty_tags $id_empty_tags "dir" "raid1" \
+        "legacy"
 
     # phobos put with non-existing alias - expect default
     test_single_alias_put $alias_bad $id_noexist $PHOBOS_STORE_default_family \
-        "raid1"
+        "raid1" "legacy"
 
     # phobos put with additional family parameter - expect additional parameter
-    test_single_alias_put $alias_tape $id_with_fam "dir" "raid1" "--family dir"
+    test_single_alias_put $alias_tape $id_with_fam "dir" "raid1" "legacy" \
+        "--family dir"
 
     # phobos put with additional layout parameter - expect additional parameter
-    test_single_alias_put $alias_full $id_with_lay "dir" "raid1" \
+    test_single_alias_put $alias_full $id_with_lay "dir" "raid1" "legacy" \
         "--layout raid1"
 
     # phobos put with additional tags parameter - expect success
     test_single_alias_put $alias_empty_family $id_with_tag1 "dir" "raid1" \
-        "--tags $(echo $TAGS | cut -d',' -f2)"
+        "legacy" "--tags $(echo $TAGS | cut -d',' -f2)"
 
     # phobos put with additional, non existing tags parameter - expect failure
     $valg_phobos put -a $alias_full --tags no-such-tag /etc/hosts \
@@ -390,6 +425,38 @@ function put_alias
         error "Put with alias $alias_nonexist_tags should not have worked"
 
     # reset replication count for raid layout
+    export PHOBOS_LAYOUT_RAID1_repl_count=repl_count
+}
+
+function put_alias_lib
+{
+    local alias_lib_full="full-test-lib"
+    local alias_empty_lib="empty-lib-test"
+
+    local id_lib_full=test/host-alias1.$$
+    local id_empty_library=test/host-alias2.$$
+    local id_with_lib1=test/host-alias3.$$
+    local id_with_lib2=test/host-alias4.$$
+
+    local repl_count=$PHOBOS_LAYOUT_RAID1_repl_count
+    export PHOBOS_LAYOUT_RAID1_repl_count=1
+
+    # phobos put with full alias lib
+    test_single_alias_put $alias_lib_full $id_lib_full "dir" "raid1" "blob"
+
+    # phobos put with reduced aliases
+    test_single_alias_put $alias_empty_lib $id_empty_library "dir" "raid1" \
+        "legacy"
+
+    # phobos put with additional library parameter
+    test_single_alias_put $alias_lib_full $id_with_lib1 "dir" "raid1" "legacy" \
+        "--library legacy"
+
+    # phobos put with additional wrong library parameter
+    $valg_phobos put -a $alias_lib_full --library lib1 /etc/hosts \
+        $id_with_lib2 &&
+        error "Put with additional non existing library should not have worked"
+
     export PHOBOS_LAYOUT_RAID1_repl_count=repl_count
 }
 
@@ -640,7 +707,8 @@ TESTS=("dir_setup; \
         check_status dir $dirs; \
         concurrent_put_get_retry; \
         dir_lock_test; \
-        dir_cleanup")
+        dir_cleanup"
+        "dir_setup_bis; put_alias_lib; dir_cleanup_bis")
 
 if  [[ -w /dev/changer ]]; then
     TESTS+=("tape_setup; \

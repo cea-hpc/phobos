@@ -45,6 +45,7 @@ static void test_fill_put_params(void)
     char *alias_name_no_family = "empty-family-test";
     char *alias_name_no_layout = "empty-layout-test";
     char *alias_name_no_tags = "empty-tag-test";
+    char *alias_name_no_library = "empty-lib-test";
     char *pre_existing_tag[1];
 
     pre_existing_tag[0] = "new-tag";
@@ -75,6 +76,7 @@ static void test_fill_put_params(void)
     assert(xfer.xd_params.put.tags.n_tags == 2);
     assert(strcmp(xfer.xd_params.put.tags.tags[0], "foo-tag") == 0);
     assert(strcmp(xfer.xd_params.put.tags.tags[1], "bar-tag") == 0);
+    assert(strcmp(xfer.xd_params.put.library, "legacy") == 0);
 
     tags_free(&xfer.xd_params.put.tags);
 
@@ -88,6 +90,7 @@ static void test_fill_put_params(void)
     assert(xfer.xd_params.put.family == PHO_RSC_TAPE);
     assert(xfer.xd_params.put.tags.n_tags == 1);
     assert(strcmp(xfer.xd_params.put.tags.tags[0], "foo-tag") == 0);
+    assert(strcmp(xfer.xd_params.put.library, "legacy") == 0);
 
     tags_free(&xfer.xd_params.put.tags);
 
@@ -101,6 +104,7 @@ static void test_fill_put_params(void)
     assert(xfer.xd_params.put.family == PHO_RSC_DIR);
     assert(xfer.xd_params.put.tags.n_tags == 1);
     assert(strcmp(xfer.xd_params.put.tags.tags[0], "foo-tag") == 0);
+    assert(strcmp(xfer.xd_params.put.library, "legacy") == 0);
 
     tags_free(&xfer.xd_params.put.tags);
 
@@ -113,6 +117,7 @@ static void test_fill_put_params(void)
     assert(strcmp(xfer.xd_params.put.layout_name, "raid1") == 0);
     assert(xfer.xd_params.put.family == PHO_RSC_DIR);
     assert(xfer.xd_params.put.tags.n_tags == 0);
+    assert(strcmp(xfer.xd_params.put.library, "legacy") == 0);
 
     tags_free(&xfer.xd_params.put.tags);
 
@@ -132,6 +137,21 @@ static void test_fill_put_params(void)
     assert(strcmp(xfer.xd_params.put.tags.tags[0], pre_existing_tag[0]) == 0);
     assert(strcmp(xfer.xd_params.put.tags.tags[1], "foo-tag") == 0);
     assert(strcmp(xfer.xd_params.put.tags.tags[2], "bar-tag") == 0);
+    assert(strcmp(xfer.xd_params.put.library, "legacy") == 0);
+
+    tags_free(&xfer.xd_params.put.tags);
+
+    /* test alias without library */
+    xfer = empty_xfer;
+    xfer.xd_params.put.alias = alias_name_no_library;
+
+    assert(fill_put_params(&xfer) == 0);
+
+    assert(strcmp(xfer.xd_params.put.layout_name, "raid1") == 0);
+    assert(xfer.xd_params.put.family == PHO_RSC_DIR);
+    assert(xfer.xd_params.put.tags.n_tags == 1);
+    assert(strcmp(xfer.xd_params.put.tags.tags[0], "foo-tag") == 0);
+    assert(xfer.xd_params.put.library == NULL);
 
     tags_free(&xfer.xd_params.put.tags);
 }

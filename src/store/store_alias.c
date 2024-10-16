@@ -40,6 +40,7 @@
 #define ALIAS_LAYOUT_CFG_PARAM "layout"
 #define ALIAS_LYT_PARAMS_CFG_PARAM "lyt-params"
 #define ALIAS_TAGS_CFG_PARAM "tags"
+#define ALIAS_LIBRARY_CFG_PARAM "library"
 
 /**
  * List of configuration parameters for alias store
@@ -196,6 +197,15 @@ static int apply_alias_to_put_params(struct pho_xfer_desc *xfer)
         str2tags(cfg_val, &xfer->xd_params.put.tags);
     else if (rc != -ENODATA)
         goto out;
+
+    // library
+    if (xfer->xd_params.put.library == NULL) {
+        rc = pho_cfg_get_val(section_name, ALIAS_LIBRARY_CFG_PARAM, &cfg_val);
+        if (!rc)
+            xfer->xd_params.put.library = cfg_val;
+        else if (rc != -ENODATA)
+            goto out;
+    }
 
     free(section_name);
     return 0;
