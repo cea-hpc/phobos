@@ -52,12 +52,12 @@ the same medium, or all entries sharing a same job ID.
 
 The first issue to tackle is the logical link between objects: how can the user
 indicate to Phobos the link between objects? This can be done by having a
-special user metadata associated to each object, so that we can for instance
+special attribute associated with each object, so that we can for instance
 easily establish the list of objects that are linked together.
 
 Then, to have that link be meaningful to Phobos, they need to be stored as much
 as possible on the same medium, to reduce the number of media needed to read
-the linked objects. For this, similarly, we add a medium tag that will be
+the linked objects. For this, similarly, we add a medium attribute that will be
 associated to that object link, ensuring all the linked objects are written on
 that medium.
 
@@ -83,28 +83,27 @@ the medium is not full. If it isn't full, but cannot hold another object of the
 grouping, another medium will be selected to be part of that grouping. When a
 medium reaches its maximum capacity, the medium is removed from the grouping.
 
+We can build a function to "reconstruct" the groupings of a medium by getting
+all groupings of the objects with some extents on this medium. This might be
+used for example when we repack a tape with hard removal of some deprecated
+extents and recover free space on the newly repacked tape.
+
 ### Location of the extents
 
-A medium can be part of multiple groupings. Since we need to know which
-groupings are stored on a medium, we need to associate each medium with its set
-of groupings. The grouping can be stored as a special tag (prefixed with
-"grouping." for example) or stored in a separate column as a JSON array to keep
-the two concepts separated.
+To store grouping, we choose to add a new grouping column containing one string
+to the `object` and `deprecated object` tables. As a first grouping
+implementation, we allow only one grouping per object.
 
-On the other hand, we also want to keep the link between the objects in the
-database, so we have to do a similar choice for the `object` and `deprecated
-object` tables. Therefore, we choose to prefix the groupings with a specific
-string that the user does not have access to.
-
-To allow multiple groupings, the grouping value given when inserting objects
-will be a comma-separated list of groupings, and those groupings will then be
-stored as the object's metadata with the key `groupings` and the value the same
-list of groupings.
+A medium, because it can store many different objects, can be part of multiple
+groupings. Since we need to know which groupings are stored on a medium, we need
+to associate each medium with its set of groupings. The groupings can be stored
+in a separate "grouping" column as a JSON array of strings.
 
 Finally, when a put with a grouping is received, we must check if that grouping
 exists. If it does, we retrieve the list of media associated to that grouping,
 and select one of them for the put. If none is available, we revert back to the
-standard procedure and instead pick any medium.
+standard procedure and instead pick any medium and add this new grouping to this
+picked medium.
 
 ## Implementation plan
 
@@ -121,7 +120,7 @@ multiple media
 return an error
     - Put all the objects of the obtained medium
   - Add an option `grouping` to the `put` CLI command and API function
-    - Add the object's grouping in its user metadata
+    - Add this grouping to the object
     - Send the put request to the LRS with the grouping as an additional
 parameter
     - If that grouping exists in the database (verified by checking if a medium
