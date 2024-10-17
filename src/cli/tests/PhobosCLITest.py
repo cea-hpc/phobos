@@ -167,6 +167,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['put', '--lyt-params', 'a=b', 'src', 'oid'])
         self.check_cmdline_valid(['put', '--lyt-params', 'a=b,c=d', 'src',
                                   'oid'])
+        self.check_cmdline_valid(['put', '--grouping', 'my_grouping', 'src',
+                                  'oid'])
         self.check_cmdline_valid(['drive', 'lookup', 'drive_serial_or_path'])
         self.check_cmdline_valid(['drive', 'load', 'drive_serial_or_path',
                                   'tape_label'])

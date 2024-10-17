@@ -72,6 +72,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
     _fields_ = [
         ("size", c_ssize_t),
         ("family", c_int),
+        ("_grouping", c_char_p),
         ("_library", c_char_p),
         ("_layout_name", c_char_p),
         ("lyt_params", PhoAttrs),
@@ -91,6 +92,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
     def __init__(self, put_params):
         super().__init__()
         self.size = -1
+        self.grouping = put_params.grouping
         self.library = put_params.library
         self.layout_name = put_params.layout
         self.set_lyt_params(put_params.lyt_params)
@@ -102,6 +104,17 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
             self.family = PHO_RSC_INVAL
         else:
             self.family = str2rsc_family(put_params.family)
+
+    @property
+    def grouping(self):
+        """Wrapper to get grouping"""
+        return self._grouping.decode('utf-8') if self._grouping else None
+
+    @grouping.setter
+    def grouping(self, val):
+        """Wrapper to set grouping"""
+        # pylint: disable=attribute-defined-outside-init
+        self._grouping = val.encode('utf-8') if val else None
 
     @property
     def library(self):
@@ -137,8 +150,8 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         self._alias = val.encode('utf-8') if val else None
 
 class PutParams(namedtuple('PutParams',
-                           'alias family library layout lyt_params overwrite '
-                           'tags')):
+                           'alias family grouping library layout lyt_params '
+                           'overwrite tags')):
     """
     Transition data structure for put parameters between
     the CLI and the XFer data structure.

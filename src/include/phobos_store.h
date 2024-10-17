@@ -95,6 +95,7 @@ static inline const char *xfer_op2str(enum pho_xfer_op op)
 struct pho_xfer_put_params {
     ssize_t          size;        /**< Amount of data to write. */
     enum rsc_family  family;      /**< Targeted resource family. */
+    const char      *grouping;    /**< Grouping attached to the new object. */
     const char      *library;     /**< Targeted library (If NULL, any available
                                     *  library can be selected.)
                                     */

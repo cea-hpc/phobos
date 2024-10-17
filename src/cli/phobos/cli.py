@@ -360,6 +360,9 @@ class StoreGenericPutHandler(XferOptHandler):
         parser.add_argument('-p', '--layout-params', '--lyt-params',
                             help='Comma-separated list of key=value for layout '
                             'specific parameters.')
+        parser.add_argument('--grouping',
+                            help='Set the grouping of the new objects')
+
 
 
 class StorePutHandler(StoreGenericPutHandler):
@@ -450,6 +453,7 @@ class StorePutHandler(StoreGenericPutHandler):
             self.logger.debug("Loaded layout params set %r", lyt_attrs)
 
         put_params = PutParams(alias=self.params.get('alias'),
+                               grouping=self.params.get('grouping'),
                                family=self.params.get('family'),
                                library=self.params.get('library'),
                                layout=self.params.get('layout'),
