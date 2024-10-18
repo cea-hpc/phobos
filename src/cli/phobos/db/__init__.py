@@ -32,7 +32,7 @@ from phobos.core import cfg
 from phobos.core.ffi import (LIBPHOBOS, ResourceFamily)
 
 ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92", "1.93", "1.95", "2.0", "2.1"]
-FUTURE_SCHEMAS = []
+FUTURE_SCHEMAS = ["2.2"]
 CURRENT_SCHEMA_VERSION = ORDERED_SCHEMAS[-1]
 AVAIL_SCHEMAS = set(ORDERED_SCHEMAS) | set(FUTURE_SCHEMAS)
 
@@ -66,6 +66,7 @@ class Migrator:
             "1.93": ("1.95", self.convert_1_93_to_1_95),
             "1.95": ("2.0", self.convert_1_95_to_2_0),
             "2.0": ("2.1", self.convert_2_0_to_2_1),
+            "2.1": ("2.2", self.convert_2_1_to_2_2),
         }
 
         self.reachable_versions = set(
@@ -627,6 +628,28 @@ class Migrator:
         """Convert DB from v2.0 to v2.1"""
         with self.connect():
             self.convert_schema_2_0_to_2_1()
+
+    def convert_schema_2_1_to_2_2(self):
+        """DB schema changes: add _grouping and groupings columnst"""
+        cur = self.conn.cursor()
+        cur.execute(f"""
+            -- add _grouping to object and deprecated_object tables
+            ALTER TABLE object ADD _grouping varchar(255);
+            ALTER TABLE deprecated_object ADD _grouping varchar(255);
+
+            -- add groupings to media table
+            ALTER TABLE media ADD COLUMN groupings JSONB;
+
+            -- update current schema version
+            UPDATE schema_info SET version = '2.2';
+        """)
+        self.conn.commit()
+        cur.close()
+
+    def convert_2_1_to_2_2(self):
+        """Convert DB from v2.1 to v2.2"""
+        with self.connect():
+            self.convert_schema_2_1_to_2_2()
 
     def migrate(self, target_version=None):
         """Convert DB schema up to a given phobos version"""
