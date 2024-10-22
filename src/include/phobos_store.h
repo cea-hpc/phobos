@@ -108,6 +108,9 @@ struct pho_xfer_put_params {
     bool             overwrite;   /**< true if the put command could be an
                                     *  update.
                                     */
+    bool             no_split;    /**< true if all xfer of the put command
+                                    *  should be put on the same medium.
+                                    */
 };
 
 /**

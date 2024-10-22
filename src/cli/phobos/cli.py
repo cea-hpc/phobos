@@ -332,13 +332,16 @@ class StoreGetHandler(XferOptHandler):
             else:
                 self.logger.info("Object '%s' successfully retrieved", oid)
 
-
-class StoreGenericPutHandler(XferOptHandler):
-    """Base class for common options between put and mput"""
+class StorePutHandler(XferOptHandler):
+    """Insert objects into backend."""
+    label = 'put'
+    descr = 'insert object into backend. Either "--file" or "src_file" and '\
+            '"oid" must be provided.'
 
     @classmethod
     def add_options(cls, parser):
-        super(StoreGenericPutHandler, cls).add_options(parser)
+        """Add options for the PUT command."""
+        super(StorePutHandler, cls).add_options(parser)
         # The type argument allows to transform 'a,b,c' into ['a', 'b', 'c'] at
         # parse time rather than post processing it
         parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
@@ -363,18 +366,6 @@ class StoreGenericPutHandler(XferOptHandler):
         parser.add_argument('--grouping',
                             help='Set the grouping of the new objects')
 
-
-
-class StorePutHandler(StoreGenericPutHandler):
-    """Insert objects into backend."""
-    label = 'put'
-    descr = 'insert object into backend. Either "--file" or "src_file" and '\
-            '"oid" must be provided.'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add options for the PUT command."""
-        super(StorePutHandler, cls).add_options(parser)
         parser.add_argument('-m', '--metadata',
                             help='Comma-separated list of key=value')
         parser.add_argument('--overwrite', action='store_true',
@@ -382,6 +373,9 @@ class StorePutHandler(StoreGenericPutHandler):
         parser.add_argument('--file',
                             help='File containing lines like: '\
                                  '<src_file>  <object_id>  <metadata|->')
+        parser.add_argument('--no-split', action='store_true',
+                            help='Prevent splitting object over multiple '
+                            'media.')
         parser.add_argument('src_file', help='File to insert', nargs='?')
         parser.add_argument('object_id', help='Desired object ID', nargs='?')
 
@@ -428,6 +422,7 @@ class StorePutHandler(StoreGenericPutHandler):
         src = self.params.get('src_file')
         oid = self.params.get('object_id')
         mput_file = self.params.get('file')
+        no_split = self.params.get('no_split')
 
         if not mput_file and (not src and not oid):
             self.logger.error("either '--file' or 'src_file'/'oid' must be "
@@ -458,6 +453,7 @@ class StorePutHandler(StoreGenericPutHandler):
                                library=self.params.get('library'),
                                layout=self.params.get('layout'),
                                lyt_params=lyt_attrs,
+                               no_split=no_split,
                                overwrite=self.params.get('overwrite'),
                                tags=self.params.get('tags', []))
 
@@ -475,7 +471,7 @@ class StorePutHandler(StoreGenericPutHandler):
             sys.exit(abs(err.errno))
 
 
-class StoreMPutHandler(StoreGenericPutHandler):
+class StoreMPutHandler(StorePutHandler):
     """Deprecated, use 'put --file' instead."""
     label = 'mput'
     descr = "Deprecated, use 'put --file' instead."

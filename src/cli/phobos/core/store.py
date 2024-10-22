@@ -79,6 +79,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         ("tags", Tags),
         ("_alias", c_char_p),
         ("overwrite", c_bool),
+        ("no_split", c_bool),
     ]
 
     def set_lyt_params(self, val):
@@ -99,6 +100,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         self.tags = Tags(put_params.tags)
         self.alias = put_params.alias
         self.overwrite = put_params.overwrite
+        self.no_split = put_params.no_split
 
         if put_params.family is None:
             self.family = PHO_RSC_INVAL
@@ -151,7 +153,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
 
 class PutParams(namedtuple('PutParams',
                            'alias family grouping library layout lyt_params '
-                           'overwrite tags')):
+                           'no_split overwrite tags')):
     """
     Transition data structure for put parameters between
     the CLI and the XFer data structure.
