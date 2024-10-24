@@ -1454,6 +1454,8 @@ static int _send_and_recv_release(struct admin_handle *adm,
         LOG_RETURN(-EBADMSG, "Bad response for release request: ID #%d - '%s'",
                    resp->req_id, pho_srl_response_kind_str(resp));
 
+    pho_srl_response_free(resp, true);
+
     return rc;
 }
 
