@@ -369,6 +369,8 @@ static void raid_build_write_allocation_req(struct pho_encoder *enc,
             req->walloc->media[i]->tags[j] =
                 xstrdup(enc->xfer->xd_params.put.tags.tags[j]);
     }
+
+    req->walloc->no_split = enc->xfer->xd_params.put.no_split;
 }
 
 static size_t split_first_extent_index(struct pho_encoder *enc)

@@ -125,6 +125,7 @@ void pho_srl_request_write_alloc(pho_req_t *req, size_t n_media,
     req->walloc->n_media = n_media;
     req->walloc->media = xmalloc(n_media * sizeof(*req->walloc->media));
     req->walloc->prevent_duplicate = false;
+    req->walloc->no_split = false;
 
     for (i = 0; i < n_media; ++i) {
         req->walloc->media[i] = xmalloc(sizeof(*req->walloc->media[i]));

@@ -1122,6 +1122,11 @@ int sched_select_medium(struct io_scheduler *io_sched,
         if (already_alloc)
             continue;
 
+        /* exclude medium too small to do a no-split */
+        if (reqc->req->walloc->no_split &&
+            curr->stats.phys_spc_free <= required_size)
+            continue;
+
         avail_size += curr->stats.phys_spc_free;
 
         /* already locked */
@@ -1150,9 +1155,10 @@ int sched_select_medium(struct io_scheduler *io_sched,
             continue;
         }
 
-        if (split_media_best == NULL ||
-            curr->stats.phys_spc_free > split_media_best->stats.phys_spc_free)
-            split_media_best = curr;
+        if (!reqc->req->walloc->no_split &&
+            (split_media_best == NULL ||
+             curr->stats.phys_spc_free > split_media_best->stats.phys_spc_free))
+                split_media_best = curr;
 
         if (curr->stats.phys_spc_free < required_size)
             continue;

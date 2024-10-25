@@ -47,6 +47,9 @@ message PhoRequest {
                                                // want a medium it already
                                                // allocated
         optional string library = 4;           // Targeted library
+        required bool no_split = 5;            // Whether the client requires
+                                               // to put all the data on the
+                                               // same medium.
     }
 
     /**
