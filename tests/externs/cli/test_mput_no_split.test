@@ -1,0 +1,166 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2024 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for put --file command
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
+
+################################################################################
+#                                    SETUP                                     #
+################################################################################
+
+function setup()
+{
+    setup_tables
+    if [[ -w /dev/changer ]]; then
+        invoke_daemons
+    else
+        invoke_lrs
+    fi
+
+    setup_test_dirs
+}
+
+function cleanup() {
+    if [[ -w /dev/changer ]]; then
+        waive_daemons
+        drain_all_drives
+    else
+        waive_lrs
+    fi
+
+    drop_tables
+    cleanup_test_dirs
+}
+
+function setup_dir()
+{
+    setup
+
+    # Add 2 dirs to ensure that with the no-split option, we have an error when
+    # we want to make a put larger than a medium while the total size available
+    # is greater than the size of the put
+    DIRS=(
+          $(make_tmp_fs 1M)
+          $(make_tmp_fs 1M)
+         )
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
+function cleanup_dir()
+{
+    cleanup
+    for dir in ${DIRS[@]}; do
+        cleanup_tmp_fs $dir
+    done
+}
+
+################################################################################
+#                              TEST MPUT NO-SPLIT                              #
+################################################################################
+
+function test_mput_no_split_one_file()
+{
+    local files=(
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                )
+
+    dd if=/dev/urandom of="${files[0]}" bs=600KB count=2
+    dd if=/dev/urandom of="${files[1]}" bs=600KB count=1
+
+    local object="${files[0]} mput_no_split_oid1 -"
+    echo "$object" > $DIR_TEST_OUT/mput_no_split
+
+    $valg_phobos put -f dir --file $DIR_TEST_OUT/mput_no_split --no-split &&
+         error "phobos put --file should have failed (file too big)"
+
+    local count=$($phobos extent list --degroup | wc -l)
+    if [[ $count -ne 0 ]]; then
+        error "There should be no extent (got $count)"
+    fi
+
+    object="${files[1]} mput_no_split_oid1 -"
+    echo "$object" > $DIR_TEST_OUT/mput_no_split
+
+    $valg_phobos put -f dir --file $DIR_TEST_OUT/mput_no_split --no-split ||
+        error "phobos put --file should have worked"
+
+    count=$($phobos extent list --degroup | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be one extent (got $count)"
+    fi
+}
+
+function test_mput_no_split_two_file()
+{
+    local files=(
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                )
+    # Two files bigger than the medium
+    dd if=/dev/urandom of="${files[0]}" bs=600KB count=1
+    dd if=/dev/urandom of="${files[1]}" bs=600KB count=1
+
+    local objects=("${files[0]} mput_no_split_oid1 -"
+                   "${files[1]} mput_no_split_oid2 -")
+    echo "${objects[0]}
+          ${objects[1]}" > $DIR_TEST_OUT/mput_no_split
+
+    $valg_phobos put -f dir --file $DIR_TEST_OUT/mput_no_split --no-split &&
+        error "phobos put --file should have failed"
+
+    local count=$($phobos extent list --degroup | wc -l)
+    if [[ $count -ne 0 ]]; then
+        error "There should no extent (got $count)"
+    fi
+
+    # Two files smaller than the medium
+    dd if=/dev/urandom of="${files[2]}" bs=200KB count=1
+    dd if=/dev/urandom of="${files[3]}" bs=200KB count=1
+
+    objects=("${files[2]} mput_no_split_oid1 -"
+             "${files[3]} mput_no_split_oid2 -")
+    echo "${objects[0]}
+          ${objects[1]}" > $DIR_TEST_OUT/mput_no_split
+
+    $valg_phobos put -f dir --file $DIR_TEST_OUT/mput_no_split --no-split ||
+        error "phobos put --file should have worked"
+
+    count=$($phobos extent list --degroup | wc -l)
+    if [[ $count -ne 2 ]]; then
+        error "There should be two extents (got $count)"
+    fi
+}
+
+TESTS=("setup_dir; test_mput_no_split_one_file; cleanup_dir"
+       "setup_dir; test_mput_no_split_two_file; cleanup_dir")

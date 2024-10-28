@@ -68,6 +68,7 @@ check_SCRIPTS=acceptance.test \
               test_media.test \
               test_media_delete.test \
               test_multilibrary.test \
+              test_mput_no_split.test \
               test_object_list.sh \
               test_phobos_tape_library_test.sh \
               test_ping.test \
