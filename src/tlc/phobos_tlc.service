@@ -8,10 +8,10 @@ Type=forking
 # whole control group after 5 minutes
 KillMode=mixed
 TimeoutStopSec=300
-Environment="DAEMON_PID_FILEPATH=/run/tlc/tlc.pid"
-RuntimeDirectory=tlc
-PIDFile=/run/tlc/tlc.pid
-ExecStart=/usr/sbin/tlc
+Environment="DAEMON_PID_FILEPATH=/run/phobos_tlc/phobos_tlc.pid"
+RuntimeDirectory=phobos_tlc
+PIDFile=/run/phobos_tlc/phobos_tlc.pid
+ExecStart=/usr/sbin/phobos_tlc
 
 [Install]
 WantedBy=multi-user.target
