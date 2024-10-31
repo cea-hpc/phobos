@@ -44,6 +44,8 @@ function setup()
     fi
 
     setup_test_dirs
+    export PHOBOS_LRS_families="dir"
+    export PHOBOS_STORE_default_family="dir"
 }
 
 function cleanup() {
@@ -58,7 +60,7 @@ function cleanup() {
     cleanup_test_dirs
 }
 
-function setup_dir()
+function setup_dir_raid1()
 {
     setup
 
@@ -69,6 +71,9 @@ function setup_dir()
           $(make_tmp_fs 1M)
           $(make_tmp_fs 1M)
          )
+
+    export PHOBOS_STORE_default_layout="raid1"
+    export PHOBOS_LAYOUT_RAID1_repl_count=1
 
     $phobos dir add ${DIRS[@]}
     $phobos dir format --unlock ${DIRS[@]}
@@ -82,11 +87,52 @@ function cleanup_dir()
     done
 }
 
+function setup_2dir_raid1()
+{
+    setup
+
+    # Same, add enough media so that a put with split is possible to ensure
+    # that a put with the no-split option returns an error
+    DIRS=(
+          $(make_tmp_fs 1M)
+          $(make_tmp_fs 1M)
+          $(make_tmp_fs 1M)
+          $(make_tmp_fs 1M)
+         )
+
+    export PHOBOS_STORE_default_layout="raid1"
+    export PHOBOS_LAYOUT_RAID1_repl_count=2
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
+function setup_dir_raid4()
+{
+    setup
+
+    # Same, add enough media so that a put with split is possible to ensure
+    # that a put with the no-split option returns an error
+    DIRS=(
+         $(make_tmp_fs 1M)
+         $(make_tmp_fs 1M)
+         $(make_tmp_fs 1M)
+         $(make_tmp_fs 1M)
+         $(make_tmp_fs 1M)
+         $(make_tmp_fs 1M)
+        )
+
+    export PHOBOS_STORE_default_layout="raid4"
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
 ################################################################################
 #                              TEST MPUT NO-SPLIT                              #
 ################################################################################
 
-function test_mput_no_split_one_file()
+function test_mput_no_split_raid1_one_file()
 {
     local files=(
                  $(mktemp $DIR_TEST_IN/test.pho.XXXX)
@@ -119,7 +165,7 @@ function test_mput_no_split_one_file()
     fi
 }
 
-function test_mput_no_split_two_file()
+function test_mput_no_split_raid1_two_file()
 {
     local files=(
                  $(mktemp $DIR_TEST_IN/test.pho.XXXX)
@@ -162,5 +208,180 @@ function test_mput_no_split_two_file()
     fi
 }
 
-TESTS=("setup_dir; test_mput_no_split_one_file; cleanup_dir"
-       "setup_dir; test_mput_no_split_two_file; cleanup_dir")
+function test_mput_no_split_raid1_repl_one_file()
+{
+    local files=(
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                )
+
+    dd if=/dev/urandom of="${files[0]}" bs=600KB count=2
+    dd if=/dev/urandom of="${files[1]}" bs=600KB count=1
+
+    local object="${files[0]} mput_no_split_oid1 -"
+    echo "$object" > $DIR_TEST_OUT/mput_no_split
+
+    $valg_phobos put --file $DIR_TEST_OUT/mput_no_split --no-split &&
+         error "phobos put --file should have failed (file too big)"
+
+    local count=$($phobos extent list --degroup | wc -l)
+    if [[ $count -ne 0 ]]; then
+        error "There should be no extent (got $count)"
+    fi
+
+    object="${files[1]} mput_no_split_oid1 -"
+    echo "$object" > $DIR_TEST_OUT/mput_no_split
+
+    $valg_phobos put --file $DIR_TEST_OUT/mput_no_split --no-split ||
+        error "phobos put --file should have worked"
+
+    local media_extents=$($phobos extent list --degroup -o media_name | sort)
+    count=$(echo "$media_extents" | wc -l)
+    if [[ $count -ne 2 ]]; then
+        error "There should be two extents (got $count)"
+    fi
+}
+
+function test_mput_no_split_raid1_repl_two_file()
+{
+    local files=(
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                )
+    # Two files bigger than the medium
+    dd if=/dev/urandom of="${files[0]}" bs=600KB count=1
+    dd if=/dev/urandom of="${files[1]}" bs=600KB count=1
+
+    local objects=("${files[0]} mput_no_split_oid1 -"
+                   "${files[1]} mput_no_split_oid2 -")
+    echo "${objects[0]}
+          ${objects[1]}" > $DIR_TEST_OUT/mput_no_split
+
+    $valg_phobos put --file $DIR_TEST_OUT/mput_no_split --no-split &&
+        error "phobos put --file should have failed"
+
+    local count=$($phobos extent list --degroup | wc -l)
+    if [[ $count -ne 0 ]]; then
+        error "There should no extent (got $count)"
+    fi
+
+    # Two files smaller than the medium
+    dd if=/dev/urandom of="${files[2]}" bs=200KB count=1
+    dd if=/dev/urandom of="${files[3]}" bs=200KB count=1
+
+    objects=("${files[2]} mput_no_split_oid1 -"
+             "${files[3]} mput_no_split_oid2 -")
+    echo "${objects[0]}
+          ${objects[1]}" > $DIR_TEST_OUT/mput_no_split
+
+    $valg_phobos put --file $DIR_TEST_OUT/mput_no_split --no-split ||
+        error "phobos put --file should have worked"
+
+    count=$($phobos extent list --degroup | wc -l)
+    if [[ $count -ne 4 ]]; then
+        error "There should be four extents (got $count)"
+    fi
+}
+
+function test_mput_no_split_raid4_one_file()
+{
+    local files=(
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                )
+
+    # Each half should be larger than 1M (expected fail)
+    dd if=/dev/urandom of="${files[0]}" bs=600KB count=4
+    # Each half should be smaller than 1M (expected success)
+    dd if=/dev/urandom of="${files[1]}" bs=600KB count=1
+
+    local object="${files[0]} mput_no_split_oid1 -"
+    echo "$object" > $DIR_TEST_OUT/mput_no_split
+
+    $valg_phobos put --file $DIR_TEST_OUT/mput_no_split --no-split &&
+         error "phobos put --file should have failed (file too big)"
+
+    local count=$($phobos extent list --degroup | wc -l)
+    if [[ $count -ne 0 ]]; then
+        error "There should be no extent (got $count)"
+    fi
+
+    object="${files[1]} mput_no_split_oid1 -"
+    echo "$object" > $DIR_TEST_OUT/mput_no_split
+
+    $valg_phobos put --file $DIR_TEST_OUT/mput_no_split --no-split ||
+        error "phobos put --file should have worked"
+
+    local media_extents=$($phobos extent list --degroup -o media_name | sort)
+    count=$(echo "$media_extents" | wc -l)
+    if [[ $count -ne 3 ]]; then
+        error "There should be 3 extents (got $count)"
+    fi
+}
+
+function test_mput_no_split_raid4_two_file()
+{
+    local files=(
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                )
+
+    # Sum of each half should be larger than 1M (expected fail)
+    dd if=/dev/urandom of="${files[0]}" bs=600KB count=2
+    dd if=/dev/urandom of="${files[1]}" bs=600KB count=2
+
+    local objects=("${files[0]} mput_no_split_oid1 -"
+                   "${files[1]} mput_no_split_oid2 -")
+    echo "${objects[0]}
+          ${objects[1]}" > $DIR_TEST_OUT/mput_no_split
+
+    $valg_phobos put --file $DIR_TEST_OUT/mput_no_split --no-split &&
+        error "phobos put --file should have failed"
+
+    local count=$($phobos extent list --degroup | wc -l)
+    if [[ $count -ne 0 ]]; then
+        error "There should no extent (got $count)"
+    fi
+
+    # Sum of each half should be smaller than 1M (expected success)
+    dd if=/dev/urandom of="${files[2]}" bs=600KB count=1
+    dd if=/dev/urandom of="${files[3]}" bs=600KB count=1
+
+    objects=("${files[2]} mput_no_split_oid1 -"
+             "${files[3]} mput_no_split_oid2 -")
+    echo "${objects[0]}
+          ${objects[1]}" > $DIR_TEST_OUT/mput_no_split
+
+    $valg_phobos put --file $DIR_TEST_OUT/mput_no_split --no-split ||
+        error "phobos put --file should have worked"
+
+    local media_extents=$($phobos extent list --degroup -o media_name | sort)
+    count=$(echo "$media_extents" | wc -l)
+    if [[ $count -ne 6 ]]; then
+        error "There should be 6 extents (got $count)"
+    fi
+}
+
+################################################################################
+#                              RAID1                                           #
+################################################################################
+
+TESTS=("setup_dir_raid1; test_mput_no_split_raid1_one_file; cleanup_dir"
+       "setup_dir_raid1; test_mput_no_split_raid1_two_file; cleanup_dir"
+       "setup_2dir_raid1; \
+            test_mput_no_split_raid1_repl_one_file; \
+        cleanup_dir"
+       "setup_2dir_raid1; \
+            test_mput_no_split_raid1_repl_two_file; \
+        cleanup_dir")
+
+################################################################################
+#                              RAID4                                           #
+################################################################################
+
+TESTS+=("setup_dir_raid4; test_mput_no_split_raid4_one_file; cleanup_dir"
+        "setup_dir_raid4; test_mput_no_split_raid4_two_file; cleanup_dir")
