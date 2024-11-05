@@ -40,8 +40,11 @@ function setup_dir
     setup_test_dirs
     setup_dummy_files 1
 
-    $phobos dir add "$DIR_TEST_OUT"
-    $phobos dir format --fs posix --unlock "$DIR_TEST_OUT"
+    dirs=("$DIR_TEST_IN/tmp1" "$DIR_TEST_IN/tmp2" "$DIR_TEST_IN/tmp3")
+
+    mkdir ${dirs[@]}
+    $phobos dir add ${dirs[@]}
+    $phobos dir format --fs posix --unlock ${dirs[@]}
 }
 
 function setup_tape
@@ -105,6 +108,51 @@ function test_delete
     return 0
 }
 
+function test_dir_hard_delete
+{
+    local prefix=$(generate_prefix_id)_$1_$2
+    local oid=${prefix}_id
+
+    export PHOBOS_STORE_default_family="dir"
+    export PHOBOS_STORE_default_layout=$1
+    export PHOBOS_LAYOUT_RAID1_repl_count=$2
+
+    $phobos put "${FILES[0]}" $oid || error "Object should be put"
+    medium_list=$($phobos extent list -o media_name)
+    path_list=$($phobos extent list -o address)
+    $valg_phobos delete --hard $oid || error "Object should be deleted"
+    $phobos get $oid test_tmp && error "Object should not be retrieved"
+
+    [ -z $($phobos object list $oid) ] ||
+        error "Object should not be listed, because deleted"
+    [ -z $($phobos object list --deprecated $oid) ] ||
+        error "Object should not be listed, because hard deleted"
+
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM layout;")
+    if [ $nb -ne 0 ]; then
+        error "Hard delete should have deleted layout info"
+    fi
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM extent;")
+    if [ $nb -ne 0 ]; then
+        error "Hard delete should have deleted extent info"
+    fi
+
+    for path in $path_list; do
+        path=$(echo $path | cut -d"'" -f2)
+        if [ -f $path ]; then
+            error "Hard delete should have deleted extent file"
+        fi
+    done
+
+    for medium in $medium_list; do
+        medium=$(echo $medium | cut -d"'" -f2)
+        [ $($phobos dir list -o stats.nb_obj $medium) -eq 0 ] ||
+            error "Hard delete should have set correct number of objects on dir"
+        [ $($phobos dir list -o stats.logc_spc_used $medium) -eq 0 ] ||
+            error "Hard delete should have set correct logical space on dir"
+    done
+}
+
 function test_tape_hard_delete
 {
     local prefix=$(generate_prefix_id)
@@ -159,6 +207,9 @@ function test_tape_hard_delete_after_soft_delete
 
 TESTS=(
     "setup_dir; test_delete; cleanup_dir"
+    "setup_dir; test_dir_hard_delete raid1 1; cleanup_dir"
+    "setup_dir; test_dir_hard_delete raid1 2; cleanup_dir"
+    "setup_dir; test_dir_hard_delete raid4; cleanup_dir"
 )
 
 if [[ -w /dev/changer ]]; then
