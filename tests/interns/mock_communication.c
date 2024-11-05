@@ -9,13 +9,12 @@
 
 #include "pho_srl_lrs.h"
 #include "phobos_admin.h"
-
-#include "admin_utils.h"
+#include "pho_comm_wrapper.h"
 
 #include <cmocka.h>
 
-int _send_and_receive(struct pho_comm_info *comm, pho_req_t *lrs_req,
-                      pho_resp_t **lrs_resp)
+int comm_send_and_recv(struct pho_comm_info *comm, pho_req_t *lrs_req,
+                       pho_resp_t **lrs_resp)
 {
     int rc;
 

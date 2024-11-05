@@ -37,6 +37,7 @@
 
 #include "pho_cfg.h"
 #include "pho_comm.h"
+#include "pho_comm_wrapper.h"
 #include "pho_common.h"
 #include "pho_dss.h"
 #include "pho_dss_wrapper.h"
@@ -46,7 +47,6 @@
 #include "pho_types.h"
 #include "pho_type_utils.h"
 
-#include "admin_utils.h"
 #include "import.h"
 
 enum pho_cfg_params_admin {
@@ -65,67 +65,6 @@ const struct pho_config_item cfg_admin[] = {
 /* ****************************************************************************/
 /* Static Communication-related Functions *************************************/
 /* ****************************************************************************/
-
-int _send(struct pho_comm_info *comm, pho_req_t *lrs_req)
-{
-    struct pho_comm_data data_out;
-    int rc;
-
-    data_out = pho_comm_data_init(comm);
-    pho_srl_request_pack(lrs_req, &data_out.buf);
-    pho_srl_request_free(lrs_req, false);
-    rc = pho_comm_send(&data_out);
-    free(data_out.buf.buff);
-    if (rc)
-        LOG_RETURN(rc, "Cannot send request to LRS");
-
-    return 0;
-}
-
-static int _receive(struct pho_comm_info *comm, pho_resp_t **lrs_resp)
-{
-    struct pho_comm_data *data_in = NULL;
-    int n_data_in = 0;
-    int rc;
-
-    rc = pho_comm_recv(comm, &data_in, &n_data_in);
-    if (rc || n_data_in != 1) {
-        if (data_in)
-            free(data_in->buf.buff);
-
-        free(data_in);
-        if (rc)
-            LOG_RETURN(rc, "Cannot receive responses from LRS");
-        else
-            LOG_RETURN(-EINVAL, "Received %d responses (expected 1) from LRS",
-                       n_data_in);
-    }
-
-    *lrs_resp = pho_srl_response_unpack(&data_in->buf);
-    if (*lrs_resp) {
-        rc = 0;
-    } else {
-        rc = -EINVAL;
-        pho_error(rc, "The received LRS response cannot be deserialized");
-    }
-
-    free(data_in);
-    return rc;
-}
-
-int _send_and_receive(struct pho_comm_info *comm, pho_req_t *req,
-                      pho_resp_t **resp)
-{
-    int rc;
-
-    rc = _send(comm, req);
-    if (rc)
-        return rc;
-
-    rc = _receive(comm, resp);
-
-    return rc;
-}
 
 static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
                          enum notify_op op, bool need_to_wait)
@@ -147,14 +86,14 @@ static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
     req.notify->rsrc_id->library = xstrdup(id->library);
     req.notify->wait = need_to_wait;
 
-    rc = _send(&adm->phobosd_comm, &req);
+    rc = comm_send(&adm->phobosd_comm, &req);
     if (rc)
         LOG_RETURN(rc, "Error with phobosd communication");
 
     if (!need_to_wait)
         return rc;
 
-    rc = _receive(&adm->phobosd_comm, &resp);
+    rc = comm_recv(&adm->phobosd_comm, &resp);
     if (rc)
         LOG_RETURN(rc, "Error with phobosd communication");
 
@@ -573,7 +512,7 @@ static int send_configure(struct admin_handle *adm,
     req.configure->op = op;
     req.configure->configuration = configuration;
 
-    rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
+    rc = comm_send_and_recv(&adm->phobosd_comm, &req, &resp);
     if (rc)
         LOG_GOTO(free_req, rc, "Failed to send/receive configure with phobosd");
 
@@ -880,7 +819,7 @@ int phobos_admin_device_status(struct admin_handle *adm,
     req.id = 0;
     req.monitor->family = family;
 
-    rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
+    rc = comm_send_and_recv(&adm->phobosd_comm, &req, &resp);
     if (rc)
         return rc;
 
@@ -1101,7 +1040,7 @@ static int receive_format_response(struct admin_handle *adm,
     pho_resp_t *resp;
     int rc = 0;
 
-    rc = _receive(&adm->phobosd_comm, &resp);
+    rc = comm_recv(&adm->phobosd_comm, &resp);
     if (rc)
         return rc;
 
@@ -1214,7 +1153,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
 
         req.id = i;
 
-        rc2 = _send(&adm->phobosd_comm, &req);
+        rc2 = comm_send(&adm->phobosd_comm, &req);
         if (rc2) {
             rc = rc ? : rc2;
             pho_error(rc2,
@@ -1330,7 +1269,7 @@ static int _get_source_medium(struct admin_handle *adm,
     req.ralloc->med_ids[0]->name = xstrdup(source->name);
     req.ralloc->med_ids[0]->library = xstrdup(source->library);
 
-    rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
+    rc = comm_send_and_recv(&adm->phobosd_comm, &req, &resp);
     if (rc)
         return rc;
 
@@ -1378,7 +1317,7 @@ static int _get_target_medium(struct admin_handle *adm,
     for (i = 0; i < tags->n_tags; ++i)
         req.walloc->media[0]->tags[i] = xstrdup(tags->tags[i]);
 
-    rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
+    rc = comm_send_and_recv(&adm->phobosd_comm, &req, &resp);
     if (rc)
         return rc;
 
@@ -1430,7 +1369,7 @@ static int _send_and_recv_release(struct admin_handle *adm,
     req.release->media[0]->to_sync = false;
 
     if (target == NULL) {
-        rc = _send(&adm->phobosd_comm, &req);
+        rc = comm_send(&adm->phobosd_comm, &req);
 
         return rc;
     }
@@ -1443,7 +1382,7 @@ static int _send_and_recv_release(struct admin_handle *adm,
     req.release->media[1]->nb_extents_written = nb_extents_written;
     req.release->media[1]->to_sync = true;
 
-    rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
+    rc = comm_send_and_recv(&adm->phobosd_comm, &req, &resp);
     if (rc)
         return rc;
 
@@ -1707,7 +1646,7 @@ int phobos_admin_ping_lrs(struct admin_handle *adm)
 
     req.id = rid;
 
-    rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
+    rc = comm_send_and_recv(&adm->phobosd_comm, &req, &resp);
     if (rc)
         LOG_RETURN(rc, "Error with phobosd communication");
 

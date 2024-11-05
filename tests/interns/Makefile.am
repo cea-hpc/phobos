@@ -174,7 +174,8 @@ test_pho_cache_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_pho_cache_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I..
 
 test_ping_SOURCES=test_ping.c mock_communication.c
-test_ping_LDADD=$(ADMIN_LIB) $(COMMON_LIB) $(DSS_LIB) $(LDM_LIB)
+test_ping_LDADD=$(ADMIN_LIB) $(COMMON_LIB) $(COMMUNICATION_LIB) $(DSS_LIB) \
+                $(LDM_LIB)
 test_ping_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/admin
 
 test_scsi_logs_SOURCES=test_scsi_logs.c

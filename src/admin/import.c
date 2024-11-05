@@ -38,6 +38,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "pho_comm_wrapper.h"
 #include "pho_common.h"
 #include "pho_attrs.h"
 #include "pho_dss_wrapper.h"
@@ -45,7 +46,6 @@
 #include "pho_layout.h"
 #include "pho_ldm.h"
 
-#include "admin_utils.h"
 #include "import.h"
 #include "io_posix_common.h"
 
@@ -706,7 +706,7 @@ int import_medium(struct admin_handle *adm, struct media_info *medium,
     reqs[0].ralloc->med_ids[0]->name = strdup(id.name);
     reqs[0].ralloc->med_ids[0]->library = strdup(id.library);
 
-    rc = _send_and_receive(&adm->phobosd_comm, &reqs[0], &resp);
+    rc = comm_send_and_recv(&adm->phobosd_comm, &reqs[0], &resp);
     if (rc)
         LOG_GOTO(request_free, rc,
                  "Failed to send or receive read request for medium (family "
@@ -757,7 +757,7 @@ int import_medium(struct admin_handle *adm, struct media_info *medium,
     reqs[1].release->media[0]->rc = 0;
     reqs[1].release->media[0]->to_sync = false;
 
-    rc = _send(&adm->phobosd_comm, &reqs[1]);
+    rc = comm_send(&adm->phobosd_comm, &reqs[1]);
     if (rc)
         pho_error(rc, "Failed to send release request");
     pho_srl_request_free(reqs + 1, false);

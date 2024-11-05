@@ -9,8 +9,7 @@
 
 #include "pho_srl_lrs.h"
 #include "phobos_admin.h"
-
-#include "admin_utils.h"
+#include "pho_comm_wrapper.h"
 
 #include <cmocka.h>
 
@@ -50,8 +49,8 @@ static void phobos_admin_ping_lrs_success(void **state)
     struct admin_handle handle;
     int rc;
 
-    will_return(_send_and_receive, 0);
-    will_return(_send_and_receive, lrs_resp);
+    will_return(comm_send_and_recv, 0);
+    will_return(comm_send_and_recv, lrs_resp);
     rc = phobos_admin_ping_lrs(&handle);
     assert_int_equal(rc, 0);
 }
@@ -61,7 +60,7 @@ static void phobos_admin_ping_lrs_no_daemon(void **state)
     struct admin_handle handle;
     int rc;
 
-    will_return(_send_and_receive, -ENOTCONN);
+    will_return(comm_send_and_recv, -ENOTCONN);
     rc = phobos_admin_ping_lrs(&handle);
     assert_int_equal(rc, -ENOTCONN);
 }
@@ -71,7 +70,7 @@ static void phobos_admin_ping_lrs_wrong_socket_path(void **state)
     struct admin_handle handle;
     int rc;
 
-    will_return(_send_and_receive, -ENOTSOCK);
+    will_return(comm_send_and_recv, -ENOTSOCK);
     rc = phobos_admin_ping_lrs(&handle);
     assert_int_equal(rc, -ENOTSOCK);
 }
@@ -84,8 +83,8 @@ static void phobos_admin_ping_lrs_bad_response(void **state)
     int rc;
 
     lrs_resp->has_ping = false;
-    will_return(_send_and_receive, 0);
-    will_return(_send_and_receive, lrs_resp);
+    will_return(comm_send_and_recv, 0);
+    will_return(comm_send_and_recv, lrs_resp);
     rc = phobos_admin_ping_lrs(&handle);
     assert_int_equal(rc, -EBADMSG);
 }
