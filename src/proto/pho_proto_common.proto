@@ -87,3 +87,10 @@ enum PhoRequestKind {
     RQ_CONFIGURE = 6; // Get/Set configuration information from the LRS
 }
 
+/** LRS sync threshold */
+message PhoSyncThreshold {
+    required uint64 sync_nb_req   = 1; // Number of requests threshold.
+    required uint64 sync_wsize_kb = 2; // Written size threshold.
+    required int64 sync_time_sec  = 3; // Time threshold in seconds.
+    required int64 sync_time_nsec = 5; // Time threshold in nanoseconds.
+}

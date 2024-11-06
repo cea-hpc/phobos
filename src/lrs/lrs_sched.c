@@ -1928,6 +1928,20 @@ select_device:
     return 0;
 }
 
+static void sched_write_alloc_add_threshold(struct lrs_sched *sched,
+                                            struct resp_container *respc)
+{
+    pho_resp_write_t *wresp = respc->resp->walloc;
+
+    wresp->threshold = xmalloc(sizeof(*wresp->threshold));
+    pho_sync_threshold__init(wresp->threshold);
+
+    wresp->threshold->sync_nb_req    = sched->devices.sync_nb_req;
+    wresp->threshold->sync_wsize_kb  = sched->devices.sync_wsize_kb;
+    wresp->threshold->sync_time_sec  = sched->devices.sync_time_ms.tv_sec;
+    wresp->threshold->sync_time_nsec = sched->devices.sync_time_ms.tv_nsec;
+}
+
 /**
  * Handle a write allocation request by finding appropriate medium/device
  * couples to write.
@@ -1969,6 +1983,11 @@ static int sched_handle_write_alloc(struct lrs_sched *sched,
             break;
     }
 
+    /* If it's a no-split request, the lrs needs to provide to the client the
+     * threshold for the sync in order to know if a sync is needed while writing
+     */
+    if (wreq->no_split)
+        sched_write_alloc_add_threshold(sched, reqc->params.rwalloc.respc);
 end:
     return publish_or_cancel(sched, reqc, rc, next_medium_index);
 }

@@ -160,7 +160,9 @@ message PhoResponse {
             required PhoAddressType addr_type = 5;  // Address type.
         }
 
-        repeated Elt media = 1;     // Description of allocated media.
+        repeated Elt media                  = 1; // Description of allocated
+                                                 // media.
+        optional PhoSyncThreshold threshold = 2; // LRS sync threshold.
     }
 
     /** Body of the read allocation response. */

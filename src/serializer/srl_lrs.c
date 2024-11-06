@@ -323,6 +323,8 @@ void pho_srl_response_write_alloc(pho_resp_t *resp, size_t n_media)
             xmalloc(sizeof(*resp->walloc->media[i]->med_id));
         pho_resource_id__init(resp->walloc->media[i]->med_id);
     }
+
+    resp->walloc->threshold = NULL;
 }
 
 void pho_srl_response_read_alloc(pho_resp_t *resp, size_t n_media)
@@ -436,6 +438,7 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
             free(resp->walloc->media[i]->root_path);
             free(resp->walloc->media[i]);
         }
+        free(resp->walloc->threshold);
         free(resp->walloc->media);
         free(resp->walloc);
         resp->walloc = NULL;
