@@ -261,6 +261,12 @@ void layout_destroy(struct pho_encoder *enc)
         enc->layout = NULL;
     }
 
+    if (enc->last_resp != NULL) {
+        pho_srl_response_free(enc->last_resp, false);
+        free(enc->last_resp);
+        enc->last_resp = NULL;
+    }
+
     /* Not fully initialized */
     if (enc->ops == NULL)
         return;

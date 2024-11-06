@@ -130,6 +130,10 @@ struct pho_encoder {
                                       */
     size_t io_block_size;           /**< Block size (in bytes) of the I/O buffer
                                       */
+    pho_resp_t *last_resp;          /**< Last response from the LRS (use for
+                                      *  a mput with no-split to keep the write
+                                      *  resp)
+                                      */
 };
 
 /**

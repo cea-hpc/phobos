@@ -1077,15 +1077,73 @@ static int raid_write_handle_release_resp(struct pho_encoder *enc,
     return rc;
 }
 
+static bool need_to_sync(pho_req_release_t *release, struct timespec start,
+                         pho_resp_t *resp)
+{
+    unsigned long resp_sync_wsize_kb = resp->walloc->threshold->sync_wsize_kb;
+    unsigned int resp_sync_nb_req = resp->walloc->threshold->sync_nb_req;
+    struct timespec resp_sync_time = {
+        .tv_sec = resp->walloc->threshold->sync_time_sec,
+        .tv_nsec = resp->walloc->threshold->sync_time_nsec,
+    };
+    int i;
+
+    for (i = 0; i < release->n_media; i++) {
+        if (release->media[i]->size_written >= resp_sync_wsize_kb ||
+            release->media[i]->nb_extents_written >= resp_sync_nb_req ||
+            is_past(add_timespec(&start, &resp_sync_time))) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static pho_resp_t *copy_response_write_alloc(pho_resp_t *resp)
+{
+    pho_resp_write_t *wresp;
+    pho_resp_t *resp_cpy;
+    int i;
+
+    resp_cpy = xmalloc(sizeof(*resp));
+    pho_srl_response_write_alloc(resp_cpy, resp->walloc->n_media);
+
+    resp_cpy->walloc->threshold = xmalloc(sizeof(*resp_cpy->walloc->threshold));
+    pho_sync_threshold__init(resp_cpy->walloc->threshold);
+    wresp = resp_cpy->walloc;
+
+    wresp->threshold->sync_nb_req    = resp->walloc->threshold->sync_nb_req;
+    wresp->threshold->sync_wsize_kb  = resp->walloc->threshold->sync_wsize_kb;
+    wresp->threshold->sync_time_sec  = resp->walloc->threshold->sync_time_sec;
+    wresp->threshold->sync_time_nsec = resp->walloc->threshold->sync_time_nsec;
+
+    for (i = 0; i < resp->walloc->n_media; i++) {
+        rsc_id_cpy(wresp->media[i]->med_id, resp->walloc->media[i]->med_id);
+        wresp->media[i]->avail_size = resp->walloc->media[i]->avail_size;
+        wresp->media[i]->root_path = xstrdup(resp->walloc->media[i]->root_path);
+        wresp->media[i]->fs_type = resp->walloc->media[i]->fs_type;
+        wresp->media[i]->addr_type = resp->walloc->media[i]->addr_type;
+    }
+
+    return resp_cpy;
+}
+
 static int raid_enc_handle_write_resp(struct pho_encoder *enc,
-                                      pho_resp_t *resp, pho_req_t **reqs,
+                                      pho_resp_t *resp_new, pho_req_t **reqs,
                                       size_t *n_reqs)
 {
     struct raid_io_context *io_context;
+    static int nb_written;
+    struct timespec start;
     size_t split_size;
+    pho_resp_t *resp;
     int rc = 0;
     int i, j;
 
+    if (resp_new == NULL)
+        resp = enc->last_resp;
+    else
+        resp = resp_new;
     /*
      * Build release req matching this allocation response, this release
      * request will be emitted after the IO has been performed. Any
@@ -1101,8 +1159,15 @@ static int raid_enc_handle_write_resp(struct pho_encoder *enc,
         (*reqs)[*n_reqs].release->media[i]->nb_extents_written = 0;
     }
 
-    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+    if (enc->xfer->xd_params.put.no_split) {
+        rc = clock_gettime(CLOCK_REALTIME, &start);
+        if (rc)
+            LOG_RETURN(-errno, "clock_gettime: unable to get CLOCK_REALTIME");
+    }
+
+    for (i = nb_written; i < enc->xfer->xd_ntargets; i++) {
         io_context = &((struct raid_io_context *) enc->priv_enc)[i];
+
         split_size =
             (io_context->write.to_write + io_context->n_data_extents - 1) /
                 io_context->n_data_extents;
@@ -1121,6 +1186,28 @@ static int raid_enc_handle_write_resp(struct pho_encoder *enc,
 
 skip_io:
         rc = write_split_fini(enc, rc, (*reqs)[*n_reqs].release, split_size, i);
+
+        io_context->requested_alloc = false;
+        /* Only increment xd_nwritten with a no-split, otherwise there is
+         * always one target to write.
+         */
+        if (enc->xfer->xd_params.put.no_split)
+            nb_written++;
+
+        /* If the transfer has exceeded the threshold for the sync, perform a
+         * partial release (only a sync).
+         * Also check if it's not the last encoders, otherwise the release
+         * request is enough.
+         */
+        if (enc->xfer->xd_params.put.no_split &&
+            need_to_sync((*reqs)[*n_reqs].release, start, resp) &&
+            i < enc->xfer->xd_ntargets - 1) {
+
+            (*reqs)[*n_reqs].release->partial = true;
+            if (enc->last_resp == NULL)
+                enc->last_resp = copy_response_write_alloc(resp);
+            break;
+        }
     }
 
     (*n_reqs)++;
@@ -1260,7 +1347,6 @@ static int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
 
         for (i = 0; i < enc->xfer->xd_ntargets; i++) {
             io_context = &((struct raid_io_context *) enc->priv_enc)[i];
-            io_context->requested_alloc = false;
 
             if (resp->walloc->n_media != n_total_extents(io_context))
                 LOG_RETURN(-EINVAL,
@@ -1297,7 +1383,12 @@ static int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
 
         return raid_enc_handle_read_resp(enc, resp, reqs, n_reqs);
 
+    } else if (pho_response_is_partial_release(resp)) {
+
+        return raid_enc_handle_write_resp(enc, NULL, reqs, n_reqs);
+
     } else if (pho_response_is_release(resp)) {
+
         if (!enc->is_decoder)
             return raid_write_handle_release_resp(enc, resp->release);
         else
