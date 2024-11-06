@@ -540,6 +540,16 @@ int fill_host_owner(const char **hostname, int *pid);
  */
 int cmp_timespec(const struct timespec *a, const struct timespec *b);
 
+/**
+ * Return true if a is older or equal to b
+ */
+bool is_older_or_equal(struct timespec a, struct timespec b);
+
+/**
+ * Return true if t is older than now
+ */
+bool is_past(struct timespec t);
+
 /** Compute the sum of \p a and \p b and make sure that the result's
  * tv_nsec is lower or equal to 10^9.
  */

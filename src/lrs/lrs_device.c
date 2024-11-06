@@ -588,18 +588,6 @@ static void clean_tosync_array(struct lrs_dev *dev, int rc)
     MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
-/**
- * Return true if a is older or equal to b
- */
-static bool is_older_or_equal(struct timespec a, struct timespec b)
-{
-    if (a.tv_sec > b.tv_sec ||
-        (a.tv_sec == b.tv_sec && a.tv_nsec > b.tv_nsec))
-        return false;
-
-    return true;
-}
-
 static inline void update_oldest_tosync(struct timespec *oldest_to_update,
                                          struct timespec candidate)
 {
@@ -707,20 +695,6 @@ static void remove_canceled_sync(struct lrs_dev *dev)
         update_queue_oldest_tosync(dev);
 
     MUTEX_UNLOCK(&dev->ld_mutex);
-}
-
-static bool is_past(struct timespec t)
-{
-    struct timespec now;
-    int rc;
-
-    rc = clock_gettime(CLOCK_REALTIME, &now);
-    if (rc) {
-        pho_error(-errno, "Unable to get CLOCK_REALTIME to check delay");
-        return true;
-    }
-
-    return is_older_or_equal(t, now);
 }
 
 static void check_needs_sync(struct lrs_dev_hdl *handle, struct lrs_dev *dev)

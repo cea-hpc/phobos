@@ -494,6 +494,29 @@ int cmp_timespec(const struct timespec *a, const struct timespec *b)
     }
 }
 
+bool is_older_or_equal(struct timespec a, struct timespec b)
+{
+    if (a.tv_sec > b.tv_sec ||
+        (a.tv_sec == b.tv_sec && a.tv_nsec > b.tv_nsec))
+        return false;
+
+    return true;
+}
+
+bool is_past(struct timespec t)
+{
+    struct timespec now;
+    int rc;
+
+    rc = clock_gettime(CLOCK_REALTIME, &now);
+    if (rc) {
+        pho_error(-errno, "Unable to get CLOCK_REALTIME to check delay");
+        return true;
+    }
+
+    return is_older_or_equal(t, now);
+}
+
 struct timespec add_timespec(const struct timespec *a,
                              const struct timespec *b)
 {
