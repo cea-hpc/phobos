@@ -540,6 +540,7 @@ static int release_medium(struct lrs_sched *sched,
 
     /* Acknowledgement of the request */
     dev->ld_ongoing_io = false;
+
     MUTEX_UNLOCK(&dev->ld_mutex);
 
     if (release->to_sync)

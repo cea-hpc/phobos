@@ -179,6 +179,7 @@ void pho_srl_request_release_alloc(pho_req_t *req, size_t n_media)
             xmalloc(sizeof(*req->release->media[i]->med_id));
         pho_resource_id__init(req->release->media[i]->med_id);
     }
+    req->release->partial = false;
 }
 
 void pho_srl_request_format_alloc(pho_req_t *req)

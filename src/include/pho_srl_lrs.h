@@ -64,7 +64,7 @@ typedef PhoResponse__Error          pho_resp_error_t;
  * If the protocol version is greater than 127, need to increase its size
  * to an integer size (4 bytes).
  */
-#define PHO_PROTOCOL_VERSION      11
+#define PHO_PROTOCOL_VERSION      12
 /**
  * Protocol version size in bytes.
  */
@@ -214,6 +214,19 @@ static inline bool pho_response_is_read(const pho_resp_t *resp)
 static inline bool pho_response_is_release(const pho_resp_t *resp)
 {
     return resp->release != NULL;
+}
+
+/**
+ * Response partial release checker.
+ *
+ * \param[in]       resp        Response.
+ *
+ * \return                      true if the response is a partial release one,
+ *                              false else.
+ */
+static inline bool pho_response_is_partial_release(const pho_resp_t *resp)
+{
+    return resp->release != NULL && resp->release->partial;
 }
 
 /**

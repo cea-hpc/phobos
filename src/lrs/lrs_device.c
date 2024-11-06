@@ -519,6 +519,8 @@ void queue_release_response(struct tsqueue *response_queue,
             xstrdup_safe(tosync_media[i].medium.library);
     }
 
+    resp_release->partial = reqc->req->release->partial;
+
     tsqueue_push(response_queue, respc);
 }
 
@@ -570,8 +572,14 @@ static void clean_tosync_array(struct lrs_dev *dev, int rc)
             queue_error_response(dev->ld_response_queue, rc, req->reqc);
 
         if (is_tosync_ended) {
-            if (!req->reqc->params.release.rc)
+            if (!req->reqc->params.release.rc) {
                 queue_release_response(dev->ld_response_queue, req->reqc);
+                /* If it is a partial request, it means that the client has not
+                 * finished writing
+                 */
+                if (req->reqc->req->release->partial)
+                    dev->ld_ongoing_io = true;
+            }
         } else {
             req->reqc = NULL;   /* only the last device free reqc */
         }
@@ -623,6 +631,12 @@ void push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
     sync_params->tosync_nb_extents +=
         reqc->params.release.tosync_media[medium_index].nb_extents_written;
     update_oldest_tosync(&sync_params->oldest_tosync, reqc->received_at);
+
+    /* Set ld_needs_sync to true to avoid waiting until the threshold are
+     * exceeded
+     */
+    if (reqc->req->release->partial)
+        dev->ld_needs_sync = true;
 
     MUTEX_UNLOCK(&dev->ld_mutex);
 
@@ -2015,6 +2029,24 @@ static void dev_thread_end(struct lrs_dev *device)
     device->ld_ongoing_io = false;
 }
 
+static int dev_perform_sync(struct lrs_dev *device, struct thread_info *thread)
+{
+    int rc;
+
+    rc = dev_sync(device);
+    if (rc) {
+        const struct pho_id *dev_id = lrs_dev_id(device);
+
+        LOG_RETURN(thread->status = rc,
+                   "device thread (family '%s', name '%s', library "
+                   "'%s'): fatal error syncing device",
+                   rsc_family2str(dev_id->family), dev_id->name,
+                   dev_id->library);
+    }
+
+    return 0;
+}
+
 /**
  * Main device thread loop.
  */
@@ -2050,16 +2082,8 @@ static void *lrs_dev_thread(void *tdata)
 
         if (!device->ld_ongoing_io) {
             if (device->ld_needs_sync) {
-                rc = dev_sync(device);
-                if (rc) {
-                    const struct pho_id *dev_id = lrs_dev_id(device);
-
-                    LOG_GOTO(end_thread, thread->status = rc,
-                             "device thread (family '%s', name '%s', library "
-                             "'%s'): fatal error syncing device",
-                             rsc_family2str(dev_id->family), dev_id->name,
-                             dev_id->library);
-                }
+                if (dev_perform_sync(device, thread))
+                    goto end_thread;
             }
 
             if (device->ld_sub_request) {
