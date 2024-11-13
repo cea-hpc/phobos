@@ -139,8 +139,8 @@ void cleanup_device(struct lrs_dev *dev)
 void medium_set_tags(struct media_info *medium,
                             char **tags, size_t n_tags)
 {
-    medium->tags.n_tags = n_tags;
-    medium->tags.tags = tags;
+    medium->tags.count = n_tags;
+    medium->tags.strings = tags;
 }
 
 void create_medium(struct media_info *medium, const char *name)

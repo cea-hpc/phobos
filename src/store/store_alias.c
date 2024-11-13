@@ -194,7 +194,7 @@ static int apply_alias_to_put_params(struct pho_xfer_desc *xfer)
     // tags
     rc = pho_cfg_get_val(section_name, ALIAS_TAGS_CFG_PARAM, &cfg_val);
     if (rc == 0)
-        str2tags(cfg_val, &xfer->xd_params.put.tags);
+        str2string_array(cfg_val, &xfer->xd_params.put.tags);
     else if (rc != -ENODATA)
         goto out;
 

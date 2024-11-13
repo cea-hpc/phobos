@@ -333,8 +333,8 @@ const char *pho_srl_error_kind_str(pho_resp_error_t *err);
  *
  * \param[out]      req         Pointer to the request data structure.
  * \param[in]       n_media     Number of media targeted by the request.
- * \param[in]       n_tags      Array which contains, for each medium,
- *                              the number of tags it is defined by.
+ * \param[in]       n_tags      Number of tags per medium targeted by the
+ *                              request.
  */
 void pho_srl_request_write_alloc(pho_req_t *req, size_t n_media,
                                  size_t *n_tags);

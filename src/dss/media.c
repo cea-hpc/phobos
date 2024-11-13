@@ -126,98 +126,100 @@ out_decref:
 }
 
 /**
- * Extract media tags from json
+ * Extract string array from json
  *
- * \param[out] tags   pointer to an array of tags (char**) to allocate in this
- *                    function
- * \param[out] n_tags size of tags
- * \param[in]  json   String with json media tags
+ * \param[out] string_array     string_array filled (string_array->strings is
+ *                              allocated in this function)
+ * \param[in]  json             JSON string of an array of string
  *
  * \return 0 on success, negative error code on failure.
  */
-static int dss_tags_decode(struct tags *tags, const char *json)
+static int dss_string_array_decode(struct string_array *string_array,
+                                   const char *json)
 {
     json_error_t     json_error;
     json_t          *array_entry;
-    json_t          *tag_array;
-    const char      *tag;
+    json_t          *json_string_array;
+    const char      *string;
     size_t           i;
     int              rc = 0;
 
     ENTRY;
 
     if (!json || json[0] == '\0') {
-        memset(tags, 0, sizeof(*tags));
+        memset(string_array, 0, sizeof(*string_array));
         return 0;
     }
 
-    tag_array = json_loads(json, JSON_REJECT_DUPLICATES, &json_error);
-    if (!tag_array)
-        LOG_RETURN(-EINVAL, "Failed to parse media tags json data '%s': %s",
+    json_string_array = json_loads(json, JSON_REJECT_DUPLICATES, &json_error);
+    if (!json_string_array)
+        LOG_RETURN(-EINVAL,
+                   "Failed to parse media string array json data '%s': %s",
                    json, json_error.text);
 
-    if (!(json_is_array(tag_array) || json_is_null(tag_array)))
-        pho_warn("media tags json is not an array");
+    if (!(json_is_array(json_string_array) || json_is_null(json_string_array)))
+        pho_warn("media string array json is not an array");
 
-    /* No tags (not an array or empty array), set table to NULL */
-    tags->n_tags = json_array_size(tag_array);
-    if (tags->n_tags == 0) {
-        tags->tags = NULL;
+    /* No string (not an array or empty array), set table to NULL */
+    string_array->count = json_array_size(json_string_array);
+    if (string_array->count == 0) {
+        string_array->strings = NULL;
         goto out_free;
     }
 
-    tags->tags = xcalloc(tags->n_tags, sizeof(*tags->tags));
-    for (i = 0; i < tags->n_tags; i++) {
-        array_entry = json_array_get(tag_array, i);
-        tag = json_string_value(array_entry);
-        if (tag) {
-            tags->tags[i] = xstrdup(tag);
+    string_array->strings = xcalloc(string_array->count,
+                                    sizeof(*string_array->strings));
+    for (i = 0; i < string_array->count; i++) {
+        array_entry = json_array_get(json_string_array, i);
+        string = json_string_value(array_entry);
+        if (string) {
+            string_array->strings[i] = xstrdup(string);
         } else {
             /* Fallback to empty string to avoid unexpected NULL */
-            tags->tags[i] = xstrdup("");
-            pho_warn("Non string tag in media tags");
+            string_array->strings[i] = xstrdup("");
+            pho_warn("Non string in media string array");
         }
     }
 
 out_free:
-    json_decref(tag_array);
+    json_decref(json_string_array);
     return rc;
 }
 
 /**
- * Encode media tags to json
+ * Encode a string array to json
  *
- * \param[in]  tags    media tags to be encoded
- * \param[in]  n_tags  size of the tags array
+ * \param[in]  string_array     string_array to be encoded
  *
  * \return Return a string json object allocated with malloc. The caller must
  *     free() this string.
  */
-static char *dss_tags_encode(const struct tags *tags)
+static char *dss_string_array_encode(const struct string_array *string_array)
 {
-    json_t  *tag_array;
+    json_t  *json;
     size_t   i;
     char    *res = NULL;
 
     ENTRY;
 
-    tag_array = json_array();
-    if (!tag_array) {
-        pho_error(-ENOMEM, "Failed to create json object");
+    json = json_array();
+    if (!json) {
+        pho_error(-ENOMEM, "Failed to create json string array object");
         return NULL;
     }
 
-    for (i = 0; i < tags->n_tags; i++) {
-        if (json_array_append_new(tag_array, json_string(tags->tags[i]))) {
+    for (i = 0; i < string_array->count; i++) {
+        if (json_array_append_new(json,
+                                  json_string(string_array->strings[i]))) {
             res = NULL;
             LOG_GOTO(out_free, -ENOMEM,
-                     "Could not append media tag to json tag array");
+                     "Could not append string to json string array");
         }
     }
-    res = json_dumps(tag_array, 0);
+    res = json_dumps(json, 0);
 
 out_free:
-    json_decref(tag_array);
+    json_decref(json);
     return res;
 }
 
@@ -275,7 +277,7 @@ static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
         if (stats == NULL)
             goto free_info;
 
-        tmp_tags = dss_tags_encode(&medium->tags);
+        tmp_tags = dss_string_array_encode(&medium->tags);
         if (tmp_tags == NULL)
             goto free_info;
 
@@ -394,7 +396,7 @@ static int append_tags_update_request(PGconn *conn, GString *request,
     char *tmp_tags = NULL;
     char *tags = NULL;
 
-    tmp_tags = dss_tags_encode(&medium->tags);
+    tmp_tags = dss_string_array_encode(&medium->tags);
     if (!tmp_tags)
         LOG_RETURN(-EINVAL,
                    "Failed to encode tags for media update");
@@ -607,13 +609,13 @@ static int media_from_pg_row(struct dss_handle *handle, void *void_media,
         return rc;
     }
 
-    rc = dss_tags_decode(&medium->tags, PQgetvalue(res, row_num, 10));
+    rc = dss_string_array_decode(&medium->tags, PQgetvalue(res, row_num, 10));
     if (rc) {
         pho_error(rc, "dss_media tags decode error");
         return rc;
     }
     pho_debug("Decoded %lu tags (%s)",
-              medium->tags.n_tags, PQgetvalue(res, row_num, 10));
+              medium->tags.count, PQgetvalue(res, row_num, 10));
 
     rc = dss_lock_status(handle, DSS_MEDIA, medium, 1, &medium->lock);
     if (rc == -ENOLCK) {
@@ -632,7 +634,7 @@ static void media_result_free(void *void_media)
     struct media_info *media = void_media;
 
     pho_lock_clean(&media->lock);
-    tags_free(&media->tags);
+    string_array_free(&media->tags);
 }
 
 const struct dss_resource_ops media_ops = {

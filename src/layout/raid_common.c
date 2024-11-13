@@ -415,7 +415,7 @@ static void raid_build_write_allocation_req(struct pho_encoder *enc,
     n_tags = xcalloc(n_extents, sizeof(*n_tags));
 
     for (i = 0; i < n_extents; ++i)
-        n_tags[i] = enc->xfer->xd_params.put.tags.n_tags;
+        n_tags[i] = enc->xfer->xd_params.put.tags.count;
 
     pho_srl_request_write_alloc(req, n_extents, n_tags);
     free(n_tags);
@@ -428,9 +428,9 @@ static void raid_build_write_allocation_req(struct pho_encoder *enc,
             (size + io_contexts[0].n_data_extents - 1) /
                 io_contexts[0].n_data_extents;
 
-        for (j = 0; j < enc->xfer->xd_params.put.tags.n_tags; ++j)
+        for (j = 0; j < enc->xfer->xd_params.put.tags.count; ++j)
             req->walloc->media[i]->tags[j] =
-                xstrdup(enc->xfer->xd_params.put.tags.tags[j]);
+                xstrdup(enc->xfer->xd_params.put.tags.strings[j]);
     }
 
     req->walloc->no_split = enc->xfer->xd_params.put.no_split;

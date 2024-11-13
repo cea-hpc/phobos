@@ -128,7 +128,7 @@ void media_info_copy(struct media_info *dst, const struct media_info *src)
 {
     memcpy(dst, src, sizeof(*dst));
     dst->rsc.model = xstrdup_safe(src->rsc.model);
-    tags_dup(&dst->tags, &src->tags);
+    string_array_dup(&dst->tags, &src->tags);
     pho_lock_cpy(&dst->lock, &src->lock);
 }
 
@@ -141,7 +141,7 @@ struct media_info *media_info_dup(const struct media_info *mda)
     memcpy(media_out, mda, sizeof(*media_out));
     media_out->rsc.model = xstrdup_safe(mda->rsc.model);
 
-    tags_dup(&media_out->tags, &mda->tags);
+    string_array_dup(&media_out->tags, &mda->tags);
 
     pho_lock_cpy(&media_out->lock, &mda->lock);
 
@@ -155,7 +155,7 @@ void media_info_cleanup(struct media_info *medium)
 
     pho_lock_clean(&medium->lock);
     free(medium->rsc.model);
-    tags_free(&medium->tags);
+    string_array_free(&medium->tags);
 }
 
 void media_info_free(struct media_info *mda)
@@ -165,7 +165,7 @@ void media_info_free(struct media_info *mda)
 
     pho_lock_clean(&mda->lock);
     free(mda->rsc.model);
-    tags_free(&mda->tags);
+    string_array_free(&mda->tags);
     free(mda);
 }
 
@@ -209,150 +209,156 @@ void object_info_free(struct object_info *obj)
     free(obj);
 }
 
-void tags_dup(struct tags *tags_dst, const struct tags *tags_src)
+void string_array_dup(struct string_array *string_array_dst,
+                      const struct string_array *string_array_src)
 {
-    if (!tags_dst)
+    if (!string_array_dst)
         return;
 
-    if (!tags_src) {
-        *tags_dst = NO_TAGS;
+    if (!string_array_src) {
+        *string_array_dst = NO_STRING;
         return;
     }
 
-    tags_init(tags_dst, tags_src->tags, tags_src->n_tags);
+    string_array_init(string_array_dst, string_array_src->strings,
+                      string_array_src->count);
 }
 
-void tags_init(struct tags *tags, char **tag_values, size_t n_tags)
+void string_array_init(struct string_array *string_array, char **strings,
+                       size_t count)
 {
     ssize_t i;
 
-    tags->n_tags = n_tags;
-    if (tags->n_tags == 0) {
-        tags->tags = NULL;
+    string_array->count = count;
+    if (string_array->count == 0) {
+        string_array->strings = NULL;
         return;
     }
 
-    tags->tags = xcalloc(n_tags, sizeof(*tags->tags));
+    string_array->strings = xcalloc(count, sizeof(*string_array->strings));
 
-    for (i = 0; i < n_tags; i++)
-        tags->tags[i] = xstrdup_safe(tag_values[i]);
+    for (i = 0; i < count; i++)
+        string_array->strings[i] = xstrdup_safe(strings[i]);
 }
 
-void tags_free(struct tags *tags)
+void string_array_free(struct string_array *string_array)
 {
     size_t i;
 
-    if (!tags)
+    if (!string_array)
         return;
 
-    for (i = 0; i < tags->n_tags; i++)
-        free(tags->tags[i]);
-    free(tags->tags);
+    for (i = 0; i < string_array->count; i++)
+        free(string_array->strings[i]);
+    free(string_array->strings);
 
-    tags->tags = NULL;
-    tags->n_tags = 0;
+    string_array->strings = NULL;
+    string_array->count = 0;
 }
 
-bool tags_eq(const struct tags *tags1, const struct tags *tags2)
+bool string_array_eq(const struct string_array *string_array1,
+                     const struct string_array *string_array2)
 {
     size_t i;
 
     /* Same size? */
-    if (tags1->n_tags != tags2->n_tags)
+    if (string_array1->count != string_array2->count)
         return false;
 
     /* Same content? (order matters) */
-    for (i = 0; i < tags1->n_tags; i++)
-        if (strcmp(tags1->tags[i], tags2->tags[i]))
+    for (i = 0; i < string_array1->count; i++)
+        if (strcmp(string_array1->strings[i], string_array2->strings[i]))
             return false;
 
     return true;
 }
 
-bool tag_exists(const struct tags *tags, const char *tag_str)
+bool string_exists(const struct string_array *string_array, const char *string)
 {
     int i;
 
-    for (i = 0; i < tags->n_tags; i++)
-        if (strcmp(tag_str, tags->tags[i]) == 0)
+    for (i = 0; i < string_array->count; i++)
+        if (strcmp(string, string_array->strings[i]) == 0)
             return true;
 
     return false;
 }
 
-bool tags_in(const struct tags *haystack, const struct tags *needle)
+bool string_array_in(const struct string_array *haystack,
+                     const struct string_array *needle)
 {
     size_t ndl_i, hay_i;
 
     /* The needle cannot be larger than the haystack */
-    if (needle->n_tags > haystack->n_tags)
+    if (needle->count > haystack->count)
         return false;
 
     /* Naive n^2 set inclusion check */
-    for (ndl_i = 0; ndl_i < needle->n_tags; ndl_i++) {
-        for (hay_i = 0; hay_i < haystack->n_tags; hay_i++)
-            if (!strcmp(needle->tags[ndl_i], haystack->tags[hay_i]))
+    for (ndl_i = 0; ndl_i < needle->count; ndl_i++) {
+        for (hay_i = 0; hay_i < haystack->count; hay_i++)
+            if (!strcmp(needle->strings[ndl_i], haystack->strings[hay_i]))
                 break;
 
-        /* Needle tag not found in haystack tags */
-        if (hay_i == haystack->n_tags)
+        /* Needle string not found in haystack strings */
+        if (hay_i == haystack->count)
             return false;
     }
 
     return true;
 }
 
-void str2tags(const char *tag_str, struct tags *tags)
+void str2string_array(const char *str, struct string_array *string_array)
 {
-    size_t n_alias_tags = 0;
-    char *parse_tag_str;
-    char *single_tag;
+    size_t count = 0;
+    char *one_string;
+    char *parse_str;
     char *saveptr;
     size_t i;
 
-    if (tag_str == NULL || tags == NULL)
+    if (str == NULL || string_array == NULL)
         return;
 
-    i = tags->n_tags;
+    i = string_array->count;
 
-    if (strcmp(tag_str, "") == 0)
+    if (strcmp(str, "") == 0)
         return;
 
-    /* copy the tags list to tokenize it */
-    parse_tag_str = xstrdup(tag_str);
+    /* copy the strings list to tokenize it */
+    parse_str = xstrdup(str);
 
-    /* count number of tags in alias */
-    single_tag = strtok_r(parse_tag_str, ",", &saveptr);
-    while (single_tag != NULL) {
-        n_alias_tags++;
-        single_tag = strtok_r(NULL, ",", &saveptr);
+    /* count number of strings in alias */
+    one_string = strtok_r(parse_str, ",", &saveptr);
+    while (one_string != NULL) {
+        count++;
+        one_string = strtok_r(NULL, ",", &saveptr);
     }
-    free(parse_tag_str);
+    free(parse_str);
 
-    if (n_alias_tags == 0)
+    if (count == 0)
         return;
 
-    /* allocate space for new tags */
-    if (tags->n_tags > 0)
-        tags->tags = xrealloc(tags->tags,
-                              (tags->n_tags + n_alias_tags) * sizeof(char *));
+    /* allocate space for new strings */
+    if (string_array->count > 0)
+        string_array->strings = xrealloc(string_array->strings,
+                                         (string_array->count + count) *
+                                             sizeof(char *));
     else
-        tags->tags = xcalloc(n_alias_tags, sizeof(char *));
+        string_array->strings = xcalloc(count, sizeof(char *));
 
-    /* fill tags */
-    parse_tag_str = xstrdup(tag_str);
+    /* fill strings */
+    parse_str = xstrdup(str);
 
-    for (single_tag = strtok_r(parse_tag_str, ",", &saveptr);
-         single_tag != NULL;
-         single_tag = strtok_r(NULL, ",", &saveptr), i++) {
-        if (tag_exists(tags, single_tag))
+    for (one_string = strtok_r(parse_str, ",", &saveptr);
+         one_string != NULL;
+         one_string = strtok_r(NULL, ",", &saveptr), i++) {
+        if (string_exists(string_array, one_string))
             continue;
 
-        tags->tags[i] = xstrdup(single_tag);
-        tags->n_tags++;
+        string_array->strings[i] = xstrdup(one_string);
+        string_array->count++;
     }
 
-    free(parse_tag_str);
+    free(parse_str);
 }
 
 int str2timeval(const char *tv_str, struct timeval *tv)

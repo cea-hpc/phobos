@@ -39,7 +39,7 @@ from phobos.core.glue import admin_device_status, jansson_dumps  # pylint: disab
 from phobos.core.dss import DSSHandle, dss_sort
 from phobos.core.ffi import (CommInfo, Id, LayoutInfo, LibDrvInfo, LIBPHOBOS,
                              LIBPHOBOS_ADMIN, MediaInfo, MediaStats,
-                             OperationFlags, Tags)
+                             OperationFlags, StringArray)
 
 
 def string_list2c_array(str_list, getter):
@@ -480,7 +480,7 @@ class Client: # pylint: disable=too-many-public-methods
 
     def repack(self, family, medium, library, tags):
         """Repack a tape"""
-        tags = Tags(tags)
+        tags = StringArray(tags)
         rc = LIBPHOBOS_ADMIN.phobos_admin_repack(
             byref(self.handle), byref(Id(family, name=medium,
                                          library=library)),

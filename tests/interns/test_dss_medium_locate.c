@@ -58,8 +58,8 @@ static void fill_medium_info(struct media_info *medium_info, struct pho_id id)
     medium_info->stats.nb_load = 7;
     medium_info->stats.nb_errors = 0;
     medium_info->stats.last_load = 7;
-    medium_info->tags.tags = NULL;
-    medium_info->tags.n_tags = 0;
+    medium_info->tags.strings = NULL;
+    medium_info->tags.count = 0;
     medium_info->flags.put = true;
     medium_info->flags.get = true;
     medium_info->flags.delete = true;
@@ -94,9 +94,9 @@ static void check_medium_info_correctly_filled(struct media_info *medium_info,
                      filled_medium.stats.nb_errors);
     assert_int_equal(medium_info->stats.last_load,
                      filled_medium.stats.last_load);
-    assert_ptr_equal(medium_info->tags.tags, filled_medium.tags.tags);
-    assert_null(medium_info->tags.tags);
-    assert_int_equal(medium_info->tags.n_tags, filled_medium.tags.n_tags);
+    assert_ptr_equal(medium_info->tags.strings, filled_medium.tags.strings);
+    assert_null(medium_info->tags.strings);
+    assert_int_equal(medium_info->tags.count, filled_medium.tags.count);
     assert_int_equal(medium_info->flags.put, filled_medium.flags.put);
     assert_int_equal(medium_info->flags.get, filled_medium.flags.get);
     assert_int_equal(medium_info->flags.delete, filled_medium.flags.delete);

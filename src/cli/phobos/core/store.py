@@ -31,7 +31,8 @@ from collections import namedtuple
 from ctypes import (byref, c_bool, c_char_p, c_int, c_ssize_t, c_void_p, cast,
                     CFUNCTYPE, pointer, POINTER, py_object, Structure, Union)
 
-from phobos.core.ffi import LIBPHOBOS, DeprecatedObjectInfo, ObjectInfo, Tags
+from phobos.core.ffi import (LIBPHOBOS, DeprecatedObjectInfo, ObjectInfo,
+                             StringArray)
 from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OBJ_BEST_HOST, # pylint: disable=no-name-in-module
                                PHO_XFER_OBJ_HARD_DEL,
                                PHO_XFER_OP_GET, PHO_XFER_OP_GETMD,
@@ -75,7 +76,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         ("_library", c_char_p),
         ("_layout_name", c_char_p),
         ("lyt_params", PhoAttrs),
-        ("tags", Tags),
+        ("tags", StringArray),
         ("_alias", c_char_p),
         ("overwrite", c_bool),
         ("no_split", c_bool),
@@ -95,7 +96,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         self.library = put_params.library
         self.layout_name = put_params.layout
         self.set_lyt_params(put_params.lyt_params)
-        self.tags = Tags(put_params.tags)
+        self.tags = StringArray(put_params.tags)
         self.alias = put_params.alias
         self.overwrite = put_params.overwrite
         self.no_split = put_params.no_split
@@ -288,6 +289,7 @@ class XferDescriptor(Structure): # pylint: disable=too-many-instance-attributes
         self.xd_flags = 0
         self.xd_rc = 0
         self.xd_ntargets = 0
+        self.xd_targets = None
 
     def creat_flags(self):
         """

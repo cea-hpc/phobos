@@ -491,11 +491,11 @@ struct media_fs {
 };
 
 /**
- * A simple array of tags (strings)
+ * A simple array of strings
  */
-struct tags {
-    char   **tags;     /**< The array of tags */
-    size_t   n_tags;   /**< Number of tags */
+struct string_array {
+    char   **strings;   /**< The array of strings */
+    size_t   count;     /**< Number of strings */
 };
 
 /**
@@ -515,7 +515,7 @@ struct media_info {
     enum address_type      addr_type;    /**< Way to address this media */
     struct media_fs        fs;           /**< Local filesystem information */
     struct media_stats     stats;        /**< Usage metrics */
-    struct tags            tags;         /**< Tags used for filtering */
+    struct string_array    tags;         /**< Tags used for filtering */
     struct pho_lock        lock;         /**< Distributed access lock */
     struct operation_flags flags;        /**< Media operation flags */
     size_t                 health;       /**< Current health of the medium */

@@ -321,32 +321,32 @@ class DevInfo(Structure, CLIManagedResourceMixin):
         self._path = val.encode('utf-8')
 
 
-class Tags(Structure): # pylint: disable=too-few-public-methods
-    """List of tags"""
+class StringArray(Structure): # pylint: disable=too-few-public-methods
+    """List of strings"""
     _fields_ = [
-        ('tags', POINTER(c_char_p)),
-        ('n_tags', c_size_t),
+        ('strings', POINTER(c_char_p)),
+        ('count', c_size_t),
     ]
 
-    def __init__(self, tag_list):
-        """Allocate C resources to create a native Tags instance from a python
-        list of strings.
+    def __init__(self, string_list):
+        """Allocate C resources to create a native StringArray instance from a
+        python list of strings.
         """
         super().__init__()
-        if not tag_list:
-            self.tags = None
-            self.n_tags = 0
+        if not string_list:
+            self.strings = None
+            self.count = 0
         else:
-            enc_tags = list([tag.encode('utf-8') if isinstance(tag, str)
-                             else tag for _, tag in enumerate(tag_list)])
-            tags = (c_char_p * len(enc_tags))(*enc_tags)
-            LIBPHOBOS.tags_init(byref(self), tags, len(enc_tags))
+            enc_strings = list([s.encode('utf-8') if isinstance(s, str)
+                                else s for _, s in enumerate(string_list)])
+            strings = (c_char_p * len(enc_strings))(*enc_strings)
+            LIBPHOBOS.string_array_init(byref(self), strings, len(enc_strings))
 
     def free(self):
         """Free all allocated resources. Only call this if tag values were
         dynamically allocated (and not borrowed from another structure).
         """
-        LIBPHOBOS.tags_free(byref(self))
+        LIBPHOBOS.string_array_free(byref(self))
 
 class FSType(IntEnum):
     """File system type enumeration."""
@@ -409,7 +409,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         ('addr_type', c_int),
         ('fs', MediaFS),
         ('stats', MediaStats),
-        ('_tags', Tags),
+        ('_tags', StringArray),
         ('lock', DSSLock),
         ('flags', OperationFlags),
         ('health', c_size_t),
@@ -543,7 +543,8 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
     def tags(self):
         """Wrapper to get tags"""
         # pylint: disable=unsubscriptable-object
-        return [t.decode('utf-8') for t in self._tags.tags[:self._tags.n_tags]]
+        return [t.decode('utf-8')
+                for t in self._tags.strings[:self._tags.count]]
 
     @tags.setter
     def tags(self, tags):
@@ -551,7 +552,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         # pylint: disable=access-member-before-definition
         # pylint: disable=attribute-defined-outside-init
         self._tags.free()
-        self._tags = Tags(tags)
+        self._tags = StringArray(tags)
         # Manually creating and assigning tags means that we will have to free
         # them when MediaInfo is garbage collected
         self._free_tags = True

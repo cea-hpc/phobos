@@ -40,130 +40,130 @@ static const char *const T_BA[] = {"b", "a"};
 static const char *const T_ABC[] = {"a", "b", "c"};
 static const char *const T_CBA[] = {"c", "b", "a"};
 
-static void test_no_tags(void)
+static void test_no_string(void)
 {
-    struct tags tags = NO_TAGS;
+    struct string_array strings = NO_STRING;
 
-    assert(tags.tags == NULL);
-    assert(tags.n_tags == 0);
+    assert(strings.strings == NULL);
+    assert(strings.count == 0);
 }
 
-static void test_tags_various(void)
+static void test_string_array_various(void)
 {
-    struct tags tags_ab;
-    struct tags tags_ab2;
-    struct tags tags_ab3;
-    struct tags tags_ba;
-    struct tags tags_ac;
-    struct tags tags_abc;
-    struct tags tags_cba;
-    struct tags tags_none = NO_TAGS;
+    struct string_array string_array_ab;
+    struct string_array string_array_ab2;
+    struct string_array string_array_ab3;
+    struct string_array string_array_ba;
+    struct string_array string_array_ac;
+    struct string_array string_array_abc;
+    struct string_array string_array_cba;
+    struct string_array string_array_none = NO_STRING;
 
     /* Static allocation */
-    tags_ab.tags = (char **)T_AB;
-    tags_ab.n_tags = 2;
+    string_array_ab.strings = (char **)T_AB;
+    string_array_ab.count = 2;
 
     /* Dynamic allocations */
-    tags_init(&tags_ab2, (char **)T_AB, 2);
-    assert(tags_ab2.tags != NULL);
-    assert(tags_ab2.n_tags == 2);
-    tags_dup(&tags_ab3, &tags_ab2);
-    assert(tags_ab3.tags != NULL);
-    assert(tags_ab3.n_tags == 2);
+    string_array_init(&string_array_ab2, (char **)T_AB, 2);
+    assert(string_array_ab2.strings != NULL);
+    assert(string_array_ab2.count == 2);
+    string_array_dup(&string_array_ab3, &string_array_ab2);
+    assert(string_array_ab3.strings != NULL);
+    assert(string_array_ab3.count == 2);
 
-    tags_ba.tags = (char **)T_BA;
-    tags_ba.n_tags = 2;
+    string_array_ba.strings = (char **)T_BA;
+    string_array_ba.count = 2;
 
-    tags_ac.tags = (char **)T_AC;
-    tags_ac.n_tags = 2;
+    string_array_ac.strings = (char **)T_AC;
+    string_array_ac.count = 2;
 
-    tags_abc.tags = (char **)T_ABC;
-    tags_abc.n_tags = 3;
+    string_array_abc.strings = (char **)T_ABC;
+    string_array_abc.count = 3;
 
-    tags_cba.tags = (char **)T_CBA;
-    tags_cba.n_tags = 3;
+    string_array_cba.strings = (char **)T_CBA;
+    string_array_cba.count = 3;
 
     /* Equality */
-    assert(tags_eq(&tags_ab, &tags_ab));
-    assert(tags_eq(&tags_ab, &tags_ab2));
-    assert(tags_eq(&tags_ab2, &tags_ab));
-    assert(tags_eq(&tags_ab, &tags_ab3));
-    assert(tags_eq(&tags_ab2, &tags_ab3));
-    assert(!tags_eq(&tags_ab, &tags_ba));
-    assert(!tags_eq(&tags_ab, &tags_ac));
-    assert(!tags_eq(&tags_ab, &tags_abc));
-    assert(!tags_eq(&tags_ab, &tags_none));
+    assert(string_array_eq(&string_array_ab, &string_array_ab));
+    assert(string_array_eq(&string_array_ab, &string_array_ab2));
+    assert(string_array_eq(&string_array_ab2, &string_array_ab));
+    assert(string_array_eq(&string_array_ab, &string_array_ab3));
+    assert(string_array_eq(&string_array_ab2, &string_array_ab3));
+    assert(!string_array_eq(&string_array_ab, &string_array_ba));
+    assert(!string_array_eq(&string_array_ab, &string_array_ac));
+    assert(!string_array_eq(&string_array_ab, &string_array_abc));
+    assert(!string_array_eq(&string_array_ab, &string_array_none));
 
     /* Containment */
-    assert(tags_in(&tags_abc, &tags_ab));
-    assert(tags_in(&tags_cba, &tags_ab));
-    assert(tags_in(&tags_ab, &tags_ab));
-    assert(tags_in(&tags_ab, &tags_ba));
-    assert(!tags_in(&tags_ac, &tags_ab));
-    assert(!tags_in(&tags_none, &tags_ab));
-    assert(tags_in(&tags_ab, &tags_none));
-    assert(tags_in(&tags_none, &tags_none));
+    assert(string_array_in(&string_array_abc, &string_array_ab));
+    assert(string_array_in(&string_array_cba, &string_array_ab));
+    assert(string_array_in(&string_array_ab, &string_array_ab));
+    assert(string_array_in(&string_array_ab, &string_array_ba));
+    assert(!string_array_in(&string_array_ac, &string_array_ab));
+    assert(!string_array_in(&string_array_none, &string_array_ab));
+    assert(string_array_in(&string_array_ab, &string_array_none));
+    assert(string_array_in(&string_array_none, &string_array_none));
 
     /* Free */
-    tags_free(&tags_ab2);
-    tags_free(&tags_ab3);
+    string_array_free(&string_array_ab2);
+    string_array_free(&string_array_ab3);
 
     /* Don't segfault on double free */
-    tags_free(&tags_ab2);
+    string_array_free(&string_array_ab2);
 }
 
-static void test_tags_dup(void)
+static void test_string_array_dup(void)
 {
-    struct tags tags_src;
-    struct tags tags_dst;
+    struct string_array string_array_src;
+    struct string_array string_array_dst;
 
-    tags_src.tags = (char **)T_AB;
-    tags_src.n_tags = 2;
+    string_array_src.strings = (char **)T_AB;
+    string_array_src.count = 2;
 
     /* Should not segfault */
-    tags_dup(NULL, NULL);
-    tags_dup(NULL, &tags_src);
+    string_array_dup(NULL, NULL);
+    string_array_dup(NULL, &string_array_src);
 
-    /* tags_dst should be equal to NO_TAGS */
-    tags_dup(&tags_dst, NULL);
-    assert(tags_eq(&tags_dst, &NO_TAGS));
+    /* string_array_dst should be equal to NO_STRING */
+    string_array_dup(&string_array_dst, NULL);
+    assert(string_array_eq(&string_array_dst, &NO_STRING));
 
     /* Standard dup */
-    tags_dup(&tags_dst, &tags_src);
-    assert(tags_eq(&tags_dst, &tags_dst));
-    assert(!tags_eq(&tags_dst, &NO_TAGS));
+    string_array_dup(&string_array_dst, &string_array_src);
+    assert(string_array_eq(&string_array_dst, &string_array_dst));
+    assert(!string_array_eq(&string_array_dst, &NO_STRING));
 
-    tags_free(&tags_dst);
+    string_array_free(&string_array_dst);
 }
 
-static void test_str2tags(void)
+static void test_str2string_array(void)
 {
-    struct tags tags_new = {};
-    struct tags tags_abc = {};
-    char *tags_as_string = "";
+    struct string_array string_array_new = {};
+    struct string_array string_array_abc = {};
+    char *string_array_as_string = "";
 
     /* empty string */
-    str2tags(tags_as_string, &tags_new);
-    assert(tags_eq(&tags_abc, &tags_new));
+    str2string_array(string_array_as_string, &string_array_new);
+    assert(string_array_eq(&string_array_abc, &string_array_new));
 
-    /* 3 tags */
-    tags_abc.tags = (char **)T_ABC;
-    tags_abc.n_tags = 3;
+    /* 3 string_array */
+    string_array_abc.strings = (char **)T_ABC;
+    string_array_abc.count = 3;
 
-    tags_as_string = "a,b,c";
-    str2tags(tags_as_string, &tags_new);
-    assert(tags_eq(&tags_abc, &tags_new));
+    string_array_as_string = "a,b,c";
+    str2string_array(string_array_as_string, &string_array_new);
+    assert(string_array_eq(&string_array_abc, &string_array_new));
 
-    tags_free(&tags_new);
+    string_array_free(&string_array_new);
 }
 
 int main(int argc, char **argv)
 {
     test_env_initialize();
-    test_no_tags();
-    test_tags_various();
-    test_tags_dup();
-    test_str2tags();
+    test_no_string();
+    test_string_array_various();
+    test_string_array_dup();
+    test_str2string_array();
 
     return EXIT_SUCCESS;
 }

@@ -1298,7 +1298,7 @@ free_resp:
 static int _get_target_medium(struct admin_handle *adm,
                               const struct pho_id *source,
                               ssize_t total_size,
-                              struct tags *tags,
+                              struct string_array *tags,
                               struct pho_ext_loc *loc,
                               struct pho_io_descr *iod,
                               struct pho_id *target)
@@ -1308,14 +1308,14 @@ static int _get_target_medium(struct admin_handle *adm,
     int rc;
     int i;
 
-    pho_srl_request_write_alloc(&req, 1, &tags->n_tags);
+    pho_srl_request_write_alloc(&req, 1, &tags->count);
     req.id = 2;
     req.walloc->family = source->family;
     req.walloc->prevent_duplicate = true;
     req.walloc->media[0]->size = total_size;
     req.walloc->media[0]->empty_medium = true;
-    for (i = 0; i < tags->n_tags; ++i)
-        req.walloc->media[0]->tags[i] = xstrdup(tags->tags[i]);
+    for (i = 0; i < tags->count; ++i)
+        req.walloc->media[0]->tags[i] = xstrdup(tags->strings[i]);
 
     rc = comm_send_and_recv(&adm->phobosd_comm, &req, &resp);
     if (rc)
@@ -1498,7 +1498,7 @@ static int _retrieve_fstype_from_medium(struct admin_handle *adm,
 }
 
 int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
-                        struct tags *tags)
+                        struct string_array *tags)
 {
     enum fs_type source_fs_type = PHO_FS_INVAL;
     struct pho_io_descr iod_source = {0};

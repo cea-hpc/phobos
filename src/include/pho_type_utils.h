@@ -31,7 +31,7 @@
 #include <glib.h>
 #include <stdbool.h>
 
-static const struct tags NO_TAGS = {0};
+static const struct string_array NO_STRING = {0};
 
 /** dump basic storage information as JSON to be attached to data objects. */
 int storage_info_to_json(const struct layout_info *layout,
@@ -93,43 +93,48 @@ struct object_info *object_info_dup(const struct object_info *obj);
 void object_info_free(struct object_info *obj);
 
 /**
- * Init tags by strdup'ing tag_values.
+ * Init string_array by strdup'ing strings.
  */
-void tags_init(struct tags *tags, char **tag_values, size_t n_tags);
+void string_array_init(struct string_array *string_array, char **strings,
+                       size_t count);
 
 /**
- * Free a tags structure where the tag list and tag strings have been malloc'd
+ * Free a string_array structure where the string list and its strings have
+ * been malloc'd
  */
-void tags_free(struct tags *tags);
+void string_array_free(struct string_array *string_array);
 
-/** duplicate a tags structure. Return 0 or -ENOMEM. */
-void tags_dup(struct tags *tags_dst, const struct tags *tags_src);
+/** duplicate a string_array. Return 0 or -ENOMEM. */
+void string_array_dup(struct string_array *string_array_dst,
+                      const struct string_array *string_array_src);
 
 /**
- * Return true if the two tags are equal, false otherwise. The order of tags
- * matters.
+ * Return true if the two string_array are equal, false otherwise. The order of
+ * strings into string_array matters.
  */
-bool tags_eq(const struct tags *tags1, const struct tags *tags2);
+bool string_array_eq(const struct string_array *string_array1,
+                     const struct string_array *string_array2);
 
 /**
- * Return true if all tags in needle are in haystack, false otherwise. Always
+ * Return true if all strings in needle are in haystack, false otherwise. Always
  * return true if needle is empty.
  */
-bool tags_in(const struct tags *haystack, const struct tags *needle);
+bool string_array_in(const struct string_array *haystack,
+                     const struct string_array *needle);
 
 /**
- * Return true if the given string is in the tags, false otherwise.
+ * Return true if the given string is in the string_array, false otherwise.
  */
-bool tag_exists(const struct tags *tags, const char *tag_str);
+bool string_exists(const struct string_array *string_array, const char *string);
 
 /**
- * Convert the string of the form "tag1,tag2" into separate tags (tag1 and tag2)
- * and add it to an existing @tags structure
+ * Convert the string of the form "string1,string2" into separate strings
+ * (string1 and string2) and add it to an existing string_array
  *
- * @param[in]   tag_str the string to extract the tags from
- * @param[in,out]  tags    the tags struct to fill
+ * @param[in]       str             line containing strings
+ * @param[in,out]   string_array    the array of string to fill
  */
-void str2tags(const char *tag_str, struct tags *tags);
+void str2string_array(const char *str, struct string_array *string_array);
 
 /**
  * Convert a string of the form "YYYY-mm-dd HH:MM:SS.uuuuuu" into a

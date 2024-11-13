@@ -287,7 +287,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
  * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
-                        struct tags *tags);
+                        struct string_array *tags);
 
 /*
  * Ping the lrs phobosd daemon to check if it is online or not.

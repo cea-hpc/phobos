@@ -57,8 +57,8 @@ static void fill_medium_info(struct media_info *medium_info, struct pho_id id)
     medium_info->stats.nb_load = 7;
     medium_info->stats.nb_errors = 0;
     medium_info->stats.last_load = 7;
-    medium_info->tags.tags = NULL;
-    medium_info->tags.n_tags = 0;
+    medium_info->tags.strings = NULL;
+    medium_info->tags.count = 0;
     medium_info->flags.put = true;
     medium_info->flags.get = true;
     medium_info->flags.delete = true;

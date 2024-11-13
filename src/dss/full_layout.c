@@ -206,7 +206,7 @@ static int full_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
     rc = layout_extents_decode(&layout->extents, &layout->ext_count,
                                PQgetvalue(res, row_num, 4));
     if (rc)
-        LOG_RETURN(rc, "dss_extent tags decode error");
+        LOG_RETURN(rc, "dss_extent decode error");
 
     return 0;
 }

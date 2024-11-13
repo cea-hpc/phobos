@@ -193,8 +193,8 @@ out_free_mput:
         }
 
         xfer.xd_params.put.family = PHO_RSC_INVAL;
-        xfer.xd_params.put.tags.tags = tags;
-        xfer.xd_params.put.tags.n_tags = argc - 3;
+        xfer.xd_params.put.tags.strings = tags;
+        xfer.xd_params.put.tags.count = argc - 3;
         xfer.xd_targets->xt_objid = concat(path, "_tag-put");
         xfer.xd_targets->xt_attrs = attrs;
 

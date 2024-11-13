@@ -221,7 +221,7 @@ static int find_read_device(struct io_scheduler *io_sched,
     if (!*dev) {
         *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
                           medium->rsc.id.library, select_empty_loaded_mount, 0,
-                          &NO_TAGS, medium, false, false, NULL);
+                          &NO_STRING, medium, false, false, NULL);
 
         return 0;
     }
@@ -254,7 +254,7 @@ static int find_write_device(struct io_scheduler *io_sched,
         &reqc->params.rwalloc.media[index].alloc_medium;
     device_select_func_t dev_select_policy;
     bool one_drive_available;
-    struct tags tags;
+    struct string_array tags;
     bool sched_ready;
     size_t size;
     int rc;
@@ -268,8 +268,8 @@ static int find_write_device(struct io_scheduler *io_sched,
         LOG_RETURN(-EINVAL,
                    "Unable to get device select policy during write alloc");
 
-    tags.n_tags = wreq->media[index]->n_tags;
-    tags.tags = wreq->media[index]->tags;
+    tags.count = wreq->media[index]->n_tags;
+    tags.strings = wreq->media[index]->tags;
     size = wreq->media[index]->size;
 
     /* 1a) is there a mounted filesystem with enough room? */
@@ -318,7 +318,7 @@ static int find_write_device(struct io_scheduler *io_sched,
 
 find_device:
     *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC, wreq->library,
-                      select_empty_loaded_mount, 0, &NO_TAGS, *medium, true,
+                      select_empty_loaded_mount, 0, &NO_STRING, *medium, true,
                       false, NULL);
     if (*dev)
         return 0;
@@ -348,7 +348,7 @@ static int find_format_device(struct io_scheduler *io_sched,
     if (!*dev) {
         *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
                           med_id->library, select_empty_loaded_mount,
-                          0, &NO_TAGS, reqc->params.format.medium_to_format,
+                          0, &NO_STRING, reqc->params.format.medium_to_format,
                           false, false, NULL);
 
         return 0;

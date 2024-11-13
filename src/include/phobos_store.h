@@ -100,7 +100,7 @@ struct pho_xfer_put_params {
                                     */
     const char      *layout_name; /**< Name of the layout module to use. */
     struct pho_attrs lyt_params;  /**< Parameters used for the layout */
-    struct tags      tags;        /**< Tags to select a media to write. */
+    struct string_array     tags; /**< Tags to select a media to write. */
     const char      *alias;       /**< Identifier for family, layout,
                                     *  tag combination
                                     */

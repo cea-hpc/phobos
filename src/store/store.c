@@ -1705,7 +1705,7 @@ clean:
 
 static void xfer_put_param_clean(struct pho_xfer_desc *xfer)
 {
-    tags_free(&xfer->xd_params.put.tags);
+    string_array_free(&xfer->xd_params.put.tags);
     pho_attrs_free(&xfer->xd_params.put.lyt_params);
 }
 

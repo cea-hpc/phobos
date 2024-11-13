@@ -857,13 +857,13 @@ bool sched_has_running_devices(struct lrs_sched *sched)
 }
 
 /**
- * Build a filter string fragment to filter on a given tag set. The returned
+ * Build a filter string fragment to filter on a given tag array. The returned
  * string is allocated with malloc. NULL is returned when ENOMEM is encountered.
  *
  * The returned string looks like the following:
  * {"$AND": [{"DSS:MDA::tags": "tag1"}]}
  */
-static char *build_tag_filter(const struct tags *tags)
+static char *build_tag_filter(const struct string_array *tags)
 {
     json_t *and_filter = NULL;
     json_t *tag_filters = NULL;
@@ -876,7 +876,7 @@ static char *build_tag_filter(const struct tags *tags)
         return NULL;
 
     /* Build and append one filter per tag */
-    for (i = 0; i < tags->n_tags; i++) {
+    for (i = 0; i < tags->count; i++) {
         json_t *tag_flt;
         json_t *xjson;
 
@@ -891,7 +891,7 @@ static char *build_tag_filter(const struct tags *tags)
         }
 
         if (json_object_set_new(tag_flt, "DSS::MDA::tags",
-                                json_string(tags->tags[i]))) {
+                                json_string(tags->strings[i]))) {
             json_decref(tag_flt);
             json_decref(xjson);
             GOTO(out, -ENOMEM);
@@ -1009,13 +1009,13 @@ int sched_select_medium(struct io_scheduler *io_sched,
                         size_t required_size,
                         enum rsc_family family,
                         const char *library,
-                        const struct tags *tags,
+                        const struct string_array *tags,
                         struct req_container *reqc,
                         size_t n_med,
                         size_t not_alloc)
 {
     struct lock_handle *lock_handle = io_sched->io_sched_hdl->lock_handle;
-    bool with_tags = tags != NULL && tags->n_tags > 0;
+    bool with_tags = tags != NULL && tags->count > 0;
     struct media_info *split_media_best = NULL;
     struct media_info *whole_media_best = NULL;
     struct media_info *chosen_media = NULL;
@@ -1214,7 +1214,7 @@ err_nores:
  * requested tags
  */
 static bool medium_is_write_compatible(struct media_info *medium,
-                                       const struct tags *required_tags,
+                                       const struct string_array *required_tags,
                                        bool empty_medium)
 {
     if (medium->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED) {
@@ -1248,7 +1248,8 @@ static bool medium_is_write_compatible(struct media_info *medium,
         return false;
     }
 
-    if (required_tags->n_tags > 0 && !tags_in(&medium->tags, required_tags)) {
+    if (required_tags->count > 0 &&
+        !string_array_in(&medium->tags, required_tags)) {
         pho_debug("Media (family '%s', name '%s', library '%s') does not match "
                   "required tags",
                   rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
@@ -1297,7 +1298,7 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
                            const char *library,
                            device_select_func_t select_func,
                            size_t required_size,
-                           const struct tags *media_tags,
+                           const struct string_array *media_tags,
                            struct media_info *pmedia,
                            bool is_write, bool empty_medium,
                            bool *one_drive_available)
