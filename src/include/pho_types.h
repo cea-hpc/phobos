@@ -519,6 +519,9 @@ struct media_info {
     struct pho_lock        lock;         /**< Distributed access lock */
     struct operation_flags flags;        /**< Media operation flags */
     size_t                 health;       /**< Current health of the medium */
+    struct string_array    groupings;    /**< Groupings to keep some objects
+                                           *  together on this medium
+                                           */
 };
 
 enum obj_status {
@@ -561,6 +564,7 @@ struct object_info {
     struct timeval creation_time;
     struct timeval access_time;
     struct timeval deprec_time;
+    char *grouping;
 };
 
 /**

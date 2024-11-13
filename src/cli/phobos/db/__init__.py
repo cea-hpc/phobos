@@ -31,8 +31,11 @@ import psycopg2
 from phobos.core import cfg
 from phobos.core.ffi import (LIBPHOBOS, ResourceFamily)
 
-ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92", "1.93", "1.95", "2.0", "2.1"]
-FUTURE_SCHEMAS = ["2.2"]
+ORDERED_SCHEMAS = [
+    "1.1", "1.2", "1.91", "1.92", "1.93", "1.95",
+    "2.0", "2.1", "2.2"
+]
+FUTURE_SCHEMAS = []
 CURRENT_SCHEMA_VERSION = ORDERED_SCHEMAS[-1]
 AVAIL_SCHEMAS = set(ORDERED_SCHEMAS) | set(FUTURE_SCHEMAS)
 
@@ -48,7 +51,7 @@ def get_sql_script(schema_version, script_name):
         return script_file.read()
 
 
-class Migrator:
+class Migrator: # pylint: disable=too-many-public-methods
     """StrToInt JSONB conversion engine"""
     def __init__(self, conn=None):
         self.conn = None

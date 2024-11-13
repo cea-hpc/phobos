@@ -63,6 +63,8 @@ static void fill_medium_info(struct media_info *medium_info, struct pho_id id)
     medium_info->flags.put = true;
     medium_info->flags.get = true;
     medium_info->flags.delete = true;
+    medium_info->groupings.strings = NULL;
+    medium_info->groupings.count = 0;
 }
 
 static void check_medium_info_correctly_filled(struct media_info *medium_info,

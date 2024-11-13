@@ -232,14 +232,16 @@ static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
         request,
         "INSERT INTO media (family, model, id, library, adm_status, fs_type, "
                            "address_type, fs_status, fs_label, stats, tags, "
-                           "put, get, delete) VALUES "
+                           "put, get, delete, groupings) VALUES "
     );
 
     for (int i = 0; i < item_cnt; ++i) {
         struct media_info *medium = ((struct media_info *) void_med) + i;
         GString *sub_request = g_string_new(NULL);
+        char *tmp_groupings = NULL;
         char *medium_name = NULL;
         char *tmp_stats = NULL;
+        char *groupings = NULL;
         char *fs_label = NULL;
         char *tmp_tags = NULL;
         char *library = NULL;
@@ -285,10 +287,18 @@ static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
         if (tags == NULL)
             goto free_info;
 
+        tmp_groupings = dss_string_array_encode(&medium->groupings);
+        if (tmp_tags == NULL)
+            goto free_info;
+
+        groupings = dss_char4sql(conn, tmp_groupings);
+        if (tags == NULL)
+            goto free_info;
+
         g_string_append_printf(
             sub_request,
             "('%s', %s, %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s, %s, %s, "
-            "%s)",
+            "%s, %s)",
             rsc_family2str(medium->rsc.id.family),
             model,
             medium_name,
@@ -302,7 +312,8 @@ static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
             tags,
             bool2sqlbool(medium->flags.put),
             bool2sqlbool(medium->flags.get),
-            bool2sqlbool(medium->flags.delete)
+            bool2sqlbool(medium->flags.delete),
+            groupings
         );
 
         g_string_append(request, sub_request->str);
@@ -316,8 +327,10 @@ free_info:
         free_dss_char4sql(model);
         free(stats);
         free(tags);
+        free(groupings);
         free(tmp_stats);
         free(tmp_tags);
+        free(tmp_groupings);
     }
 
     g_string_append(request, ";");
@@ -546,7 +559,7 @@ static int media_select_query(GString **conditions, int n_conditions,
     g_string_append(request,
                     "SELECT family, model, media.id, media.library, adm_status,"
                     " address_type, fs_type, fs_status, fs_label, stats, tags, "
-                    " put, get, delete FROM media");
+                    " put, get, delete, groupings FROM media");
 
     if (sort && sort->is_lock)
         g_string_append(request,
@@ -617,6 +630,15 @@ static int media_from_pg_row(struct dss_handle *handle, void *void_media,
     pho_debug("Decoded %lu tags (%s)",
               medium->tags.count, PQgetvalue(res, row_num, 10));
 
+    rc = dss_string_array_decode(&medium->groupings,
+                                 PQgetvalue(res, row_num, 14));
+    if (rc) {
+        pho_error(rc, "dss_media groupings decode error");
+        return rc;
+    }
+    pho_debug("Decoded %lu groupings (%s)",
+              medium->groupings.count, PQgetvalue(res, row_num, 14));
+
     rc = dss_lock_status(handle, DSS_MEDIA, medium, 1, &medium->lock);
     if (rc == -ENOLCK) {
         medium->lock.hostname = NULL;
@@ -635,6 +657,7 @@ static void media_result_free(void *void_media)
 
     pho_lock_clean(&media->lock);
     string_array_free(&media->tags);
+    string_array_free(&media->groupings);
 }
 
 const struct dss_resource_ops media_ops = {

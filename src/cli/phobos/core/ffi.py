@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pylint: disable=too-many-lines
 
 #
 #  All rights reserved (c) 2014-2024 CEA/DAM.
@@ -413,6 +414,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         ('lock', DSSLock),
         ('flags', OperationFlags),
         ('health', c_size_t),
+        ('_groupings', StringArray),
     ]
 
     def get_display_fields(self, max_width=None):
@@ -430,7 +432,8 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'put_access': None,
             'get_access': None,
             'delete_access': None,
-            'library': None
+            'library': None,
+            'groupings': None,
         }
 
     def get_display_dict(self, numeric=False, max_width=None, fmt=None):
@@ -587,9 +590,30 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         """Wrapper to set delete operation flag"""
         self.flags.delete = delete_access
 
+    @property
+    def groupings(self):
+        """Wrapper to get groupings"""
+        # pylint: disable=unsubscriptable-object
+        return [t.decode('utf-8')
+                for t in self._groupings.strings[:self._groupings.count]]
+
+    @groupings.setter
+    def groupings(self, groupings):
+        """Wrapper to set groupings"""
+        # pylint: disable=access-member-before-definition
+        # pylint: disable=attribute-defined-outside-init
+        self._groupings.free()
+        self._groupings = StringArray(groupings)
+        # Manually creating and assigning groupings means that we will have to
+        # free them when MediaInfo is garbage collected
+        self._free_groupings = True
+
     def __del__(self):
         if hasattr(self, "_free_tags") and self._free_tags:
             self._tags.free()
+
+        if hasattr(self, "_free_groupings") and self._free_groupings:
+            self._groupings.free()
 
 def truncate_user_md(user_md_str, max_width):
     """Truncate user_md."""
@@ -616,6 +640,7 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
         ('creation_time', Timeval),
         ('access_time', Timeval),
         ('deprec_time', Timeval),
+        ('_grouping', c_char_p),
     ]
 
     def get_display_fields(self, max_width):
@@ -628,7 +653,8 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
             'creation_time': Timeval.to_string,
             'access_time': Timeval.to_string,
             'user_md': (lambda obj, width=max_width: truncate_user_md(obj,
-                                                                      width))
+                                                                      width)),
+            'grouping': None,
         }
 
     @property
@@ -664,6 +690,17 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
         # pylint: disable=attribute-defined-outside-init
         self._user_md = val.encode('utf-8')
 
+    @property
+    def grouping(self):
+        """Wrapper to get grouping"""
+        return self._grouping.decode('utf-8') if self._grouping else None
+
+    @grouping.setter
+    def grouping(self, val):
+        """Wrapper to set grouping"""
+        # pylint: disable=attribute-defined-outside-init
+        self._grouping = val.encode('utf-8')
+
 class DeprecatedObjectInfo(ObjectInfo):
     """Deprecated object wrapper to get the correct display fields"""
     def get_display_fields(self, max_width=None):
@@ -677,6 +714,7 @@ class DeprecatedObjectInfo(ObjectInfo):
             'access_time': Timeval.to_string,
             'status': obj_status2str,
             'deprec_time': Timeval.to_string,
+            'grouping': None,
         }
 
 class Buffer(Structure): # pylint: disable=too-few-public-methods

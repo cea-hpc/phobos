@@ -324,8 +324,8 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
 {
     GString *md_repr = g_string_new(NULL);
     struct object_info *obj_res = NULL;
+    struct object_info obj = {0};
     struct dss_filter filter;
-    struct object_info obj;
     int obj_cnt;
     int rc2;
     int rc;

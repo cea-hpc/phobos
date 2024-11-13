@@ -48,7 +48,7 @@ static int deprecated_insert_query(PGconn *conn, void *void_deprecated,
     g_string_append(
         request,
         "INSERT INTO deprecated_object (oid, object_uuid, version, user_md,"
-        " obj_status) VALUES "
+        " obj_status, _grouping) VALUES "
     );
 
     for (int i = 0; i < item_cnt; ++i) {
@@ -61,11 +61,19 @@ static int deprecated_insert_query(PGconn *conn, void *void_deprecated,
         if (object->version < 1)
             LOG_RETURN(-EINVAL, "Object version must be strictly positive");
 
-        g_string_append_printf(request,
-                               "('%s', '%s', %d, '%s', '%s')",
-                               object->oid, object->uuid,
-                               object->version, object->user_md,
-                               obj_status2str(object->obj_status));
+        if (object->grouping)
+            g_string_append_printf(request,
+                                   "('%s', '%s', %d, '%s', '%s', '%s')",
+                                   object->oid, object->uuid,
+                                   object->version, object->user_md,
+                                   obj_status2str(object->obj_status),
+                                   object->grouping);
+        else
+            g_string_append_printf(request,
+                                   "('%s', '%s', %d, '%s', '%s', NULL)",
+                                   object->oid, object->uuid,
+                                   object->version, object->user_md,
+                                   obj_status2str(object->obj_status));
 
         if (i < item_cnt - 1)
             g_string_append(request, ", ");
@@ -114,7 +122,7 @@ static int deprecated_select_query(GString **conditions, int n_conditions,
 {
     g_string_append(request,
                     "SELECT oid, object_uuid, version, user_md, obj_status,"
-                    " creation_time, access_time, deprec_time"
+                    " creation_time, access_time, _grouping, deprec_time"
                     " FROM deprecated_object");
 
     if (n_conditions == 1)
@@ -154,7 +162,7 @@ static int deprecated_from_pg_row(struct dss_handle *handle, void *void_object,
     int rc;
 
     rc = create_resource(DSS_OBJECT, handle, void_object, res, row_num);
-    rc = rc ? : str2timeval(get_str_value(res, row_num, 7),
+    rc = rc ? : str2timeval(get_str_value(res, row_num, 8),
                             &object->deprec_time);
 
     return rc;
