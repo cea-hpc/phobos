@@ -51,8 +51,8 @@ static char *concat(char *path, char *suffix)
 
 static void cleanup(struct pho_xfer_desc *xfer, char *path)
 {
-    free(xfer->xd_objid);
-    xfer_desc_close_fd(xfer);
+    free(xfer->xd_targets->xt_objid);
+    xfer_close_fd(xfer->xd_targets);
     pho_xfer_desc_clean(xfer);
 
     if (path != NULL)
@@ -102,6 +102,7 @@ int main(int argc, char **argv)
     pho_attr_set(&attrs, "program", argv[0]);
 
     if (!strcmp(argv[1], "put")) {
+        struct pho_xfer_target target = {0};
         struct pho_xfer_desc xfer = {0};
         char *path;
 
@@ -111,6 +112,7 @@ int main(int argc, char **argv)
             goto out_attrs;
         }
 
+        xfer.xd_targets = &target;
         rc = xfer_desc_open_path(&xfer, argv[2], PHO_XFER_OP_PUT, 0);
         if (rc < 0) {
             free(path);
@@ -118,8 +120,8 @@ int main(int argc, char **argv)
         }
 
         xfer.xd_params.put.family = PHO_RSC_INVAL;
-        xfer.xd_objid = concat(path, "_put");
-        xfer.xd_attrs = attrs;
+        xfer.xd_targets->xt_objid = concat(path, "_put");
+        xfer.xd_targets->xt_attrs = attrs;
 
         rc = phobos_put(&xfer, 1, NULL, NULL);
         if (rc)
@@ -141,14 +143,14 @@ int main(int argc, char **argv)
                 rc = errno;
                 goto out_free_mput;
             }
-
+            xfer[j].xd_targets = xcalloc(1, sizeof(*xfer[j].xd_targets));
             rc = xfer_desc_open_path(xfer + j, argv[i], PHO_XFER_OP_PUT, 0);
             if (rc < 0)
                 goto out_free_mput;
 
             xfer[j].xd_params.put.family = PHO_RSC_INVAL;
-            xfer[j].xd_objid = concat(path, "_mput");
-            xfer[j].xd_attrs = attrs;
+            xfer[j].xd_targets->xt_objid = concat(path, "_mput");
+            xfer[j].xd_targets->xt_attrs = attrs;
 
             free(path);
         }
@@ -159,14 +161,16 @@ int main(int argc, char **argv)
 
 out_free_mput:
         for (j--; j >= 0; j--) {
-            xfer_desc_close_fd(xfer + j);
-            free(xfer[j].xd_objid);
-            free(xfer[j].xd_objuuid);
+            xfer_close_fd(xfer[j].xd_targets);
+            free(xfer[j].xd_targets->xt_objid);
+            free(xfer[j].xd_targets->xt_objuuid);
+            free(xfer[j].xd_targets);
         }
         free(xfer);
         goto out_attrs;
 
     } else if (!strcmp(argv[1], "tag-put")) {
+        struct pho_xfer_target target = {0};
         struct pho_xfer_desc xfer = {0};
         char **tags;
         char *path;
@@ -180,6 +184,7 @@ out_free_mput:
             goto out_attrs;
         }
 
+        xfer.xd_targets = &target;
         rc = xfer_desc_open_path(&xfer, argv[2], PHO_XFER_OP_PUT, 0);
         if (rc < 0) {
             free(path);
@@ -190,8 +195,8 @@ out_free_mput:
         xfer.xd_params.put.family = PHO_RSC_INVAL;
         xfer.xd_params.put.tags.tags = tags;
         xfer.xd_params.put.tags.n_tags = argc - 3;
-        xfer.xd_objid = concat(path, "_tag-put");
-        xfer.xd_attrs = attrs;
+        xfer.xd_targets->xt_objid = concat(path, "_tag-put");
+        xfer.xd_targets->xt_attrs = attrs;
 
         rc = phobos_put(&xfer, 1, NULL, NULL);
         if (rc)
@@ -200,19 +205,21 @@ out_free_mput:
         cleanup(&xfer, path);
         goto out;
     } else if (!strcmp(argv[1], "get")) {
+        struct pho_xfer_target target = {0};
         struct pho_xfer_desc xfer = {0};
 
+        xfer.xd_targets = &target;
         rc = xfer_desc_open_path(&xfer, argv[3], PHO_XFER_OP_GET, 0);
         if (rc < 0)
             goto out_attrs;
 
-        xfer.xd_objid = argv[2];
+        xfer.xd_targets->xt_objid = argv[2];
 
         rc = phobos_get(&xfer, 1, NULL, NULL);
         if (rc)
             pho_error(rc, "GET '%s' failed", argv[2]);
 
-        xfer_desc_close_fd(&xfer);
+        xfer_close_fd(xfer.xd_targets);
     } else if (!strcmp(argv[1], "list")) {
         struct object_info *objs;
         int n_objs;

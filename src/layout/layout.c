@@ -85,8 +85,8 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
     enc->done = false;
     enc->xfer = xfer;
     enc->layout = xcalloc(1, sizeof(*enc->layout));
-    enc->layout->oid = xfer->xd_objid;
-    enc->layout->wr_size = xfer->xd_params.put.size;
+    enc->layout->oid = xfer->xd_targets->xt_objid;
+    enc->layout->wr_size = xfer->xd_targets->xt_size;
 
     /* get io_block_size from conf */
     rc = get_cfg_io_block_size(&enc->io_block_size);

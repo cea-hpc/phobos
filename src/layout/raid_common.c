@@ -75,7 +75,7 @@ static int init_posix_iod(struct pho_encoder *enc)
      * descriptor of the Xfer. This file descriptor is managed by Python in the
      * CLI for example.
      */
-    fd = dup(enc->xfer->xd_fd);
+    fd = dup(enc->xfer->xd_targets->xt_fd);
     if (fd == -1)
         return -errno;
 
@@ -101,9 +101,9 @@ int raid_encoder_init(struct pho_encoder *enc,
 
     assert(!enc->is_decoder);
 
-    if (enc->xfer->xd_fd < 0)
+    if (enc->xfer->xd_targets->xt_fd < 0)
         LOG_RETURN(-EBADF, "raid: invalid xfer file descriptor in '%s' encoder",
-                   enc->xfer->xd_objid);
+                   enc->xfer->xd_targets->xt_objid);
 
     /* The ops field is set early to allow the caller to call the destroy
      * function on error.
@@ -122,7 +122,8 @@ int raid_encoder_init(struct pho_encoder *enc,
      * "self-description"/"rebuild" purpose.
      */
     io_context->write.user_md = g_string_new(NULL);
-    rc = pho_attrs_to_json(&enc->xfer->xd_attrs, io_context->write.user_md,
+    rc = pho_attrs_to_json(&enc->xfer->xd_targets->xt_attrs,
+                           io_context->write.user_md,
                            PHO_ATTR_BACKUP_JSON_FLAGS);
     if (rc) {
         g_string_free(io_context->write.user_md, TRUE);
@@ -196,7 +197,7 @@ int raid_decoder_init(struct pho_encoder *dec,
     size_t n_extents = n_total_extents(io_context);
     int rc;
 
-    if (dec->xfer->xd_fd < 0)
+    if (dec->xfer->xd_targets->xt_fd < 0)
         LOG_RETURN(rc = -EBADF, "Invalid decoder xfer file descriptor");
 
     assert(dec->is_decoder);
@@ -315,11 +316,12 @@ static int raid_io_context_open(struct raid_io_context *io_context,
 
         iod->iod_size = 0;
         iod->iod_loc = &ext_location;
-        rc = ioa_open(iod->iod_ioa, enc->xfer->xd_objid, iod, !enc->is_decoder);
+        rc = ioa_open(iod->iod_ioa, enc->xfer->xd_targets->xt_objid, iod,
+                      !enc->is_decoder);
         if (rc)
             LOG_GOTO(out_close, rc,
                      "raid: unable to open extent for '%s' on '%s':'%s'",
-                     enc->xfer->xd_objid,
+                     enc->xfer->xd_targets->xt_objid,
                      ext_location.extent->media.library,
                      ext_location.extent->media.name);
 
@@ -522,7 +524,7 @@ static int write_split_setup(struct pho_encoder *enc, pho_resp_write_t *wresp,
     int rc;
     int i;
 
-    object_size = enc->xfer->xd_params.put.size;
+    object_size = enc->xfer->xd_targets->xt_size;
     left_to_write = io_context->write.to_write;
 
     n_extents = n_total_extents(io_context);
@@ -538,7 +540,7 @@ static int write_split_setup(struct pho_encoder *enc, pho_resp_write_t *wresp,
         iods[i].iod_flags = PHO_IO_REPLACE | PHO_IO_NO_REUSE;
     }
 
-    raid_io_context_setmd(io_context, enc->xfer->xd_objid,
+    raid_io_context_setmd(io_context, enc->xfer->xd_targets->xt_objid,
                           io_context->write.user_md);
     raid_io_context_set_extent_info(io_context, wresp->media,
                                     io_context->current_split * n_extents,
@@ -608,11 +610,11 @@ static int write_split_fini(struct pho_encoder *enc, int io_rc,
     struct raid_io_context *io_context = enc->priv_enc;
     size_t n_extents = n_total_extents(io_context);
     struct object_metadata object_md = {
-        .object_attrs = enc->xfer->xd_attrs,
-        .object_size = enc->xfer->xd_params.put.size,
-        .object_version = enc->xfer->xd_version,
+        .object_attrs = enc->xfer->xd_targets->xt_attrs,
+        .object_size = enc->xfer->xd_targets->xt_size,
+        .object_version = enc->xfer->xd_targets->xt_version,
         .layout_name = io_context->name,
-        .object_uuid = enc->xfer->xd_objuuid,
+        .object_uuid = enc->xfer->xd_targets->xt_objuuid,
     };
     size_t total_written = 0;
     int rc = 0;
@@ -775,7 +777,7 @@ static int read_split_setup(struct pho_encoder *dec,
                        "Did not find medium '%s':'%s' in layout of '%s'",
                        medium[i]->med_id->library,
                        medium[i]->med_id->name,
-                       dec->xfer->xd_objid);
+                       dec->xfer->xd_targets->xt_objid);
 
         io_context->read.extents[i] = &dec->layout->extents[ext_index];
         if (io_context->read.extents[i]->size > *split_size)
@@ -1010,7 +1012,8 @@ skip_io:
 
     /* Nothing more to read: the decoder is done */
     if (io_context->read.to_read == 0) {
-        pho_debug("Decoder for '%s' is now finished", dec->xfer->xd_objid);
+        pho_debug("Decoder for '%s' is now finished",
+                  dec->xfer->xd_targets->xt_objid);
         dec->done = true;
     }
 
@@ -1030,7 +1033,8 @@ static int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
         enc->done = true;
         LOG_RETURN(enc->xfer->xd_rc,
                    "%s for objid:'%s' received error %s to last request",
-                   enc->is_decoder ? "Decoder" : "Encoder", enc->xfer->xd_objid,
+                   enc->is_decoder ? "Decoder" : "Encoder",
+                   enc->xfer->xd_targets->xt_objid,
                    pho_srl_error_kind_str(resp->error));
 
     } else if (pho_response_is_write(resp)) {
@@ -1082,7 +1086,7 @@ int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
 
     ENTRY;
 
-    if (enc->xfer->xd_fd < 0)
+    if (enc->xfer->xd_targets->xt_fd < 0)
         LOG_RETURN(-EBADF, "No file descriptor in %s",
                    enc->is_decoder ? "decoder" : "encoder");
 

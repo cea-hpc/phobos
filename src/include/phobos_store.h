@@ -93,7 +93,6 @@ static inline const char *xfer_op2str(enum pho_xfer_op op)
  * in this struct but extend existing tags.
  */
 struct pho_xfer_put_params {
-    ssize_t          size;        /**< Amount of data to write. */
     enum rsc_family  family;      /**< Targeted resource family. */
     const char      *grouping;    /**< Grouping attached to the new object. */
     const char      *library;     /**< Targeted library (If NULL, any available
@@ -141,15 +140,21 @@ union pho_xfer_params {
  *  - phobos_undelete()
  */
 struct pho_xfer_desc {
-    char                   *xd_objid;  /**< Object ID to read or write. */
-    char                   *xd_objuuid;/**< Object UUID to read or write. */
-    int                     xd_version;/**< Object version. */
-    enum pho_xfer_op        xd_op;     /**< Operation to perform. */
-    int                     xd_fd;     /**< FD of the source/destination. */
-    struct pho_attrs        xd_attrs;  /**< User defined attributes. */
-    union pho_xfer_params   xd_params; /**< Operation parameters. */
-    enum pho_xfer_flags     xd_flags;  /**< See enum pho_xfer_flags doc. */
-    int                     xd_rc;     /**< Outcome of this xfer. */
+    enum pho_xfer_op        xd_op;       /**< Operation to perform. */
+    union pho_xfer_params   xd_params;   /**< Operation parameters. */
+    enum pho_xfer_flags     xd_flags;    /**< See enum pho_xfer_flags doc. */
+    int                     xd_rc;       /**< Outcome of this xfer. */
+    int                     xd_ntargets; /**< Number of objects. */
+    struct pho_xfer_target *xd_targets;  /**< Object(s) to transfer. */
+};
+
+struct pho_xfer_target {
+    char             *xt_objid;   /**< Object ID to read or write. */
+    char             *xt_objuuid; /**< Object UUID to read or write. */
+    int               xt_version; /**< Object version. */
+    int               xt_fd;      /**< FD of the source/destination. */
+    struct pho_attrs  xt_attrs;   /**< User defined attributes. */
+    ssize_t           xt_size;    /**< Amount of data to write. */
 };
 
 /**
@@ -364,6 +369,15 @@ int phobos_rename(const char *old_oid, const char *uuid, char *new_oid);
  * This must be called after phobos_init.
  */
 void pho_xfer_desc_clean(struct pho_xfer_desc *xfer);
+
+/**
+ * Clean a pho_xfer_target structure by freeing the uuid and attributes
+ *
+ * @param[in]   xfer        The xfer_target structure to clean.
+ *
+ * This must be called after phobos_init.
+ */
+void pho_xfer_clean(struct pho_xfer_target *xfer);
 
 /**
  * Retrieve the objects that match the given pattern and metadata.

@@ -70,7 +70,6 @@ def attrs_as_dict(attrs):
 class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-many-instance-attributes
     """Phobos PUT parameters of the XferDescriptor."""
     _fields_ = [
-        ("size", c_ssize_t),
         ("family", c_int),
         ("_grouping", c_char_p),
         ("_library", c_char_p),
@@ -92,7 +91,6 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
 
     def __init__(self, put_params):
         super().__init__()
-        self.size = -1
         self.grouping = put_params.grouping
         self.library = put_params.library
         self.layout_name = put_params.layout
@@ -190,49 +188,107 @@ class XferOpParams(Union): # pylint: disable=too-few-public-methods
         ("get", XferGetParams),
     ]
 
-class XferDescriptor(Structure): # pylint: disable=too-many-instance-attributes
+class XferTarget(Structure): # pylint: disable=too-many-instance-attributes
     """phobos struct xfer_descriptor."""
     _fields_ = [
-        ("_xd_objid", c_char_p),
-        ("_xd_objuuid", c_char_p),
-        ("xd_version", c_int),
-        ("xd_op", c_int),
-        ("xd_fd", c_int),
-        ("xd_attrs", PhoAttrs),
-        ("xd_params", XferOpParams),
-        ("xd_flags", c_int),
-        ("xd_rc", c_int),
+        ("_xt_objid", c_char_p),
+        ("_xt_objuuid", c_char_p),
+        ("xt_version", c_int),
+        ("xt_fd", c_int),
+        ("xt_attrs", PhoAttrs),
+        ("xt_size", c_ssize_t),
     ]
 
     def __init__(self):
         super().__init__()
-        self.xd_fd = -1
+        self.xt_fd = -1
+        self.xt_version = -1
+        self.xt_size = -1
+
+    @property
+    def xt_objid(self):
+        """Wrapper to get xt_objid"""
+        return self._xt_objid.decode('utf-8') if self._xt_objid else None
+
+    @xt_objid.setter
+    def xt_objid(self, val):
+        """Wrapper to set xt_objid"""
+        # pylint: disable=attribute-defined-outside-init
+        self._xt_objid = val.encode('utf-8') if val else None
+
+    @property
+    def xt_objuuid(self):
+        """Wrapper to get xt_objuuid"""
+        return self._xt_objuuid.decode('utf-8') if self._xt_objuuid else None
+
+    @xt_objuuid.setter
+    def xt_objuuid(self, val):
+        """Wrapper to set xt_objuuid"""
+        # pylint: disable=attribute-defined-outside-init
+        self._xt_objuuid = val.encode('utf-8') if val else None
+
+    def open_file(self, path, xfer_desc):
+        """
+        Retrieve the xt_fd field of the xfer_target, opening path with NOATIME
+        if the xfer target has not been previously opened.
+        Return the fd or raise OSError if the open failed or ValueError if
+        the given path is not correct.
+        """
+        # in case of getmd, the file is not opened, return without exception
+        if xfer_desc.xd_op == PHO_XFER_OP_GETMD:
+            self.xt_fd = -1
+            return
+
+        if not path:
+            raise ValueError("path must be a non empty string")
+
+        if xfer_desc.xd_op == PHO_XFER_OP_GET:
+            self.xt_fd = os.open(path, xfer_desc.creat_flags(), 0o666)
+        else:
+            try:
+                self.xt_fd = os.open(path, os.O_RDONLY | os.O_NOATIME)
+            except OSError as exc:
+                # not allowed to open with NOATIME arg, try without
+                if exc.errno != errno.EPERM:
+                    raise exc
+                self.xt_fd = os.open(path, os.O_RDONLY)
+
+            self.xt_size = os.fstat(self.xt_fd).st_size
+
+    def init_from_descriptor(self, desc, xfer_desc):
+        """
+        xfer initialization by using python-list descriptor.
+        It opens the file descriptor of the given path. The python-list
+        contains the tuple (id, path, attrs, flags, put or get parameters, op)
+        describing the opened file.
+        """
+        self.xt_objid = desc[0]
+
+        if desc[2]:
+            for k, v in desc[2].items():
+                LIBPHOBOS.pho_attr_set(byref(self.xt_attrs),
+                                       str(k).encode('utf8'),
+                                       str(v).encode('utf8'))
+
+        self.open_file(desc[1], xfer_desc)
+
+class XferDescriptor(Structure): # pylint: disable=too-many-instance-attributes
+    """phobos struct xfer_descriptor."""
+    _fields_ = [
+        ("xd_op", c_int),
+        ("xd_params", XferOpParams),
+        ("xd_flags", c_int),
+        ("xd_rc", c_int),
+        ("xd_ntargets", c_int),
+        ("xd_targets", POINTER(XferTarget))
+    ]
+
+    def __init__(self):
+        super().__init__()
         self.xd_op = -1
         self.xd_flags = 0
         self.xd_rc = 0
-        self.xd_version = -1
-
-    @property
-    def xd_objid(self):
-        """Wrapper to get xd_objid"""
-        return self._xd_objid.decode('utf-8') if self._xd_objid else None
-
-    @xd_objid.setter
-    def xd_objid(self, val):
-        """Wrapper to set xd_objid"""
-        # pylint: disable=attribute-defined-outside-init
-        self._xd_objid = val.encode('utf-8') if val else None
-
-    @property
-    def xd_objuuid(self):
-        """Wrapper to get xd_objuuid"""
-        return self._xd_objuuid.decode('utf-8') if self._xd_objuuid else None
-
-    @xd_objuuid.setter
-    def xd_objuuid(self, val):
-        """Wrapper to set xd_objuuid"""
-        # pylint: disable=attribute-defined-outside-init
-        self._xd_objuuid = val.encode('utf-8') if val else None
+        self.xd_ntargets = 0
 
     def creat_flags(self):
         """
@@ -245,62 +301,29 @@ class XferDescriptor(Structure): # pylint: disable=too-many-instance-attributes
 
         return os.O_CREAT | os.O_WRONLY | os.O_EXCL
 
-    def open_file(self, path):
-        """
-        Retrieve the xd_fd field of the xfer, opening path with NOATIME if
-        the xfer has not been previously opened.
-        Return the fd or raise OSError if the open failed or ValueError if
-        the given path is not correct.
-        """
-        # in case of getmd, the file is not opened, return without exception
-        if self.xd_op == PHO_XFER_OP_GETMD:
-            self.xd_fd = -1
-            return
-
-        if not path:
-            raise ValueError("path must be a non empty string")
-
-        if self.xd_op == PHO_XFER_OP_GET:
-            self.xd_fd = os.open(path, self.creat_flags(), 0o666)
-        else:
-            try:
-                self.xd_fd = os.open(path, os.O_RDONLY | os.O_NOATIME)
-            except OSError as exc:
-                # not allowed to open with NOATIME arg, try without
-                if exc.errno != errno.EPERM:
-                    raise exc
-                self.xd_fd = os.open(path, os.O_RDONLY)
-
-            self.xd_params.put.size = os.fstat(self.xd_fd).st_size
-
     def init_from_descriptor(self, desc):
         """
-        xfer_descriptor initialization by using python-list descriptor.
-        It opens the file descriptor of the given path. The python-list
+        xfer initialization by using python-list descriptor. The python-list
         contains the tuple (id, path, attrs, flags, put or get parameters, op)
         describing the opened file.
         """
+        self.xd_ntargets = 1
+        self.xd_flags = desc[3]
         self.xd_op = desc[5]
+        self.xd_rc = 0
+
+        xfer_item = XferTarget * 1
+        self.xd_targets = xfer_item()
+        self.xd_targets[0].init_from_descriptor(desc, self)
+
         if self.xd_op == PHO_XFER_OP_PUT:
             self.xd_params.put = XferPutParams(desc[4]) if \
                                  desc[4] is not None else \
                                  XferPutParams(PutParams())
         elif self.xd_op == PHO_XFER_OP_GET:
-            self.xd_objuuid = desc[4][0]
-            self.xd_version = desc[4][1]
+            self.xd_targets[0].xt_objuuid = desc[4][0]
+            self.xd_targets[0].xt_version = desc[4][1]
             self.xd_params.get = XferGetParams()
-
-        self.xd_objid = desc[0]
-        self.xd_flags = desc[3]
-        self.xd_rc = 0
-
-        if desc[2]:
-            for k, v in desc[2].items():
-                LIBPHOBOS.pho_attr_set(byref(self.xd_attrs),
-                                       str(k).encode('utf8'),
-                                       str(v).encode('utf8'))
-
-        self.open_file(desc[1])
 
 XFER_COMPLETION_CB_TYPE = CFUNCTYPE(None, c_void_p, POINTER(XferDescriptor),
                                     c_int)
@@ -346,8 +369,8 @@ class Store:
         Release memory associated to xfer_descriptors in both phobos and cli.
         """
         for elt in xfer:
-            if elt.xd_fd >= 0:
-                os.close(elt.xd_fd)
+            if elt.xd_targets[0].xt_fd >= 0:
+                os.close(elt.xd_targets[0].xt_fd)
 
             LIBPHOBOS.pho_xfer_desc_clean(byref(elt))
 
@@ -392,8 +415,7 @@ class XferClient: # pylint: disable=too-many-instance-attributes
         self.get_session.append((oid, data_path, attrs, flags, get_args,
                                  PHO_XFER_OP_GET))
 
-    def put_register(self, oid, data_path, attrs=None,
-                     put_params=PutParams()):
+    def put_register(self, oid, data_path, attrs=None, put_params=PutParams()):
         """Enqueue a PUT transfert."""
         self.put_session.append((oid, data_path, attrs, 0, put_params,
                                  PHO_XFER_OP_PUT))
@@ -464,7 +486,10 @@ class UtilClient:
         xfers = xfer_array_type()
 
         for i, oid in enumerate(oids):
-            xfers[i].xd_objid = oid
+            xfers[i].xd_ntargets = 1
+            target = XferTarget * 1
+            xfers[i].xd_targets = target()
+            xfers[i].xd_targets[0].xt_objid = oid
             xfers[i].xd_flags = PHO_XFER_OBJ_HARD_DEL if hard_delete else 0
 
         rc = LIBPHOBOS.phobos_delete(xfers, n_xfers)
@@ -479,10 +504,15 @@ class UtilClient:
         xfers = xfer_array_type()
 
         for i, oid in enumerate(oids):
-            xfers[i].xd_objid = oid
+            xfers[i].xd_ntargets = 1
+            target = XferTarget * 1
+            xfers[i].xd_targets = target()
+            xfers[i].xd_targets[0].xt_objid = oid
 
         for i, uuid in enumerate(uuids):
-            xfers[i + len(oids)].xd_objuuid = uuid
+            target = XferTarget * 1
+            xfers[i + len(oids)].xd_targets = target()
+            xfers[i + len(oids)].xd_targets[0].xt_objuuid = uuid
 
         rc = LIBPHOBOS.phobos_undelete(xfers, n_xfers)
         if rc:

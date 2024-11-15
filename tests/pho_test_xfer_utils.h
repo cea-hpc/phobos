@@ -59,43 +59,45 @@ static int xfer_desc_open_path(struct pho_xfer_desc *xfer, const char *path,
 {
     struct stat st;
 
-    memset(xfer, 0, sizeof(*xfer));
+    memset(xfer->xd_targets, 0, sizeof(*xfer->xd_targets));
 
     if (path == NULL) {
-        xfer->xd_fd = -1;
+        xfer->xd_targets->xt_fd = -1;
         return -EINVAL;
     }
 
     xfer->xd_op = op;
     xfer->xd_flags = flags;
+    xfer->xd_ntargets = 1;
 
     if (xfer->xd_op == PHO_XFER_OP_GET)
         /* Set file permission to 666 and let user umask filter unwanted bits */
-        xfer->xd_fd = open(path, xfer2open_flags(xfer->xd_flags), 0666);
+        xfer->xd_targets->xt_fd = open(path, xfer2open_flags(xfer->xd_flags),
+                                       0666);
     else
-        xfer->xd_fd = open(path, O_RDONLY);
+        xfer->xd_targets->xt_fd = open(path, O_RDONLY);
 
-    if (xfer->xd_fd < 0)
+    if (xfer->xd_targets->xt_fd < 0)
         LOG_RETURN(-errno, "open(%s) failed", path);
 
     if (xfer->xd_op == PHO_XFER_OP_PUT) {
-        fstat(xfer->xd_fd, &st);
-        xfer->xd_params.put.size = st.st_size;
+        fstat(xfer->xd_targets->xt_fd, &st);
+        xfer->xd_targets->xt_size = st.st_size;
     }
 
-    return xfer->xd_fd;
+    return xfer->xd_targets->xt_fd;
 }
 
 /**
  * Close the file descriptor contained in the xfer dsecriptor data structure.
  * Return 0 on success, -errno on failure.
  */
-static int xfer_desc_close_fd(struct pho_xfer_desc *xfer)
+static int xfer_close_fd(struct pho_xfer_target *target)
 {
     int rc;
 
-    if (xfer->xd_fd >= 0) {
-        rc = close(xfer->xd_fd);
+    if (target->xt_fd >= 0) {
+        rc = close(target->xt_fd);
         if (rc)
             return -errno;
     }

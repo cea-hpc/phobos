@@ -64,13 +64,13 @@ static char *setup_tmp_dir(void)
 static void reinit_xfer(struct pho_xfer_desc *xfer, const char *path,
                         const char *objpath, enum pho_xfer_op op)
 {
-    free(xfer->xd_objid);
-    free(xfer->xd_objuuid);
-    close(xfer->xd_fd);
+    free(xfer->xd_targets->xt_objid);
+    free(xfer->xd_targets->xt_objuuid);
+    close(xfer->xd_targets->xt_fd);
 
     xfer_desc_open_path(xfer, path, op, 0);
     xfer->xd_op = op;
-    xfer->xd_objid = realpath(objpath, NULL);
+    xfer->xd_targets->xt_objid = realpath(objpath, NULL);
     if (op == PHO_XFER_OP_PUT)
         xfer->xd_params.put.family = PHO_RSC_INVAL;
 }
@@ -209,6 +209,7 @@ int main(int argc, char **argv)
     struct admin_handle     adm;
     struct dss_handle       dss = {0};
     struct pho_xfer_desc    xfer = {0};
+    struct pho_xfer_target  target = {0};
     struct dev_info         dev = { { {0} } };
     struct media_info       media = { { {0} } };
     char                   *tmp_dir = setup_tmp_dir();
@@ -219,6 +220,8 @@ int main(int argc, char **argv)
     assert(system("../../setup_db.sh setup_tables") == 0);
     test_env_initialize();
 
+    xfer.xd_targets = &target;
+    xfer.xd_ntargets = 1;
     reinit_xfer(&xfer, argv[0], argv[0], PHO_XFER_OP_PUT);
 
     dss_init(&dss);
@@ -251,7 +254,7 @@ int main(int argc, char **argv)
 
         /* Put retry again to ensure no new error is raised */
         reinit_xfer(&xfer, argv[0], argv[0], PHO_XFER_OP_PUT);
-        xfer.xd_objid[0] = '0';
+        xfer.xd_targets->xt_objid[0] = '0';
         test_put_retry(&xfer, &dev, &media);
     } else {
         /* Dir based tests */
@@ -273,14 +276,15 @@ int main(int argc, char **argv)
 
         /* Test put retry */
         reinit_xfer(&xfer, argv[0], argv[0], PHO_XFER_OP_PUT);
-        xfer.xd_objid[0] = '0';  /* Artificially build a new object ID */
+        /* Artificially build a new object ID */
+        xfer.xd_targets->xt_objid[0] = '0';
         test_put_retry(&xfer, &dev, &media);
     }
 
     free(dev.rsc.model);
-    free(xfer.xd_objid);
-    free(xfer.xd_objuuid);
-    xfer_desc_close_fd(&xfer);
+    free(xfer.xd_targets->xt_objid);
+    free(xfer.xd_targets->xt_objuuid);
+    xfer_close_fd(xfer.xd_targets);
     phobos_admin_fini(&adm);
     dss_fini(&dss);
 

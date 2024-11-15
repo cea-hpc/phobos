@@ -38,7 +38,7 @@ static void *action_thread(void *tdata)
      * otherwise, read operations cannot be concurrent on the
      * same file descriptor.
      */
-    data->xfer.xd_fd = open(data->file, O_RDONLY);
+    data->xfer.xd_targets->xt_fd = open(data->file, O_RDONLY);
     /* Let phobos fail if open failed as this should not happen anyway */
 
     pthread_barrier_wait(data->barrier);
@@ -247,11 +247,13 @@ int main(int argc, char **argv)
             &xfer->xd_params.put.lyt_params;
 
         xfer->xd_op = conf.type;
-        xfer->xd_objid = make_oid(conf.file, i);
-        xfer->xd_objuuid = NULL;
-        xfer->xd_version = 0;
+        xfer->xd_ntargets = 1;
+        xfer->xd_targets = xcalloc(1, sizeof(*xfer->xd_targets));
+        xfer->xd_targets->xt_objid = make_oid(conf.file, i);
+        xfer->xd_targets->xt_objuuid = NULL;
+        xfer->xd_targets->xt_version = 0;
         xfer->xd_flags = 0;
-        xfer->xd_params.put.size = size;
+        xfer->xd_targets->xt_size = size;
         xfer->xd_params.put.family = PHO_RSC_DIR;
         xfer->xd_params.put.overwrite = true;
         xfer->xd_params.put.layout_name = "raid1";
@@ -272,7 +274,8 @@ int main(int argc, char **argv)
 
         pthread_join(threads[i].tid, (void **)&threadrc);
         pho_xfer_desc_clean(&threads[i].xfer);
-        free(threads[i].xfer.xd_objid);
+        free(threads[i].xfer.xd_targets->xt_objid);
+        free(threads[i].xfer.xd_targets);
 
         rc = rc ? : *threadrc;
     }

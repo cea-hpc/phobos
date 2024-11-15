@@ -101,7 +101,7 @@ static int layout_raid4_encode(struct pho_encoder *enc)
     io_context->name = PLUGIN_NAME;
     io_context->n_data_extents = 2;
     io_context->n_parity_extents = 1;
-    io_context->write.to_write = enc->xfer->xd_params.put.size;
+    io_context->write.to_write = enc->xfer->xd_targets->xt_size;
     io_context->nb_hashes = 3;
     io_context->hashes = xcalloc(io_context->nb_hashes,
                                  sizeof(*io_context->hashes));

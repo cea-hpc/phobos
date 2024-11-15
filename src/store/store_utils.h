@@ -28,8 +28,9 @@
 #include "phobos_store.h"
 #include "pho_dss.h"
 
-int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer);
-int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer);
-int object_md_get(struct dss_handle *dss, struct pho_xfer_desc *xfer);
+int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
+                   bool overwrite);
+int object_md_del(struct dss_handle *dss, struct pho_xfer_target *xfer);
+int object_md_get(struct dss_handle *dss, struct pho_xfer_target *xfer);
 
 #endif

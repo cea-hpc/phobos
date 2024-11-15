@@ -28,7 +28,7 @@ from contextlib import contextmanager
 from tempfile import NamedTemporaryFile
 
 from phobos.core.const import PHO_XFER_OP_GETMD, PHO_XFER_OP_PUT # pylint: disable=no-name-in-module
-from phobos.core.store import XferDescriptor
+from phobos.core.store import XferDescriptor, XferTarget
 
 @contextmanager
 def _open_context():
@@ -52,40 +52,50 @@ class FileDescTest(unittest.TestCase):
         """Check the xfer size parameter is correctly set."""
         xfr = XferDescriptor()
         xfr.xd_op = PHO_XFER_OP_PUT
-        xfr.open_file(path)
-        self.assertEqual(xfr.xd_params.put.size, size)
-        os.close(xfr.xd_fd)
+        target = XferTarget * 1
+        xfr.xd_targets = target()
+        xfr.xd_targets[0].open_file(path, xfr)
+        self.assertEqual(xfr.xd_targets[0].xt_size, size)
+        os.close(xfr.xd_targets[0].xt_fd)
 
     def test_open_good(self):
         """Check opening an existing file is valid."""
         with _open_context() as file_desc:
             xfr = XferDescriptor()
-            xfr.open_file(file_desc.name)
-            self.assertTrue(xfr.xd_fd >= 0)
-            os.close(xfr.xd_fd)
+            target = XferTarget * 1
+            xfr.xd_targets = target()
+            xfr.xd_targets[0].open_file(file_desc.name, xfr)
+            self.assertTrue(xfr.xd_targets[0].xt_fd >= 0)
+            os.close(xfr.xd_targets[0].xt_fd)
 
     def test_open_notexist(self):
         """Check opening a non-existing file is not valid."""
         xfr = XferDescriptor()
+        target = XferTarget * 1
+        xfr.xd_targets = target()
         with self.assertRaises(OSError):
-            xfr.open_file("foo")
+            xfr.xd_targets[0].open_file("foo", xfr)
 
     def test_open_empty(self):
         """Check bad openings."""
         xfr = XferDescriptor()
+        target = XferTarget * 1
+        xfr.xd_targets = target()
         with self.assertRaises(ValueError):
-            xfr.open_file("")
+            xfr.xd_targets[0].open_file("", xfr)
         with self.assertRaises(ValueError):
-            xfr.open_file(None)
+            xfr.xd_targets[0].open_file(None, xfr)
 
     def test_open_getmd(self):
         """Check bad openings with a GETMD has no impact."""
         xfr = XferDescriptor()
+        target = XferTarget * 1
+        xfr.xd_targets = target()
         xfr.xd_op = PHO_XFER_OP_GETMD
-        xfr.open_file("")
-        self.assertEqual(xfr.xd_fd, -1)
-        xfr.open_file(None)
-        self.assertEqual(xfr.xd_fd, -1)
+        xfr.xd_targets[0].open_file("", xfr)
+        self.assertEqual(xfr.xd_targets[0].xt_fd, -1)
+        xfr.xd_targets[0].open_file(None, xfr)
+        self.assertEqual(xfr.xd_targets[0].xt_fd, -1)
 
     def test_getsize(self):
         """Check xfer size parameter setter."""

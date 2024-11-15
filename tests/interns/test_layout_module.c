@@ -38,14 +38,17 @@
 
 static void le_valid_module(void **data)
 {
+    struct pho_xfer_target target = {0};
     struct pho_encoder encoder = {0};
     struct pho_xfer_desc xfer = {0};
     int rc;
 
-    xfer.xd_objid = "oid";
+    target.xt_objid = "oid";
+    target.xt_size = 0;
+    xfer.xd_ntargets = 1;
+    xfer.xd_targets = &target;
     xfer.xd_params.put.layout_name = "raid1";
     xfer.xd_params.put.lyt_params.attr_set = NULL;
-    xfer.xd_params.put.size = 0;
 
     rc = layout_encode(&encoder, &xfer);
     assert_return_code(rc, -rc);
@@ -54,11 +57,14 @@ static void le_valid_module(void **data)
 
 static void le_invalid_module(void **data)
 {
+    struct pho_xfer_target target = {0};
     struct pho_encoder encoder = {0};
     struct pho_xfer_desc xfer = {0};
     int rc;
 
-    xfer.xd_objid = "oid";
+    target.xt_objid = "oid";
+    xfer.xd_ntargets = 1;
+    xfer.xd_targets = &target;
     xfer.xd_params.put.layout_name = "unknown";
 
     rc = layout_encode(&encoder, &xfer);
@@ -67,14 +73,17 @@ static void le_invalid_module(void **data)
 
 static void le_invalid_layout_io_size(void **data)
 {
+    struct pho_xfer_target target = {0};
     struct pho_encoder encoder = {0};
     struct pho_xfer_desc xfer = {0};
     int rc;
 
-    xfer.xd_objid = "oid";
+    target.xt_objid = "oid";
+    target.xt_size = 0;
+    xfer.xd_ntargets = 1;
+    xfer.xd_targets = &target;
     xfer.xd_params.put.layout_name = "raid1";
     xfer.xd_params.put.lyt_params.attr_set = NULL;
-    xfer.xd_params.put.size = 0;
 
     rc = setenv("PHOBOS_IO_io_block_size", "-1", 1);
     assert_int_equal(rc, 0);
@@ -98,14 +107,17 @@ static void le_invalid_layout_io_size(void **data)
 
 static void le_valid_layout_io_size(void **data)
 {
+    struct pho_xfer_target target = {0};
     struct pho_encoder encoder = {0};
     struct pho_xfer_desc xfer = {0};
     int rc;
 
-    xfer.xd_objid = "oid";
+    target.xt_objid = "oid";
+    target.xt_size = 0;
+    xfer.xd_ntargets = 1;
+    xfer.xd_targets = &target;
     xfer.xd_params.put.layout_name = "raid1";
     xfer.xd_params.put.lyt_params.attr_set = NULL;
-    xfer.xd_params.put.size = 0;
 
     /* 0 is allowed in cfg */
     rc = setenv("PHOBOS_IO_io_block_size", "0", 1);

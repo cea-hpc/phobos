@@ -49,17 +49,23 @@ static bool test_undelete_null_list(void)
 
 static bool test_undelete(void)
 {
+    struct pho_xfer_target targets[2];
     struct pho_xfer_desc xfers[2];
     int rc;
 
     /* test-oid1 */
-    xfers[0].xd_objuuid = "00112233445566778899aabbccddeef1";
-    xfers[0].xd_objid = NULL;
+    targets[0].xt_objuuid = "00112233445566778899aabbccddeef1";
+    targets[0].xt_objid = NULL;
+    xfers[0].xd_ntargets = 1;
+    xfers[0].xd_targets = &targets[0];
     xfers[0].xd_op = PHO_XFER_OP_UNDEL;
     xfers[0].xd_flags = 0;
+
     /* test-oid2 */
-    xfers[1].xd_objuuid = "00112233445566778899aabbccddeef2";
-    xfers[1].xd_objid = NULL;
+    targets[1].xt_objuuid = "00112233445566778899aabbccddeef2";
+    targets[1].xt_objid = NULL;
+    xfers[1].xd_ntargets = 1;
+    xfers[1].xd_targets = &targets[1];
     xfers[1].xd_op = PHO_XFER_OP_UNDEL;
     xfers[1].xd_flags = 0;
 

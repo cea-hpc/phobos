@@ -179,7 +179,8 @@ static int decoder_build(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
                               "{\"DSS::LYT::object_uuid\": \"%s\"}, "
                               "{\"DSS::LYT::version\": \"%d\"}"
                           "]}",
-                          xfer->xd_objuuid, xfer->xd_version);
+                          xfer->xd_targets->xt_objuuid,
+                          xfer->xd_targets->xt_version);
     if (rc)
         LOG_RETURN(rc, "Cannot build filter");
 
@@ -227,8 +228,7 @@ static int encoder_communicate(struct pho_encoder *enc,
 
     rc = layout_step(enc, resp, &requests, &n_reqs);
     if (rc)
-        pho_error(rc, "Error while communicating with encoder for %s",
-                  enc->xfer->xd_objid);
+        pho_error(rc, "Error while communicating with encoder");
 
     /* Dispatch generated requests (even on error, if any) */
     for (i = 0; i < n_reqs; i++) {
@@ -237,8 +237,8 @@ static int encoder_communicate(struct pho_encoder *enc,
 
         req = requests + i;
 
-        pho_debug("%s for objid:'%s' emitted a request of type %s",
-                  enc->is_decoder ? "Decoder" : "Encoder", enc->xfer->xd_objid,
+        pho_debug("%s emitted a request of type %s",
+                  enc->is_decoder ? "Decoder" : "Encoder",
                   pho_srl_request_kind_str(req));
 
         /* req_id is used to route responses to the appropriate encoder */
@@ -257,8 +257,7 @@ static int encoder_communicate(struct pho_encoder *enc,
         rc2 = pho_comm_send(&data);
         free(data.buf.buff);
         if (rc2) {
-            pho_error(rc2, "Error while sending request to LRS for %s",
-                      enc->xfer->xd_objid);
+            pho_error(rc2, "Error while sending request to LRS");
             rc = rc ? : rc2;
             continue;
         }
@@ -276,37 +275,37 @@ static int encoder_communicate(struct pho_encoder *enc,
  * Retrieve metadata associated with this xfer oid from the DSS and update the
  * \a xfer xd_attrs field accordingly.
  */
-int object_md_get(struct dss_handle *dss, struct pho_xfer_desc *xfer)
+int object_md_get(struct dss_handle *dss, struct pho_xfer_target *xfer)
 {
-    struct object_info  *obj;
-    struct dss_filter    filter;
-    int                  obj_cnt;
-    int                  rc;
+    struct dss_filter filter;
+    struct object_info *obj;
+    int obj_cnt;
+    int rc;
 
     ENTRY;
 
     rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}",
-                          xfer->xd_objid);
+                          xfer->xt_objid);
     if (rc)
         return rc;
 
     rc = dss_object_get(dss, &filter, &obj, &obj_cnt, NULL);
     if (rc)
-        LOG_GOTO(filt_free, rc, "Cannot fetch objid:'%s'", xfer->xd_objid);
+        LOG_GOTO(filt_free, rc, "Cannot fetch objid:'%s'", xfer->xt_objid);
 
     assert(obj_cnt <= 1);
 
     if (obj_cnt == 0)
         LOG_GOTO(out_free, rc = -ENOENT, "No such object objid:'%s'",
-                 xfer->xd_objid);
+                 xfer->xt_objid);
 
-    rc = pho_json_to_attrs(&xfer->xd_attrs, obj[0].user_md);
+    rc = pho_json_to_attrs(&xfer->xt_attrs, obj[0].user_md);
     if (rc)
         LOG_GOTO(out_free, rc, "Cannot convert attributes of objid:'%s'",
-                 xfer->xd_objid);
+                 xfer->xt_objid);
 
-    xfer->xd_objuuid = xstrdup(obj->uuid);
-    xfer->xd_version = obj->version;
+    xfer->xt_objuuid = xstrdup(obj->uuid);
+    xfer->xt_version = obj->version;
 
 out_free:
     dss_res_free(obj, obj_cnt);
@@ -318,7 +317,8 @@ filt_free:
 /**
  * Save this xfer oid and metadata (xd_attrs) into the DSS.
  */
-int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
+int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
+                   bool overwrite)
 {
     GString *md_repr = g_string_new(NULL);
     struct object_info *obj_res = NULL;
@@ -330,11 +330,11 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 
     ENTRY;
 
-    rc = pho_attrs_to_json(&xfer->xd_attrs, md_repr, 0);
+    rc = pho_attrs_to_json(&xfer->xt_attrs, md_repr, 0);
     if (rc)
         LOG_GOTO(out_md, rc, "Cannot convert attributes into JSON");
 
-    obj.oid = xfer->xd_objid;
+    obj.oid = xfer->xt_objid;
     obj.obj_status = PHO_OBJ_STATUS_INCOMPLETE;
     obj.user_md = md_repr->str;
 
@@ -343,9 +343,9 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         LOG_GOTO(out_md, rc, "Unable to lock object objid: '%s'",
                  obj.oid);
 
-    if (!xfer->xd_params.put.overwrite) {
+    if (!overwrite) {
         pho_debug("Storing object objid:'%s' (transient) with attributes: %s",
-                  xfer->xd_objid, md_repr->str);
+                  xfer->xt_objid, md_repr->str);
 
         rc = dss_object_insert(dss, &obj, 1, DSS_SET_INSERT);
         if (rc)
@@ -362,7 +362,7 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         rc = dss_object_get(dss, &filter, &obj_res, &obj_cnt, NULL);
         dss_filter_free(&filter);
         if (rc || obj_cnt == 0) {
-            pho_verb("dss_object_get failed for objid:'%s'", xfer->xd_objid);
+            pho_verb("dss_object_get failed for objid:'%s'", xfer->xt_objid);
 
             /**
              * If we try overwritting an object that doesn't exist in the
@@ -372,13 +372,13 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
              */
             if (rc == 0)
                 pho_debug("Can't overwrite unexisting object:'%s'",
-                         xfer->xd_objid);
+                         xfer->xt_objid);
 
             rc = dss_object_insert(dss, &obj, 1, DSS_SET_INSERT);
             if (rc)
                 LOG_GOTO(out_filt, rc,
                          "dss_object_insert failed for objid:'%s'",
-                         xfer->xd_objid);
+                         xfer->xt_objid);
 
             goto out_update;
         }
@@ -386,10 +386,10 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         rc = dss_move_object_to_deprecated(dss, obj_res, 1);
         if (rc)
             LOG_GOTO(out_res, rc, "object_move failed for objid:'%s'",
-                     xfer->xd_objid);
+                     xfer->xt_objid);
 
         ++obj_res->version;
-        if (!pho_attrs_is_empty(&xfer->xd_attrs))
+        if (!pho_attrs_is_empty(&xfer->xt_attrs))
             obj_res->user_md = md_repr->str;
 
         obj_res->obj_status = obj.obj_status;
@@ -397,23 +397,23 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         rc = dss_object_insert(dss, obj_res, 1, DSS_SET_FULL_INSERT);
         if (rc)
             LOG_GOTO(out_res, rc, "object_insert failed for objid:'%s'",
-                     xfer->xd_objid);
+                     xfer->xt_objid);
     }
 
 out_update:
     dss_res_free(obj_res, 1);
 
     rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}",
-                          xfer->xd_objid);
+                          xfer->xt_objid);
     if (rc)
         LOG_GOTO(out_unlock, rc, "dss_filter_build failed");
 
     rc = dss_object_get(dss, &filter, &obj_res, &obj_cnt, NULL);
     if (rc)
-        LOG_GOTO(out_filt, rc, "Cannot fetch objid:'%s'", xfer->xd_objid);
+        LOG_GOTO(out_filt, rc, "Cannot fetch objid:'%s'", xfer->xt_objid);
 
-    xfer->xd_version = obj_res->version;
-    xfer->xd_objuuid = xstrdup(obj_res->uuid);
+    xfer->xt_version = obj_res->version;
+    xfer->xt_objuuid = xstrdup(obj_res->uuid);
 
 out_res:
     dss_res_free(obj_res, 1);
@@ -427,7 +427,7 @@ out_unlock:
         rc = rc ? : rc2;
         pho_error(rc2,
                   "Couldn't unlock object:'%s'. Database may be corrupted.",
-                  xfer->xd_objid);
+                  xfer->xt_objid);
     }
 out_md:
     g_string_free(md_repr, true);
@@ -439,9 +439,9 @@ out_md:
  * Delete xfer metadata from the DSS by \a objid, making the oid free to be used
  * again (unless layout information still lay in the DSS).
  */
-int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
+int object_md_del(struct dss_handle *dss, struct pho_xfer_target *xfer)
 {
-    struct object_info lock_obj = { .oid = xfer->xd_objid };
+    struct object_info lock_obj = { .oid = xfer->xt_objid };
     struct object_info *prev_obj = NULL;
     struct layout_info *layout = NULL;
     struct object_info *obj = NULL;
@@ -457,26 +457,26 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 
     /* Retrieve object to get uuid and version info */
     rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}",
-                          xfer->xd_objid);
+                          xfer->xt_objid);
     if (rc)
         LOG_RETURN(rc, "Couldn't build filter in md_del for objid:'%s'.",
-                   xfer->xd_objid);
+                   xfer->xt_objid);
 
     rc = dss_lock(dss, DSS_OBJECT, &lock_obj, 1);
     if (rc) {
         dss_filter_free(&filter);
-        LOG_RETURN(rc, "Unable to lock object objid: '%s'", xfer->xd_objid);
+        LOG_RETURN(rc, "Unable to lock object objid: '%s'", xfer->xt_objid);
     }
 
     rc = dss_object_get(dss, &filter, &obj, &obj_cnt, NULL);
     dss_filter_free(&filter);
     if (rc)
         LOG_GOTO(out_unlock, rc, "dss_object_get failed for objid:'%s'",
-                 xfer->xd_objid);
+                 xfer->xt_objid);
 
     if (obj_cnt != 1)
         LOG_GOTO(out_res, rc = -EINVAL, "object '%s' does not exist",
-                 xfer->xd_objid);
+                 xfer->xt_objid);
 
 
     /* Check if the performed operation was an overwrite PUT */
@@ -514,14 +514,14 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     dss_filter_free(&filter);
     if (rc)
         LOG_GOTO(out_prev, rc, "dss_layout_get failed for uuid:'%s'",
-                 xfer->xd_objuuid);
+                 xfer->xt_objuuid);
 
     dss_res_free(layout, cnt);
 
     if (cnt > 0)
         LOG_GOTO(out_prev, rc = -EEXIST,
                  "Cannot rollback objid:'%s' from DSS, a layout still exists "
-                 "for this objid", xfer->xd_objid);
+                 "for this objid", xfer->xt_objid);
 
     /* Then the rollback can safely happen */
     pho_verb("Rolling back obj oid:'%s', obj uuid:'%s' and obj version:'%d' "
@@ -529,7 +529,7 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     rc = dss_object_delete(dss, obj, 1);
     if (rc)
         LOG_GOTO(out_prev, rc, "dss_object_insert failed for objid:'%s'",
-                 xfer->xd_objid);
+                 xfer->xt_objid);
 
     if (need_undelete) {
         rc = dss_move_deprecated_to_object(dss, prev_obj, prev_cnt);
@@ -550,7 +550,7 @@ out_unlock:
         rc = rc ? : rc2;
         pho_error(rc2,
                   "Couldn't unlock object:'%s'. Database may be corrupted.",
-                  xfer->xd_objid);
+                  xfer->xt_objid);
     }
 
     return rc;
@@ -642,9 +642,10 @@ static int object_hard_delete(struct dss_handle *dss, struct object_info *obj,
  * TODO: from object_delete to objects_delete, to delete many objects (all or
  * nothing) into the same command.
  */
-static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
+static int object_delete(struct dss_handle *dss, struct pho_xfer_target *xfer,
+                         enum pho_xfer_flags flags)
 {
-    struct object_info obj = { .oid = xfer->xd_objid };
+    struct object_info obj = { .oid = xfer->xt_objid };
     struct dss_filter filter;
     struct object_info *objs;
     int obj_cnt;
@@ -672,7 +673,7 @@ static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
                                "for oid: '%s'", obj.oid);
     }
 
-    if (xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL) {
+    if (flags & PHO_XFER_OBJ_HARD_DEL) {
         struct object_info *deprec_objs;
         int deprec_obj_cnt;
         int i;
@@ -727,15 +728,15 @@ out_unlock:
     return rc;
 }
 
-static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
+static int object_undelete(struct dss_handle *dss, struct pho_xfer_target *xfer)
 {
     struct dss_filter *p_filter_uuid = NULL;
     struct dss_filter *p_filter_oid = NULL;
     struct dss_filter filter_uuid;
     struct dss_filter filter_oid;
     struct object_info obj = {
-        .oid = xfer->xd_objid,
-        .uuid = xfer->xd_objuuid,
+        .oid = xfer->xt_objid,
+        .uuid = xfer->xt_objuuid,
         .version = 0,
     };
     struct object_info *objs;
@@ -910,21 +911,21 @@ out:
 }
 
 static int object_info_copy_into_xfer(struct object_info *obj,
-                                      struct pho_xfer_desc *xfer)
+                                      struct pho_xfer_target *xfer)
 {
     int rc;
 
     /** XXX: This is a temporary fix as the uuid and attrs may already exist
      * before they are copied, so we free them beforehand.
      */
-    pho_xfer_desc_clean(xfer);
+    pho_xfer_clean(xfer);
 
-    rc = pho_json_to_attrs(&xfer->xd_attrs, obj->user_md);
+    rc = pho_json_to_attrs(&xfer->xt_attrs, obj->user_md);
     if (rc)
         LOG_RETURN(rc, "Cannot convert attributes of objid: '%s'", obj->oid);
 
-    xfer->xd_objuuid = xstrdup_safe(obj->uuid);
-    xfer->xd_version = obj->version;
+    xfer->xt_objuuid = xstrdup_safe(obj->uuid);
+    xfer->xt_version = obj->version;
 
     return 0;
 }
@@ -946,10 +947,10 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
     /* can't get md for undel without any objid */
     /* TODO: really necessary to create decoder for getmd, del and undel OP ? */
     if (xfer->xd_op != PHO_XFER_OP_UNDEL && xfer->xd_op != PHO_XFER_OP_GET) {
-        rc = object_md_get(dss, xfer);
+        rc = object_md_get(dss, xfer->xd_targets);
         if (rc)
             LOG_RETURN(rc, "Cannot find metadata for objid:'%s'",
-                       xfer->xd_objid);
+                       xfer->xd_targets->xt_objid);
     }
 
     if (xfer->xd_op == PHO_XFER_OP_GETMD ||
@@ -963,14 +964,15 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
     }
 
     /* Handle decoder creation for GET */
-    if (!xfer->xd_objid && !xfer->xd_objuuid)
+    if (!xfer->xd_targets->xt_objid && !xfer->xd_targets->xt_objuuid)
         LOG_RETURN(rc = -EINVAL, "uuid or oid must be provided");
 
-    rc = dss_lazy_find_object(dss, xfer->xd_objid, xfer->xd_objuuid,
-                              xfer->xd_version, &obj);
+    rc = dss_lazy_find_object(dss, xfer->xd_targets->xt_objid,
+                              xfer->xd_targets->xt_objuuid,
+                              xfer->xd_targets->xt_version, &obj);
     if (rc)
         LOG_RETURN(rc, "Cannot find metadata for objid:'%s'",
-                   xfer->xd_objid);
+                   xfer->xd_targets->xt_objid);
 
     if (obj->obj_status == PHO_OBJ_STATUS_INCOMPLETE)
         LOG_RETURN(-ENOENT, "Status of object '%s' is incomplete, "
@@ -980,7 +982,7 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
         pho_warn("Object '%s' status is %s.", obj->oid,
                  obj_status2str(obj->obj_status));
 
-    rc = object_info_copy_into_xfer(obj, xfer);
+    rc = object_info_copy_into_xfer(obj, xfer->xd_targets);
     object_info_free(obj);
     if (rc)
         return rc;
@@ -988,15 +990,15 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
     return decoder_build(enc, xfer, dss);
 }
 
-static bool is_uuid_arg(struct pho_xfer_desc *xfer)
+static bool is_uuid_arg(struct pho_xfer_target *xfer, enum pho_xfer_op xd_op)
 {
-    return xfer->xd_op == PHO_XFER_OP_UNDEL &&
-           xfer->xd_objuuid != NULL;
+    return xd_op == PHO_XFER_OP_UNDEL && xfer->xt_objuuid != NULL;
 }
 
-static const char *oid_or_uuid_val(struct pho_xfer_desc *xfer)
+static const char *oid_or_uuid_val(struct pho_xfer_target *xfer,
+                                   enum pho_xfer_op xd_op)
 {
-    return is_uuid_arg(xfer) ? xfer->xd_objuuid : xfer->xd_objid;
+    return is_uuid_arg(xfer, xd_op) ? xfer->xt_objuuid : xfer->xt_objid;
 }
 
 /**
@@ -1029,19 +1031,19 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
 
     /* Once the encoder is done and successful, save the layout and metadata */
     if (!enc->is_decoder && xfer->xd_rc == 0 && rc == 0) {
-        pho_debug("Saving layout for objid:'%s'", xfer->xd_objid);
+        pho_debug("Saving layout for objid:'%s'", xfer->xd_targets->xt_objid);
         rc = dss_extent_insert(&pho->dss, enc->layout->extents,
                                enc->layout->ext_count);
         if (rc) {
             pho_error(rc, "Error while saving extents for objid: '%s'",
-                      xfer->xd_objid);
+                      xfer->xd_targets->xt_objid);
         } else {
             rc = dss_layout_insert(&pho->dss, enc->layout, 1);
             if (rc) {
                 int rc2;
 
                 pho_error(rc, "Error while saving layout for objid: '%s'",
-                          xfer->xd_objid);
+                          xfer->xd_targets->xt_objid);
 
                 for (i = 0; i < enc->layout->ext_count; ++i)
                     enc->layout->extents[i].state = PHO_EXT_ST_ORPHAN;
@@ -1054,7 +1056,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
                     pho_error(rc2, "Error while updating extents to orphan");
             } else {
                 struct object_info obj = {
-                    .oid = xfer->xd_objid,
+                    .oid = xfer->xd_targets->xt_objid,
                     .obj_status = PHO_OBJ_STATUS_COMPLETE,
                 };
 
@@ -1071,8 +1073,9 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     if (xfer->xd_rc == 0 && rc == 0 && xfer->xd_op == PHO_XFER_OP_GET) {
         struct object_info *obj;
 
-        rc = dss_lazy_find_object(&pho->dss, xfer->xd_objid,
-                                  xfer->xd_objuuid, xfer->xd_version, &obj);
+        rc = dss_lazy_find_object(&pho->dss, xfer->xd_targets->xt_objid,
+                                  xfer->xd_targets->xt_objuuid,
+                                  xfer->xd_targets->xt_version, &obj);
         if (rc)
             LOG_GOTO(cont, rc,
                      "Error while retrieving object info, "
@@ -1105,14 +1108,14 @@ cont:
 
     pho_info("%s operation for %s:'%s' %s",
              xfer_op2str(xfer->xd_op),
-             is_uuid_arg(xfer) ? "uuid" : "oid",
-             oid_or_uuid_val(xfer),
+             is_uuid_arg(xfer->xd_targets, xfer->xd_op) ? "uuid" : "oid",
+             oid_or_uuid_val(xfer->xd_targets, xfer->xd_op),
              xfer->xd_rc ? "failed" : "succeeded");
 
     /* Cleanup metadata for failed PUT */
     if (pho->md_created && pho->md_created[xfer_idx] &&
             xfer->xd_op == PHO_XFER_OP_PUT && xfer->xd_rc)
-        object_md_del(&pho->dss, xfer);
+        object_md_del(&pho->dss, xfer->xd_targets);
 
     if (pho->cb)
         pho->cb(pho->udata, xfer, rc);
@@ -1198,6 +1201,10 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
         rc = pho_xfer_desc_flag_check(&xfers[i]);
         if (rc)
             return rc;
+
+        /* Check that xfers contains only one object */
+        if (xfers->xd_ntargets > 1)
+            return -EINVAL;
     }
 
     /* Ensure conf is loaded */
@@ -1233,11 +1240,11 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
     for (i = 0; i < n_xfers; i++) {
         pho_debug("Initializing %s %ld for objid:'%s'",
                   pho->encoders[i].is_decoder ? "decoder" : "encoder",
-                  i, pho->xfers[i].xd_objid);
+                  i, pho->xfers[i].xd_targets->xt_objid);
         rc = init_enc_or_dec(&pho->encoders[i], &pho->dss, &pho->xfers[i]);
         if (rc)
             pho_error(rc, "Error while creating encoders for objid:'%s'",
-                      xfers[i].xd_objid);
+                      pho->xfers[i].xd_targets->xt_objid);
         if (rc || pho->encoders[i].done)
             store_end_xfer(pho, i, rc);
         rc = 0;
@@ -1258,7 +1265,7 @@ static int store_lrs_response_process(struct phobos_handle *pho,
 
     pho_debug("%s for objid:'%s' received a response of type %s",
               encoder->is_decoder ? "Decoder" : "Encoder",
-              encoder->xfer->xd_objid,
+              encoder->xfer->xd_targets->xt_objid,
               pho_srl_response_kind_str(resp));
 
     rc = encoder_communicate(encoder, &pho->comm, resp, resp->req_id);
@@ -1269,7 +1276,7 @@ static int store_lrs_response_process(struct phobos_handle *pho,
 
     if (rc)
         pho_error(rc, "Error while sending response to layout for %s",
-                  encoder->xfer->xd_objid);
+                  encoder->xfer->xd_targets->xt_objid);
 
     return rc;
 }
@@ -1369,32 +1376,36 @@ static int store_perform_xfers(struct phobos_handle *pho)
      */
     for (i = 0; i < pho->n_xfers; i++) {
         if (pho->xfers[i].xd_op == PHO_XFER_OP_DEL) {
-            rc = object_delete(&pho->dss, &pho->xfers[i]);
+            rc = object_delete(&pho->dss, pho->xfers[i].xd_targets,
+                               pho->xfers[i].xd_flags);
             if (rc)
                 pho_error(rc, "Error while deleting objid: '%s'",
-                          pho->xfers[i].xd_objid);
+                              pho->xfers[i].xd_targets->xt_objid);
             store_end_xfer(pho, i, rc);
         }
 
         if (pho->xfers[i].xd_op == PHO_XFER_OP_UNDEL) {
-            rc = object_undelete(&pho->dss, &pho->xfers[i]);
+            rc = object_undelete(&pho->dss, pho->xfers[i].xd_targets);
             if (rc) {
                 pho_error(rc, "Error while undeleting oid: '%s', uuid: '%s'",
-                          pho->xfers[i].xd_objid ? pho->xfers[i].xd_objid :
-                              "NULL",
-                          pho->xfers[i].xd_objuuid ?
-                              pho->xfers[i].xd_objuuid : "NULL");
+                          pho->xfers[i].xd_targets->xt_objid ?
+                                pho->xfers[i].xd_targets->xt_objid : "NULL",
+                          pho->xfers[i].xd_targets->xt_objuuid ?
+                                pho->xfers[i].xd_targets->xt_objuuid : "NULL");
             }
             store_end_xfer(pho, i, rc);
         }
 
         if (pho->xfers[i].xd_op != PHO_XFER_OP_PUT)
             continue;
-        rc = object_md_save(&pho->dss, &pho->xfers[i]);
+
+        rc = object_md_save(&pho->dss, pho->xfers[i].xd_targets,
+                            pho->xfers[i].xd_params.put.overwrite);
         if (rc && !pho->encoders[i].done) {
             pho_error(rc, "Error while saving metadata for objid:'%s'",
-                      pho->xfers[i].xd_objid);
+                      pho->xfers[i].xd_targets->xt_objid);
             store_end_xfer(pho, i, rc);
+            break;
         }
         pho->md_created[i] = true;
     }
@@ -1495,8 +1506,9 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
          * For the Python CLI, the garbage collector will take care of
          * this pointer.
          */
-        if (xfers[i].xd_objuuid)
-            xfers[i].xd_objuuid = xstrdup(xfers[i].xd_objuuid);
+        if (xfers[i].xd_targets->xt_objuuid)
+            xfers[i].xd_targets->xt_objuuid =
+                xstrdup(xfers[i].xd_targets->xt_objuuid);
 
         if (xfers[i].xd_flags & PHO_XFER_OBJ_BEST_HOST) {
             int nb_new_lock;
@@ -1506,30 +1518,31 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
                 if (!hostname) {
                     pho_warn("Get was cancelled for object '%s': "
                              "hostname couldn't be retrieved",
-                             xfers[i].xd_objid);
+                             xfers[i].xd_targets->xt_objid);
                     xfers[i].xd_rc = -ECANCELED;
                     continue;
                 }
             }
 
-            rc2 = phobos_locate(xfers[i].xd_objid, xfers[i].xd_objuuid,
-                                xfers[i].xd_version, hostname,
+            rc2 = phobos_locate(xfers[i].xd_targets->xt_objid,
+                                xfers[i].xd_targets->xt_objuuid,
+                                xfers[i].xd_targets->xt_version, hostname,
                                 &xfers[i].xd_params.get.node_name,
                                 &nb_new_lock);
             rc = rc ? : rc2;
             if (rc2) {
                 pho_warn("Object objid:'%s' couldn't be located",
-                         xfers[i].xd_objid);
+                         xfers[i].xd_targets->xt_objid);
                 xfers[i].xd_rc = rc2;
             } else {
                 if (strcmp(xfers[i].xd_params.get.node_name, hostname)) {
                     pho_warn("Object objid:'%s' located on node: %s",
-                             xfers[i].xd_objid,
+                             xfers[i].xd_targets->xt_objid,
                              xfers[i].xd_params.get.node_name);
                     xfers[i].xd_rc = -EREMOTE;
                 } else {
                     pho_info("Object objid:'%s' located on local node",
-                             xfers[i].xd_objid);
+                             xfers[i].xd_targets->xt_objid);
                     n_xfers_to_get++;
                     free(xfers[i].xd_params.get.node_name);
                     xfers[i].xd_params.get.node_name = NULL;
@@ -1720,12 +1733,20 @@ static void (*xfer_param_cleaner[PHO_XFER_OP_LAST])(struct pho_xfer_desc *) = {
 
 void pho_xfer_desc_clean(struct pho_xfer_desc *xfer)
 {
+    int i;
+
     if (xfer_param_cleaner[xfer->xd_op] != NULL)
         xfer_param_cleaner[xfer->xd_op](xfer);
 
-    pho_attrs_free(&xfer->xd_attrs);
-    free(xfer->xd_objuuid);
-};
+    for (i = 0; i < xfer->xd_ntargets; i++)
+        pho_xfer_clean(&xfer->xd_targets[i]);
+}
+
+void pho_xfer_clean(struct pho_xfer_target *xfer)
+{
+    pho_attrs_free(&xfer->xt_attrs);
+    free(xfer->xt_objuuid);
+}
 
 int phobos_locate(const char *oid, const char *uuid, int version,
                   const char *focus_host, char **hostname, int *nb_new_lock)

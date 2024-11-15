@@ -260,7 +260,7 @@ class StoreGetMDHandler(XferOptHandler):
             return
 
         res = []
-        itm = attrs_as_dict(xfr.contents.xd_attrs)
+        itm = attrs_as_dict(xfr.contents.xd_targets[0].xt_attrs)
         if not itm:
             return
 

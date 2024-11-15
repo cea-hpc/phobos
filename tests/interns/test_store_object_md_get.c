@@ -123,33 +123,33 @@ static void assert_xfer_in_state(const struct test_state *state,
     const struct object_info *obj = state->obj + index;
     GString *gstr = g_string_new(NULL);
 
-    pho_attrs_to_json(&state->xfer.xd_attrs, gstr, 0);
+    pho_attrs_to_json(&state->xfer.xd_targets->xt_attrs, gstr, 0);
     assert_string_equal(gstr->str, obj->user_md);
     g_string_free(gstr, true);
 
-    assert_string_equal(state->xfer.xd_objid,   obj->oid);
-    assert_string_equal(state->xfer.xd_objuuid, obj->uuid);
+    assert_string_equal(state->xfer.xd_targets->xt_objid,   obj->oid);
+    assert_string_equal(state->xfer.xd_targets->xt_objuuid, obj->uuid);
 
-    assert_int_equal(state->xfer.xd_version, obj->version);
+    assert_int_equal(state->xfer.xd_targets->xt_version, obj->version);
     assert_return_code(rc, -rc);
 }
 
 static void update_state_xfer(struct test_state *state, char *oid, char *uuid,
                               int version)
 {
-    state->xfer.xd_objid = oid;
-    state->xfer.xd_objuuid = uuid;
-    state->xfer.xd_version = version;
+    state->xfer.xd_targets->xt_objid = oid;
+    state->xfer.xd_targets->xt_objuuid = uuid;
+    state->xfer.xd_targets->xt_version = version;
 }
 
 static void clean_state_xfer(struct test_state *state)
 {
-    free(state->xfer.xd_objuuid);
-    pho_attrs_free(&state->xfer.xd_attrs);
+    free(state->xfer.xd_targets->xt_objuuid);
+    pho_attrs_free(&state->xfer.xd_targets->xt_attrs);
 
-    state->xfer.xd_version = 0;
-    state->xfer.xd_objid = NULL;
-    state->xfer.xd_objuuid = NULL;
+    state->xfer.xd_targets->xt_version = 0;
+    state->xfer.xd_targets->xt_objid = NULL;
+    state->xfer.xd_targets->xt_objuuid = NULL;
 }
 
 static void get_xfer_and_check_res(struct test_state *state, int index,
@@ -158,7 +158,7 @@ static void get_xfer_and_check_res(struct test_state *state, int index,
     int rc;
 
     update_state_xfer(state, oid, uuid, version);
-    rc = object_md_get(state->dss, &state->xfer);
+    rc = object_md_get(state->dss, state->xfer.xd_targets);
     assert_xfer_in_state(state, index, rc);
     clean_state_xfer(state);
 }
@@ -170,7 +170,7 @@ static void check_omg_fails_with_rc(struct test_state *state,
     int rc;
 
     update_state_xfer(state, oid, uuid, version);
-    rc = object_md_get(state->dss, &state->xfer);
+    rc = object_md_get(state->dss, state->xfer.xd_targets);
     assert_int_equal(rc, expected_rc);
 }
 
@@ -231,9 +231,12 @@ int main(void)
         cmocka_unit_test(omg_enoent),
         cmocka_unit_test(omg_filter_build_fail),
     };
+    struct pho_xfer_target target = {0};
 
     pho_context_init();
     atexit(pho_context_fini);
+
+    global_state.xfer.xd_targets = &target;
 
     return cmocka_run_group_tests(object_md_save_test_cases,
                                   omg_setup, omg_teardown);

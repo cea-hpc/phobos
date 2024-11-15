@@ -250,19 +250,26 @@ void dss_filter_free(struct dss_filter *filter)
 /** Tests for object_md_save */
 static void oms_attrs_to_json_failure(void **state)
 {
+    struct pho_xfer_target target;
     struct pho_xfer_desc xfer;
     int rc;
 
     (void)state;
 
+    xfer.xd_targets = &target;
     will_return(pho_attrs_to_json, -ENOMEM);
-    rc = object_md_save(NULL, &xfer);
+    rc = object_md_save(NULL, xfer.xd_targets, false);
     assert_int_equal(rc, -ENOMEM);
 }
 
+static struct pho_xfer_target PUT_XFER_TARGET = {
+    .xt_objid = "dummy_object",
+};
+
 static const struct pho_xfer_desc PUT_XFER = {
     .xd_params.put.overwrite = false,
-    .xd_objid = "dummy_object",
+    .xd_ntargets = 1,
+    .xd_targets = &PUT_XFER_TARGET,
 };
 
 static void oms_dss_lock_failure(void **state)
@@ -274,7 +281,7 @@ static void oms_dss_lock_failure(void **state)
 
     will_return(pho_attrs_to_json, 0);
     will_return(dss_lock, -EINVAL);
-    rc = object_md_save(NULL, &xfer);
+    rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, -EINVAL);
 }
 
@@ -289,13 +296,18 @@ static void oms_dss_object_insert_failure_without_overwrite(void **state)
     will_return(dss_lock, 0);
     will_return(dss_object_insert, -EINVAL);
     will_return(dss_unlock, 0);
-    rc = object_md_save(NULL, &xfer);
+    rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, -EINVAL);
 }
 
+static struct pho_xfer_target OVERWRITE_XFER_TARGET = {
+    .xt_objid = "dummy_object",
+};
+
 static const struct pho_xfer_desc OVERWRITE_XFER = {
     .xd_params.put.overwrite = true,
-    .xd_objid = "dummy_object",
+    .xd_ntargets = 1,
+    .xd_targets = &OVERWRITE_XFER_TARGET,
 };
 
 static void oms_dss_filter_build_failure_with_overwrite(void **state)
@@ -309,7 +321,7 @@ static void oms_dss_filter_build_failure_with_overwrite(void **state)
     will_return(dss_lock, 0);
     will_return(dss_filter_build, -ENOMEM);
     will_return(dss_unlock, 0);
-    rc = object_md_save(NULL, &xfer);
+    rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, -ENOMEM);
 }
 
@@ -326,7 +338,7 @@ static void oms_dss_object_insert_failure_with_fake_overwrite(void **state)
     MOCK_DSS_OBJECT_GET(0, 0);
     will_return(dss_object_insert, -EINVAL);
     will_return(dss_unlock, 0);
-    rc = object_md_save(NULL, &xfer);
+    rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, -EINVAL);
 
     will_return(pho_attrs_to_json, 0);
@@ -335,7 +347,7 @@ static void oms_dss_object_insert_failure_with_fake_overwrite(void **state)
     MOCK_DSS_OBJECT_GET(-ENOENT, 0);
     will_return(dss_object_insert, -EINVAL);
     will_return(dss_unlock, 0);
-    rc = object_md_save(NULL, &xfer);
+    rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, -EINVAL);
 }
 
@@ -352,7 +364,7 @@ static void oms_dss_object_move_failure_with_overwrite(void **state)
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_move_object_to_deprecated, -ENOENT);
     will_return(dss_unlock, 0);
-    rc = object_md_save(NULL, &xfer);
+    rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, -ENOENT);
 }
 
@@ -370,7 +382,7 @@ static void oms_dss_object_insert_failure_with_overwrite(void **state)
     will_return(dss_move_object_to_deprecated, 0);
     will_return(dss_object_insert, -EINVAL);
     will_return(dss_unlock, 0);
-    rc = object_md_save(NULL, &xfer);
+    rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, -EINVAL);
 }
 
@@ -386,7 +398,7 @@ static void oms_dss_filter_build_failure(void **state)
     will_return(dss_object_insert, 0);
     will_return(dss_filter_build, -ENOMEM);
     will_return(dss_unlock, 0);
-    rc = object_md_save(NULL, &xfer);
+    rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, -ENOMEM);
 }
 
@@ -403,7 +415,7 @@ static void oms_dss_object_get_failure(void **state)
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(-EINVAL, 0);
     will_return(dss_unlock, 0);
-    rc = object_md_save(NULL, &xfer);
+    rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, -EINVAL);
 }
 
@@ -420,10 +432,10 @@ static void oms_dss_unlock_failure(void **state)
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_unlock, -ENOLCK);
-    rc = object_md_save(NULL, &xfer);
+    rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, -ENOLCK);
 
-    free(xfer.xd_objuuid);
+    free(xfer.xd_targets->xt_objuuid);
 }
 
 static void oms_success_without_overwrite(void **state)
@@ -439,10 +451,10 @@ static void oms_success_without_overwrite(void **state)
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_unlock, 0);
-    rc = object_md_save(NULL, &xfer);
+    rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, 0);
 
-    free(xfer.xd_objuuid);
+    free(xfer.xd_targets->xt_objuuid);
 }
 
 static void oms_success_with_fake_overwrite(void **state)
@@ -460,10 +472,10 @@ static void oms_success_with_fake_overwrite(void **state)
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_unlock, 0);
-    rc = object_md_save(NULL, &xfer);
+    rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, 0);
 
-    free(xfer.xd_objuuid);
+    free(xfer.xd_targets->xt_objuuid);
 }
 
 static void oms_success_with_overwrite(void **state)
@@ -482,10 +494,10 @@ static void oms_success_with_overwrite(void **state)
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_unlock, 0);
-    rc = object_md_save(NULL, &xfer);
+    rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, 0);
 
-    free(xfer.xd_objuuid);
+    free(xfer.xd_targets->xt_objuuid);
 }
 
 /** Tests for object_md_del */
@@ -497,13 +509,18 @@ static void omd_dss_filter_build_for_get_failure(void **state)
     (void)state;
 
     will_return(dss_filter_build, -ENOMEM);
-    rc = object_md_del(NULL, &xfer);
+    rc = object_md_del(NULL, xfer.xd_targets);
     assert_int_equal(rc, -ENOMEM);
 }
 
+static struct pho_xfer_target DEL_XFER_TARGET = {
+    .xt_objid = "dummy-object",
+    .xt_objuuid = "abcdefgh12345678",
+};
+
 static const struct pho_xfer_desc DEL_XFER = {
-    .xd_objid = "dummy_object",
-    .xd_objuuid = "abcdefgh12345678",
+    .xd_ntargets = 1,
+    .xd_targets = &DEL_XFER_TARGET,
 };
 
 static void omd_dss_lock_failure(void **state)
@@ -515,7 +532,7 @@ static void omd_dss_lock_failure(void **state)
 
     will_return(dss_filter_build, 0);
     will_return(dss_lock, -EINVAL);
-    rc = object_md_del(NULL, &xfer);
+    rc = object_md_del(NULL, xfer.xd_targets);
     assert_int_equal(rc, -EINVAL);
 }
 
@@ -530,14 +547,14 @@ static void omd_dss_object_get_failure(void **state)
     will_return(dss_lock, 0);
     MOCK_DSS_OBJECT_GET(-ENOMEM, 0);
     will_return(dss_unlock, 0);
-    rc = object_md_del(NULL, &xfer);
+    rc = object_md_del(NULL, xfer.xd_targets);
     assert_int_equal(rc, -ENOMEM);
 
     will_return(dss_filter_build, 0);
     will_return(dss_lock, 0);
     MOCK_DSS_OBJECT_GET(0, 2);
     will_return(dss_unlock, 0);
-    rc = object_md_del(NULL, &xfer);
+    rc = object_md_del(NULL, xfer.xd_targets);
     assert_int_equal(rc, -EINVAL);
 }
 
@@ -553,7 +570,7 @@ static void omd_dss_filter_build_for_deprec_failure(void **state)
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, -ENOMEM);
     will_return(dss_unlock, 0);
-    rc = object_md_del(NULL, &xfer);
+    rc = object_md_del(NULL, xfer.xd_targets);
     assert_int_equal(rc, -ENOMEM);
 }
 
@@ -570,7 +587,7 @@ static void omd_dss_deprecated_object_get_failure(void **state)
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(-EINVAL, 0);
     will_return(dss_unlock, 0);
-    rc = object_md_del(NULL, &xfer);
+    rc = object_md_del(NULL, xfer.xd_targets);
     assert_int_equal(rc, -EINVAL);
 }
 
@@ -588,7 +605,7 @@ static void omd_dss_filter_build_for_layout_failure(void **state)
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
     will_return(dss_filter_build, -ENOMEM);
     will_return(dss_unlock, 0);
-    rc = object_md_del(NULL, &xfer);
+    rc = object_md_del(NULL, xfer.xd_targets);
     assert_int_equal(rc, -ENOMEM);
 }
 
@@ -607,7 +624,7 @@ static void omd_dss_full_layout_get_failure(void **state)
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(-EINVAL, 0);
     will_return(dss_unlock, 0);
-    rc = object_md_del(NULL, &xfer);
+    rc = object_md_del(NULL, xfer.xd_targets);
     assert_int_equal(rc, -EINVAL);
 
     will_return(dss_filter_build, 0);
@@ -618,7 +635,7 @@ static void omd_dss_full_layout_get_failure(void **state)
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(0, 1);
     will_return(dss_unlock, 0);
-    rc = object_md_del(NULL, &xfer);
+    rc = object_md_del(NULL, xfer.xd_targets);
     assert_int_equal(rc, -EEXIST);
 }
 
@@ -638,7 +655,7 @@ static void omd_dss_object_delete_failure(void **state)
     MOCK_DSS_LAYOUT_GET(0, 0);
     will_return(dss_object_delete, -EINVAL);
     will_return(dss_unlock, 0);
-    rc = object_md_del(NULL, &xfer);
+    rc = object_md_del(NULL, xfer.xd_targets);
     assert_int_equal(rc, -EINVAL);
 }
 
@@ -659,7 +676,7 @@ static void omd_dss_object_move_failure(void **state)
     will_return(dss_object_delete, 0);
     will_return(dss_move_deprecated_to_object, -ENOENT);
     will_return(dss_unlock, 0);
-    rc = object_md_del(NULL, &xfer);
+    rc = object_md_del(NULL, xfer.xd_targets);
     assert_int_equal(rc, -ENOENT);
 }
 
@@ -679,7 +696,7 @@ static void omd_dss_unlock_failure(void **state)
     MOCK_DSS_LAYOUT_GET(0, 0);
     will_return(dss_object_delete, 0);
     will_return(dss_unlock, -ENOLCK);
-    rc = object_md_del(NULL, &xfer);
+    rc = object_md_del(NULL, xfer.xd_targets);
     assert_int_equal(rc, -ENOLCK);
 }
 
@@ -700,7 +717,7 @@ static void omd_success(void **state)
     will_return(dss_object_delete, 0);
     will_return(dss_move_deprecated_to_object, 0);
     will_return(dss_unlock, 0);
-    rc = object_md_del(NULL, &xfer);
+    rc = object_md_del(NULL, xfer.xd_targets);
     assert_int_equal(rc, 0);
 
     will_return(dss_filter_build, 0);
@@ -712,7 +729,7 @@ static void omd_success(void **state)
     MOCK_DSS_LAYOUT_GET(0, 0);
     will_return(dss_object_delete, 0);
     will_return(dss_unlock, 0);
-    rc = object_md_del(NULL, &xfer);
+    rc = object_md_del(NULL, xfer.xd_targets);
     assert_int_equal(rc, 0);
 }
 

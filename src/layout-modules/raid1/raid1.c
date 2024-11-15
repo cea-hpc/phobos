@@ -303,11 +303,11 @@ static int raid1_read_split(struct pho_encoder *dec)
     iod = &io_context->iods[0];
     loc = make_ext_location(dec, 0);
 
-    iod->iod_fd = dec->xfer->xd_fd;
+    iod->iod_fd = dec->xfer->xd_targets->xt_fd;
     iod->iod_size = loc.extent->size;
     iod->iod_loc = &loc;
 
-    return ioa_get(iod->iod_ioa, dec->xfer->xd_objid, iod);
+    return ioa_get(iod->iod_ioa, dec->xfer->xd_targets->xt_objid, iod);
 }
 
 static int raid1_get_block_size(struct pho_encoder *enc,
@@ -390,7 +390,7 @@ static int layout_raid1_encode(struct pho_encoder *enc)
     io_context->name = PLUGIN_NAME;
     io_context->n_data_extents = 1;
     io_context->n_parity_extents = repl_count - 1;
-    io_context->write.to_write = enc->xfer->xd_params.put.size;
+    io_context->write.to_write = enc->xfer->xd_targets->xt_size;
     io_context->nb_hashes = repl_count;
     io_context->hashes = xcalloc(io_context->nb_hashes,
                                  sizeof(*io_context->hashes));

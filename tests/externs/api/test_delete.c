@@ -48,10 +48,21 @@ static bool test_delete_null_list(void)
 
 static bool test_delete_success(void)
 {
+    struct pho_xfer_target targets[] = {
+        { .xt_objid = "test-oid1" },
+        { .xt_objid = "test-oid2" },
+        { .xt_objid = "test-oid3" }
+    };
     struct pho_xfer_desc xfers[] = {
-        { .xd_objid = "test-oid1" },
-        { .xd_objid = "test-oid2" },
-        { .xd_objid = "test-oid3" }
+        { .xd_ntargets = 1,
+          .xd_targets = &targets[0],
+        },
+        { .xd_ntargets = 1,
+          .xd_targets = &targets[1],
+        },
+        { .xd_ntargets = 1,
+          .xd_targets = &targets[2],
+        }
     };
     int rc;
 
@@ -60,22 +71,23 @@ static bool test_delete_success(void)
     if (rc)
         return false;
 
-    free(xfers[0].xd_objuuid);
+    free(xfers[0].xd_targets->xt_objuuid);
 
     /* process the other xfer elements */
     rc = phobos_delete(xfers + 1, 2);
     if (rc)
         return false;
 
-    free(xfers[1].xd_objuuid);
-    free(xfers[2].xd_objuuid);
+    free(xfers[1].xd_targets->xt_objuuid);
+    free(xfers[2].xd_targets->xt_objuuid);
 
     return true;
 }
 
 static bool test_delete_failure(void)
 {
-    struct pho_xfer_desc xfer = { .xd_objid = "not-an-object" };
+    struct pho_xfer_target target = { .xt_objid = "not-an-object" };
+    struct pho_xfer_desc xfer = { .xd_ntargets = 1, .xd_targets = &target };
     int rc;
 
     rc = phobos_delete(&xfer, 1);

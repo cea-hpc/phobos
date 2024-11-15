@@ -86,18 +86,20 @@ static int global_teardown(void **state)
 static int local_setup(void **state, char *oid)
 {
     struct phobos_locate_state *pl_state = (struct phobos_locate_state *)*state;
+    struct pho_xfer_target target = {0};
     struct pho_xfer_desc xfer = {0};
     int rc;
 
     /* open the xfer path and properly set xfer values */
+    xfer.xd_targets = &target;
     xfer_desc_open_path(&xfer, "/etc/hosts", PHO_XFER_OP_PUT, 0);
     xfer.xd_params.put.family = pl_state->rsc_family;
-    xfer.xd_objid = oid;
-    xfer.xd_attrs.attr_set = NULL;
+    xfer.xd_targets->xt_objid = oid;
+    xfer.xd_targets->xt_attrs.attr_set = NULL;
 
     /* put the object and close the descriptor */
     rc = phobos_put(&xfer, 1, NULL, NULL);
-    xfer_desc_close_fd(&xfer);
+    xfer_close_fd(xfer.xd_targets);
     assert_return_code(rc, -rc);
     assert_return_code(xfer.xd_rc, -xfer.xd_rc);
     pho_xfer_desc_clean(&xfer);
@@ -349,6 +351,7 @@ static void pl(void **state)
 {
     struct phobos_locate_state *pl_state = (struct phobos_locate_state *)*state;
     struct object_info *obj = pl_state->objs;
+    struct pho_xfer_target target = {0};
     const char *myself_hostname = NULL;
     struct pho_xfer_desc xfer = { 0 };
     struct media_info *medium;
@@ -379,7 +382,9 @@ static void pl(void **state)
     pl_hostname(HOSTNAME, HOSTNAME, state, true);
 
     /* move object to deprecated table */
-    xfer.xd_objid = obj->oid;
+    xfer.xd_targets = &target;
+    xfer.xd_ntargets = 1;
+    xfer.xd_targets->xt_objid = obj->oid;
     rc = phobos_delete(&xfer, 1);
     pho_xfer_desc_clean(&xfer);
     assert_return_code(rc, -rc);
@@ -426,27 +431,27 @@ static void assert_get_hostname(struct pho_xfer_desc xfer,
     else
         assert_null(xfer.xd_params.get.node_name);
     free(xfer.xd_params.get.node_name);
-    free(xfer.xd_objuuid);
+    free(xfer.xd_targets->xt_objuuid);
 }
 
 static void pgl_scenario(struct pho_xfer_desc xfer, struct object_info *obj,
                          const char *hostname, int expected)
 {
     /* good OID*/
-    xfer.xd_objid = obj->oid;
-    xfer.xd_objuuid = NULL;
-    xfer.xd_version = 0;
+    xfer.xd_targets->xt_objid = obj->oid;
+    xfer.xd_targets->xt_objuuid = NULL;
+    xfer.xd_targets->xt_version = 0;
     assert_get_hostname(xfer, hostname, expected);
 
     /* good OID, good VERSION */
-    xfer.xd_objid = obj->oid;
-    xfer.xd_objuuid = NULL;
-    xfer.xd_version = obj->version;
+    xfer.xd_targets->xt_objid = obj->oid;
+    xfer.xd_targets->xt_objuuid = NULL;
+    xfer.xd_targets->xt_version = obj->version;
     assert_get_hostname(xfer, hostname, expected);
 
     /* good OID, good UUID, good VERSION */
-    xfer.xd_objid = obj->oid;
-    xfer.xd_objuuid = obj->uuid;
+    xfer.xd_targets->xt_objid = obj->oid;
+    xfer.xd_targets->xt_objuuid = obj->uuid;
     assert_get_hostname(xfer, hostname, expected);
 }
 
@@ -454,6 +459,7 @@ static void pgl(void **state)
 {
     struct phobos_locate_state *pl_state = (struct phobos_locate_state *)*state;
     struct object_info *obj = pl_state->objs;
+    struct pho_xfer_target target = {0};
     struct pho_xfer_desc xfer = { 0 };
     struct media_info *medium;
     const char *myself = NULL;
@@ -464,6 +470,7 @@ static void pgl(void **state)
     assert_non_null(myself);
 
     /* Open xfer descriptor */
+    xfer.xd_targets = &target;
     xfer_desc_open_path(&xfer, "/etc/hosts", PHO_XFER_OP_GET,
                         PHO_XFER_OBJ_REPLACE | PHO_XFER_OBJ_BEST_HOST);
 
@@ -489,7 +496,7 @@ static void pgl(void **state)
     unlock_medium(pl_state, medium, cnt);
 
     /* Close xfer descriptor */
-    xfer_desc_close_fd(&xfer);
+    xfer_close_fd(xfer.xd_targets);
 }
 
 #define NB_ARGS 1
