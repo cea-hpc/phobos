@@ -60,6 +60,7 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
     char layout_name[NAME_MAX];
     struct layout_module *mod;
     int rc;
+    int i;
 
     rc = build_layout_name(xfer->xd_params.put.layout_name, layout_name,
                            sizeof(layout_name));
@@ -84,9 +85,11 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
     enc->is_decoder = false;
     enc->done = false;
     enc->xfer = xfer;
-    enc->layout = xcalloc(1, sizeof(*enc->layout));
-    enc->layout->oid = xfer->xd_targets->xt_objid;
-    enc->layout->wr_size = xfer->xd_targets->xt_size;
+    enc->layout = xcalloc(enc->xfer->xd_ntargets, sizeof(*enc->layout));
+    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+        enc->layout[i].oid = xfer->xd_targets[i].xt_objid;
+        enc->layout[i].wr_size = xfer->xd_targets[i].xt_size;
+    }
 
     /* get io_block_size from conf */
     rc = get_cfg_io_block_size(&enc->io_block_size);
@@ -246,10 +249,14 @@ int layout_reconstruct(struct layout_info lyt, struct object_info *obj)
 
 void layout_destroy(struct pho_encoder *enc)
 {
+    int i;
+
     /* Only encoders own their layout */
     if (!enc->is_decoder && enc->layout != NULL) {
-        pho_attrs_free(&enc->layout->layout_desc.mod_attrs);
-        layout_info_free_extents(enc->layout);
+        for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+            pho_attrs_free(&enc->layout[i].layout_desc.mod_attrs);
+            layout_info_free_extents(&enc->layout[i]);
+        }
         free(enc->layout);
         enc->layout = NULL;
     }

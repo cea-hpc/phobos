@@ -91,24 +91,28 @@ const struct pho_config_item raid4_cfg_items[] = {
 
 static int layout_raid4_encode(struct pho_encoder *enc)
 {
+    struct raid_io_context *io_contexts;
     struct raid_io_context *io_context;
+    int i, j;
     int rc;
-    int i;
 
     ENTRY;
 
-    io_context = xcalloc(1, sizeof(*io_context));
-    enc->priv_enc = io_context;
-    io_context->name = PLUGIN_NAME;
-    io_context->n_data_extents = 2;
-    io_context->n_parity_extents = 1;
-    io_context->write.to_write = enc->xfer->xd_targets->xt_size;
-    io_context->nb_hashes = 3;
-    io_context->hashes = xcalloc(io_context->nb_hashes,
-                                 sizeof(*io_context->hashes));
+    io_contexts = xcalloc(enc->xfer->xd_ntargets, sizeof(*io_contexts));
+    enc->priv_enc = io_contexts;
 
-    for (i = 0; i < io_context->nb_hashes; i++) {
-        rc = extent_hash_init(&io_context->hashes[i],
+    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+        io_context = &io_contexts[i];
+        io_context->name = PLUGIN_NAME;
+        io_context->n_data_extents = 2;
+        io_context->n_parity_extents = 1;
+        io_context->write.to_write = enc->xfer->xd_targets[i].xt_size;
+        io_context->nb_hashes = 3;
+        io_context->hashes = xcalloc(io_context->nb_hashes,
+                                     sizeof(*io_context->hashes));
+
+        for (j = 0; j < io_context->nb_hashes; j++) {
+            rc = extent_hash_init(&io_context->hashes[j],
                               PHO_CFG_GET_BOOL(raid4_cfg_items,
                                                PHO_CFG_LYT_RAID4,
                                                extent_md5,
@@ -117,17 +121,21 @@ static int layout_raid4_encode(struct pho_encoder *enc)
                                                PHO_CFG_LYT_RAID4,
                                                extent_xxh128,
                                                false));
-        if (rc)
-            goto out_hash;
+            if (rc)
+                goto out_hash;
+        }
     }
 
     return raid_encoder_init(enc, &RAID4_MODULE_DESC, &RAID4_ENCODER_OPS,
                              &RAID4_OPS);
 
 out_hash:
-    for (i -= 1; i >= 0; i--)
-        extent_hash_fini(&io_context->hashes[i]);
-    io_context->nb_hashes = 0;
+    for (i -= 1; i >= 0; i--) {
+        io_context = &io_contexts[i];
+        for (j = 0; j < io_context->nb_hashes; j++)
+            extent_hash_fini(&io_context->hashes[i]);
+        io_context->nb_hashes = 0;
+    }
 
     /* The rest will be free'd by layout_destroy */
     return rc;

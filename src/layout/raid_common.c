@@ -61,9 +61,10 @@ static void free_extent_address_buff(void *void_extent)
     free(extent->address.buff);
 }
 
-static int init_posix_iod(struct pho_encoder *enc)
+static int init_posix_iod(struct pho_encoder *enc, int target_idx)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
+    struct raid_io_context *io_context =
+            &((struct raid_io_context *) enc->priv_enc)[target_idx];
     int rc;
     int fd;
 
@@ -75,16 +76,17 @@ static int init_posix_iod(struct pho_encoder *enc)
      * descriptor of the Xfer. This file descriptor is managed by Python in the
      * CLI for example.
      */
-    fd = dup(enc->xfer->xd_targets->xt_fd);
+    fd = dup(enc->xfer->xd_targets[target_idx].xt_fd);
     if (fd == -1)
         return -errno;
 
     return iod_from_fd(io_context->posix.iod_ioa, &io_context->posix, fd);
 }
 
-static void close_posix_iod(struct pho_encoder *enc)
+static void close_posix_iod(struct pho_encoder *enc, int target_idx)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
+    struct raid_io_context *io_context =
+            &((struct raid_io_context *) enc->priv_enc)[target_idx];
 
     if (io_context->posix.iod_ioa)
         ioa_close(io_context->posix.iod_ioa, &io_context->posix);
@@ -98,95 +100,109 @@ int raid_encoder_init(struct pho_encoder *enc,
     struct raid_io_context *io_context = enc->priv_enc;
     size_t n_extents = n_total_extents(io_context);
     int rc;
+    int i;
 
     assert(!enc->is_decoder);
-
-    if (enc->xfer->xd_targets->xt_fd < 0)
-        LOG_RETURN(-EBADF, "raid: invalid xfer file descriptor in '%s' encoder",
-                   enc->xfer->xd_targets->xt_objid);
 
     /* The ops field is set early to allow the caller to call the destroy
      * function on error.
      */
     enc->ops = enc_ops;
-    /* Do not copy mod_attrs as it may have been modified by the caller before
-     * this function is called.
-     */
-    enc->layout->layout_desc.mod_name = module->mod_name;
-    enc->layout->layout_desc.mod_minor = module->mod_minor;
-    enc->layout->layout_desc.mod_major = module->mod_major;
-    io_context->ops = raid_ops;
 
-    /* Build the extent attributes from the object ID and the user provided
-     * attributes. This information will be attached to backend objects for
-     * "self-description"/"rebuild" purpose.
-     */
-    io_context->write.user_md = g_string_new(NULL);
-    rc = pho_attrs_to_json(&enc->xfer->xd_targets->xt_attrs,
-                           io_context->write.user_md,
-                           PHO_ATTR_BACKUP_JSON_FLAGS);
-    if (rc) {
-        g_string_free(io_context->write.user_md, TRUE);
-        LOG_RETURN(rc, "Failed to convert attributes to JSON");
+    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+        io_context = &((struct raid_io_context *) enc->priv_enc)[i];
+        n_extents = n_total_extents(io_context);
+
+        if (enc->xfer->xd_targets[i].xt_fd < 0)
+            LOG_RETURN(-EBADF,
+                       "raid: invalid xfer file descriptor in '%s' encoder",
+                       enc->xfer->xd_targets[i].xt_objid);
+
+        /* Do not copy mod_attrs as it may have been modified by the caller
+         * before this function is called.
+         */
+        enc->layout[i].layout_desc.mod_name = module->mod_name;
+        enc->layout[i].layout_desc.mod_minor = module->mod_minor;
+        enc->layout[i].layout_desc.mod_major = module->mod_major;
+        io_context->ops = raid_ops;
+
+        /* Build the extent attributes from the object ID and the user provided
+         * attributes. This information will be attached to backend objects for
+         * "self-description"/"rebuild" purpose.
+         */
+        io_context->write.user_md = g_string_new(NULL);
+        rc = pho_attrs_to_json(&enc->xfer->xd_targets[i].xt_attrs,
+                               io_context->write.user_md,
+                               PHO_ATTR_BACKUP_JSON_FLAGS);
+        if (rc) {
+            g_string_free(io_context->write.user_md, TRUE);
+            LOG_RETURN(rc, "Failed to convert attributes to JSON");
+        }
+
+        rc = init_posix_iod(enc, i);
+        if (rc)
+            /* io_context is free'd by layout_destroy */
+            return rc;
+
+        io_context->write.written_extents = g_array_new(FALSE, TRUE,
+                                                        sizeof(struct extent));
+        g_array_set_clear_func(io_context->write.written_extents,
+                               free_extent_address_buff);
+
+        io_context->write.to_release_media =
+            g_hash_table_new_full(g_pho_id_hash, g_pho_id_equal, free, free);
+
+        io_context->iods = xcalloc(n_extents, sizeof(*io_context->iods));
+        io_context->write.extents = xcalloc(n_extents,
+                                            sizeof(*io_context->write.extents));
+        io_context->buffers = xmalloc(n_extents * sizeof(*io_context->buffers));
     }
-
-    rc = init_posix_iod(enc);
-    if (rc)
-        /* io_context is free'd by layout_destroy */
-        return rc;
-
-    io_context->write.written_extents = g_array_new(FALSE, TRUE,
-                                                    sizeof(struct extent));
-    g_array_set_clear_func(io_context->write.written_extents,
-                           free_extent_address_buff);
-
-    io_context->write.to_release_media =
-        g_hash_table_new_full(g_pho_id_hash, g_pho_id_equal, free, free);
-
-    io_context->iods = xcalloc(n_extents, sizeof(*io_context->iods));
-    io_context->write.extents = xcalloc(n_extents,
-                                        sizeof(*io_context->write.extents));
-    io_context->buffers = xmalloc(n_extents * sizeof(*io_context->buffers));
 
     return 0;
 }
 
 void raid_encoder_destroy(struct pho_encoder *enc)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
-    int i;
+    struct raid_io_context *io_context;
+    int i, j;
 
-    if (!io_context)
-        return;
+    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+        io_context = &((struct raid_io_context *) enc->priv_enc)[i];
 
-    close_posix_iod(enc);
+        if (!io_context)
+            return;
 
-    if (!enc->is_decoder) {
-        if (io_context->write.written_extents)
-            g_array_free(io_context->write.written_extents, TRUE);
+        close_posix_iod(enc, i);
 
-        if (io_context->write.to_release_media)
-            g_hash_table_destroy(io_context->write.to_release_media);
+        if (!enc->is_decoder) {
+            if (io_context->write.written_extents)
+                g_array_free(io_context->write.written_extents, TRUE);
 
-        io_context->write.written_extents = NULL;
-        io_context->write.to_release_media = NULL;
-        free(io_context->write.extents);
-        free(io_context->iods);
-        g_string_free(io_context->write.user_md, TRUE);
-    } else if (!enc->delete_action) {
-        free(io_context->read.extents);
-        free(io_context->iods);
-    } else {
-        free(io_context->delete.extents);
-        free(io_context->iods);
+            if (io_context->write.to_release_media)
+                g_hash_table_destroy(io_context->write.to_release_media);
+
+            io_context->write.written_extents = NULL;
+            io_context->write.to_release_media = NULL;
+            free(io_context->write.extents);
+            free(io_context->iods);
+            g_string_free(io_context->write.user_md, TRUE);
+
+        } else if (!enc->delete_action) {
+            free(io_context->read.extents);
+            free(io_context->iods);
+        } else {
+            free(io_context->delete.extents);
+            free(io_context->iods);
+        }
+
+        for (j = 0; j < io_context->nb_hashes; j++)
+            extent_hash_fini(&io_context->hashes[j]);
+
+        free(io_context->hashes);
+        free(io_context->buffers);
     }
 
-    for (i = 0; i < io_context->nb_hashes; i++)
-        extent_hash_fini(&io_context->hashes[i]);
-
-    free(io_context->hashes);
-    free(io_context->buffers);
-    free(io_context);
+    free(enc->priv_enc);
     enc->priv_enc = NULL;
 }
 
@@ -213,7 +229,7 @@ int raid_decoder_init(struct pho_encoder *dec,
                                        sizeof(*io_context->read.extents));
     io_context->buffers = xmalloc(n_extents * sizeof(*io_context->buffers));
 
-    rc = init_posix_iod(dec);
+    rc = init_posix_iod(dec, 0);
     if (rc) {
         free(io_context);
         return rc;
@@ -241,9 +257,10 @@ int raid_delete_decoder_init(struct pho_encoder *dec,
     return 0;
 }
 
-static size_t remaining_io_size(struct pho_encoder *enc)
+static size_t remaining_io_size(struct pho_encoder *enc, int idx)
 {
-    const struct raid_io_context *io_context = enc->priv_enc;
+    const struct raid_io_context *io_context =
+            &((struct raid_io_context *) enc->priv_enc)[idx];
 
     if (enc->is_decoder)
         return io_context->read.to_read;
@@ -251,16 +268,17 @@ static size_t remaining_io_size(struct pho_encoder *enc)
         return io_context->write.to_write;
 }
 
-static bool no_more_alloc(struct pho_encoder *enc)
+static bool no_more_alloc(struct pho_encoder *enc, int idx)
 {
-    const struct raid_io_context *io_context = enc->priv_enc;
+    const struct raid_io_context *io_context =
+        &((struct raid_io_context *) enc->priv_enc)[idx];
 
     /* ended encoder */
     if (enc->done)
         return true;
 
     /* still some I/O to do */
-    if (remaining_io_size(enc) > 0)
+    if (remaining_io_size(enc, idx) > 0)
         return false;
 
     /* decoder with no more to read */
@@ -276,9 +294,10 @@ static bool no_more_alloc(struct pho_encoder *enc)
 }
 
 static char *raid_enc_root_path(struct pho_encoder *enc,
-                                size_t i)
+                                size_t i, int target_idx)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
+    struct raid_io_context *io_context =
+        &((struct raid_io_context *) enc->priv_enc)[target_idx];
 
     if (!enc->is_decoder)
         return io_context->write.resp->media[i]->root_path;
@@ -289,9 +308,10 @@ static char *raid_enc_root_path(struct pho_encoder *enc,
 }
 
 static enum address_type raid_enc_addr_type(struct pho_encoder *enc,
-                                            size_t i)
+                                            size_t i, int target_idx)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
+    struct raid_io_context *io_context =
+        &((struct raid_io_context *) enc->priv_enc)[target_idx];
 
     if (!enc->is_decoder)
         return io_context->write.resp->media[i]->addr_type;
@@ -302,9 +322,10 @@ static enum address_type raid_enc_addr_type(struct pho_encoder *enc,
 }
 
 static struct extent *raid_enc_extent(struct pho_encoder *enc,
-                                      size_t i)
+                                      size_t i, int target_idx)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
+    struct raid_io_context *io_context =
+        &((struct raid_io_context *) enc->priv_enc)[target_idx];
 
     if (!enc->is_decoder)
         return &io_context->write.extents[i];
@@ -314,42 +335,46 @@ static struct extent *raid_enc_extent(struct pho_encoder *enc,
         return io_context->delete.extents[i];
 }
 
-static struct pho_io_descr *raid_enc_iod(struct pho_encoder *enc, size_t i)
+static struct pho_io_descr *raid_enc_iod(struct pho_encoder *enc, size_t i,
+                                         int target_idx)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
+    struct raid_io_context *io_context =
+        &((struct raid_io_context *) enc->priv_enc)[target_idx];
 
     return &io_context->iods[i];
 }
 
-struct pho_ext_loc make_ext_location(struct pho_encoder *enc, size_t i)
+struct pho_ext_loc make_ext_location(struct pho_encoder *enc, size_t i,
+                                     int target_idx)
 {
     return (struct pho_ext_loc) {
-        .root_path = raid_enc_root_path(enc, i),
-        .addr_type = raid_enc_addr_type(enc, i),
-        .extent = raid_enc_extent(enc, i),
+        .root_path = raid_enc_root_path(enc, i, target_idx),
+        .addr_type = raid_enc_addr_type(enc, i, target_idx),
+        .extent = raid_enc_extent(enc, i, target_idx),
     };
 }
 
 static int raid_io_context_open(struct raid_io_context *io_context,
                                 struct pho_encoder *enc,
-                                size_t count)
+                                size_t count, int target_idx)
 {
     size_t i;
     int rc;
 
     for (i = 0; i < count; ++i) {
-        struct pho_ext_loc ext_location = make_ext_location(enc, i);
-        struct pho_io_descr *iod = raid_enc_iod(enc, i);
+        struct pho_ext_loc ext_location = make_ext_location(enc, i, target_idx);
+        struct pho_io_descr *iod = raid_enc_iod(enc, i, target_idx);
 
         iod->iod_size = 0;
         iod->iod_loc = &ext_location;
         if (!enc->is_decoder || !enc->delete_action) {
-            rc = ioa_open(iod->iod_ioa, enc->xfer->xd_targets->xt_objid, iod,
+            rc = ioa_open(iod->iod_ioa,
+                          enc->xfer->xd_targets[target_idx].xt_objid, iod,
                           !enc->is_decoder);
             if (rc)
                 LOG_GOTO(out_close, rc,
                          "raid: unable to open extent for '%s' on '%s':'%s'",
-                         enc->xfer->xd_targets->xt_objid,
+                         enc->xfer->xd_targets[target_idx].xt_objid,
                          ext_location.extent->media.library,
                          ext_location.extent->media.name);
         }
@@ -364,7 +389,7 @@ out_close:
         struct pho_io_descr *iod;
 
         i--;
-        iod = raid_enc_iod(enc, i);
+        iod = raid_enc_iod(enc, i, target_idx);
 
         ioa_close(iod->iod_ioa, iod);
     }
@@ -375,8 +400,12 @@ out_close:
 static void raid_build_write_allocation_req(struct pho_encoder *enc,
                                             pho_req_t *req)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
-    size_t n_extents = n_total_extents(io_context);
+    struct raid_io_context *io_contexts = enc->priv_enc;
+    /* Use the first io_context as they have all the same number of extents.
+     * I/O contexts are defined with the put params.
+     */
+    size_t n_extents = n_total_extents(&io_contexts[0]);
+    size_t size = 0;
     size_t *n_tags;
     int i;
     int j;
@@ -385,16 +414,19 @@ static void raid_build_write_allocation_req(struct pho_encoder *enc,
 
     n_tags = xcalloc(n_extents, sizeof(*n_tags));
 
-    for (i = 0; i < n_total_extents(io_context); ++i)
+    for (i = 0; i < n_extents; ++i)
         n_tags[i] = enc->xfer->xd_params.put.tags.n_tags;
 
     pho_srl_request_write_alloc(req, n_extents, n_tags);
     free(n_tags);
 
+    for (i = 0; i < enc->xfer->xd_ntargets; i++)
+        size += io_contexts[i].write.to_write;
+
     for (i = 0; i < n_extents; ++i) {
         req->walloc->media[i]->size =
-            (io_context->write.to_write + io_context->n_data_extents - 1) /
-            io_context->n_data_extents;
+            (size + io_contexts[0].n_data_extents - 1) /
+                io_contexts[0].n_data_extents;
 
         for (j = 0; j < enc->xfer->xd_params.put.tags.n_tags; ++j)
             req->walloc->media[i]->tags[j] =
@@ -516,9 +548,10 @@ static size_t lcm(size_t a, size_t b)
  * of all the I/O descriptor optimal sizes. If the I/O size is already set in
  * the config, simply return it.
  */
-static size_t best_io_size(struct pho_encoder *enc)
+static size_t best_io_size(struct pho_encoder *enc, int target_idx)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
+    struct raid_io_context *io_context =
+        &((struct raid_io_context *) enc->priv_enc)[target_idx];
     size_t nb_extents;
     size_t best = 0;
     int i;
@@ -542,7 +575,7 @@ static size_t best_io_size(struct pho_encoder *enc)
     for (i = 0; i < nb_extents; i++) {
         size_t io_size = 0;
 
-        get_io_size(raid_enc_iod(enc, i), &io_size);
+        get_io_size(raid_enc_iod(enc, i, target_idx), &io_size);
 
         best = lcm(best, io_size);
     }
@@ -551,9 +584,10 @@ static size_t best_io_size(struct pho_encoder *enc)
 }
 
 static int write_split_setup(struct pho_encoder *enc, pho_resp_write_t *wresp,
-                             size_t split_size)
+                             size_t split_size, int target_idx)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
+    struct raid_io_context *io_context =
+        &((struct raid_io_context *) enc->priv_enc)[target_idx];
     struct pho_io_descr *iods;
     size_t left_to_write;
     size_t object_size;
@@ -561,7 +595,7 @@ static int write_split_setup(struct pho_encoder *enc, pho_resp_write_t *wresp,
     int rc;
     int i;
 
-    object_size = enc->xfer->xd_targets->xt_size;
+    object_size = enc->xfer->xd_targets[target_idx].xt_size;
     left_to_write = io_context->write.to_write;
 
     n_extents = n_total_extents(io_context);
@@ -577,17 +611,18 @@ static int write_split_setup(struct pho_encoder *enc, pho_resp_write_t *wresp,
         iods[i].iod_flags = PHO_IO_REPLACE | PHO_IO_NO_REUSE;
     }
 
-    raid_io_context_setmd(io_context, enc->xfer->xd_targets->xt_objid,
+    raid_io_context_setmd(io_context,
+                          enc->xfer->xd_targets[target_idx].xt_objid,
                           io_context->write.user_md);
     raid_io_context_set_extent_info(io_context, wresp->media,
                                     io_context->current_split * n_extents,
                                     split_size,
                                     object_size - left_to_write);
-    rc = raid_io_context_open(io_context, enc, n_extents);
+    rc = raid_io_context_open(io_context, enc, n_extents, target_idx);
     if (rc)
         return rc;
 
-    enc->io_block_size = best_io_size(enc);
+    enc->io_block_size = best_io_size(enc, target_idx);
     if (split_size < enc->io_block_size)
         enc->io_block_size = split_size;
 
@@ -642,24 +677,25 @@ static void raid_io_add_written_extent(struct raid_io_context *io_context,
 
 static int write_split_fini(struct pho_encoder *enc, int io_rc,
                             pho_req_release_t *release,
-                            size_t split_size)
+                            size_t split_size, int target_idx)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
+    struct raid_io_context *io_context =
+        &((struct raid_io_context *) enc->priv_enc)[target_idx];
     size_t n_extents = n_total_extents(io_context);
     struct object_metadata object_md = {
-        .object_attrs = enc->xfer->xd_targets->xt_attrs,
-        .object_size = enc->xfer->xd_targets->xt_size,
-        .object_version = enc->xfer->xd_targets->xt_version,
+        .object_attrs = enc->xfer->xd_targets[target_idx].xt_attrs,
+        .object_size = enc->xfer->xd_targets[target_idx].xt_size,
+        .object_version = enc->xfer->xd_targets[target_idx].xt_version,
         .layout_name = io_context->name,
-        .object_uuid = enc->xfer->xd_targets->xt_objuuid,
+        .object_uuid = enc->xfer->xd_targets[target_idx].xt_objuuid,
     };
     size_t total_written = 0;
     int rc = 0;
     size_t i;
 
     for (i = 0; i < n_extents; i++) {
-        struct pho_ext_loc ext_location = make_ext_location(enc, i);
-        struct pho_io_descr *iod = raid_enc_iod(enc, i);
+        struct pho_ext_loc ext_location = make_ext_location(enc, i, target_idx);
+        struct pho_io_descr *iod = raid_enc_iod(enc, i, target_idx);
         int rc2;
 
         iod->iod_loc = &ext_location;
@@ -692,7 +728,7 @@ static int write_split_fini(struct pho_encoder *enc, int io_rc,
     }
 
     for (i = 0; i < n_extents; i++) {
-        pho_attrs_free(&raid_enc_iod(enc, i)->iod_attrs);
+        pho_attrs_free(&raid_enc_iod(enc, i, target_idx)->iod_attrs);
         pho_buff_free(&io_context->buffers[i]);
     }
 
@@ -824,7 +860,7 @@ static int read_split_setup(struct pho_encoder *dec,
                                  io_context->read.extents,
                                  io_context->n_data_extents);
 
-    rc = raid_io_context_open(io_context, dec, io_context->n_data_extents);
+    rc = raid_io_context_open(io_context, dec, io_context->n_data_extents, 0);
     if (rc)
         return rc;
 
@@ -836,7 +872,7 @@ static int read_split_setup(struct pho_encoder *dec,
         /* If the layout does not have a prefered I/O size, set it to the best
          * one. For example, RAID1 can use any I/O size.
          */
-        dec->io_block_size = best_io_size(dec);
+        dec->io_block_size = best_io_size(dec, 0);
         if (*split_size < dec->io_block_size)
             dec->io_block_size = *split_size;
 
@@ -907,7 +943,7 @@ static int delete_split_setup(struct pho_encoder *dec,
                                  io_context->delete.extents,
                                  n_extents);
 
-    rc = raid_io_context_open(io_context, dec, n_extents);
+    rc = raid_io_context_open(io_context, dec, n_extents, 0);
     if (rc)
         return rc;
 
@@ -925,7 +961,7 @@ int raid_delete_split(struct pho_encoder *dec)
 
     for (i = 0; i < n_extents; ++i) {
         iod = &io_context->iods[i];
-        loc = make_ext_location(dec, i);
+        loc = make_ext_location(dec, i, 0);
         iod->iod_loc = &loc;
 
         rc = ioa_del(iod->iod_ioa, iod);
@@ -984,9 +1020,9 @@ static int mark_written_medium_released(struct raid_io_context *io_context,
 static int raid_write_handle_release_resp(struct pho_encoder *enc,
                                           pho_resp_release_t *rel_resp)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
+    struct raid_io_context *io_context;
     int rc = 0;
-    int i;
+    int i, j;
 
     for (i = 0; i < rel_resp->n_med_ids; i++) {
         int rc2;
@@ -994,36 +1030,46 @@ static int raid_write_handle_release_resp(struct pho_encoder *enc,
         pho_debug("Marking medium '%s':'%s' as released",
                   rel_resp->med_ids[i]->name,
                   rel_resp->med_ids[i]->library);
-        /* If the media_id is unexpected, -EINVAL will be returned */
-        rc2 = mark_written_medium_released(io_context,
-                                           rel_resp->med_ids[i]);
-        if (rc2 && !rc)
-            rc = rc2;
+        for (j = 0; j < enc->xfer->xd_ntargets; j++) {
+            /* If the media_id is unexpected, -EINVAL will be returned */
+            io_context = &((struct raid_io_context *) enc->priv_enc)[j];
+            rc2 = mark_written_medium_released(io_context,
+                                               rel_resp->med_ids[i]);
+            if (rc2 && !rc)
+                rc = rc2;
+        }
     }
 
     /*
      * If we wrote everything and all the releases have been received, mark the
      * encoder as done.
      */
-    if (io_context->write.to_write == 0 && /* no more data to write */
-        /* at least one extent is created, special test for null size put */
-        io_context->write.written_extents->len > 0 &&
-        /* we got releases of all extents */
-        io_context->write.written_extents->len ==
-        io_context->write.n_released_media) {
+    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+        io_context = &((struct raid_io_context *) enc->priv_enc)[i];
+        if (io_context->write.to_write == 0 && /* no more data to write */
+            /* at least one extent is created, special test for null size put */
+            io_context->write.written_extents->len > 0 &&
+            /* we got releases of all extents */
+            io_context->write.written_extents->len ==
+            io_context->write.n_released_media) {
 
-        /* Fill the layout with the extents */
-        enc->layout->ext_count = io_context->write.written_extents->len;
-        enc->layout->extents = (struct extent *)
+            /* Fill the layout with the extents */
+            enc->layout[i].ext_count = io_context->write.written_extents->len;
+            enc->layout[i].extents = (struct extent *)
             g_array_free(io_context->write.written_extents, FALSE);
-        io_context->write.written_extents = NULL;
+            io_context->write.written_extents = NULL;
 
-        io_context->write.n_released_media = 0;
+            io_context->write.n_released_media = 0;
 
-        for (i = 0; i < enc->layout->ext_count; ++i)
-            enc->layout->extents[i].state = PHO_EXT_ST_SYNC;
+            for (j = 0; j < enc->layout->ext_count; ++j)
+                enc->layout[i].extents[j].state = PHO_EXT_ST_SYNC;
+        } else {
+            break;
+        }
+    }
 
-        /* Switch to DONE state */
+    /* Switch to DONE state */
+    if (i == enc->xfer->xd_ntargets) {
         enc->done = true;
         return 0;
     }
@@ -1035,13 +1081,10 @@ static int raid_enc_handle_write_resp(struct pho_encoder *enc,
                                       pho_resp_t *resp, pho_req_t **reqs,
                                       size_t *n_reqs)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
+    struct raid_io_context *io_context;
     size_t split_size;
-    int rc;
-    int i;
-
-    split_size = (io_context->write.to_write + io_context->n_data_extents - 1) /
-        io_context->n_data_extents;
+    int rc = 0;
+    int i, j;
 
     /*
      * Build release req matching this allocation response, this release
@@ -1056,21 +1099,29 @@ static int raid_enc_handle_write_resp(struct pho_encoder *enc,
         (*reqs)[*n_reqs].release->media[i]->to_sync = true;
         (*reqs)[*n_reqs].release->media[i]->size_written = 0;
         (*reqs)[*n_reqs].release->media[i]->nb_extents_written = 0;
-
-        if (resp->walloc->media[i]->avail_size < split_size)
-            split_size = resp->walloc->media[i]->avail_size;
     }
 
-    io_context->write.resp = resp->walloc;
-    rc = write_split_setup(enc, resp->walloc, split_size);
-    if (rc)
-        goto skip_io;
+    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+        io_context = &((struct raid_io_context *) enc->priv_enc)[i];
+        split_size =
+            (io_context->write.to_write + io_context->n_data_extents - 1) /
+                io_context->n_data_extents;
+        for (j = 0; j < resp->walloc->n_media; j++) {
+            if (resp->walloc->media[j]->avail_size < split_size)
+                split_size = resp->walloc->media[j]->avail_size;
+        }
 
-    /* Perform IO and populate release request with the outcome */
-    rc = io_context->ops->write_split(enc, split_size);
+        io_context->write.resp = resp->walloc;
+        rc = write_split_setup(enc, resp->walloc, split_size, i);
+        if (rc)
+            goto skip_io;
+
+        /* Perform IO and populate release request with the outcome */
+        rc = io_context->ops->write_split(enc, split_size, i);
 
 skip_io:
-    rc = write_split_fini(enc, rc, (*reqs)[*n_reqs].release, split_size);
+        rc = write_split_fini(enc, rc, (*reqs)[*n_reqs].release, split_size, i);
+    }
 
     (*n_reqs)++;
 
@@ -1191,46 +1242,48 @@ skip_io:
 static int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
                                 pho_req_t **reqs, size_t *n_reqs)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
-    size_t n_extents = n_total_extents(io_context);
+    struct raid_io_context *io_context;
     int rc = 0;
+    int i;
 
     if (pho_response_is_error(resp)) {
         enc->xfer->xd_rc = resp->error->rc;
         enc->done = true;
         LOG_RETURN(enc->xfer->xd_rc,
-                   "%s for objid:'%s' received error %s to last request",
+                   "%s %d received error %s to last request",
                    enc->is_decoder ? "Decoder" : "Encoder",
-                   enc->xfer->xd_targets->xt_objid,
-                   pho_srl_error_kind_str(resp->error));
+                   resp->req_id, pho_srl_error_kind_str(resp->error));
 
     } else if (pho_response_is_write(resp)) {
-
-        io_context->requested_alloc = false;
         if (enc->is_decoder)
             LOG_RETURN(-EINVAL, "Decoder received a write response");
 
-        if (resp->walloc->n_media != n_total_extents(io_context))
-            LOG_RETURN(-EINVAL,
-                       "Unexpected number of media. "
-                       "Expected %lu, got %lu",
-                       n_extents,
-                       resp->walloc->n_media);
+        for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+            io_context = &((struct raid_io_context *) enc->priv_enc)[i];
+            io_context->requested_alloc = false;
+
+            if (resp->walloc->n_media != n_total_extents(io_context))
+                LOG_RETURN(-EINVAL,
+                            "Unexpected number of media. "
+                            "Expected %lu, got %lu",
+                            n_total_extents(io_context),
+                            resp->walloc->n_media);
+        }
 
         return raid_enc_handle_write_resp(enc, resp, reqs, n_reqs);
 
     } else if (pho_response_is_read(resp)) {
-
+        io_context = enc->priv_enc;
         io_context->requested_alloc = false;
         if (!enc->is_decoder)
             LOG_RETURN(-EINVAL, "Encoder received a read response");
 
         if (enc->delete_action) {
-            if (resp->ralloc->n_media != n_extents)
+            if (resp->ralloc->n_media != n_total_extents(io_context))
                 LOG_RETURN(-EINVAL,
                            "Unexpected number of media. "
                            "Expected %lu, got %lu",
-                           n_extents,
+                           n_total_extents(io_context),
                            resp->ralloc->n_media);
             return raid_enc_handle_delete_resp(enc, resp, reqs, n_reqs);
         }
@@ -1258,15 +1311,18 @@ static int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
 int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
                       pho_req_t **reqs, size_t *n_reqs)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
+    struct raid_io_context *io_context;
     int rc = 0;
+    int i;
 
     ENTRY;
 
-    if (enc->xfer->xd_targets->xt_fd < 0 &&
-        !(enc->is_decoder && enc->delete_action))
-        LOG_RETURN(-EBADF, "No file descriptor in %s",
-                   enc->is_decoder ? "decoder" : "encoder");
+    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+        if (enc->xfer->xd_targets[i].xt_fd < 0 &&
+            !(enc->is_decoder && enc->delete_action))
+            LOG_RETURN(-EBADF, "No file descriptor in %s",
+                       enc->is_decoder ? "decoder" : "encoder");
+    }
 
     /* At most 2 requests will be emitted, allocate optimistically */
     *reqs = xcalloc(2, sizeof(**reqs));
@@ -1275,12 +1331,20 @@ int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
     if (resp)
         rc = raid_enc_handle_resp(enc, resp, reqs, n_reqs);
 
-    /* Do we need to generate a new alloc ? */
-    if (rc || /* an error happened */
-        io_context->requested_alloc || /* an alloc was already requested */
-        no_more_alloc(enc))
+    if (rc)
         goto out;
 
+    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+        io_context = &((struct raid_io_context *) enc->priv_enc)[i];
+
+        /* go to alloc if the I/O context is not finished */
+        if (!io_context->requested_alloc && !no_more_alloc(enc, i))
+            goto alloc;
+    }
+
+    goto out;
+
+alloc:
     /* Build next request */
     if (enc->is_decoder)
         if (enc->delete_action)
@@ -1291,7 +1355,10 @@ int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
         raid_build_write_allocation_req(enc, *reqs + *n_reqs);
 
     (*n_reqs)++;
-    io_context->requested_alloc = true;
+    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+        io_context = &((struct raid_io_context *) enc->priv_enc)[i];
+        io_context->requested_alloc = true;
+    }
 
 out:
     if (*n_reqs == 0) {

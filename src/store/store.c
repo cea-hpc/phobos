@@ -970,7 +970,8 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
 {
     struct pho_encoder *enc = &pho->encoders[xfer_idx];
     struct pho_xfer_desc *xfer = &pho->xfers[xfer_idx];
-    int i;
+    int rc2 = 0;
+    int i, j;
 
     /* Don't end an encoder twice */
     if (pho->ended_xfers[xfer_idx])
@@ -983,40 +984,53 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
 
     /* Once the encoder is done and successful, save the layout and metadata */
     if (!enc->is_decoder && xfer->xd_rc == 0 && rc == 0) {
-        pho_debug("Saving layout for objid:'%s'", xfer->xd_targets->xt_objid);
-        rc = dss_extent_insert(&pho->dss, enc->layout->extents,
-                               enc->layout->ext_count);
-        if (rc) {
-            pho_error(rc, "Error while saving extents for objid: '%s'",
-                      xfer->xd_targets->xt_objid);
-        } else {
-            rc = dss_layout_insert(&pho->dss, enc->layout, 1);
-            if (rc) {
-                int rc2;
-
-                pho_error(rc, "Error while saving layout for objid: '%s'",
-                          xfer->xd_targets->xt_objid);
-
-                for (i = 0; i < enc->layout->ext_count; ++i)
-                    enc->layout->extents[i].state = PHO_EXT_ST_ORPHAN;
-
-                rc2 = dss_extent_update(&pho->dss, enc->layout->extents,
-                                        enc->layout->extents,
-                                        enc->layout->ext_count);
-
-                if (rc2)
-                    pho_error(rc2, "Error while updating extents to orphan");
+        for (i = 0; i < xfer->xd_ntargets; i++) {
+            pho_debug("Saving layout for objid:'%s'",
+                      xfer->xd_targets[i].xt_objid);
+            rc2 = dss_extent_insert(&pho->dss, enc->layout[i].extents,
+                                    enc->layout[i].ext_count);
+            if (rc2) {
+                pho_error(rc2, "Error while saving extents for objid: '%s'",
+                          xfer->xd_targets[i].xt_objid);
+                rc = rc ? : rc2;
+                break;
             } else {
-                struct object_info obj = {
-                    .oid = xfer->xd_targets->xt_objid,
-                    .obj_status = PHO_OBJ_STATUS_COMPLETE,
-                };
+                rc2 = dss_layout_insert(&pho->dss, &enc->layout[i], 1);
+                if (rc2) {
+                    pho_error(rc2, "Error while saving layout for objid: '%s'",
+                              xfer->xd_targets[i].xt_objid);
+                    rc = rc ? : rc2;
 
-                rc = dss_object_update(&pho->dss, &obj, &obj, 1,
-                                       DSS_OBJECT_UPDATE_OBJ_STATUS);
-                if (rc)
-                    pho_error(rc,
-                              "Error while updating object status to complete");
+                    for (j = 0; j < enc->layout[i].ext_count; ++j)
+                        enc->layout[i].extents[j].state = PHO_EXT_ST_ORPHAN;
+
+                    rc2 = dss_extent_update(&pho->dss, enc->layout[i].extents,
+                                            enc->layout[i].extents,
+                                            enc->layout[i].ext_count);
+
+                    if (rc2) {
+                        pho_error(rc2,
+                                  "Error while updating extents to orphan");
+                        rc = rc ? : rc2;
+                        break;
+                    }
+                    break;
+                } else {
+                    struct object_info obj = {
+                        .oid = xfer->xd_targets[i].xt_objid,
+                        .obj_status = PHO_OBJ_STATUS_COMPLETE,
+                    };
+
+                    rc2 = dss_object_update(&pho->dss, &obj, &obj, 1,
+                                           DSS_OBJECT_UPDATE_OBJ_STATUS);
+                    if (rc2) {
+                        pho_error(rc2,
+                                  "Error while updating object status "
+                                  "to complete");
+                        rc = rc ? : rc2;
+                        break;
+                    }
+                }
             }
         }
     }
@@ -1062,16 +1076,20 @@ cont:
     if (xfer->xd_rc == 0 && rc != 0)
         xfer->xd_rc = rc;
 
-    pho_info("%s operation for %s:'%s' %s",
-             xfer_op2str(xfer->xd_op),
-             is_uuid_arg(xfer->xd_targets, xfer->xd_op) ? "uuid" : "oid",
-             oid_or_uuid_val(xfer->xd_targets, xfer->xd_op),
-             xfer->xd_rc ? "failed" : "succeeded");
+    for (i = 0; i < xfer->xd_ntargets; i++)
+        pho_info("%s operation for %s:'%s' %s",
+                 xfer_op2str(xfer->xd_op),
+                 is_uuid_arg(&xfer->xd_targets[i], xfer->xd_op) ?
+                    "uuid" : "oid",
+                 oid_or_uuid_val(&xfer->xd_targets[i], xfer->xd_op),
+                 xfer->xd_rc ? "failed" : "succeeded");
 
     /* Cleanup metadata for failed PUT */
     if (pho->md_created && pho->md_created[xfer_idx] &&
-            xfer->xd_op == PHO_XFER_OP_PUT && xfer->xd_rc)
-        object_md_del(&pho->dss, xfer->xd_targets);
+            xfer->xd_op == PHO_XFER_OP_PUT && xfer->xd_rc) {
+        for (i = 0; i < xfer->xd_ntargets; i++)
+            object_md_del(&pho->dss, &xfer->xd_targets[i]);
+    }
 
     if (pho->cb)
         pho->cb(pho->udata, xfer, rc);
@@ -1158,9 +1176,12 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
         if (rc)
             return rc;
 
-        /* Check that xfers contains only one object */
-        if (xfers->xd_ntargets > 1)
-            return -EINVAL;
+        /* Xfer can only contain more than 1 object if it's a PUT operation
+         * with the no_split option.
+         */
+        if (xfers->xd_ntargets > 1 && !xfers->xd_params.put.no_split &&
+            xfers->xd_op != PHO_XFER_OP_PUT)
+            return -ENOTSUP;
     }
 
     /* Ensure conf is loaded */
@@ -1194,13 +1215,13 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
 
     /* Initialize all the encoders */
     for (i = 0; i < n_xfers; i++) {
-        pho_debug("Initializing %s %ld for objid:'%s'",
+        pho_debug("Initializing %s %ld for %d objid(s)",
                   pho->encoders[i].is_decoder ? "decoder" : "encoder",
-                  i, pho->xfers[i].xd_targets->xt_objid);
+                  i, pho->xfers[i].xd_ntargets);
         rc = init_enc_or_dec(&pho->encoders[i], &pho->dss, &pho->xfers[i]);
         if (rc)
-            pho_error(rc, "Error while creating encoders for objid:'%s'",
-                      pho->xfers[i].xd_targets->xt_objid);
+            pho_error(rc, "Error while creating encoders for %d objid(s)",
+                      pho->xfers[i].xd_ntargets);
         if (rc || pho->encoders[i].done)
             store_end_xfer(pho, i, rc);
         rc = 0;
@@ -1219,10 +1240,9 @@ static int store_lrs_response_process(struct phobos_handle *pho,
     struct pho_encoder *encoder = &pho->encoders[resp->req_id];
     int rc;
 
-    pho_debug("%s for objid:'%s' received a response of type %s",
-              encoder->is_decoder ? "Decoder" : "Encoder",
-              encoder->xfer->xd_targets->xt_objid,
-              pho_srl_response_kind_str(resp));
+    pho_debug("%s %d for %d objid(s) received a response of type %s",
+              encoder->is_decoder ? "Decoder" : "Encoder", resp->req_id,
+              encoder->xfer->xd_ntargets, pho_srl_response_kind_str(resp));
 
     rc = encoder_communicate(encoder, &pho->comm, resp, resp->req_id);
 
@@ -1231,8 +1251,8 @@ static int store_lrs_response_process(struct phobos_handle *pho,
         store_end_xfer(pho, resp->req_id, rc);
 
     if (rc)
-        pho_error(rc, "Error while sending response to layout for %s",
-                  encoder->xfer->xd_targets->xt_objid);
+        pho_error(rc, "Error while sending response to layout for %s %d",
+                  encoder->is_decoder ? "decoder" : "encoder", resp->req_id);
 
     return rc;
 }
@@ -1316,7 +1336,8 @@ static int store_dispatch_loop(struct phobos_handle *pho)
  */
 static int store_perform_xfers(struct phobos_handle *pho)
 {
-    size_t i;
+    int rc2 = 0;
+    size_t i, j;
     int rc = 0;
 
     /**
@@ -1354,12 +1375,18 @@ static int store_perform_xfers(struct phobos_handle *pho)
 
         if (pho->xfers[i].xd_op != PHO_XFER_OP_PUT)
             continue;
+        for (j = 0; j < pho->xfers[i].xd_ntargets; j++) {
+            rc2 = object_md_save(&pho->dss, &pho->xfers[i].xd_targets[j],
+                                 pho->xfers[i].xd_params.put.overwrite);
+            if (rc2) {
+                pho_error(rc2, "Error while saving metadata for objid:'%s'",
+                          pho->xfers[i].xd_targets[i].xt_objid);
+                rc = rc ? : rc2;
+                break;
+            }
+        }
 
-        rc = object_md_save(&pho->dss, pho->xfers[i].xd_targets,
-                            pho->xfers[i].xd_params.put.overwrite);
         if (rc && !pho->encoders[i].done) {
-            pho_error(rc, "Error while saving metadata for objid:'%s'",
-                      pho->xfers[i].xd_targets->xt_objid);
             store_end_xfer(pho, i, rc);
             break;
         }

@@ -65,9 +65,11 @@ static int set_raid4_md(struct raid_io_context *io_context, size_t chunk_size)
     return rc;
 }
 
-int raid4_write_split(struct pho_encoder *enc, size_t split_size)
+int raid4_write_split(struct pho_encoder *enc, size_t split_size,
+                      int target_idx)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
+    struct raid_io_context *io_context =
+        &((struct raid_io_context *) enc->priv_enc)[target_idx];
     struct pho_io_descr *posix = &io_context->posix;
     size_t buf_size = io_context->buffers[0].size;
     struct pho_io_descr *iods = io_context->iods;

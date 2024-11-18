@@ -199,9 +199,11 @@ attrs_free:
     return rc;
 }
 
-static int raid1_write_split(struct pho_encoder *enc, size_t split_size)
+static int raid1_write_split(struct pho_encoder *enc, size_t split_size,
+                             int target_idx)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
+    struct raid_io_context *io_context =
+        &((struct raid_io_context *) enc->priv_enc)[target_idx];
     size_t repl_count = io_context->n_data_extents +
         io_context->n_parity_extents;
     struct pho_io_descr *iods;
@@ -301,7 +303,7 @@ static int raid1_read_split(struct pho_encoder *dec)
         return checked_read(dec);
 
     iod = &io_context->iods[0];
-    loc = make_ext_location(dec, 0);
+    loc = make_ext_location(dec, 0, 0);
 
     iod->iod_fd = dec->xfer->xd_targets->xt_fd;
     iod->iod_size = loc.extent->size;
@@ -336,6 +338,7 @@ static int raid1_get_repl_count(struct pho_encoder *enc,
 {
     const char *string_repl_count;
     int rc;
+    int i;
 
     *repl_count = 0;
 
@@ -350,19 +353,21 @@ static int raid1_get_repl_count(struct pho_encoder *enc,
         LOG_RETURN(-EINVAL, "Unable to get replica count from conf to "
                             "build a raid1 encoder");
 
-    /* set repl_count as char * in layout */
-    pho_attr_set(&enc->layout->layout_desc.mod_attrs,
-                 PHO_EA_RAID1_REPL_COUNT_NAME, string_repl_count);
+    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+        /* set repl_count as char * in layout */
+        pho_attr_set(&enc->layout[i].layout_desc.mod_attrs,
+                     PHO_EA_RAID1_REPL_COUNT_NAME, string_repl_count);
 
-    /* set repl_count in encoder */
-    rc = raid1_repl_count(enc->layout, repl_count);
-    if (rc)
-        LOG_RETURN(rc, "Invalid replica count from layout to build raid1 "
-                       "encoder");
+        /* set repl_count in encoder */
+        rc = raid1_repl_count(&enc->layout[i], repl_count);
+        if (rc)
+            LOG_RETURN(rc, "Invalid replica count from layout to build raid1 "
+                           "encoder");
 
-    /* set write size */
-    if (*repl_count <= 0)
-        LOG_RETURN(-EINVAL, "Invalid # of replica (%d)", *repl_count);
+        /* set write size */
+        if (*repl_count <= 0)
+            LOG_RETURN(-EINVAL, "Invalid # of replica (%d)", *repl_count);
+    }
 
     return 0;
 }
@@ -377,27 +382,30 @@ static int raid1_get_repl_count(struct pho_encoder *enc,
  */
 static int layout_raid1_encode(struct pho_encoder *enc)
 {
+    struct raid_io_context *io_contexts;
     struct raid_io_context *io_context;
     unsigned int repl_count;
-    size_t i;
+    size_t i, j;
     int rc;
 
     rc = raid1_get_repl_count(enc, &repl_count);
     if (rc)
         return rc;
 
-    io_context = xcalloc(1, sizeof(*io_context));
-    enc->priv_enc = io_context;
-    io_context->name = PLUGIN_NAME;
-    io_context->n_data_extents = 1;
-    io_context->n_parity_extents = repl_count - 1;
-    io_context->write.to_write = enc->xfer->xd_targets->xt_size;
-    io_context->nb_hashes = repl_count;
-    io_context->hashes = xcalloc(io_context->nb_hashes,
-                                 sizeof(*io_context->hashes));
+    io_contexts = xcalloc(enc->xfer->xd_ntargets, sizeof(*io_contexts));
+    enc->priv_enc = io_contexts;
+    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+        io_context = &io_contexts[i];
+        io_context->name = PLUGIN_NAME;
+        io_context->n_data_extents = 1;
+        io_context->n_parity_extents = repl_count - 1;
+        io_context->write.to_write = enc->xfer->xd_targets[i].xt_size;
+        io_context->nb_hashes = repl_count;
+        io_context->hashes = xcalloc(io_context->nb_hashes,
+                                     sizeof(*io_context->hashes));
 
-    for (i = 0; i < io_context->nb_hashes; i++) {
-        rc = extent_hash_init(&io_context->hashes[i],
+        for (j = 0; j < io_context->nb_hashes; j++) {
+            rc = extent_hash_init(&io_context->hashes[j],
                               PHO_CFG_GET_BOOL(cfg_lyt_raid1,
                                                PHO_CFG_LYT_RAID1,
                                                extent_md5,
@@ -406,16 +414,20 @@ static int layout_raid1_encode(struct pho_encoder *enc)
                                                PHO_CFG_LYT_RAID1,
                                                extent_xxh128,
                                                false));
-        if (rc)
-            goto out_hash;
+            if (rc)
+                goto out_hash;
+        }
     }
 
     return raid_encoder_init(enc, &RAID1_MODULE_DESC, &RAID1_ENCODER_OPS,
                              &RAID1_OPS);
 
 out_hash:
-    for (i -= 1; i >= 0; i--)
-        extent_hash_fini(&io_context->hashes[i]);
+    for (i -= 1; i >= 0; i--) {
+        io_context = &io_contexts[i];
+        for (j = 0; j < io_context->nb_hashes; j++)
+            extent_hash_fini(&io_context->hashes[j]);
+    }
 
     /* The rest will be free'd by layout destroy */
     return rc;

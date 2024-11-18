@@ -133,7 +133,7 @@ struct raid_io_context {
 };
 
 struct raid_ops {
-    int (*write_split)(struct pho_encoder *enc, size_t split_size);
+    int (*write_split)(struct pho_encoder *enc, size_t split_size, int idx);
     int (*read_split)(struct pho_encoder *enc);
     int (*delete_split)(struct pho_encoder *enc);
     int (*get_block_size)(struct pho_encoder *enc, size_t *block_size);
@@ -193,6 +193,7 @@ int extent_hash_copy(struct extent_hash *hash, struct extent *extent);
 
 int extent_hash_compare(struct extent_hash *hash, struct extent *extent);
 
-struct pho_ext_loc make_ext_location(struct pho_encoder *enc, size_t i);
+struct pho_ext_loc make_ext_location(struct pho_encoder *enc, size_t i,
+                                     int idx);
 
 #endif

@@ -112,8 +112,8 @@ struct layout_module {
 
 /** An encoder encoding or decoding one object on a set of media */
 struct pho_encoder {
-    void *priv_enc;                 /**< Layout specific data */
-    const struct pho_enc_ops *ops;  /**< Layout specific operations */
+    void *priv_enc;                 /**< Layouts specific data */
+    const struct pho_enc_ops *ops;  /**< Layouts specific operations */
     bool is_decoder;                /**< This encoder is a decoder */
     bool delete_action;             /**< This encoder will delete objects (only
                                       *  works with decoder)
@@ -125,7 +125,7 @@ struct pho_encoder {
     struct pho_xfer_desc *xfer;     /**< Transfer descriptor (managed
                                       *  externally)
                                       */
-    struct layout_info *layout;     /**< Layout of the current transfer filled
+    struct layout_info *layout;     /**< Layouts of the current transfer filled
                                       *  out when decoding
                                       */
     size_t io_block_size;           /**< Block size (in bytes) of the I/O buffer

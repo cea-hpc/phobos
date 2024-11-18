@@ -7,7 +7,8 @@
 /**
  * Implementation of raid_ops::write_split
  */
-int raid4_write_split(struct pho_encoder *enc, size_t split_size);
+int raid4_write_split(struct pho_encoder *enc, size_t split_size,
+                      int target_idx);
 
 int raid4_read_split(struct pho_encoder *dec);
 
