@@ -594,6 +594,7 @@ end:
 static const struct pho_layout_module_ops LAYOUT_RAID1_OPS = {
     .encode = layout_raid1_encode,
     .decode = layout_raid1_decode,
+    .delete = NULL,
     .locate = layout_raid1_locate,
     .get_specific_attrs = layout_raid1_get_specific_attrs,
     .reconstruct = layout_raid1_reconstruct,

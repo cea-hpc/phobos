@@ -192,6 +192,7 @@ static int layout_raid4_locate(struct dss_handle *dss,
 static const struct pho_layout_module_ops LAYOUT_RAID4_OPS = {
     .encode = layout_raid4_encode,
     .decode = layout_raid4_decode,
+    .delete = NULL,
     .locate = layout_raid4_locate,
     .get_specific_attrs = NULL,
     .reconstruct = NULL,

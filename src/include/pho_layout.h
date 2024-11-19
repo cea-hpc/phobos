@@ -59,6 +59,9 @@ struct pho_layout_module_ops {
     /** Initialize a new decoder to get an object from phobos */
     int (*decode)(struct pho_encoder *dec);
 
+    /** Delete an object from phobos */
+    int (*delete)(struct pho_encoder *dec);
+
     /** Retrieve one node name from which an object can be accessed */
     int (*locate)(struct dss_handle *dss, struct layout_info *layout,
                   const char *focus_host, char **hostname, int *nb_new_lock);
