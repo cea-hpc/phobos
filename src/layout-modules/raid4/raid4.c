@@ -48,6 +48,7 @@ static struct module_desc RAID4_MODULE_DESC = {
 static struct raid_ops RAID4_OPS = {
     .write_split    = raid4_write_split,
     .read_split     = raid4_read_split,
+    .delete_split   = raid_delete_split,
     .get_block_size = raid4_get_block_size,
 };
 

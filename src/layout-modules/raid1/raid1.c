@@ -327,6 +327,7 @@ static const struct pho_enc_ops RAID1_ENCODER_OPS = {
 static const struct raid_ops RAID1_OPS = {
     .write_split    = raid1_write_split,
     .read_split     = raid1_read_split,
+    .delete_split   = raid_delete_split,
     .get_block_size = raid1_get_block_size,
 };
 

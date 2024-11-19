@@ -135,6 +135,7 @@ struct raid_io_context {
 struct raid_ops {
     int (*write_split)(struct pho_encoder *enc, size_t split_size);
     int (*read_split)(struct pho_encoder *enc);
+    int (*delete_split)(struct pho_encoder *enc);
     int (*get_block_size)(struct pho_encoder *enc, size_t *block_size);
 };
 
@@ -150,6 +151,11 @@ int raid_decoder_init(struct pho_encoder *dec,
 
 int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
                       pho_req_t **reqs, size_t *n_reqs);
+
+/**
+ * Generic implementation of raid_ops::delete_split
+ */
+int raid_delete_split(struct pho_encoder *dec);
 
 /**
  * Generic implementation of pho_layout_module_ops::locate

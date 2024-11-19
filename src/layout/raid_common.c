@@ -835,6 +835,30 @@ static int read_split_setup(struct pho_encoder *dec,
     return 0;
 }
 
+int raid_delete_split(struct pho_encoder *dec)
+{
+    struct raid_io_context *io_context = dec->priv_enc;
+    size_t n_extents = n_total_extents(io_context);
+    struct pho_io_descr *iod;
+    struct pho_ext_loc loc;
+    int rc = 0;
+    int i;
+
+    for (i = 0; i < n_extents; ++i) {
+        iod = &io_context->iods[i];
+        loc = make_ext_location(dec, i);
+        iod->iod_loc = &loc;
+
+        rc = ioa_del(iod->iod_ioa, iod);
+        if (rc)
+            break;
+
+        io_context->delete.to_delete--;
+    }
+
+    return rc;
+}
+
 static void pho_id_from_rsc_id(const pho_rsc_id_t *medium, struct pho_id *dst)
 {
     dst->family = medium->family;
