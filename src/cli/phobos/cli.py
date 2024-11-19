@@ -386,6 +386,7 @@ class StorePutHandler(XferOptHandler):
         else:
             fin = open(mput_file)
 
+        mput_list = []
         for i, line in enumerate(fin):
             # Skip empty lines and comments
             line = line.strip()
@@ -410,8 +411,16 @@ class StorePutHandler(XferOptHandler):
                 self.logger.debug("Loaded attributes set %r", attrs)
 
             self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
-            self.client.put_register(oid, src, attrs=attrs,
-                                     put_params=put_params)
+            # If no_split option is set, a xfer with N objects will be built in
+            # order to group the alloc. Otherwise, N xfers with 1 object
+            # will be built.
+            if put_params.no_split:
+                mput_list.append((oid, src, attrs))
+            else:
+                self.client.put_register(oid, src, attrs, put_params=put_params)
+
+        if put_params.no_split:
+            self.client.mput_register(mput_list, put_params=put_params)
 
         if fin is not sys.stdin:
             fin.close()

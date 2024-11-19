@@ -204,7 +204,7 @@ function test_get_locate_cli
     hostname $self_hostname
 
     local output="Current host is not the best to get this object, try on"
-    output="$output this other node, '$oid' : '$self_hostname'"
+    output="$output these other nodes, '$oid' : '$self_hostname'"
     if [ "$get_locate_output" != "$output" ]; then
         error "Object should have been located on node '$self_hostname'"
     fi

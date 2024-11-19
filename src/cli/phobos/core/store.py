@@ -257,10 +257,9 @@ class XferTarget(Structure): # pylint: disable=too-many-instance-attributes
 
     def init_from_descriptor(self, desc, xfer_desc):
         """
-        xfer initialization by using python-list descriptor.
-        It opens the file descriptor of the given path. The python-list
-        contains the tuple (id, path, attrs, flags, put or get parameters, op)
-        describing the opened file.
+        xfer initialization by using python descriptor.
+        It opens the file descriptor of the given path. The descriptor is a
+        tuple (id, path, attrs) describing the opened file.
         """
         self.xt_objid = desc[0]
 
@@ -304,25 +303,28 @@ class XferDescriptor(Structure): # pylint: disable=too-many-instance-attributes
     def init_from_descriptor(self, desc):
         """
         xfer initialization by using python-list descriptor. The python-list
-        contains the tuple (id, path, attrs, flags, put or get parameters, op)
+        contains the tuple
+        ([(id, path, attrs), ...], flags, put or get parameters, op)
         describing the opened file.
         """
-        self.xd_ntargets = 1
-        self.xd_flags = desc[3]
-        self.xd_op = desc[5]
+        self.xd_ntargets = len(desc[0])
+        self.xd_flags = desc[1]
+        self.xd_op = desc[3]
         self.xd_rc = 0
 
-        xfer_item = XferTarget * 1
+        xfer_item = XferTarget * self.xd_ntargets
         self.xd_targets = xfer_item()
-        self.xd_targets[0].init_from_descriptor(desc, self)
+        for idx, target in enumerate(desc[0]):
+            self.xd_targets[idx].init_from_descriptor(target, self)
 
         if self.xd_op == PHO_XFER_OP_PUT:
-            self.xd_params.put = XferPutParams(desc[4]) if \
-                                 desc[4] is not None else \
+            self.xd_params.put = XferPutParams(desc[2]) if \
+                                 desc[2] is not None else \
                                  XferPutParams(PutParams())
         elif self.xd_op == PHO_XFER_OP_GET:
-            self.xd_targets[0].xt_objuuid = desc[4][0]
-            self.xd_targets[0].xt_version = desc[4][1]
+            # The CLI can only create a xfer with 1 target with a GET
+            self.xd_targets[0].xt_objuuid = desc[2][0]
+            self.xd_targets[0].xt_version = desc[2][1]
             self.xd_params.get = XferGetParams()
 
 XFER_COMPLETION_CB_TYPE = CFUNCTYPE(None, c_void_p, POINTER(XferDescriptor),
@@ -337,6 +339,12 @@ def compl_cb_convert(compl_cb):
         raise TypeError("Completion handler must be callable")
 
     return XFER_COMPLETION_CB_TYPE(compl_cb)
+
+def xfer_targets2str(xfer_descriptors, index):
+    """
+    Convert one value of all targets in a xfer into a list of string
+    """
+    return [str(x[index]) for desc in xfer_descriptors for x in desc[0]]
 
 class Store:
     """Store handler"""
@@ -353,7 +361,8 @@ class Store:
         """
         Internal conversion method to turn a python list into an array of
         struct xfer_descriptor as expected by phobos_{get,put} functions.
-        xfer_descriptors is a list of (id, path, attrs, flags, tags, op).
+        xfer_descriptors is a list of
+        ([(id, path, attrs), ...], flags, tags, op).
         The element conversion is made by the xfer_descriptor initializer.
         """
         xfer_array_type = XferDescriptor * len(xfer_descriptors)
@@ -369,8 +378,9 @@ class Store:
         Release memory associated to xfer_descriptors in both phobos and cli.
         """
         for elt in xfer:
-            if elt.xd_targets[0].xt_fd >= 0:
-                os.close(elt.xd_targets[0].xt_fd)
+            for i in range(elt.xd_ntargets):
+                if elt.xd_targets[i].xt_fd >= 0:
+                    os.close(elt.xd_targets[i].xt_fd)
 
             LIBPHOBOS.pho_xfer_desc_clean(byref(elt))
 
@@ -405,20 +415,24 @@ class XferClient: # pylint: disable=too-many-instance-attributes
 
     def getmd_register(self, oid, data_path, attrs=None):
         """Enqueue a GETMD transfer."""
-        self.getmd_session.append((oid, data_path, attrs, 0, None,
+        self.getmd_session.append(([(oid, data_path, attrs)], 0, None,
                                    PHO_XFER_OP_GETMD))
 
     def get_register(self, oid, data_path, get_args, best_host, attrs=None):
         # pylint: disable=too-many-arguments
         """Enqueue a GET transfer."""
         flags = PHO_XFER_OBJ_BEST_HOST if best_host else 0
-        self.get_session.append((oid, data_path, attrs, flags, get_args,
+        self.get_session.append(([(oid, data_path, attrs)], flags, get_args,
                                  PHO_XFER_OP_GET))
 
     def put_register(self, oid, data_path, attrs=None, put_params=PutParams()):
         """Enqueue a PUT transfert."""
-        self.put_session.append((oid, data_path, attrs, 0, put_params,
+        self.put_session.append(([(oid, data_path, attrs)], 0, put_params,
                                  PHO_XFER_OP_PUT))
+
+    def mput_register(self, mput_list, put_params=PutParams()):
+        """Enqueue a MPUT transfert."""
+        self.put_session.append((mput_list, 0, put_params, PHO_XFER_OP_PUT))
 
     def clear(self):
         """Release resources associated to the current queues."""
@@ -438,7 +452,7 @@ class XferClient: # pylint: disable=too-many-instance-attributes
             rc, _ = self._store.phobos_xfer(LIBPHOBOS.phobos_getmd,
                                             self.getmd_session, compl_cb)
             if rc:
-                full_oids = ", ".join([str(x[0]) for x in self.getmd_session])
+                full_oids = ", ".join(xfer_targets2str(self.getmd_session, 0))
                 raise IOError(rc, "Cannot GETMD for objid(s) '%s'" % full_oids)
 
         if self.get_session:
@@ -448,15 +462,17 @@ class XferClient: # pylint: disable=too-many-instance-attributes
 
             if node_name is not None:
                 print("Current host is not the best to get this object, try " +
-                      "on this other node, '" + self.get_session[0][0] +
+                      "on these other nodes, '" +
+                      ", ".join(xfer_targets2str(self.get_session, 0)) +
                       "' : '" + node_name + "'")
 
             if rc:
                 for desc in self.get_session:
-                    os.remove(desc[1])
+                    for target in desc[0]:
+                        os.remove(target[1])
 
-                full_oids = ", ".join([str(x[0]) for x in self.get_session])
-                full_paths = ", ".join([str(x[1]) for x in self.get_session])
+                full_oids = ", ".join(xfer_targets2str(self.get_session, 0))
+                full_paths = ", ".join(xfer_targets2str(self.get_session, 1))
                 raise IOError(rc, "Cannot GET objid(s) '%s' to '%s'" %
                               (full_oids, full_paths))
 
@@ -464,8 +480,8 @@ class XferClient: # pylint: disable=too-many-instance-attributes
             rc, _ = self._store.phobos_xfer(LIBPHOBOS.phobos_put,
                                             self.put_session, compl_cb)
             if rc:
-                full_oids = ", ".join([str(x[0]) for x in self.put_session])
-                full_paths = ", ".join([str(x[1]) for x in self.put_session])
+                full_oids = ", ".join(xfer_targets2str(self.put_session, 0))
+                full_paths = ", ".join(xfer_targets2str(self.put_session, 1))
                 raise IOError(rc, "Cannot PUT '%s' to objid(s) '%s'" %
                               (full_paths, full_oids))
 
