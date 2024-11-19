@@ -1,5 +1,5 @@
 /*
- *  All rights reserved (c) 2014-2023 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -49,6 +49,12 @@ struct read_io_context {
     size_t to_read;
     struct extent **extents;
     bool check_hash;
+};
+
+struct delete_io_context {
+    pho_resp_read_t *resp;          /*< Response for the I/O operation */
+    size_t to_delete;               /*< Number of extents to delete */
+    struct extent **extents;        /*< Extents to delete */
 };
 
 struct write_io_context {
@@ -109,6 +115,7 @@ struct raid_io_context {
     struct pho_io_descr *iods;
     union {
         struct read_io_context read;
+        struct delete_io_context delete;
         struct write_io_context write;
     };
 

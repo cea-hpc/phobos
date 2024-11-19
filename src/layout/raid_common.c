@@ -173,9 +173,11 @@ void raid_encoder_destroy(struct pho_encoder *enc)
         free(io_context->write.extents);
         free(io_context->iods);
         g_string_free(io_context->write.user_md, TRUE);
-
-    } else {
+    } else if (!enc->delete_action) {
         free(io_context->read.extents);
+        free(io_context->iods);
+    } else {
+        free(io_context->delete.extents);
         free(io_context->iods);
     }
 
@@ -261,8 +263,10 @@ static char *raid_enc_root_path(struct pho_encoder *enc,
 
     if (!enc->is_decoder)
         return io_context->write.resp->media[i]->root_path;
-    else
+    else if (!enc->delete_action)
         return io_context->read.resp->media[i]->root_path;
+    else
+        return io_context->delete.resp->media[i]->root_path;
 }
 
 static enum address_type raid_enc_addr_type(struct pho_encoder *enc,
@@ -272,8 +276,10 @@ static enum address_type raid_enc_addr_type(struct pho_encoder *enc,
 
     if (!enc->is_decoder)
         return io_context->write.resp->media[i]->addr_type;
-    else
+    else if (!enc->delete_action)
         return io_context->read.resp->media[i]->addr_type;
+    else
+        return io_context->delete.resp->media[i]->addr_type;
 }
 
 static struct extent *raid_enc_extent(struct pho_encoder *enc,
@@ -283,8 +289,10 @@ static struct extent *raid_enc_extent(struct pho_encoder *enc,
 
     if (!enc->is_decoder)
         return &io_context->write.extents[i];
-    else
+    else if (!enc->delete_action)
         return io_context->read.extents[i];
+    else
+        return io_context->delete.extents[i];
 }
 
 static struct pho_io_descr *raid_enc_iod(struct pho_encoder *enc, size_t i)

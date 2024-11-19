@@ -124,6 +124,7 @@ int layout_decode(struct pho_encoder *enc, struct pho_xfer_desc *xfer,
 
     /* See notes in layout_encode */
     enc->is_decoder = true;
+    enc->delete_action = false;
     enc->done = false;
     enc->xfer = xfer;
     enc->layout = layout;

@@ -112,6 +112,9 @@ struct pho_encoder {
     void *priv_enc;                 /**< Layout specific data */
     const struct pho_enc_ops *ops;  /**< Layout specific operations */
     bool is_decoder;                /**< This encoder is a decoder */
+    bool delete_action;             /**< This encoder will delete objects (only
+                                      *  works with decoder)
+                                      */
     bool done;                      /**< True if this encoder has no more work
                                       *  to do (check rc to know if an error
                                       *  happened)
