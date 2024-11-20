@@ -222,6 +222,25 @@ int raid_decoder_init(struct pho_encoder *dec,
     return 0;
 }
 
+int raid_delete_decoder_init(struct pho_encoder *dec,
+                             const struct module_desc *module,
+                             const struct pho_enc_ops *enc_ops,
+                             const struct raid_ops *raid_ops)
+{
+    struct raid_io_context *io_context = dec->priv_enc;
+    size_t n_extents = n_total_extents(io_context);
+
+    assert(dec->is_decoder);
+    dec->ops = enc_ops;
+    io_context->ops = raid_ops;
+
+    io_context->iods = xcalloc(n_extents, sizeof(*io_context->iods));
+    io_context->delete.extents = xcalloc(n_extents,
+                                         sizeof(*io_context->delete.extents));
+
+    return 0;
+}
+
 static size_t remaining_io_size(struct pho_encoder *enc)
 {
     const struct raid_io_context *io_context = enc->priv_enc;

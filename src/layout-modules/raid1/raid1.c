@@ -477,6 +477,42 @@ static int layout_raid1_decode(struct pho_encoder *dec)
     return 0;
 }
 
+static int layout_raid1_delete(struct pho_encoder *dec)
+{
+    struct raid_io_context *io_context;
+    unsigned int repl_count;
+    int rc;
+
+    rc = raid1_repl_count(dec->layout, &repl_count);
+    if (rc)
+        LOG_RETURN(rc, "Invalid replica count from layout to build raid1 "
+                       "decoder");
+
+    io_context = xcalloc(1, sizeof(*io_context));
+    dec->priv_enc = io_context;
+    io_context->name = PLUGIN_NAME;
+    io_context->n_data_extents = 1;
+    io_context->n_parity_extents = repl_count - 1;
+
+    rc = raid_delete_decoder_init(dec, &RAID1_MODULE_DESC, &RAID1_ENCODER_OPS,
+                                  &RAID1_OPS);
+    if (rc) {
+        dec->priv_enc = NULL;
+        free(io_context);
+    }
+
+    io_context->delete.to_delete = 0;
+    /* No hard removal on tapes */
+    if (dec->layout->ext_count != 0 &&
+        dec->layout->extents[0].media.family != PHO_RSC_TAPE)
+        io_context->delete.to_delete = dec->layout->ext_count;
+
+    if (io_context->delete.to_delete == 0)
+        dec->done = true;
+
+    return rc;
+}
+
 int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
                         const char *focus_host, char **hostname,
                         int *nb_new_locks)
@@ -594,7 +630,7 @@ end:
 static const struct pho_layout_module_ops LAYOUT_RAID1_OPS = {
     .encode = layout_raid1_encode,
     .decode = layout_raid1_decode,
-    .delete = NULL,
+    .delete = layout_raid1_delete,
     .locate = layout_raid1_locate,
     .get_specific_attrs = layout_raid1_get_specific_attrs,
     .reconstruct = layout_raid1_reconstruct,

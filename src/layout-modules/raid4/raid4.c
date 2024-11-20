@@ -180,6 +180,37 @@ static int layout_raid4_decode(struct pho_encoder *dec)
     return 0;
 }
 
+static int layout_raid4_delete(struct pho_encoder *dec)
+{
+    struct raid_io_context *io_context;
+    int rc;
+
+    io_context = xcalloc(1, sizeof(*io_context));
+    dec->priv_enc = io_context;
+    io_context->name = PLUGIN_NAME;
+    io_context->n_data_extents = 2;
+    io_context->n_parity_extents = 1;
+
+    rc = raid_delete_decoder_init(dec, &RAID4_MODULE_DESC, &RAID4_ENCODER_OPS,
+                           &RAID4_OPS);
+
+    if (rc) {
+        dec->priv_enc = NULL;
+        free(io_context);
+    }
+
+    io_context->delete.to_delete = 0;
+    /* No hard removal on tapes */
+    if (dec->layout->ext_count != 0 &&
+        dec->layout->extents[0].media.family != PHO_RSC_TAPE)
+        io_context->delete.to_delete = dec->layout->ext_count;
+
+    if (io_context->delete.to_delete == 0)
+        dec->done = true;
+
+    return rc;
+}
+
 static int layout_raid4_locate(struct dss_handle *dss,
                                struct layout_info *layout,
                                const char *focus_host,
@@ -192,7 +223,7 @@ static int layout_raid4_locate(struct dss_handle *dss,
 static const struct pho_layout_module_ops LAYOUT_RAID4_OPS = {
     .encode = layout_raid4_encode,
     .decode = layout_raid4_decode,
-    .delete = NULL,
+    .delete = layout_raid4_delete,
     .locate = layout_raid4_locate,
     .get_specific_attrs = NULL,
     .reconstruct = NULL,

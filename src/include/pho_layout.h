@@ -187,6 +187,19 @@ int layout_decode(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
                   struct layout_info *layout);
 
 /**
+ * Initialize a new encoder \a dec to delete an object given by its ID \a oid.
+ *
+ * @param[out]  dec     Decoder to be initialized
+ * @param[in]   xfer    Information of the object requested to be deleted
+ * @param[in]   layout  Layout of the object to delete. It is used in-place by
+ *                      the decoder and must be freed separately by the caller
+ *                      after the encoder is destroyed
+ * @return 0 on success, -errno on error
+ */
+int layout_delete(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
+                  struct layout_info *layout);
+
+/**
  * Retrieve one node name from which an object can be accessed.
  *
  * @param[in]   dss         DSS handle

@@ -145,6 +145,40 @@ int layout_decode(struct pho_encoder *enc, struct pho_xfer_desc *xfer,
     return rc;
 }
 
+int layout_delete(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
+                  struct layout_info *layout)
+{
+    char layout_name[NAME_MAX];
+    struct layout_module *mod;
+    int rc;
+
+    rc = build_layout_name(layout->layout_desc.mod_name, layout_name,
+                           sizeof(layout_name));
+    if (rc)
+        return rc;
+
+    /* Load new module if necessary */
+    rc = load_module(layout_name, sizeof(*mod), phobos_context(),
+                     (void **) &mod);
+    if (rc)
+        return rc;
+
+    /* See notes in layout_encode */
+    dec->is_decoder = true;
+    dec->delete_action = true;
+    dec->done = false;
+    dec->xfer = xfer;
+    dec->layout = layout;
+
+    rc = mod->ops->delete(dec);
+    if (rc) {
+        layout_destroy(dec);
+        LOG_RETURN(rc, "Unable to create decoder");
+    }
+
+    return rc;
+}
+
 int layout_locate(struct dss_handle *dss, struct layout_info *layout,
                   const char *focus_host, char **hostname, int *nb_new_lock)
 {

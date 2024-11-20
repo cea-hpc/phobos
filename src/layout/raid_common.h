@@ -149,6 +149,11 @@ int raid_decoder_init(struct pho_encoder *dec,
                       const struct pho_enc_ops *enc_ops,
                       const struct raid_ops *raid_ops);
 
+int raid_delete_decoder_init(struct pho_encoder *dec,
+                             const struct module_desc *module,
+                             const struct pho_enc_ops *enc_ops,
+                             const struct raid_ops *raid_ops);
+
 int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
                       pho_req_t **reqs, size_t *n_reqs);
 
