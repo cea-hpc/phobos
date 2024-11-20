@@ -172,7 +172,7 @@ static int decoder_build(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
     int cnt = 0;
     int rc;
 
-    assert(xfer->xd_op == PHO_XFER_OP_GET);
+    assert(xfer->xd_op == PHO_XFER_OP_GET || xfer->xd_op == PHO_XFER_OP_DEL);
 
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
@@ -193,7 +193,9 @@ static int decoder_build(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
         GOTO(err, rc = -ENOENT);
 
     /* @FIXME: duplicate layout to avoid calling dss functions to free this? */
-    rc = layout_decode(dec, xfer, layout);
+    rc = xfer->xd_op == PHO_XFER_OP_GET ?
+        layout_decode(dec, xfer, layout) :
+        layout_delete(dec, xfer, layout);
     if (rc)
         GOTO(err, rc);
 
@@ -556,94 +558,11 @@ out_unlock:
     return rc;
 }
 
-static int object_hard_delete(struct dss_handle *dss, struct object_info *obj,
-                              bool is_deprec)
-{
-    struct layout_info *layouts;
-    struct dss_filter filter;
-    struct extent *extents;
-    GString *filter_str;
-    int count;
-    int i, j;
-    int rc;
-
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                          "  {\"DSS::LYT::object_uuid\": \"%s\"},"
-                          "  {\"DSS::LYT::version\": %d}"
-                          "]}", obj->uuid, obj->version);
-    if (rc)
-        LOG_RETURN(rc, "Unable to build uuid filter in object hard delete");
-
-    rc = dss_layout_get(dss, &filter, &layouts, &count);
-    dss_filter_free(&filter);
-    if (rc)
-        LOG_RETURN(rc, "Unable to retrieve layouts from object '%s:%d'",
-                   obj->uuid, obj->version);
-
-    filter_str = g_string_new(NULL);
-    for (i = 0; i < count; ++i) {
-        for (j = 0; j < layouts[i].ext_count; ++j) {
-            int end_of_string = i == count - 1 && j == layouts[i].ext_count - 1;
-
-            g_string_append_printf(filter_str,
-                                   "  {\"DSS::EXT::uuid\": \"%s\"}%s",
-                                   layouts[i].extents[j].uuid,
-                                   end_of_string ? "" : ",");
-        }
-    }
-
-    rc = dss_filter_build(&filter,
-                          "{\"$OR\": ["
-                          "  %s"
-                          "]}", filter_str->str);
-    g_string_free(filter_str, true);
-    if (rc) {
-        dss_res_free(layouts, count);
-        LOG_RETURN(rc,
-                   "Unable to build extents filter in object hard delete");
-    }
-
-    rc = dss_layout_delete(dss, layouts, count);
-    dss_res_free(layouts, count);
-    if (rc) {
-        dss_filter_free(&filter);
-        LOG_RETURN(rc, "Unable to delete layouts for object '%s:%d'",
-                   obj->uuid, obj->version);
-    }
-
-    rc = dss_extent_get(dss, &filter, &extents, &count);
-    dss_filter_free(&filter);
-    if (rc)
-        LOG_RETURN(rc, "Unable to retrieve extents from object '%s:%d'",
-                   obj->uuid, obj->version);
-
-    for (i = 0; i < count; ++i)
-        extents[i].state = PHO_EXT_ST_ORPHAN;
-
-    rc = dss_extent_update(dss, extents, extents, count);
-    dss_res_free(extents, count);
-    if (rc)
-        LOG_RETURN(rc, "Unable to update object '%s:%d' extents state",
-                   obj->uuid, obj->version);
-
-    if (is_deprec)
-        rc = dss_deprecated_object_delete(dss, obj, 1);
-    else
-        rc = dss_object_delete(dss, obj, 1);
-    if (rc)
-        pho_error(rc, "Unable to delete object '%s:%d'",
-                  obj->uuid, obj->version);
-
-    return rc;
-}
-
 /**
  * TODO: from object_delete to objects_delete, to delete many objects (all or
  * nothing) into the same command.
  */
-static int object_delete(struct dss_handle *dss, struct pho_xfer_target *xfer,
-                         enum pho_xfer_flags flags)
+static int object_delete(struct dss_handle *dss, struct pho_xfer_target *xfer)
 {
     struct object_info obj = { .oid = xfer->xt_objid };
     struct dss_filter filter;
@@ -673,47 +592,12 @@ static int object_delete(struct dss_handle *dss, struct pho_xfer_target *xfer,
                                "for oid: '%s'", obj.oid);
     }
 
-    if (flags & PHO_XFER_OBJ_HARD_DEL) {
-        struct object_info *deprec_objs;
-        int deprec_obj_cnt;
-        int i;
-
-        rc = object_hard_delete(dss, objs, false);
-        if (rc)
-            LOG_GOTO(out_free, rc,
-                     "Unable to hard delete object '%s'", objs->oid);
-
-        rc = dss_filter_build(&filter, "{\"DSS::OBJ::uuid\": \"%s\"}",
-                              objs->uuid);
-        if (rc)
-            LOG_GOTO(out_free, rc,
-                     "Unable to build uuid filter in object delete");
-
-        rc = dss_deprecated_object_get(dss, &filter, &deprec_objs,
-                                       &deprec_obj_cnt, NULL);
-        dss_filter_free(&filter);
-        if (rc)
-            LOG_GOTO(out_free, rc,
-                     "Unable to retrieve deprec objects '%s'", objs->uuid);
-
-        for (i = 0; i < deprec_obj_cnt; ++i) {
-            rc = object_hard_delete(dss, &deprec_objs[i], true);
-            if (rc) {
-                pho_error(rc, "Unable to hard delete object '%s:%d'",
-                          deprec_objs[i].uuid, deprec_objs[i].version);
-                break;
-            }
-        }
-
-        dss_res_free(deprec_objs, deprec_obj_cnt);
-    } else {
-        /* move from object table to deprecated object table */
-        rc = dss_move_object_to_deprecated(dss, &obj, 1);
-        if (rc)
-            LOG_GOTO(out_free, rc,
-                     "Unable to move from object to deprecated in "
-                     "object delete, for oid: '%s'", obj.oid);
-    }
+    /* move from object table to deprecated object table */
+    rc = dss_move_object_to_deprecated(dss, &obj, 1);
+    if (rc)
+        LOG_GOTO(out_free, rc,
+                "Unable to move from object to deprecated in "
+                "object delete, for oid: '%s'", obj.oid);
 
 out_free:
     dss_res_free(objs, obj_cnt);
@@ -954,7 +838,8 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
     }
 
     if (xfer->xd_op == PHO_XFER_OP_GETMD ||
-        xfer->xd_op == PHO_XFER_OP_DEL ||
+        (xfer->xd_op == PHO_XFER_OP_DEL &&
+         !(xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL)) ||
         xfer->xd_op == PHO_XFER_OP_UNDEL) {
         /* create dummy decoder if no I/O operations are made */
         enc->xfer = xfer;
@@ -963,7 +848,7 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
         return 0;
     }
 
-    /* Handle decoder creation for GET */
+    /* Handle decoder creation for GET & HARD DELETE */
     if (!xfer->xd_targets->xt_objid && !xfer->xd_targets->xt_objuuid)
         LOG_RETURN(rc = -EINVAL, "uuid or oid must be provided");
 
@@ -999,6 +884,73 @@ static const char *oid_or_uuid_val(struct pho_xfer_target *xfer,
                                    enum pho_xfer_op xd_op)
 {
     return is_uuid_arg(xfer, xd_op) ? xfer->xt_objuuid : xfer->xt_objid;
+}
+
+static int store_end_delete_xfer(struct phobos_handle *pho,
+                                 struct pho_xfer_desc *xfer,
+                                 struct pho_encoder *enc)
+{
+    struct extent *extents = enc->layout->extents;
+    int ext_count = enc->layout->ext_count;
+    struct dss_handle *dss = &pho->dss;
+    struct layout_info *layouts;
+    struct object_info obj = {
+        .oid = xfer->xd_targets->xt_objid,
+        .uuid = xfer->xd_targets->xt_objuuid,
+        .version = xfer->xd_targets->xt_version,
+        .obj_status = PHO_OBJ_STATUS_COMPLETE,
+    };
+    struct dss_filter filter;
+    bool medium_is_tape;
+    int count;
+    int rc;
+    int i;
+
+    medium_is_tape = ext_count != 0 ?
+        extents[0].media.family == PHO_RSC_TAPE :
+        false;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::LYT::object_uuid\": \"%s\"},"
+                          "  {\"DSS::LYT::version\": %d}"
+                          "]}", obj.uuid, obj.version);
+    if (rc)
+        LOG_RETURN(rc, "Unable to build uuid filter in object hard delete");
+
+    rc = dss_layout_get(dss, &filter, &layouts, &count);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc, "Unable to retrieve layouts from object '%s:%d'",
+                   obj.uuid, obj.version);
+
+    rc = dss_layout_delete(dss, layouts, count);
+    dss_res_free(layouts, count);
+    if (rc) {
+        LOG_RETURN(rc, "Unable to delete layouts for object '%s:%d'",
+                   obj.uuid, obj.version);
+    }
+
+    if (ext_count > 0) {
+        if (medium_is_tape) {
+            for (i = 0; i < count; ++i)
+                extents[i].state = PHO_EXT_ST_ORPHAN;
+            rc = dss_extent_update(dss, extents, extents, ext_count);
+        } else {
+            rc = dss_extent_delete(dss, extents, ext_count);
+        }
+    }
+    if (rc)
+        LOG_RETURN(rc, "Unable to %s object '%s:%d' extents",
+                   medium_is_tape ? "update" : "delete",
+                   obj.uuid, obj.version);
+
+    rc = dss_object_delete(dss, &obj, 1);
+    if (rc)
+        pho_error(rc, "Unable to delete object '%s:%d'",
+                  obj.uuid, obj.version);
+
+    return rc;
 }
 
 /**
@@ -1100,6 +1052,10 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
         if (rc)
             pho_error(rc, "Error while updating object access time");
     }
+
+    if (xfer->xd_op == PHO_XFER_OP_DEL &&
+        xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL && xfer->xd_rc == 0 && rc == 0)
+        rc = store_end_delete_xfer(pho, xfer, enc);
 
 cont:
     /* Only overwrite xd_rc if it was 0 */
@@ -1375,9 +1331,9 @@ static int store_perform_xfers(struct phobos_handle *pho)
      * have its metadata cleared from the DSS.
      */
     for (i = 0; i < pho->n_xfers; i++) {
-        if (pho->xfers[i].xd_op == PHO_XFER_OP_DEL) {
-            rc = object_delete(&pho->dss, pho->xfers[i].xd_targets,
-                               pho->xfers[i].xd_flags);
+        if (pho->xfers[i].xd_op == PHO_XFER_OP_DEL &&
+            !(pho->xfers[i].xd_flags & PHO_XFER_OBJ_HARD_DEL)) {
+            rc = object_delete(&pho->dss, pho->xfers[i].xd_targets);
             if (rc)
                 pho_error(rc, "Error while deleting objid: '%s'",
                               pho->xfers[i].xd_targets->xt_objid);
