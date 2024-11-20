@@ -77,24 +77,45 @@ cksum=md5:7c28aec5441644094064fcf651ab5e3e,user=foo
 ```
 
 ## Deleting objects
+
+Objects can be deleted. Two different mechanisms are available: a soft and a
+hard one.
+
+### Soft deletion
+
+A soft deletion means that the object is not considered alive anymore: its data
+still exist and may be accessible. But basic operations can not longer be
+executed on it if its uuid/version information are not given.
+
 To delete an object, use `phobos del[ete]`:
-```
+
+```bash
 phobos del obj0123
 ```
 
-WARNING: the object will not be completely removed from the phobos system ie.
-its data will still exist and be accessible. Thus the object is considered as
-deprecated and basic operations can no longer be executed on it if its
-uuid/version is not given. A future feature will allow the complete removal of
-an object.
-
 This deletion can be reverted using `phobos undel[ete]`:
-```
+
+```bash
 phobos undel obj0123
 ```
 
 To revert an object deletion, the object ID needs not to be used by a living
 object.
+
+### Hard deletion
+
+A hard deletion implies that the object data are removed from the storage
+system. This kind of deletion can not be reverted.
+
+To hard delete an object, use the `delete` command with the following option:
+
+```bash
+phobos del --hard obj0123
+```
+
+WARNING: For objects on tapes, data are not synchronously removed, as the
+operation has high latency. But data will not be accessible anymore. Objects
+are removed from Phobos database and their extents are set orphan.
 
 ## Listing objects
 To list objects, use `phobos object list`:
