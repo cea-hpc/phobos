@@ -324,14 +324,16 @@ static int raid_io_context_open(struct raid_io_context *io_context,
 
         iod->iod_size = 0;
         iod->iod_loc = &ext_location;
-        rc = ioa_open(iod->iod_ioa, enc->xfer->xd_targets->xt_objid, iod,
-                      !enc->is_decoder);
-        if (rc)
-            LOG_GOTO(out_close, rc,
-                     "raid: unable to open extent for '%s' on '%s':'%s'",
-                     enc->xfer->xd_targets->xt_objid,
-                     ext_location.extent->media.library,
-                     ext_location.extent->media.name);
+        if (!enc->is_decoder || !enc->delete_action) {
+            rc = ioa_open(iod->iod_ioa, enc->xfer->xd_targets->xt_objid, iod,
+                          !enc->is_decoder);
+            if (rc)
+                LOG_GOTO(out_close, rc,
+                         "raid: unable to open extent for '%s' on '%s':'%s'",
+                         enc->xfer->xd_targets->xt_objid,
+                         ext_location.extent->media.library,
+                         ext_location.extent->media.name);
+        }
 
         pho_debug("I/O size for replicate %lu: %zu", i, enc->io_block_size);
     }
@@ -416,6 +418,14 @@ static void raid_build_read_allocation_req(struct pho_encoder *dec,
         req->ralloc->med_ids[i]->library =
             xstrdup(dec->layout->extents[ext_idx].media.library);
     }
+}
+
+static void raid_build_delete_allocation_req(struct pho_encoder *dec,
+                                             pho_req_t *req)
+{
+    raid_build_read_allocation_req(dec, req);
+    req->ralloc->n_required = req->ralloc->n_med_ids;
+    req->ralloc->operation = PHO_READ_TARGET_ALLOC_OP_DELETE;
 }
 
 static void raid_io_context_set_extent_info(struct raid_io_context *io_context,
@@ -835,6 +845,56 @@ static int read_split_setup(struct pho_encoder *dec,
     return 0;
 }
 
+static int delete_split_setup(struct pho_encoder *dec,
+                              pho_resp_read_elt_t **medium,
+                              size_t n_media,
+                              size_t *split_size)
+{
+    struct raid_io_context *io_context = dec->priv_enc;
+    size_t n_extents = n_total_extents(io_context);
+    size_t i;
+    int rc;
+
+    ENTRY;
+
+    *split_size = 0;
+
+    if (n_media != n_extents)
+        LOG_RETURN(-EINVAL, "Invalid number of media return by phobosd. "
+                            "Expected %lu, got %lu",
+                   n_extents, n_media);
+
+    for (i = 0; i < n_extents; i++) {
+        ssize_t ext_index;
+
+        rc = get_io_adapter((enum fs_type)medium[i]->fs_type,
+                            &io_context->iods[i].iod_ioa);
+        if (rc)
+            return rc;
+
+        ext_index = extent_index(dec->layout, medium[i]->med_id);
+        if (ext_index == -1)
+            LOG_RETURN(-ENOMEDIUM,
+                       "Did not find medium '%s':'%s' in layout of '%s'",
+                       medium[i]->med_id->library,
+                       medium[i]->med_id->name,
+                       dec->xfer->xd_targets->xt_objid);
+
+        io_context->delete.extents[i] = &dec->layout->extents[ext_index];
+        if (io_context->delete.extents[i]->size > *split_size)
+            *split_size = io_context->delete.extents[i]->size;
+    }
+    sort_extents_by_layout_index(io_context->delete.resp,
+                                 io_context->delete.extents,
+                                 n_extents);
+
+    rc = raid_io_context_open(io_context, dec, n_extents);
+    if (rc)
+        return rc;
+
+    return 0;
+}
+
 int raid_delete_split(struct pho_encoder *dec)
 {
     struct raid_io_context *io_context = dec->priv_enc;
@@ -1054,10 +1114,66 @@ skip_io:
     return rc;
 }
 
+static int raid_enc_handle_delete_resp(struct pho_encoder *dec,
+                                       pho_resp_t *resp,
+                                       pho_req_t **reqs, size_t *n_reqs)
+{
+    struct raid_io_context *io_context = dec->priv_enc;
+    size_t split_size;
+    int rc;
+    int i;
+
+    ENTRY;
+
+    pho_srl_request_release_alloc(*reqs + *n_reqs, resp->ralloc->n_media);
+
+    for (i = 0; i < resp->ralloc->n_media; ++i)
+        rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
+                   resp->ralloc->media[i]->med_id);
+
+    io_context->delete.resp = resp->ralloc;
+    rc = delete_split_setup(dec, resp->ralloc->media, resp->ralloc->n_media,
+                            &split_size);
+
+    if (rc)
+        goto skip_io;
+
+    rc = io_context->ops->delete_split(dec);
+
+    for (i = 0; i < io_context->n_data_extents; ++i) {
+        struct pho_io_descr *iod = &io_context->iods[i];
+
+        ioa_close(iod->iod_ioa, iod);
+    }
+
+skip_io:
+    for (i = 0; i < resp->ralloc->n_media; ++i) {
+        (*reqs)[*n_reqs].release->media[i]->rc = rc;
+        (*reqs)[*n_reqs].release->media[i]->to_sync = true;
+        (*reqs)[*n_reqs].release->media[i]->size_written = -split_size;
+        (*reqs)[*n_reqs].release->media[i]->nb_extents_written = -1;
+    }
+
+    if (!rc)
+        io_context->current_split++;
+
+    /* Nothing more to delete: the decoder is done */
+    if (io_context->delete.to_delete == 0) {
+        pho_debug("Decoder for '%s' is now finished",
+                  dec->xfer->xd_targets->xt_objid);
+        dec->done = true;
+    }
+
+    (*n_reqs)++;
+
+    return rc;
+}
+
 static int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
                                 pho_req_t **reqs, size_t *n_reqs)
 {
     struct raid_io_context *io_context = enc->priv_enc;
+    size_t n_extents = n_total_extents(io_context);
     int rc = 0;
 
     if (pho_response_is_error(resp)) {
@@ -1079,7 +1195,7 @@ static int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
             LOG_RETURN(-EINVAL,
                        "Unexpected number of media. "
                        "Expected %lu, got %lu",
-                       n_total_extents(io_context),
+                       n_extents,
                        resp->walloc->n_media);
 
         return raid_enc_handle_write_resp(enc, resp, reqs, n_reqs);
@@ -1090,12 +1206,22 @@ static int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
         if (!enc->is_decoder)
             LOG_RETURN(-EINVAL, "Encoder received a read response");
 
+        if (enc->delete_action) {
+            if (resp->ralloc->n_media != n_extents)
+                LOG_RETURN(-EINVAL,
+                           "Unexpected number of media. "
+                           "Expected %lu, got %lu",
+                           n_extents,
+                           resp->ralloc->n_media);
+            return raid_enc_handle_delete_resp(enc, resp, reqs, n_reqs);
+        }
+
         if (resp->ralloc->n_media != io_context->n_data_extents)
             LOG_RETURN(-EINVAL,
                        "Unexpected number of media. "
                        "Expected %lu, got %lu",
                        io_context->n_data_extents,
-                       resp->walloc->n_media);
+                       resp->ralloc->n_media);
 
         return raid_enc_handle_read_resp(enc, resp, reqs, n_reqs);
 
@@ -1118,7 +1244,8 @@ int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
 
     ENTRY;
 
-    if (enc->xfer->xd_targets->xt_fd < 0)
+    if (enc->xfer->xd_targets->xt_fd < 0 &&
+        !(enc->is_decoder && enc->delete_action))
         LOG_RETURN(-EBADF, "No file descriptor in %s",
                    enc->is_decoder ? "decoder" : "encoder");
 
@@ -1137,7 +1264,10 @@ int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
 
     /* Build next request */
     if (enc->is_decoder)
-        raid_build_read_allocation_req(enc, *reqs + *n_reqs);
+        if (enc->delete_action)
+            raid_build_delete_allocation_req(enc, *reqs + *n_reqs);
+        else
+            raid_build_read_allocation_req(enc, *reqs + *n_reqs);
     else
         raid_build_write_allocation_req(enc, *reqs + *n_reqs);
 
