@@ -29,6 +29,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_launch_daemon.sh
 . $test_dir/tape_drive.sh
 . $test_dir/utils_generation.sh
+. $test_dir/utils.sh
 
 ################################################################################
 #                                    SETUP                                     #
@@ -60,6 +61,29 @@ function cleanup() {
     cleanup_test_dirs
 }
 
+function setup_sync()
+{
+    export PHOBOS_LRS_families="dir"
+    export PHOBOS_STORE_default_family="dir"
+    export PHOBOS_LRS_lock_file="$test_dir/phobosd.lock"
+    EVENT_FILE="$test_dir/test_daemon_scheduling_events"
+
+    rm -f "$PHOBOS_LRS_lock_file"
+
+    setup_tables
+    invoke_lrs_debug &
+    wait_for_lrs
+    last_read=$(now)
+}
+
+function cleanup_sync()
+{
+    rm -f "$EVENT_FILE"
+
+    kill $(pgrep phobosd)
+    drop_tables
+}
+
 function setup_dir_raid1()
 {
     setup
@@ -82,6 +106,27 @@ function setup_dir_raid1()
 function cleanup_dir()
 {
     cleanup
+    for dir in ${DIRS[@]}; do
+        cleanup_tmp_fs $dir
+    done
+}
+
+function setup_dir_raid1_sync()
+{
+    setup_sync
+
+    DIR=$(make_tmp_fs 1M)
+
+    export PHOBOS_STORE_default_layout="raid1"
+    export PHOBOS_LAYOUT_RAID1_repl_count=1
+
+    $phobos dir add $DIR
+    $phobos dir format --unlock $DIR
+}
+
+function cleanup_dir_sync()
+{
+    cleanup_sync
     for dir in ${DIRS[@]}; do
         cleanup_tmp_fs $dir
     done
@@ -367,6 +412,76 @@ function test_mput_no_split_raid4_two_file()
 }
 
 ################################################################################
+#                              SYNC THRESHOLD                                  #
+################################################################################
+
+function test_threshold_raid1()
+{
+    local files=(
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                )
+
+    dd if=/dev/urandom of="${files[0]}" bs=200KB count=1
+    dd if=/dev/urandom of="${files[1]}" bs=200KB count=1
+
+    objects=("${files[0]} mput_no_split_oid1 -"
+             "${files[1]} mput_no_split_oid2 -")
+    echo "${objects[0]}
+          ${objects[1]}" > $DIR_TEST_OUT/mput_no_split
+
+    last_read=$(now)
+
+    $valg_phobos put --file $DIR_TEST_OUT/mput_no_split --no-split ||
+        error "phobos put --file should have worked"
+
+    local res=$(get_daemon_event "sync" $last_read)
+    last_read=$(now)
+    local count=$(echo "$res" | wc -l)
+    if [[ $count -ne 2 ]]; then
+        error "There should be 2 sync (got $count)"
+    fi
+
+    local nb_obj=$($phobos dir list -o stats.nb_obj)
+    local nb_written=$($phobos dir list -o stats.logc_spc_used)
+
+    if [[ $nb_obj -ne 2 ]]; then
+        error "There should be 2 objects (got $nb_obj)"
+    fi
+
+    if [[ $nb_written -ne $((400 * 1000)) ]]; then
+        error "There should be $((400 * 1000)) bytes (got $nb_written)"
+    fi
+}
+
+function test_threshold_req_raid1()
+{
+    export PHOBOS_LRS_sync_time_ms="dir=60000"
+    export PHOBOS_LRS_sync_nb_req="dir=1"
+    export PHOBOS_LRS_sync_wsize_kb="dir=100000000000"
+
+    test_threshold_raid1
+}
+
+function test_threshold_wsize_raid1()
+{
+    export PHOBOS_LRS_sync_time_ms="dir=60000"
+    export PHOBOS_LRS_sync_nb_req="dir=100"
+    export PHOBOS_LRS_sync_wsize_kb="dir=200000"
+
+    test_threshold_raid1
+}
+
+function test_threshold_time_raid1()
+{
+    export PHOBOS_LRS_sync_time_ms="dir=1"
+    export PHOBOS_LRS_sync_nb_req="dir=100"
+    export PHOBOS_LRS_sync_wsize_kb="dir=1000000000000"
+
+    test_threshold_raid1
+}
+
+################################################################################
 #                              RAID1                                           #
 ################################################################################
 
@@ -377,7 +492,16 @@ TESTS=("setup_dir_raid1; test_mput_no_split_raid1_one_file; cleanup_dir"
         cleanup_dir"
        "setup_2dir_raid1; \
             test_mput_no_split_raid1_repl_two_file; \
-        cleanup_dir")
+        cleanup_dir"
+       "setup_dir_raid1_sync; \
+            test_threshold_req_raid1; \
+        cleanup_dir_sync"
+       "setup_dir_raid1_sync; \
+            test_threshold_wsize_raid1; \
+        cleanup_dir_sync"
+       "setup_dir_raid1_sync; \
+            test_threshold_time_raid1; \
+        cleanup_dir_sync")
 
 ################################################################################
 #                              RAID4                                           #
