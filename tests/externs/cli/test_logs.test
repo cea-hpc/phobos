@@ -362,6 +362,30 @@ function test_clear_filters
     if [ ! -z "$($valg_phobos logs dump)" ]; then
         error "No log should still be recorded"
     fi
+
+    # Create an error
+    $phobos put -f tape /etc/hosts blob
+    umount $($phobos drive status -o mount_path,name | grep ${lto6_drives[0]} |
+             cut -d' ' -f2)
+    $phobos drive unload ${lto6_drives[0]} &&
+        error "phobos drive unload should have failed"
+    # Add a successfull log
+    $phobos drive load ${lto6_drives[0]} ${lto6_tapes[3]}
+
+    $valg_phobos logs clear --errors --errno 4 &&
+        error "phobos logs clear should have failed"
+
+    $valg_phobos logs clear --errors ||
+        error "Logs for all errors should have been cleared"
+
+    check_number_of_logs 1
+    $valg_phobos logs clear --clear-all ||
+        error "All logs should have been cleared using --clear-all"
+
+    # The last log has been cleared
+    if [ ! -z "$($valg_phobos logs dump)" ]; then
+        error "No log should still be recorded"
+    fi
 }
 
 TESTS=("setup; test_device_load; cleanup"

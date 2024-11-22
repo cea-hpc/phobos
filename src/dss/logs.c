@@ -199,6 +199,8 @@ int create_logs_filter(struct pho_log_filter *log_filter,
         remaining_criteria++;
     if (log_filter->end.tv_sec != 0)
         remaining_criteria++;
+    if (log_filter->errors)
+        remaining_criteria++;
 
     if (remaining_criteria == 0) {
         *dss_log_filter = NULL;
@@ -283,6 +285,13 @@ int create_logs_filter(struct pho_log_filter *log_filter,
         g_string_append_printf(filter_str,
                                "{\"$LTE\": {\"DSS::LOG::end\": \"%s\"}}%s",
                                time_str, remaining_criteria ? "," : "");
+    }
+
+    if (log_filter->errors) {
+        remaining_criteria--;
+        g_string_append_printf(filter_str,
+                               "{\"$NE\": {\"DSS::LOG::errno\": \"%d\"}}%s", 0,
+                               remaining_criteria ? "," : "");
     }
 
     g_string_append_printf(filter_str, "]}");

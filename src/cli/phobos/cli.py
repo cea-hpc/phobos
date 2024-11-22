@@ -42,7 +42,7 @@ import os
 import os.path
 
 from abc import ABCMeta, abstractmethod
-from ctypes import (c_int, c_long, byref, pointer)
+from ctypes import (c_int, c_long, byref, pointer, c_bool)
 
 from ClusterShell.NodeSet import NodeSet
 
@@ -1088,7 +1088,7 @@ class ExtentListOptHandler(ListOptHandler):
     Specific version of the 'list' command for extent, with a couple
     extra-options.
     """
-    descr="list all extents"
+    descr = "list all extents"
 
     @classmethod
     def add_options(cls, parser):
@@ -1558,6 +1558,8 @@ class LogsDumpOptHandler(BaseOptHandler):
                             help="Library containing the target drive and tape")
         parser.add_argument('-e', '--errno', type=int,
                             help='error number of the logs to dump')
+        parser.add_argument('--errors', action='store_true',
+                            help='dump all errors')
         parser.add_argument('-c', '--cause',
                             help='cause of the logs to dump',
                             choices=["library_scan", "library_open",
@@ -1597,6 +1599,8 @@ class LogsClearOptHandler(BaseOptHandler):
                             help="Library containing the target drive and tape")
         parser.add_argument('-e', '--errno', type=int,
                             help='error number of the logs to dump')
+        parser.add_argument('--errors', action='store_true',
+                            help='clear all errors')
         parser.add_argument('-c', '--cause',
                             help='cause of the logs to dump',
                             choices=["library_scan", "library_open",
@@ -1615,7 +1619,8 @@ class LogsClearOptHandler(BaseOptHandler):
                                  'have no effect, if any of the other '
                                  'arguments is specified')
 
-def create_log_filter(library, device, medium, _errno, cause, start, end): # pylint: disable=too-many-arguments
+def create_log_filter(library, device, medium, _errno, cause, start, end, \
+                      errors): # pylint: disable=too-many-arguments
     """Create a log filter structure with the given parameters."""
     device_id = Id(PHO_RSC_TAPE if (device or library) else PHO_RSC_NONE,
                    name=device if device else "",
@@ -1628,11 +1633,12 @@ def create_log_filter(library, device, medium, _errno, cause, start, end): # pyl
                c_int(PHO_OPERATION_INVALID))
     c_start = Timeval(c_long(int(start)), 0)
     c_end = Timeval(c_long(int(end)), 999999)
+    c_errors = (c_bool(errors) if errors else None)
 
     return (byref(LogFilter(device_id, medium_id, c_errno, c_cause, c_start,
-                            c_end))
+                            c_end, c_errors))
             if device or medium or library or _errno or cause or start or
-            end else None)
+            end or errors else None)
 
 
 class LogsOptHandler(BaseOptHandler):
@@ -1660,6 +1666,7 @@ class LogsOptHandler(BaseOptHandler):
         cause = self.params.get('cause')
         start = self.params.get('start')
         end = self.params.get('end')
+        errors = self.params.get('errors')
         if (device or medium):
             #if we have a resource we need the library otion or the default
             set_library(self)
@@ -1667,8 +1674,13 @@ class LogsOptHandler(BaseOptHandler):
             #if we have no resource the library could be None if not set
             self.library = self.params.get('library')
 
+        if _errno and errors:
+            self.logger.error("only one of '--errors' or '--errno' must be "
+                              "provided")
+            sys.exit(os.EX_USAGE)
+
         log_filter = create_log_filter(self.library, device, medium, _errno,
-                                       cause, start, end)
+                                       cause, start, end, errors)
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.dump_logs(sys.stdout.fileno(), log_filter)
@@ -1685,6 +1697,7 @@ class LogsOptHandler(BaseOptHandler):
         cause = self.params.get('cause')
         start = self.params.get('start')
         end = self.params.get('end')
+        errors = self.params.get('errors')
         if (device or medium):
             #if we have a resource we need the library otion or the default
             set_library(self)
@@ -1692,8 +1705,13 @@ class LogsOptHandler(BaseOptHandler):
             #if we have no resource the library could be None if not set
             self.library = self.params.get('library')
 
+        if _errno and errors:
+            self.logger.error("only one of '--errors' or '--errno' must be "
+                              "provided")
+            sys.exit(os.EX_USAGE)
+
         log_filter = create_log_filter(self.library, device, medium, _errno,
-                                       cause, start, end)
+                                       cause, start, end, errors)
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.clear_logs(log_filter, self.params.get('clear_all'))

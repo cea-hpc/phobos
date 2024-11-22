@@ -329,6 +329,7 @@ struct pho_log_filter {
     enum operation_type cause;
     struct timeval start;
     struct timeval end;
+    bool errors;
 };
 
 /**

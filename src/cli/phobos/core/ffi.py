@@ -953,6 +953,7 @@ class LogFilter(Structure):
         ('cause', c_int),
         ('start', Timeval),
         ('end', Timeval),
+        ('errors', c_bool),
     ]
 
 

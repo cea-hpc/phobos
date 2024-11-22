@@ -151,6 +151,8 @@ static int json2sql_object_begin(struct saj_parser *parser, const char *key,
     /* If top-level key is a logical operator, we have an implicit '=' */
     if (!current_key || key_is_logical_op(current_key)) {
         g_string_append(str, " = ");
+    } else if (!g_ascii_strcasecmp(current_key, "$NE")) {
+        g_string_append(str, " != ");
     } else if (!g_ascii_strcasecmp(current_key, "$GT")) {
         g_string_append(str, " > ");
     } else if (!g_ascii_strcasecmp(current_key, "$GTE")) {
