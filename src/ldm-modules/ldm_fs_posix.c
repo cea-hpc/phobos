@@ -29,6 +29,7 @@
 #endif
 
 #include "ldm_common.h"
+#include "pho_cfg.h"
 #include "pho_common.h"
 #include "pho_ldm.h"
 #include "pho_module_loader.h"
@@ -49,14 +50,48 @@ static struct module_desc FS_ADAPTER_POSIX_MODULE_DESC = {
     .mod_minor = PLUGIN_MINOR,
 };
 
+/** List of POSIX configuration parameters */
+enum pho_cfg_params_posix {
+    /* LDM parameters */
+    PHO_CFG_POSIX_dir_full_threshold,
+
+    /* Delimiters, update when modifying options */
+    PHO_CFG_POSIX_FIRST = PHO_CFG_POSIX_dir_full_threshold,
+    PHO_CFG_POSIX_LAST  = PHO_CFG_POSIX_dir_full_threshold,
+};
+
+/** Definition and default values of POSIX configuration parameters */
+const struct pho_config_item cfg_posix[] = {
+    [PHO_CFG_POSIX_dir_full_threshold] = {
+        .section = "dir",
+        .name    = "dir_full_threshold",
+        .value   = "1",
+    },
+};
+
 static int common_statfs_wrapper(const char *mnt_path,
                                  struct ldm_fs_space *fs_spc,
                                  json_t **message)
 {
+    int dir_full_threshold;
+    int rc;
+
     if (message)
         *message = NULL;
 
-    return simple_statfs(mnt_path, fs_spc);
+    rc = simple_statfs(mnt_path, fs_spc);
+    if (rc)
+        return rc;
+
+    /* get dir_full_threshold from conf */
+    dir_full_threshold = PHO_CFG_GET_INT(cfg_posix, PHO_CFG_POSIX,
+                                         dir_full_threshold, 1);
+    if (dir_full_threshold == 0)
+        LOG_RETURN(-EINVAL, "Unable to get dir_full_threshold from conf");
+
+    apply_full_threshold(dir_full_threshold, fs_spc);
+
+    return 0;
 }
 
 static char *get_label_path(const char *dir_path)

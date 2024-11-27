@@ -148,3 +148,38 @@ int simple_statfs(const char *path, struct ldm_fs_space *fs_spc)
 
     return compute_available_space(path, stfs, fs_spc);
 }
+
+void apply_full_threshold(int full_threshold, struct ldm_fs_space *fs_spc)
+{
+    ssize_t avail;
+    ssize_t free;
+    ssize_t used;
+
+    /* Some LTFS doc says:
+     * When the tape cartridge is almost full, further write operations will be
+     * prevented.  The free space on the tape (e.g.  from the df command) will
+     * indicate that there is still some capacity available, but that is
+     * reserved for updating the index.
+     *
+     * Indeed, we state that LTFS return ENOSPC whereas the previous statfs()
+     * call indicated there was enough space to write...
+     * We found that this early ENOSPC occured 5% before the expected limit.
+     *
+     * For example, with a threshold of 5% :
+     * reserved = 5% * total
+     * total = used + free
+     * avail_space = total - reserved - used
+     *             = (used + free) - 5% * (used + free) - used
+     *             = 95% free - 5% * used
+     */
+
+    free = ((100 - full_threshold) * fs_spc->spc_avail) / 100;
+    used = (full_threshold * fs_spc->spc_used) / 100;
+    avail = free - used;
+
+    fs_spc->spc_avail = avail > 0 ? fs_spc->spc_avail : 0;
+
+    /* A full medium cannot be written */
+    if (fs_spc->spc_avail == 0)
+        fs_spc->spc_flags |= PHO_FS_READONLY;
+}

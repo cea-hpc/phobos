@@ -32,7 +32,8 @@ libpho_dev_adapter_scsi_tape_la_LDFLAGS=-version-info 0:0:0
 
 libpho_fs_adapter_posix_la_SOURCES=ldm_fs_posix.c ldm_common.c
 libpho_fs_adapter_posix_la_CFLAGS=-fPIC $(AM_CFLAGS)
-libpho_fs_adapter_posix_la_LIBADD=../common/libpho_common.la
+libpho_fs_adapter_posix_la_LIBADD=../common/libpho_common.la \
+                                  ../cfg/libpho_cfg.la
 libpho_fs_adapter_posix_la_LDFLAGS=-version-info 0:0:0
 
 libpho_fs_adapter_ltfs_la_SOURCES=ldm_fs_ltfs.c ldm_common.c

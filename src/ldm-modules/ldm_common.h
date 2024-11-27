@@ -67,6 +67,11 @@ int simple_statfs(const char *path, struct ldm_fs_space *fs_spc);
 int logged_statfs(const char *path, struct ldm_fs_space *fs_spc,
                   json_t **message);
 
+/*
+ * Apply a full threshold on a medium to reserved space. Call just after a 'df'.
+ */
+void apply_full_threshold(int full_threshold, struct ldm_fs_space *fs_spc);
+
 /**
  * Build a command to mount a LTFS filesystem at a given path.
  * The result must be released by the caller using free(3).

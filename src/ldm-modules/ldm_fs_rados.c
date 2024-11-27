@@ -53,6 +53,25 @@ static struct module_desc FS_ADAPTER_RADOS_MODULE_DESC = {
     .mod_minor = PLUGIN_MINOR,
 };
 
+/** List of RADOS_POOL configuration parameters */
+enum pho_cfg_params_rados {
+    /* LDM parameters */
+    PHO_CFG_RADOS_pool_full_threshold,
+
+    /* Delimiters, update when modifying options */
+    PHO_CFG_RADOS_FIRST = PHO_CFG_RADOS_pool_full_threshold,
+    PHO_CFG_RADOS_LAST  = PHO_CFG_RADOS_pool_full_threshold,
+};
+
+/** Definition and default values of RADOS configuration parameters */
+const struct pho_config_item cfg_posix[] = {
+    [PHO_CFG_RADOS_pool_full_threshold] = {
+        .section = "rados_pool",
+        .name    = "rados_pool_full_threshold",
+        .value   = "1",
+    },
+};
+
 static int pho_rados_pool_disconnect(struct lib_handle *lib_hdl,
                                      rados_ioctx_t *pool_io_ctx)
 {
@@ -169,6 +188,7 @@ static int pho_rados_pool_stats(const char *poolname,
 {
     struct rados_cluster_stat_t cluster_stats;
     struct rados_pool_stat_t pool_stats;
+    int rados_pool_full_threshold;
     struct lib_handle lib_hdl;
     rados_ioctx_t pool_io_ctx;
     rados_t cluster_hdl;
@@ -197,6 +217,15 @@ static int pho_rados_pool_stats(const char *poolname,
     fs_spc->spc_used = pool_stats.num_bytes;
     fs_spc->spc_avail = cluster_stats.kb_avail * 1000;
     fs_spc->spc_flags = 0;
+
+    /* get rados_pool_full_threshold from conf */
+    rados_pool_full_threshold = PHO_CFG_GET_INT(cfg_rados, PHO_CFG_RADOS,
+                                                rados_pool_full_threshold, 1);
+    if (rados_pool_full_threshold == 0)
+        LOG_RETURN(-EINVAL,
+                   "Unable to get rados_pool_full_threshold from conf");
+
+    apply_full_threshold(rados_pool_full_threshold, fs_spc);
 
 out:
     rc = pho_rados_pool_disconnect(&lib_hdl, &pool_io_ctx);

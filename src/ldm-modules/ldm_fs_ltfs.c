@@ -87,7 +87,7 @@ const struct pho_config_item cfg_ltfs[] = {
         .value   = PHO_LDM_HELPER" release_ltfs \"%s\""
     },
     [PHO_CFG_LTFS_tape_full_threshold] = {
-        .section = "ltfs",
+        .section = "tape",
         .name = "tape_full_threshold",
         .value = "5",
     },
@@ -448,31 +448,11 @@ static int ltfs_df(const char *path, struct ldm_fs_space *fs_spc,
 {
     json_t *statfs_message = NULL;
     int tape_full_threshold;
-    ssize_t  avail;
-    ssize_t free;
-    ssize_t used;
     int rc;
 
     if (message)
         *message = NULL;
 
-    /* Some LTFS doc says:
-     * When the tape cartridge is almost full, further write operations will be
-     * prevented.  The free space on the tape (e.g.  from the df command) will
-     * indicate that there is still some capacity available, but that is
-     * reserved for updating the index.
-     *
-     * Indeed, we state that LTFS return ENOSPC whereas the previous statfs()
-     * call indicated there was enough space to write...
-     * We found that this early ENOSPC occured 5% before the expected limit.
-     *
-     * For example, with a threshold of 5% :
-     * reserved = 5% * total
-     * total = used + free
-     * avail_space = total - reserved - used
-     *             = (used + free) - 5% * (used + free) - used
-     *             = 95% free - 5% * used
-     */
     rc = logged_statfs(path, fs_spc, &statfs_message);
     if (rc) {
         if (statfs_message && message)
@@ -487,15 +467,7 @@ static int ltfs_df(const char *path, struct ldm_fs_space *fs_spc,
     if (tape_full_threshold == 0)
         LOG_RETURN(-EINVAL, "Unable to get tape_full_threshold from conf");
 
-    free = ((100 - tape_full_threshold) * fs_spc->spc_avail) / 100;
-    used = (tape_full_threshold * fs_spc->spc_used) / 100;
-    avail = free - used;
-
-    fs_spc->spc_avail = avail > 0 ? avail : 0;
-
-    /* A full tape cannot be written */
-    if (fs_spc->spc_avail == 0)
-        fs_spc->spc_flags |= PHO_FS_READONLY;
+    apply_full_threshold(tape_full_threshold, fs_spc);
 
     return 0;
 }
