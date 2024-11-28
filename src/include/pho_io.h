@@ -390,6 +390,18 @@ ioa_get_common_xattrs_from_extent(const struct io_adapter_module *ioa,
 int get_cfg_io_block_size(size_t *size);
 
 /**
+ * Retrieve fs_block_size value from config file
+ *
+ * A negative value is not a valid fs block size, -EINVAL will be returned.
+ *
+ * \param[in]       family      Family of the filesystem.
+ * \param[out]      size        fs_block_size value.
+ *
+ * \return 0 on success, negative error code on failure.
+ */
+int get_cfg_fs_block_size(enum rsc_family family, size_t *size);
+
+/**
  * Retrieve the preferred IO size from the backend storage
  * if it was not set in the global "io" configuration.
  *

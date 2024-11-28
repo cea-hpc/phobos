@@ -397,18 +397,22 @@ out_close:
     return rc;
 }
 
-static void raid_build_write_allocation_req(struct pho_encoder *enc,
-                                            pho_req_t *req)
+static int raid_build_write_allocation_req(struct pho_encoder *enc,
+                                           pho_req_t *req)
 {
     struct raid_io_context *io_contexts = enc->priv_enc;
     /* Use the first io_context as they have all the same number of extents.
      * I/O contexts are defined with the put params.
      */
     size_t n_extents = n_total_extents(&io_contexts[0]);
+    int n_data_extents = io_contexts[0].n_data_extents;
+    size_t size_per_extent = 0;
+    size_t fs_block_size = 0;
+    size_t nb_block = 0;
     size_t size = 0;
     size_t *n_tags;
-    int i;
-    int j;
+    int rc = 0;
+    int i, j;
 
     ENTRY;
 
@@ -420,13 +424,35 @@ static void raid_build_write_allocation_req(struct pho_encoder *enc,
     pho_srl_request_write_alloc(req, n_extents, n_tags);
     free(n_tags);
 
-    for (i = 0; i < enc->xfer->xd_ntargets; i++)
-        size += io_contexts[i].write.to_write;
+    rc = get_cfg_fs_block_size(enc->xfer->xd_params.put.family, &fs_block_size);
+    if (rc)
+        return rc;
+
+    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+        /* Add an overhead to the total size to write to anticipate the size
+         * taken by the xattrs and directory.
+         *
+         * The phys_spc_used is:
+         * ceil(size / fs_block_size) * fs_block_size + 3 * fs_block_size
+         */
+        if (fs_block_size > 0) {
+            size_per_extent =
+                (io_contexts[i].write.to_write + n_data_extents - 1) /
+                 n_data_extents;
+            nb_block = (size_per_extent + (fs_block_size - 1)) / fs_block_size;
+            size += nb_block * fs_block_size + 3 * fs_block_size;
+
+        /* If the block size of the file system is not defined in the conf,
+         * the size to alloc is equal to the size to write.
+         */
+        } else {
+            size += (io_contexts[i].write.to_write + n_data_extents - 1) /
+                     n_data_extents;
+        }
+    }
 
     for (i = 0; i < n_extents; ++i) {
-        req->walloc->media[i]->size =
-            (size + io_contexts[0].n_data_extents - 1) /
-                io_contexts[0].n_data_extents;
+        req->walloc->media[i]->size = size;
 
         for (j = 0; j < enc->xfer->xd_params.put.tags.count; ++j)
             req->walloc->media[i]->tags[j] =
@@ -434,6 +460,7 @@ static void raid_build_write_allocation_req(struct pho_encoder *enc,
     }
 
     req->walloc->no_split = enc->xfer->xd_params.put.no_split;
+    return 0;
 }
 
 static size_t split_first_extent_index(struct pho_encoder *enc)
@@ -1437,13 +1464,16 @@ int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
 
 alloc:
     /* Build next request */
-    if (enc->is_decoder)
+    if (enc->is_decoder) {
         if (enc->delete_action)
             raid_build_delete_allocation_req(enc, *reqs + *n_reqs);
         else
             raid_build_read_allocation_req(enc, *reqs + *n_reqs);
-    else
-        raid_build_write_allocation_req(enc, *reqs + *n_reqs);
+    } else {
+        rc = raid_build_write_allocation_req(enc, *reqs + *n_reqs);
+        if (rc)
+            goto out;
+    }
 
     (*n_reqs)++;
     for (i = 0; i < enc->xfer->xd_ntargets; i++) {

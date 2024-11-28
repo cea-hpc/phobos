@@ -30,6 +30,7 @@
 #include "pho_module_loader.h"
 
 #define IO_BLOCK_SIZE_ATTR_KEY "io_block_size"
+#define FS_BLOCK_SIZE_ATTR_KEY "fs_block_size"
 
 /**
  * List of configuration parameters for this module
@@ -37,10 +38,11 @@
 enum pho_cfg_params_io {
     /* Actual parameters */
     PHO_CFG_IO_io_block_size,
+    PHO_CFG_IO_fs_block_size,
 
     /* Delimiters, update when modifying options */
     PHO_CFG_IO_FIRST = PHO_CFG_IO_io_block_size,
-    PHO_CFG_IO_LAST  = PHO_CFG_IO_io_block_size,
+    PHO_CFG_IO_LAST  = PHO_CFG_IO_fs_block_size,
 };
 
 const struct pho_config_item cfg_io[] = {
@@ -48,6 +50,11 @@ const struct pho_config_item cfg_io[] = {
         .section = "io",
         .name    = IO_BLOCK_SIZE_ATTR_KEY,
         .value   = "0" /** default value = not set */
+    },
+    [PHO_CFG_IO_fs_block_size] = {
+        .section = "io",
+        .name    = FS_BLOCK_SIZE_ATTR_KEY,
+        .value   = "dir=1024,tape=524288,rados_pool=1024"
     },
 };
 
@@ -74,6 +81,27 @@ int get_cfg_io_block_size(size_t *size)
 
     *size = sz;
     return 0;
+}
+
+int get_cfg_fs_block_size(enum rsc_family family, size_t *size)
+{
+    char *value;
+    int rc;
+
+    rc = pho_cfg_get_substring_value("io", FS_BLOCK_SIZE_ATTR_KEY, family,
+                                     &value);
+    if (rc == 0) {
+        *size = str2int64(value);
+        if (size < 0)
+            LOG_RETURN(-EINVAL,
+                       "Invalid value for fs_block_size with '%s' family",
+                       rsc_family2str(family));
+    } else if (rc == -ENODATA) {
+        *size = 0;
+        rc = 0;
+    }
+
+    return rc;
 }
 
 void get_preferred_io_block_size(size_t *io_size,

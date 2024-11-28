@@ -132,6 +132,23 @@ function cleanup_dir_sync()
     done
 }
 
+function setup_dir_raid1_overhead()
+{
+    setup
+
+    DIRS=(
+          $(make_tmp_fs 1M)
+          $(make_tmp_fs 1M)
+         )
+
+    export PHOBOS_STORE_default_layout="raid1"
+    export PHOBOS_LAYOUT_RAID1_repl_count=1
+
+    $phobos dir add -T first ${DIRS[0]}
+    $phobos dir add -T second ${DIRS[1]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
 function setup_2dir_raid1()
 {
     setup
@@ -482,6 +499,84 @@ function test_threshold_time_raid1()
 }
 
 ################################################################################
+#                              TESTS OVERHEAD                                  #
+################################################################################
+
+function test_overhead()
+{
+    local files=(
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                 $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+                )
+
+    local dev=$(df --output=source ${DIRS[1]} | tail -n1)
+    local block_size=$(blockdev --getbsz $dev)
+    local size=$($phobos dir list -o stats.phys_spc_free ${DIRS[0]})
+    local file_size=$(($size / 2))
+
+    # Write 2 files of the total size available on the medium
+    dd if=/dev/urandom of="${files[0]}" bs=$file_size count=1
+    dd if=/dev/urandom of="${files[1]}" bs=$file_size count=1
+
+    objects=("${files[0]} mput_no_split_oid1 -"
+             "${files[1]} mput_no_split_oid2 -")
+    echo "${objects[0]}
+          ${objects[1]}" > $DIR_TEST_OUT/mput_no_split
+
+    export PHOBOS_LRS_sync_time_ms="dir=60000"
+    export PHOBOS_LRS_sync_nb_req="dir=1"
+    export PHOBOS_LRS_sync_wsize_kb="dir=100000000000"
+
+    export PHOBOS_IO_fs_block_size="dir=$block_size"
+
+    # With the overhead, should failed with no space
+    set +e
+    ENOSPC=28
+    output=$($valg_phobos put -T first --file $DIR_TEST_OUT/mput_no_split \
+             --no-split 2>&1)
+    rc=$?
+    if [[ $rc -ne $ENOSPC ]]; then
+        error "phobos put --file should have failed with ENOSPC"
+    fi
+    set -e
+
+    unset PHOBOS_IO_fs_block_size
+    # Without the overhead at the alloc, should write but last sync should
+    # failed
+    set +e
+    output=$($valg_phobos put -T first --file $DIR_TEST_OUT/mput_no_split \
+             --no-split 2>&1)
+    rc=$?
+    if [[ $rc -eq 0 ]]; then
+        error "phobos put --file should have failed"
+    fi
+    set -e
+    echo "$output" | grep "received error release to last request"
+
+    # Remove the overhead added at the alloc
+    local nb_blocks=$(((($size + ($block_size - 1)) / $block_size) - 3 * 2))
+    file_size=$(($nb_blocks / 2))
+    dd if=/dev/urandom of="${files[0]}" bs=$block_size count=$file_size
+    dd if=/dev/urandom of="${files[1]}" bs=$block_size count=$file_size
+
+    export PHOBOS_IO_fs_block_size="dir=$block_size"
+    # With the overhead at the alloc, should succeed with no space left on
+    # medium
+    $valg_phobos put -T second --file $DIR_TEST_OUT/mput_no_split --no-split ||
+        error "phobos put --file should have worked"
+
+    local count=$($phobos extent list --degroup | wc -l)
+    if [[ $count -ne 2 ]]; then
+        error "There should be two extents (got $count)"
+    fi
+
+    local phys_spc_free=$($phobos dir list -o stats.phys_spc_free ${DIRS[1]})
+    if [[ $phys_spc_free -ne 0 ]]; then
+        error "There should be no space left (got $phys_spc_free)"
+    fi
+}
+
+################################################################################
 #                              RAID1                                           #
 ################################################################################
 
@@ -501,7 +596,10 @@ TESTS=("setup_dir_raid1; test_mput_no_split_raid1_one_file; cleanup_dir"
         cleanup_dir_sync"
        "setup_dir_raid1_sync; \
             test_threshold_time_raid1; \
-        cleanup_dir_sync")
+        cleanup_dir_sync"
+       "setup_dir_raid1_overhead; \
+            test_overhead; \
+        cleanup_dir")
 
 ################################################################################
 #                              RAID4                                           #
