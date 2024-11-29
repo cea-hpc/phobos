@@ -181,7 +181,8 @@ class BaseOptHandler:
     @classmethod
     def subparser_register(cls, base_parser):
         """Register the subparser to a top-level one."""
-        subparser = base_parser.add_parser(cls.label, help=cls.descr,
+        subparser = base_parser.add_parser(cls.label, description=cls.descr,
+                                           help=cls.descr,
                                            epilog=cls.epilog,
                                            aliases=cls.alias)
 
@@ -744,6 +745,7 @@ class DriveListOptHandler(ListOptHandler):
     Specific version of the 'list' command for tape drives, with a couple
     extra-options.
     """
+    descr = 'list all drives'
 
     @classmethod
     def add_options(cls, parser):
@@ -773,6 +775,7 @@ class MediaListOptHandler(ListOptHandler):
     Specific version of the 'list' command for media, with a couple
     extra-options.
     """
+    descr = "list all media"
 
     @classmethod
     def add_options(cls, parser):
@@ -818,6 +821,7 @@ class ObjectListOptHandler(ListOptHandler):
     Specific version of the 'list' command for object, with a couple
     extra-options.
     """
+    descr = 'list all objects'
 
     @classmethod
     def add_options(cls, parser):
@@ -1085,6 +1089,7 @@ class ExtentListOptHandler(ListOptHandler):
     Specific version of the 'list' command for extent, with a couple
     extra-options.
     """
+    descr="list all extents"
 
     @classmethod
     def add_options(cls, parser):
@@ -1127,6 +1132,8 @@ def uncase_fstype(choices):
 
 class TapeAddOptHandler(MediaAddOptHandler):
     """Specific version of the 'add' command for tapes, with extra-options."""
+    descr = "insert new tape to the system"
+
     @classmethod
     def add_options(cls, parser):
         """Add resource-specific options."""
@@ -1157,6 +1164,7 @@ class MediumImportOptHandler(XferOptHandler):
 
 class TapeImportOptHandler(MediumImportOptHandler):
     """Specific version of the 'import' command for tapes"""
+    descr = "import existing tape"
 
     @classmethod
     def add_options(cls, parser):
@@ -1268,6 +1276,7 @@ class FormatOptHandler(DSSInteractHandler):
 
 class TapeFormatOptHandler(FormatOptHandler):
     """Format a tape."""
+    descr = "format a tape"
 
     @classmethod
     def add_options(cls, parser):
@@ -1282,6 +1291,7 @@ class TapeFormatOptHandler(FormatOptHandler):
 
 class DirFormatOptHandler(FormatOptHandler):
     """Format a directory."""
+    descr = "format a directory"
 
     @classmethod
     def add_options(cls, parser):
@@ -1294,6 +1304,7 @@ class DirFormatOptHandler(FormatOptHandler):
 
 class RadosPoolFormatOptHandler(FormatOptHandler):
     """Format a RADOS pool."""
+    descr = "format a RADOS pool"
 
     @classmethod
     def add_options(cls, parser):
@@ -2147,7 +2158,7 @@ class TLCPingOptHandler(BaseOptHandler):
 class PingOptHandler(BaseOptHandler):
     """Ping phobos daemon"""
     label = 'ping'
-    descr = 'ping the phobos daemon'
+    descr = 'ping the phobos daemons'
     verbs = [
         PhobosdPingOptHandler,
         TLCPingOptHandler,
