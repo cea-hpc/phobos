@@ -112,7 +112,11 @@ static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
 
     if (pho_response_is_error(resp)) {
         rc = resp->error->rc;
-        LOG_GOTO(out, rc, "Received error response");
+        if (rc == -ECONNREFUSED && id->family != PHO_RSC_DIR)
+            LOG_GOTO(out, rc, "Received error response. Cannot contact '%s'",
+                     id->family == PHO_RSC_TAPE ? "TLC" : "RADOS");
+        else
+            LOG_GOTO(out, rc, "Received error response");
     }
 
     pho_error(rc = -EINVAL, "Received invalid response");
