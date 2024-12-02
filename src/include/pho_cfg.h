@@ -31,6 +31,8 @@
 #include <attr/xattr.h>
 #include <stdbool.h>
 
+#include "pho_types.h"
+
 /** prefix string for environment variables */
 #define PHO_ENV_PREFIX "PHOBOS"
 
@@ -194,4 +196,18 @@ bool _pho_cfg_get_bool(int first_index, int last_index, int param_index,
 int tape_drive_compat_models(const char *tape_model, const char *drive_model,
                              bool *res);
 
+/**
+ * Helper to get a substring value configuration parameter.
+ *
+ * @param[in]  section   Name of the section to look for the parameter.
+ * @param[in]  name      Name of the parameter to read.
+ * @param[in]  family    Name of the family to read in the parameter.
+ * @param[out] value     Value of the parameter.
+ *
+ * @return  0            The parameter is returned successfully.
+ * @return  -ENODATA     The parameter is not found.
+ * @return  -EINVAL      The parameter or family are invalid.
+ */
+int pho_cfg_get_substring_value(const char *section, const char *name,
+                                enum rsc_family family, char **substring);
 #endif

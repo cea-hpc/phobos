@@ -27,6 +27,7 @@
 #endif
 
 #include "lrs_cfg.h"
+#include "pho_cfg.h"
 #include "pho_common.h"
 
 #include <stdlib.h>
@@ -85,50 +86,6 @@ const struct pho_config_item cfg_lrs[] = {
     },
 };
 
-static int _get_substring_value_from_token(const char *cfg_param,
-                                           enum rsc_family family,
-                                           char **substring)
-{
-    const char *cfg_val;
-    char *token_dup;
-    char *save_ptr;
-    char *key;
-    int rc;
-
-    rc = pho_cfg_get_val("lrs", cfg_param, &cfg_val);
-    if (rc)
-        return rc;
-
-    token_dup = xstrdup(cfg_val);
-
-    key = strtok_r(token_dup, ",", &save_ptr);
-    if (key == NULL)
-        key = token_dup;
-
-    rc = -EINVAL;
-
-    do {
-        char *value = strchr(key, '=');
-
-        if (value == NULL)
-            continue;
-
-        *value++ = '\0';
-        if (strcmp(key, rsc_family_names[family]) != 0)
-            continue;
-
-        rc = 0;
-
-        *substring = xstrdup(value);
-
-        break;
-    } while ((key = strtok_r(NULL, ",", &save_ptr)) != NULL);
-
-    free(token_dup);
-
-    return rc;
-}
-
 static int _get_unsigned_long_from_string(const char *value,
                                           unsigned long min_limit,
                                           unsigned long max_limit,
@@ -161,7 +118,7 @@ int get_cfg_sync_time_ms_value(enum rsc_family family,
     char *value;
     int rc;
 
-    rc = _get_substring_value_from_token("sync_time_ms", family, &value);
+    rc = pho_cfg_get_substring_value("lrs", "sync_time_ms", family, &value);
     if (rc)
         return rc;
 
@@ -182,7 +139,7 @@ int get_cfg_sync_nb_req_value(enum rsc_family family, unsigned int *threshold)
     char *value;
     int rc;
 
-    rc = _get_substring_value_from_token("sync_nb_req", family, &value);
+    rc = pho_cfg_get_substring_value("lrs", "sync_nb_req", family, &value);
     if (rc)
         return rc;
 
@@ -201,7 +158,7 @@ int get_cfg_sync_wsize_value(enum rsc_family family, unsigned long *threshold)
     char *value;
     int rc;
 
-    rc = _get_substring_value_from_token("sync_wsize_kb", family, &value);
+    rc = pho_cfg_get_substring_value("lrs", "sync_wsize_kb", family, &value);
     if (rc)
         return rc;
 
