@@ -384,10 +384,11 @@ ioa_get_common_xattrs_from_extent(const struct io_adapter_module *ioa,
  * get the size from the backend storage, so no error will be returned.
  *
  * \param[out]      size        io_block_size value.
+ * \param[in]       family      io_block_size family.
  *
  * \return 0 on success, negative error code on failure.
  */
-int get_cfg_io_block_size(size_t *size);
+int get_cfg_io_block_size(size_t *size, enum rsc_family family);
 
 /**
  * Retrieve fs_block_size value from config file
@@ -406,10 +407,11 @@ int get_cfg_fs_block_size(enum rsc_family family, size_t *size);
  * if it was not set in the global "io" configuration.
  *
  * @param[out]    io_size   The IO size to be used.
+ * @param[in]     family    Family of the backend storage.
  * @param[in]     ioa       IO adapter to access the current storage backend.
  * @param[in,out] iod       IO decriptor to access the current object.
  */
-void get_preferred_io_block_size(size_t *io_size,
+void get_preferred_io_block_size(size_t *io_size, enum rsc_family family,
                                  const struct io_adapter_module *ioa,
                                  struct pho_io_descr *iod);
 
@@ -427,13 +429,15 @@ void get_preferred_io_block_size(size_t *io_size,
  * \param[in, out]  iod_source  I/O descriptor of the source object.
  * \param[in]       ioa_target  I/O adapter of the target medium.
  * \param[in, out]  iod_target  I/O descriptor of the target object.
+ * \param[in]       family      Family of the source medium.
  *
  * \return 0 on success, negative error code on failure.
  */
 int copy_extent(struct io_adapter_module *ioa_source,
                 struct pho_io_descr *iod_source,
                 struct io_adapter_module *ioa_target,
-                struct pho_io_descr *iod_target);
+                struct pho_io_descr *iod_target,
+                enum rsc_family family);
 
 /**
  * Set the common information regarding an object and the extent being

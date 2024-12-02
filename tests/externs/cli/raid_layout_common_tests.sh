@@ -347,11 +347,12 @@ function test_with_different_block_size()
     local oid=$FUNCNAME
     local file=$(make_file 512K)
 
-    export PHOBOS_IO_io_block_size=$(( 2 << 14 ))
+    export PHOBOS_IO_io_block_size="dir=$(( 2 << 14 )),tape=$(( 2 << 14 ))"
 
     $valg_phobos put "$file" $oid
     check_extent_md $oid "$file"
     unset PHOBOS_IO_io_block_size
+
     $valg_phobos get $oid /tmp/out.$$
 
     diff "$file" /tmp/out.$$
@@ -419,11 +420,13 @@ function test_put_get_split_different_block_size()
     local oid=$FUNCNAME
     local out=/tmp/out.$$
 
-    export PHOBOS_IO_io_block_size=$(( 2 << 14 ))
+    export PHOBOS_IO_io_block_size="dir=$(( 2 << 14 )),tape=$(( 2 << 14 ))"
+
     $valg_phobos put "$file" $oid
     check_extent_count "$oid" 6
     check_extent_md "$oid" "$file"
     unset PHOBOS_IO_io_block_size
+
     $valg_phobos get $oid "$out"
     diff "$out" "$file"
     rm "$out" "$file"

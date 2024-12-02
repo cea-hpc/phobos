@@ -49,7 +49,7 @@ const struct pho_config_item cfg_io[] = {
     [PHO_CFG_IO_io_block_size] = {
         .section = "io",
         .name    = IO_BLOCK_SIZE_ATTR_KEY,
-        .value   = "0" /** default value = not set */
+        .value   = "dir=0,tape=0,rados_pool=0" /** default value = not set */
     },
     [PHO_CFG_IO_fs_block_size] = {
         .section = "io",
@@ -58,29 +58,35 @@ const struct pho_config_item cfg_io[] = {
     },
 };
 
-int get_cfg_io_block_size(size_t *size)
+int get_cfg_io_block_size(size_t *size, enum rsc_family family)
 {
-    const char *string_io_block_size;
+    char *string_io_block_size;
     int64_t sz;
+    int rc;
 
-    string_io_block_size = PHO_CFG_GET(cfg_io, PHO_CFG_IO, io_block_size);
-    if (!string_io_block_size) {
+    rc = pho_cfg_get_substring_value("io", IO_BLOCK_SIZE_ATTR_KEY, family,
+                                     &string_io_block_size);
+    if (rc == 0) {
+        sz = str2int64(string_io_block_size);
+        if (sz < 0) {
+            *size = 0;
+            rc = -EINVAL;
+            pho_error(rc, "Invalid value '%s' for parameter 'io_block_size_%s'",
+                      string_io_block_size, rsc_family2str(family));
+        } else {
+            *size = sz;
+        }
+        free(string_io_block_size);
+
+    } else if (rc == -ENODATA) {
         /* If not forced by configuration, the io adapter will retrieve it
          * from the backend storage system.
          */
         *size = 0;
-        return 0;
+        rc = 0;
     }
 
-    sz = str2int64(string_io_block_size);
-    if (sz < 0) {
-        *size = 0;
-        LOG_RETURN(-EINVAL, "Invalid value '%s' for parameter '%s'",
-                   string_io_block_size, IO_BLOCK_SIZE_ATTR_KEY);
-    }
-
-    *size = sz;
-    return 0;
+    return rc;
 }
 
 int get_cfg_fs_block_size(enum rsc_family family, size_t *size)
@@ -104,13 +110,13 @@ int get_cfg_fs_block_size(enum rsc_family family, size_t *size)
     return rc;
 }
 
-void get_preferred_io_block_size(size_t *io_size,
+void get_preferred_io_block_size(size_t *io_size, enum rsc_family family,
                                  const struct io_adapter_module *ioa,
                                  struct pho_io_descr *iod)
 {
     ssize_t sz;
 
-    get_cfg_io_block_size(io_size);
+    get_cfg_io_block_size(io_size, family);
     if (*io_size != 0)
         return;
 
@@ -153,7 +159,8 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter_module **ioa)
 int copy_extent(struct io_adapter_module *ioa_source,
                 struct pho_io_descr *iod_source,
                 struct io_adapter_module *ioa_target,
-                struct pho_io_descr *iod_target)
+                struct pho_io_descr *iod_target,
+                enum rsc_family family)
 {
     size_t left_to_read;
     size_t buf_size;
@@ -162,7 +169,7 @@ int copy_extent(struct io_adapter_module *ioa_source,
     int rc;
 
     /* retrieve the preferred IO size to allocate the buffer */
-    get_preferred_io_block_size(&buf_size, ioa_target, iod_target);
+    get_preferred_io_block_size(&buf_size, family, ioa_target, iod_target);
 
     buffer = xcalloc(buf_size, sizeof(*buffer));
 

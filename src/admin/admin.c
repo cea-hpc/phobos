@@ -1560,7 +1560,7 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
         _build_new_extent(&target, &ext_res[i], &ext_new, &iod_source,
                           &iod_target);
 
-        rc = copy_extent(ioa, &iod_source, ioa, &iod_target);
+        rc = copy_extent(ioa, &iod_source, ioa, &iod_target, PHO_RSC_TAPE);
         if (rc) {
             pho_error(rc, "Failed to copy extent '%s'", ext_res[i].uuid);
             break;

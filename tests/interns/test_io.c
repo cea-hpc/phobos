@@ -375,7 +375,8 @@ static int test_copy_extent(void *state)
         LOG_GOTO(free_path, rc, "File creation failed");
 
     /* copy and check */
-    rc = copy_extent(ioa_source, &iod_source, ioa_target, &iod_target);
+    rc = copy_extent(ioa_source, &iod_source, ioa_target, &iod_target,
+                     PHO_RSC_DIR);
     if (rc)
         LOG_GOTO(remove_source, rc, "Extent copy failed");
 
