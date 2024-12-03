@@ -249,6 +249,8 @@ static int encoder_communicate(struct pho_encoder *enc,
             req->walloc->family = enc->xfer->xd_params.put.family;
             req->walloc->library =
                 xstrdup_safe(enc->xfer->xd_params.put.library);
+            req->walloc->grouping =
+                xstrdup_safe(enc->xfer->xd_params.put.grouping);
         }
 
         data = pho_comm_data_init(comm);

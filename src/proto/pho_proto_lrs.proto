@@ -50,6 +50,7 @@ message PhoRequest {
         required bool no_split = 5;            // Whether the client requires
                                                // to put all the data on the
                                                // same medium.
+        optional string grouping = 6;          // Targeted grouping
     }
 
     /**
