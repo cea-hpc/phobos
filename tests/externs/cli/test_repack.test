@@ -209,7 +209,7 @@ function test_raid1_repack_setup
 
     $phobos tape format --unlock $media
 
-    $phobos put -T origin -p repl_count=2 /etc/hosts oid-mirror
+    $phobos put -T origin -P repl_count=2 /etc/hosts oid-mirror
 
     $phobos del oid-mirror
 }

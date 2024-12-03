@@ -1,5 +1,9 @@
 # CHANGELOG UPDATES
 
+## next
+ * WARNING: the `-p` option, standing for `--lyt-params`, is uppercased, thus
+   changed to `-P`.
+
 ## 2.1.0
  * WARNING: the db schema moves from 2.0 to 2.1 and a migration is needed
  * DSS code was rewritten to merge common code and create a specific file per

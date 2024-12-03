@@ -360,7 +360,7 @@ class StorePutHandler(XferOptHandler):
                             help='Desired alias for family, tags and layout. '
                             'Specifically set family and layout supersede the '
                             'alias, tags are joined.')
-        parser.add_argument('-p', '--layout-params', '--lyt-params',
+        parser.add_argument('-P', '--layout-params', '--lyt-params',
                             help='Comma-separated list of key=value for layout '
                             'specific parameters.')
         parser.add_argument('--grouping',
