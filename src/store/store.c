@@ -38,7 +38,7 @@
 #include "pho_srl_lrs.h"
 #include "pho_type_utils.h"
 #include "pho_types.h"
-#include "store_alias.h"
+#include "store_profile.h"
 #include "store_utils.h"
 
 #include <attr/xattr.h>

@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -20,16 +20,16 @@
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
 /**
- * \brief  alias specific function header of Phobos store
+ * \brief  profile specific function header of Phobos store
  */
-#ifndef _STORE_ALIAS_H
-#define _STORE_ALIAS_H
+#ifndef _STORE_PROFILE_H
+#define _STORE_PROFILE_H
 
 #include "phobos_store.h"
 
 /**
  * Fill the struct pho_xfer_put_params with data from the cfg.
- * If an alias is given, the corresponding values are loaded and added if
+ * If a profile is given, the corresponding values are loaded and added if
  * nothing else was specified explicitely beforehand.
  *
  * @param[in]   xfer    Phobos pho_xfer_desc to update

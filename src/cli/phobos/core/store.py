@@ -77,7 +77,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         ("_layout_name", c_char_p),
         ("lyt_params", PhoAttrs),
         ("tags", StringArray),
-        ("_alias", c_char_p),
+        ("_profile", c_char_p),
         ("overwrite", c_bool),
         ("no_split", c_bool),
     ]
@@ -97,7 +97,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         self.layout_name = put_params.layout
         self.set_lyt_params(put_params.lyt_params)
         self.tags = StringArray(put_params.tags)
-        self.alias = put_params.alias
+        self.profile = put_params.profile
         self.overwrite = put_params.overwrite
         self.no_split = put_params.no_split
 
@@ -140,18 +140,18 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         self._layout_name = val.encode('utf-8') if val else None
 
     @property
-    def alias(self):
-        """Wrapper to get alias"""
-        return self._alias.decode('utf-8') if self._alias else None
+    def profile(self):
+        """Wrapper to get profile"""
+        return self._profile.decode('utf-8') if self._profile else None
 
-    @alias.setter
-    def alias(self, val):
-        """Wrapper to set alias"""
+    @profile.setter
+    def profile(self, val):
+        """Wrapper to set profile"""
         # pylint: disable=attribute-defined-outside-init
-        self._alias = val.encode('utf-8') if val else None
+        self._profile = val.encode('utf-8') if val else None
 
 class PutParams(namedtuple('PutParams',
-                           'alias family grouping library layout lyt_params '
+                           'profile family grouping library layout lyt_params '
                            'no_split overwrite tags')):
     """
     Transition data structure for put parameters between

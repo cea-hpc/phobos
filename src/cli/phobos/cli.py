@@ -356,10 +356,10 @@ class StorePutHandler(XferOptHandler):
         parser.add_argument('-l', '--layout', '--lyt',
                             choices=["raid1", "raid4"],
                             help='Desired storage layout')
-        parser.add_argument('-a', '--alias',
-                            help='Desired alias for family, tags and layout. '
+        parser.add_argument('-p', '--profile',
+                            help='Desired profile for family, tags and layout. '
                             'Specifically set family and layout supersede the '
-                            'alias, tags are joined.')
+                            'profile, tags are joined.')
         parser.add_argument('-P', '--layout-params', '--lyt-params',
                             help='Comma-separated list of key=value for layout '
                             'specific parameters.')
@@ -456,7 +456,7 @@ class StorePutHandler(XferOptHandler):
             lyt_attrs = attr_convert(lyt_attrs)
             self.logger.debug("Loaded layout params set %r", lyt_attrs)
 
-        put_params = PutParams(alias=self.params.get('alias'),
+        put_params = PutParams(profile=self.params.get('profile'),
                                grouping=self.params.get('grouping'),
                                family=self.params.get('family'),
                                library=self.params.get('library'),

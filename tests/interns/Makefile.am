@@ -66,7 +66,7 @@ check_PROGRAMS=test_attrs \
                test_pho_cache \
                test_ping \
                test_scsi_logs \
-               test_store_alias \
+               test_store_profile \
                test_store_object_md \
                test_store_object_md_get \
                test_type_utils
@@ -185,11 +185,11 @@ test_scsi_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I$(TO_SRC)/ldm-modules \
                       $(TESTS_LIB_INCLUDES)
 
 # TODO: try to link against the phobos_store library instead of
-# the store_alias object file
-test_store_alias_SOURCES=test_store_alias.c
-test_store_alias_LDADD=$(CFG_LIB) $(COMMON_LIB) \
-                       $(TO_SRC)/store/.libs/store_alias.o
-test_store_alias_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/store
+# the store_profile object file
+test_store_profile_SOURCES=test_store_profile.c
+test_store_profile_LDADD=$(CFG_LIB) $(COMMON_LIB) \
+                       $(TO_SRC)/store/.libs/store_profile.o
+test_store_profile_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/store
 
 test_store_object_md_SOURCES=test_store_object_md.c
 test_store_object_md_LDADD=$(STORE_LIB)

@@ -297,12 +297,12 @@ function put_layout
     fi
 
     # phobos put
-    $valg_phobos put --alias simple /etc/hosts $id1
+    $valg_phobos put --profile simple /etc/hosts $id1
     $valg_phobos put --layout raid1 /etc/hosts $id2
 
     $phobos extent list --output layout,ext_count $id1 | grep "raid1" \
                                                        | grep " 1" ||
-        error "Put with default alias should have written object using " \
+        error "Put with default profile should have written object using " \
               "a raid1 layout with repl_count of 1"
 
     $phobos extent list --output layout,ext_count $id2 | grep "raid1" \
@@ -337,123 +337,123 @@ function put_tags
         error "Put with one valid tag should have worked"
 }
 
-function test_single_alias_put
+function test_single_profile_put
 {
-    local alias=$1
+    local profile=$1
     local id=$2
     local expected_fam=$3
     local expected_layout=$4
     local expected_library=$5
     local extra_arguments=$6
 
-    $valg_phobos put --alias "$alias" $extra_arguments /etc/hosts "$id" ||
-        error "Put with alias $alias should have worked"
+    $valg_phobos put --profile "$profile" $extra_arguments /etc/hosts "$id" ||
+        error "Put with profile $profile should have worked"
 
     $phobos extent list -o family "$id" | grep "$expected_fam" ||
-        error "Put with alias \"$alias\" should have written object on a" \
+        error "Put with profile \"$profile\" should have written object on a" \
               "\"$expected_fam\" medium"
 
     $phobos extent list -o layout "$id" | grep "$expected_layout" ||
-        error "Put with alias \"$alias\" should have used " \
+        error "Put with profile \"$profile\" should have used " \
               "\"$expected_layout\" layout"
 
     $phobos extent list -o media_library "$id" | grep "[$expected_library]" ||
-        error "Put with alias \"$alias\" should have used " \
+        error "Put with profile \"$profile\" should have used " \
               "\"$expected_library\" library"
 }
 
-# Test alias replacement
-function put_alias
+# Test profile replacement
+function put_profile
 {
-    local alias_full="full-test"
-    local alias_tape="full-tape-test"
-    local alias_empty_family="empty-family-test"
-    local alias_empty_layout="empty-layout-test"
-    local alias_empty_tags="empty-tag-test"
-    local alias_bad="alias-noexist"
-    local alias_nonexist_tags="erroneus-tag-test"
+    local profile_full="full-test"
+    local profile_tape="full-tape-test"
+    local profile_empty_family="empty-family-test"
+    local profile_empty_layout="empty-layout-test"
+    local profile_empty_tags="empty-tag-test"
+    local profile_bad="profile-noexist"
+    local profile_nonexist_tags="erroneus-tag-test"
 
-    local id_full=test/hosts-alias1.$$
-    local id_empty_family=test/hosts-alias2.$$
-    local id_empty_layout=test/hosts-alias3.$$
-    local id_empty_tags=test/hosts-alias4.$$
-    local id_noexist=test/hosts-alias5.$$
-    local id_with_fam=test/hosts-alias6.$$
-    local id_with_lay=test/hosts-alias7.$$
-    local id_with_tag1=test/hosts-alias8.$$
-    local id_with_tag2=test/hosts-alias9.$$
-    local id_with_tag3=test/hosts-alias10.$$
+    local id_full=test/hosts-profile1.$$
+    local id_empty_family=test/hosts-profile2.$$
+    local id_empty_layout=test/hosts-profile3.$$
+    local id_empty_tags=test/hosts-profile4.$$
+    local id_noexist=test/hosts-profile5.$$
+    local id_with_fam=test/hosts-profile6.$$
+    local id_with_lay=test/hosts-profile7.$$
+    local id_with_tag1=test/hosts-profile8.$$
+    local id_with_tag2=test/hosts-profile9.$$
+    local id_with_tag3=test/hosts-profile10.$$
 
     # change repl count to test different layouts
     local repl_count=$PHOBOS_LAYOUT_RAID1_repl_count
     export PHOBOS_LAYOUT_RAID1_repl_count=1
 
-    # phobos put with full alias - expect alias family, layout and library
-    test_single_alias_put $alias_full $id_full "dir" "raid1" "legacy"
+    # phobos put with full profile - expect profile family, layout and library
+    test_single_profile_put $profile_full $id_full "dir" "raid1" "legacy"
 
-    # phobos put with reduced aliases - expect default for empty parameters
-    test_single_alias_put $alias_empty_family $id_empty_family \
+    # phobos put with reduced profilees - expect default for empty parameters
+    test_single_profile_put $profile_empty_family $id_empty_family \
         $PHOBOS_STORE_default_family "raid1" "legacy"
-    test_single_alias_put $alias_empty_layout $id_empty_layout "dir" "raid1" \
+    test_single_profile_put $profile_empty_layout $id_empty_layout "dir" "raid1" \
         "legacy"
-    test_single_alias_put $alias_empty_tags $id_empty_tags "dir" "raid1" \
+    test_single_profile_put $profile_empty_tags $id_empty_tags "dir" "raid1" \
         "legacy"
 
-    # phobos put with non-existing alias - expect default
-    test_single_alias_put $alias_bad $id_noexist $PHOBOS_STORE_default_family \
+    # phobos put with non-existing profile - expect default
+    test_single_profile_put $profile_bad $id_noexist $PHOBOS_STORE_default_family \
         "raid1" "legacy"
 
     # phobos put with additional family parameter - expect additional parameter
-    test_single_alias_put $alias_tape $id_with_fam "dir" "raid1" "legacy" \
+    test_single_profile_put $profile_tape $id_with_fam "dir" "raid1" "legacy" \
         "--family dir"
 
     # phobos put with additional layout parameter - expect additional parameter
-    test_single_alias_put $alias_full $id_with_lay "dir" "raid1" "legacy" \
+    test_single_profile_put $profile_full $id_with_lay "dir" "raid1" "legacy" \
         "--layout raid1"
 
     # phobos put with additional tags parameter - expect success
-    test_single_alias_put $alias_empty_family $id_with_tag1 "dir" "raid1" \
+    test_single_profile_put $profile_empty_family $id_with_tag1 "dir" "raid1" \
         "legacy" "--tags $(echo $TAGS | cut -d',' -f2)"
 
     # phobos put with additional, non existing tags parameter - expect failure
-    $valg_phobos put -a $alias_full --tags no-such-tag /etc/hosts \
+    $valg_phobos put -p $profile_full --tags no-such-tag /etc/hosts \
         $id_with_tag2 &&
         error "Put with additional, non existing tag should not have worked"
 
-    # phobos put with alias with wrong tags parameter - expect failure
-    $valg_phobos put --alias $alias_nonexist_tags /etc/hosts $id_with_tag3 &&
-        error "Put with alias $alias_nonexist_tags should not have worked"
+    # phobos put with profile with wrong tags parameter - expect failure
+    $valg_phobos put --profile $profile_nonexist_tags /etc/hosts $id_with_tag3 &&
+        error "Put with profile $profile_nonexist_tags should not have worked"
 
     # reset replication count for raid layout
     export PHOBOS_LAYOUT_RAID1_repl_count=repl_count
 }
 
-function put_alias_lib
+function put_profile_lib
 {
-    local alias_lib_full="full-test-lib"
-    local alias_empty_lib="empty-lib-test"
+    local profile_lib_full="full-test-lib"
+    local profile_empty_lib="empty-lib-test"
 
-    local id_lib_full=test/host-alias1.$$
-    local id_empty_library=test/host-alias2.$$
-    local id_with_lib1=test/host-alias3.$$
-    local id_with_lib2=test/host-alias4.$$
+    local id_lib_full=test/host-profile1.$$
+    local id_empty_library=test/host-profile2.$$
+    local id_with_lib1=test/host-profile3.$$
+    local id_with_lib2=test/host-profile4.$$
 
     local repl_count=$PHOBOS_LAYOUT_RAID1_repl_count
     export PHOBOS_LAYOUT_RAID1_repl_count=1
 
-    # phobos put with full alias lib
-    test_single_alias_put $alias_lib_full $id_lib_full "dir" "raid1" "blob"
+    # phobos put with full profile lib
+    test_single_profile_put $profile_lib_full $id_lib_full "dir" "raid1" "blob"
 
-    # phobos put with reduced aliases
-    test_single_alias_put $alias_empty_lib $id_empty_library "dir" "raid1" \
+    # phobos put with reduced profilees
+    test_single_profile_put $profile_empty_lib $id_empty_library "dir" "raid1" \
         "legacy"
 
     # phobos put with additional library parameter
-    test_single_alias_put $alias_lib_full $id_with_lib1 "dir" "raid1" "legacy" \
+    test_single_profile_put $profile_lib_full $id_with_lib1 "dir" "raid1" "legacy" \
         "--library legacy"
 
     # phobos put with additional wrong library parameter
-    $valg_phobos put -a $alias_lib_full --library lib1 /etc/hosts \
+    $valg_phobos put -p $profile_lib_full --library lib1 /etc/hosts \
         $id_with_lib2 &&
         error "Put with additional non existing library should not have worked"
 
@@ -701,14 +701,14 @@ TESTS=("dir_setup; \
         put_family dir; \
         put_layout; \
         put_tags; \
-        put_alias; \
+        put_profile; \
         multi_put; \
         concurrent_put; \
         check_status dir $dirs; \
         concurrent_put_get_retry; \
         dir_lock_test; \
         dir_cleanup"
-        "dir_setup_bis; put_alias_lib; dir_cleanup_bis")
+        "dir_setup_bis; put_profile_lib; dir_cleanup_bis")
 
 if  [[ -w /dev/changer ]]; then
     TESTS+=("tape_setup; \

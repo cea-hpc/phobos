@@ -68,7 +68,7 @@ Their support is useful for testing, so they should be implemented first.
     * If both --uuid and --version are specified, get the object matching the
       2 criteria and given oid.
 * phobos put [--family f] [--metadata k=v,...] [--overwrite] [--tags a,b,...]
-             [--layout l] [--alias a] <orig_file> <object_id>
+             [--layout l] [--profile p] <orig_file> <object_id>
   * Insert an item into the object store using the given family
     * If --family is specified, only the media of this specified family
       will be considered when putting the object.
@@ -83,12 +83,12 @@ Their support is useful for testing, so they should be implemented first.
       be considered when trying to put.
       eg: fast,sp -> only the media containing the tags "fast" and "sp" will be
       used
-    * If --alias is specified, the parameters defined in the configuration file
+    * If --profile is specified, the parameters defined in the configuration file
       (usually "/etc/phobos.conf") will be used. These parameters can be
       the family, the layout or tags. They will be used if not already
-      specified through the command line (eg: if you put with "--alias a
-      --layout b", and if alias 'a' defines a specific layout, then that layout
-      will not be used, as 'b' takes priority).
+      specified through the command line (eg: if you put with "--profile p
+      --layout b", and if profile 'p' defines a specific layout, then that
+      layout will not be used, as 'b' takes priority).
 * phobos mput [--family f] [--tags a,b,...] [--layout l] [--alias a]
               <input_file>
   * Bulk insert multiple items into the object store.

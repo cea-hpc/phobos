@@ -61,7 +61,7 @@ We add a new admin command to change the library id of a device or a medium.
 
 At put, we will add a new optional library parameter to fix the library on
 which the object must be created. This new "put" option will also be taken into
-account by the alias layer.
+account by the profile layer.
 
 The TLC daemon system script must also offer the possibility to set the library
 name.

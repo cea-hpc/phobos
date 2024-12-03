@@ -299,13 +299,13 @@ configuration file, in case multiple are defined:
 default_layout = raid1
 ```
 
-If an alias is defined, you can set it as default instead of the layout:
+If a profile is defined, you can set it as default instead of the layout:
 
 ```
 [store]
-default_alias = simple
+default_profile = simple
 
-[alias "simple"]
+[profile "simple"]
 layout = raid1
 lyt-params = repl_count=1
 ```
@@ -317,8 +317,8 @@ in your put commands:
 # put data using a raid1 layout
 phobos put --layout raid1 file.in obj123
 
-# put data using a simple alias
-phobos put --alias simple file.in obj123
+# put data using a simple profile
+phobos put --profile simple file.in obj123
 ```
 
 Layouts can have additional parameters. For now, the only additional parameter

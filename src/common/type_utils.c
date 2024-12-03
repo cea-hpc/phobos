@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -326,7 +326,7 @@ void str2string_array(const char *str, struct string_array *string_array)
     /* copy the strings list to tokenize it */
     parse_str = xstrdup(str);
 
-    /* count number of strings in alias */
+    /* count number of strings in profile */
     one_string = strtok_r(parse_str, ",", &saveptr);
     while (one_string != NULL) {
         count++;

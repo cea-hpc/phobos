@@ -65,7 +65,7 @@ media release response message is received by the encoder.
 ## Layout parameters
 
 As specific layouts require specific parameters, one can provide these values
-by using the `lyt_params`, either through the CLI or the aliases.
+by using the `lyt_params`, either through the CLI or the profiles.
 
 For instance, when using the CLI, a user can give the following command to
 put a file using the raid1 layout and a replica count of 1:

@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -87,9 +87,9 @@ static inline const char *xfer_op2str(enum pho_xfer_op op)
 
 /**
  * PUT parameters.
- * Family, layout_name and tags can be set directly or by using an alias.
- * An alias is a name defined in the phobos config to combine these parameters.
- * The alias will not override family and layout if they have been specified
+ * Family, layout_name and tags can be set directly or by using a profile.
+ * A profile is a name defined in the phobos config to combine these parameters.
+ * The profile will not override family and layout if they have been specified
  * in this struct but extend existing tags.
  */
 struct pho_xfer_put_params {
@@ -101,7 +101,7 @@ struct pho_xfer_put_params {
     const char      *layout_name; /**< Name of the layout module to use. */
     struct pho_attrs lyt_params;  /**< Parameters used for the layout */
     struct string_array     tags; /**< Tags to select a media to write. */
-    const char      *alias;       /**< Identifier for family, layout,
+    const char      *profile;     /**< Identifier for family, layout,
                                     *  tag combination
                                     */
     bool             overwrite;   /**< true if the put command could be an

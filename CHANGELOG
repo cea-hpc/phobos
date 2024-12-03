@@ -1,6 +1,8 @@
 # CHANGELOG UPDATES
 
 ## next
+ * WARNING: the `alias` feature is renamed `profile`. In that extent, all
+   `-a`/`--alias` options are renamed `-p`/`--profile`.
  * WARNING: the `-p` option, standing for `--lyt-params`, is uppercased, thus
    changed to `-P`.
 
