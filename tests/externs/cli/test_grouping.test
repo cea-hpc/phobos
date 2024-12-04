@@ -1,0 +1,109 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2024 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for put --grouping command
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
+
+################################################################################
+#                                    SETUP                                     #
+################################################################################
+
+function setup()
+{
+    setup_tables
+    if [[ -w /dev/changer ]]; then
+        invoke_daemons
+    else
+        invoke_lrs
+    fi
+
+    setup_test_dirs
+    setup_dummy_files 1
+}
+
+function cleanup() {
+    if [[ -w /dev/changer ]]; then
+        waive_daemons
+        drain_all_drives
+    else
+        waive_lrs
+    fi
+
+    drop_tables
+    cleanup_test_dirs
+    cleanup_dummy_files 1
+}
+
+function test_grouping_dir () {
+    $phobos dir add ${DIR_TEST}
+    $phobos dir format --unlock ${DIR_TEST}
+
+    # put without any grouping
+    $phobos put -f dir --grouping my_group ${FILES[0]} dir_object &&
+        error "Put with a grouping on dir must failed without any dir available"
+
+    # set first grouping on a dir
+    $PSQL -c "UPDATE media SET groupings = '[\"my_group\"]'
+              WHERE id = '${DIR_TEST}';"
+
+    # put with one available group
+    $phobos put -f dir --grouping my_group ${FILES[0]} dir_object ||
+        error "Put with grouping dir available must be successfull"
+}
+
+function test_grouping_tape () {
+    TAPE=$(get_tapes L6 1)
+    DRIVE=$(get_lto_drives 6 1)
+
+    $phobos tape add -t LTO6 ${TAPE}
+    $phobos drive add --unlock ${DRIVE}
+    $phobos tape format --unlock ${TAPE}
+
+    # put without any grouping
+    $phobos put -f tape --grouping my_group ${FILES[0]} tape_object &&
+        error "Put with a grouping on tape must failed without any tape" \
+              "available"
+
+    # set first grouping on a tape
+    $PSQL -c "UPDATE media SET groupings = '[\"my_group\"]'
+              WHERE id = '${TAPE}';"
+
+    # put with one available group
+    $phobos put -f tape --grouping my_group ${FILES[0]} tape_object ||
+        error "Put with grouping tape available must be successfull"
+}
+
+TEST_SETUP=setup
+
+TESTS=("test_grouping_dir")
+if [[ -w /dev/changer ]]; then
+    TESTS+=("test_grouping_tape")
+fi
+
+TEST_CLEANUP=cleanup

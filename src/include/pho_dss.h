@@ -184,6 +184,7 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::MDA::model", "model"},
     {"DSS::MDA::id", "id"},
     {"DSS::MDA::library", "library"},
+    {"DSS::MDA::groupings", "groupings"},
     {"DSS::MDA::adm_status", "adm_status"},
     {"DSS::MDA::fs_status", "fs_status"},
     {"DSS::MDA::fs_type", "fs_type"},

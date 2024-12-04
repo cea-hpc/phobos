@@ -56,6 +56,7 @@ check_SCRIPTS=acceptance.test \
               test_format.test \
               test_get.sh \
               test_group_sync.sh \
+              test_grouping.test \
               test_import.test \
               test_ldm.sh \
               test_list_sort.test \

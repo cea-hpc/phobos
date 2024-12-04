@@ -861,7 +861,7 @@ bool sched_has_running_devices(struct lrs_sched *sched)
  * string is allocated with malloc. NULL is returned when ENOMEM is encountered.
  *
  * The returned string looks like the following:
- * {"$AND": [{"DSS:MDA::tags": "tag1"}]}
+ * {"$AND": [{"$XJSON": {"DSS:MDA::tags": "tag1"}}]}
  */
 static char *build_tag_filter(const struct string_array *tags)
 {
@@ -1009,6 +1009,7 @@ int sched_select_medium(struct io_scheduler *io_sched,
                         size_t required_size,
                         enum rsc_family family,
                         const char *library,
+                        const char *grouping,
                         const struct string_array *tags,
                         struct req_container *reqc,
                         size_t n_med,
@@ -1043,6 +1044,7 @@ int sched_select_medium(struct io_scheduler *io_sched,
                               "  {\"DSS::MDA::adm_status\": \"%s\"},"
                               "  {\"DSS::MDA::fs_status\": \"%s\"}"
                               "  %s%s%s"
+                              "  %s%s%s"
                               "  %s%s"
                               "]}",
                               rsc_family2str(family),
@@ -1051,6 +1053,10 @@ int sched_select_medium(struct io_scheduler *io_sched,
                               library ? ", {\"DSS::MDA::library\": \"" : "",
                               library ? library : "",
                               library ? "\"}" : "",
+                              grouping ? ", {\"$XJSON\": "
+                                         "{\"DSS::MDA::groupings\": \"" : "",
+                              grouping ? grouping : "",
+                              grouping ? "\"}}" : "",
                               with_tags ? ", " : "",
                               with_tags ? tag_filter_json : "");
     else
@@ -1069,6 +1075,7 @@ int sched_select_medium(struct io_scheduler *io_sched,
                               "    {\"DSS::MDA::fs_status\": \"%s\"}"
                               "  ]}"
                               "  %s%s%s"
+                              "  %s%s%s"
                               "  %s%s"
                               "]}",
                               rsc_family2str(family),
@@ -1084,6 +1091,10 @@ int sched_select_medium(struct io_scheduler *io_sched,
                               library ? ", {\"DSS::MDA::library\": \"" : "",
                               library ? library : "",
                               library ? "\"}" : "",
+                              grouping ? ", {\"$XJSON\": "
+                                         "{\"DSS::MDA::groupings\": \"" : "",
+                              grouping ? grouping : "",
+                              grouping ? "\"}}" : "",
                               with_tags ? ", " : "",
                               with_tags ? tag_filter_json : "");
 
@@ -1210,10 +1221,11 @@ err_nores:
 
 /*
  * The intent is to write: exclude media that are administratively
- * locked, full, do not have the put operation flag and do not have the
- * requested tags
+ * locked, full, do not have the put operation flag, do not have the
+ * requested tags and do not have the requested grouping.
  */
 static bool medium_is_write_compatible(struct media_info *medium,
+                                       const char *grouping,
                                        const struct string_array *required_tags,
                                        bool empty_medium)
 {
@@ -1257,6 +1269,14 @@ static bool medium_is_write_compatible(struct media_info *medium,
         return false;
     }
 
+    if (grouping && !string_exists(&medium->groupings, grouping)) {
+        pho_debug("Media (family '%s', name '%s', library '%s') does not match "
+                  "the required grouping %s",
+                 rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
+                 medium->rsc.id.library, grouping);
+        return false;
+    }
+
     return true;
 }
 
@@ -1296,6 +1316,7 @@ typedef int (*device_select_func_t)(size_t required_size,
 struct lrs_dev *dev_picker(GPtrArray *devices,
                            enum dev_op_status op_st,
                            const char *library,
+                           const char *grouping,
                            device_select_func_t select_func,
                            size_t required_size,
                            const struct string_array *media_tags,
@@ -1356,8 +1377,8 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
 
         /* if pmedia is set, we don't want to use the medium currently loaded */
         if (is_write && !pmedia && itr->ld_dss_media_info &&
-            !medium_is_write_compatible(itr->ld_dss_media_info, media_tags,
-                                        empty_medium)
+            !medium_is_write_compatible(itr->ld_dss_media_info, grouping,
+                                        media_tags, empty_medium)
             )
             goto unlock_continue;
 
@@ -1367,7 +1388,8 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
             int rc;
 
             if (is_write &&
-                !medium_is_write_compatible(pmedia, media_tags, empty_medium))
+                !medium_is_write_compatible(pmedia, grouping, media_tags,
+                                            empty_medium))
                 goto unlock_continue;
 
             rc = tape_drive_compat(pmedia, itr, &compatible);
