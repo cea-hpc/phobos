@@ -660,21 +660,35 @@ class Migrator: # pylint: disable=too-many-public-methods
         default_copy_name = cfg.get_default_copy_name()
         cur = self.conn.cursor()
         cur.execute(f"""
+            -- create new type copy_status
+            CREATE TYPE copy_status AS ENUM (
+                'incomplete', 'readable', 'complete');
+
             -- create copy table
             CREATE TABLE copy (
                 object_uuid     varchar(36),
                 version         integer DEFAULT 1 NOT NULL,
                 copy_name       varchar(1024),
+                lyt_info        jsonb,
+                copy_status     copy_status DEFAULT 'incomplete',
+                creation_time   timestamp DEFAULT now(),
+                access_time     timestamp DEFAULT now(),
 
                 PRIMARY KEY (object_uuid, version, copy_name)
             );
 
-            INSERT INTO copy (object_uuid, version, copy_name)
-                SELECT object_uuid, version, '{default_copy_name}'
+            INSERT INTO copy (object_uuid, version, copy_name, lyt_info,
+                              copy_status, creation_time, access_time)
+                SELECT object_uuid, version, '{default_copy_name}', lyt_info,
+                       obj_status::text::copy_status, creation_time,
+                       access_time
                 FROM object;
 
-            INSERT INTO copy (object_uuid, version, copy_name)
-                SELECT object_uuid, version, '{default_copy_name}'
+            INSERT INTO copy (object_uuid, version, copy_name, lyt_info,
+                              copy_status, creation_time, access_time)
+                SELECT object_uuid, version, '{default_copy_name}', lyt_info,
+                       obj_status::text::copy_status, creation_time,
+                       access_time
                 FROM deprecated_object;
 
             -- update layout table
@@ -683,6 +697,18 @@ class Migrator: # pylint: disable=too-many-public-methods
             ALTER TABLE layout DROP CONSTRAINT layout_pkey;
             ALTER TABLE layout ADD PRIMARY KEY
                 (object_uuid, version, layout_index, copy_name);
+
+            -- update object table
+            ALTER TABLE object DROP lyt_info;
+            ALTER TABLE object DROP obj_status;
+            ALTER TABLE object DROP access_time;
+
+            -- update deprecated object table
+            ALTER TABLE deprecated_object DROP lyt_info;
+            ALTER TABLE deprecated_object DROP obj_status;
+            ALTER TABLE deprecated_object DROP access_time;
+
+            DROP TYPE obj_status;
 
             -- update current schema version
             UPDATE schema_info SET version = '3.0';

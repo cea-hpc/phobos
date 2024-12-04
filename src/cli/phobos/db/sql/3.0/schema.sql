@@ -14,7 +14,7 @@ CREATE TYPE operation_type AS ENUM ('Library scan', 'Library open',
                                     'LTFS mount', 'LTFS umount',
                                     'LTFS format', 'LTFS df',
                                     'LTFS sync');
-CREATE TYPE obj_status AS ENUM ('incomplete', 'readable', 'complete');
+CREATE TYPE copy_status AS ENUM ('incomplete', 'readable', 'complete');
 
 -- to extend enums: ALTER TYPE type ADD VALUE 'value'
 
@@ -65,10 +65,7 @@ CREATE TABLE object(
     user_md         jsonb,
     object_uuid     varchar(36) UNIQUE DEFAULT uuid_generate_v4(),
     version         integer DEFAULT 1 NOT NULL,
-    lyt_info        jsonb,
-    obj_status      obj_status DEFAULT 'incomplete',
     creation_time   timestamp DEFAULT now(),
-    access_time     timestamp DEFAULT now(),
     _grouping       varchar(255),
     -- grouping word is already used by psql as a function
     -- _grouping will be replaced by groupings in the future if we want
@@ -83,10 +80,7 @@ CREATE TABLE deprecated_object(
     version         integer DEFAULT 1 NOT NULL,
     user_md         jsonb,
     deprec_time     timestamp DEFAULT now(),
-    lyt_info        jsonb,
-    obj_status      obj_status DEFAULT 'incomplete',
     creation_time   timestamp DEFAULT now(),
-    access_time     timestamp DEFAULT now(),
     _grouping       varchar(255),
     -- grouping word is already used by psql as a function
     -- _grouping will be replaced by groupings in the future if we want
@@ -148,6 +142,10 @@ CREATE TABLE copy(
     object_uuid     varchar(36),
     version         integer DEFAULT 1 NOT NULL,
     copy_name       varchar(1024),
+    lyt_info        jsonb,
+    copy_status     copy_status DEFAULT 'incomplete',
+    creation_time   timestamp DEFAULT now(),
+    access_time     timestamp DEFAULT now(),
 
     PRIMARY KEY (object_uuid, version, copy_name)
 );

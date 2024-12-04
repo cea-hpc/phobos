@@ -559,6 +559,12 @@ struct copy_info {
     char *object_uuid;
     int version;
     const char *copy_name;
+    /* Enum obj_status will change to copy_status when switching with
+     * the 3.0 schema
+     */
+    enum obj_status copy_status;
+    struct timeval creation_time;
+    struct timeval access_time;
 };
 
 struct object_info {

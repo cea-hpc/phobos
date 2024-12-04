@@ -199,11 +199,16 @@ class MigratorTest(unittest.TestCase):
         self.migrator.create_schema("2.2")
 
         self.migrator.execute("""
-            INSERT INTO object(oid, object_uuid, version)
-                VALUES ('aries', 'dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 2);
+            INSERT INTO object(oid, object_uuid, version, lyt_info, obj_status)
+                VALUES ('aries', 'dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 2,
+                        '{"name": "raid1", "attrs": {"repl_count": "2"},
+                          "major": 0, "minor": 2}', 'complete');
 
-            INSERT INTO deprecated_object(oid, object_uuid, version)
-                VALUES ('aries', 'dacfaeba-24ef-431b-a7b3-205dc1e8a34b', 1);
+            INSERT INTO deprecated_object(oid, object_uuid, version, lyt_info,
+                                          obj_status)
+                VALUES ('aries', 'dacfaeba-24ef-431b-a7b3-205dc1e8a34b', 1,
+                        '{"name": "raid1", "attrs": {"repl_count": "1"},
+                          "major": 0, "minor": 2}', 'readable');
 
             INSERT INTO layout (object_uuid, version, layout_index) VALUES
                 ('dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 2, 1),
@@ -213,11 +218,16 @@ class MigratorTest(unittest.TestCase):
         self.migrator.migrate("3.0")
         self.assertEqual(self.migrator.schema_version(), "3.0")
         self.assertEqual(
-            self.migrator.execute("SELECT * FROM copy ORDER BY version;",
-                                  output=True),
+            self.migrator.execute("""
+                SELECT object_uuid, version, copy_name, lyt_info, copy_status
+                FROM copy ORDER BY version;""", output=True),
             [
-                ('dacfaeba-24ef-431b-a7b3-205dc1e8a34b', 1, 'source'),
-                ('dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 2, 'source')
+                ('dacfaeba-24ef-431b-a7b3-205dc1e8a34b', 1, 'source',
+                 {"name": "raid1", "attrs": {"repl_count": "1"},
+                  "major": 0, "minor": 2}, 'readable'),
+                ('dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 2, 'source',
+                 {"name": "raid1", "attrs": {"repl_count": "2"},
+                  "major": 0, "minor": 2}, 'complete')
             ]
         )
         self.assertEqual(

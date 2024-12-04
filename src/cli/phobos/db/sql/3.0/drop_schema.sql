@@ -19,4 +19,4 @@ DROP TYPE IF EXISTS
     extent_state,
     lock_type,
     operation_type,
-    obj_status CASCADE;
+    copy_status CASCADE;
