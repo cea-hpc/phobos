@@ -45,6 +45,8 @@ class MigratorTest(unittest.TestCase):
         os.environ["PHOBOS_STORE_default_tape_library"] = "legacy"
         os.environ["PHOBOS_STORE_default_dir_library"] = "legacy"
         os.environ["PHOBOS_STORE_default_rados_library"] = "legacy"
+        # From 2.3, the new copy_name column needs a default value from conf
+        os.environ["PHOBOS_COPY_default_copy_name"] = "source"
 
     def test_setup_drop_tables(self):
         """Test setting up and dropping the schema"""

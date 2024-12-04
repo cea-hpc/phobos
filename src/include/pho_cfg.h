@@ -210,4 +210,14 @@ int tape_drive_compat_models(const char *tape_model, const char *drive_model,
  */
 int pho_cfg_get_substring_value(const char *section, const char *name,
                                 enum rsc_family family, char **substring);
+
+/**
+ * Get the default copy name from the conf.
+ *
+ * @param[out] copy_name    Default copy name in conf.
+ *
+ * @return 0 on success, negative error code on failure
+ */
+int get_cfg_default_copy_name(const char **copy_name);
+
 #endif

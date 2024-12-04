@@ -71,3 +71,11 @@ def get_default_library(family):
     except KeyError:
         raise KeyError("Default library is not set for '%s', must be defined "
                        "in Phobos configuration" % family)
+
+def get_default_copy_name():
+    """Return the default copy name"""
+    try:
+        return get_val("copy", "default_copy_name")
+    except KeyError:
+        raise KeyError("Default copy name is not set, must be defined in Phobos"
+                       "configuration")
