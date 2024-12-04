@@ -737,6 +737,32 @@ int dss_deprecated_object_delete(struct dss_handle *handle,
 }
 
 /*
+ * COPY FUNCTION
+ */
+int dss_copy_insert(struct dss_handle *handle, struct copy_info *copy_list,
+                    int copy_count)
+{
+    return dss_generic_set(handle, DSS_COPY, (void *)copy_list, copy_count,
+                           DSS_SET_INSERT);
+}
+
+int dss_copy_get(struct dss_handle *handle, const struct dss_filter *filter,
+                 struct copy_info **copy_list, int *copy_count,
+                 struct dss_sort *sort)
+{
+    return dss_generic_get(handle, DSS_COPY,
+                           (const struct dss_filter*[]) {filter, NULL}, 1,
+                           (void **)copy_list, copy_count, sort);
+}
+
+int dss_copy_delete(struct dss_handle *handle, struct copy_info *copy_list,
+                    int copy_count)
+{
+    return dss_generic_set(handle, DSS_COPY, (void *)copy_list,
+                           copy_count, DSS_SET_DELETE);
+}
+
+/*
  * LOGS FUNCTION
  */
 

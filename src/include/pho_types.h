@@ -555,6 +555,12 @@ static inline enum obj_status str2obj_status(const char *str)
     return PHO_OBJ_STATUS_INVAL;
 }
 
+struct copy_info {
+    char *object_uuid;
+    int version;
+    const char *copy_name;
+};
+
 struct object_info {
     char *oid;
     char *uuid;

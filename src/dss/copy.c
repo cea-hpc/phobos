@@ -1,0 +1,129 @@
+/* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+ * vim:expandtab:shiftwidth=4:tabstop=4:
+ */
+/*
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
+ *
+ *  This file is part of Phobos.
+ *
+ *  Phobos is free software: you can redistribute it and/or modify it under
+ *  the terms of the GNU Lesser General Public License as published by
+ *  the Free Software Foundation, either version 2.1 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Phobos is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Lesser General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Lesser General Public License
+ *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/**
+ * \brief  Copy resource file of Phobos's Distributed State Service.
+ */
+
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#include <gmodule.h>
+#include <libpq-fe.h>
+
+#include "pho_type_utils.h"
+
+#include "dss_utils.h"
+#include "filters.h"
+#include "copy.h"
+
+static int copy_insert_query(PGconn *conn, void *void_copy, int item_cnt,
+                             int64_t fields, GString *request)
+{
+    (void) fields;
+
+    g_string_append(request,
+                    "INSERT INTO copy (object_uuid, version, copy_name)"
+                    " VALUES ");
+
+    for (int i = 0; i < item_cnt; ++i) {
+        struct copy_info *copy = ((struct copy_info *) void_copy) + i;
+
+        if (copy->object_uuid == NULL)
+            LOG_RETURN(-EINVAL, "Copy object_uuid cannot be NULL");
+
+        if (copy->version < 1)
+            LOG_RETURN(-EINVAL, "Copy version must be strictly positive");
+
+        if (copy->copy_name == NULL)
+            LOG_RETURN(-EINVAL, "Copy name cannot be NULL");
+
+        g_string_append_printf(request, "('%s', '%d', '%s')%s",
+                               copy->object_uuid, copy->version,
+                               copy->copy_name, i < item_cnt - 1 ? ", " : ";");
+    }
+
+    return 0;
+}
+
+static int copy_select_query(GString **conditions, int n_conditions,
+                             GString *request, struct dss_sort *sort)
+{
+    g_string_append(request,
+                    "SELECT object_uuid, version, copy_name FROM copy");
+
+    if (n_conditions == 1)
+        g_string_append(request, conditions[0]->str);
+    else if (n_conditions >= 2)
+        return -ENOTSUP;
+
+    dss_sort2sql(request, sort);
+    g_string_append(request, ";");
+
+    return 0;
+}
+
+static int copy_delete_query(void *void_copy, int item_cnt, GString *request)
+{
+    for (int i = 0; i < item_cnt; ++i) {
+        struct copy_info *copy = ((struct copy_info *) void_copy) + i;
+
+        g_string_append_printf(request,
+                               "DELETE FROM copy WHERE object_uuid = '%s'"
+                               " AND version = '%d' AND copy_name = '%s';",
+                               copy->object_uuid, copy->version,
+                               copy->copy_name);
+    }
+
+    return 0;
+}
+
+static int copy_from_pg_row(struct dss_handle *handle, void *void_copy,
+                            PGresult *res, int row_num)
+{
+    struct copy_info *copy = void_copy;
+
+    (void)handle;
+
+    copy->object_uuid = get_str_value(res, row_num, 0);
+    copy->version     = atoi(PQgetvalue(res, row_num, 1));
+    copy->copy_name   = get_str_value(res, row_num, 2);
+
+    return 0;
+}
+
+static void copy_result_free(void *void_copy)
+{
+    (void) void_copy;
+}
+
+const struct dss_resource_ops copy_ops = {
+    .insert_query = copy_insert_query,
+    .update_query = NULL,
+    .select_query = copy_select_query,
+    .delete_query = copy_delete_query,
+    .create       = copy_from_pg_row,
+    .free         = copy_result_free,
+    .size         = sizeof(struct copy_info),
+};
+

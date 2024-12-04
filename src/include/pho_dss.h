@@ -51,6 +51,7 @@ enum dss_type {
     DSS_MEDIA_UPDATE_LOCK,
     DSS_LOGS,
     DSS_FULL_LAYOUT,
+    DSS_COPY,
     DSS_LAST,
 };
 
@@ -64,6 +65,7 @@ static const char * const dss_type_names[] = {
     [DSS_MEDIA_UPDATE_LOCK]  = "media_update",
     [DSS_LOGS] = "logs",
     [DSS_FULL_LAYOUT] = "full_layout",
+    [DSS_COPY] = "copy",
 };
 
 #define MAX_UPDATE_LOCK_TRY 5
@@ -671,6 +673,45 @@ int dss_deprecated_object_get(struct dss_handle *handle,
 int dss_deprecated_object_delete(struct dss_handle *handle,
                               struct object_info *object_list,
                               int object_count);
+
+/**
+ * Store information for one or many copies in DSS.
+ *
+ * @param[in] handle      valid connection handle
+ * @param[in] copy_list   array of entries to store
+ * @param[in] copy_count  number of items in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_copy_insert(struct dss_handle *handle, struct copy_info *copy_list,
+                    int copy_count);
+
+/**
+ * Retrieve copy information from DSS.
+ *
+ * @param[in]  handle        valid connection handle
+ * @param[in]  filter        assembled DSS filtering criteria
+ * @param[out] copy_list     list of retrieved items to be freed
+ *                            w/ dss_res_free()
+ * @param[out] copy_count    number of items retrieved in the list
+ * @param[in]  sort          sort filter
+ * @return 0 on success, negated errno on failure
+ */
+int dss_copy_get(struct dss_handle *handle, const struct dss_filter *filter,
+                 struct copy_info **copy_list, int *copy_count,
+                 struct dss_sort *sort);
+
+/**
+ * Delete information for one or many copies in DSS.
+ *
+ * @param[in] handle        valid connection handle
+ * @param[in] copy_list     array of entries to delete
+ * @param[in] copy_count    number of items in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_copy_delete(struct dss_handle *handle, struct copy_info *copy_list,
+                    int copy_count);
 
 /**
  * Retrieve logs information from DSS

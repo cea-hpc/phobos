@@ -37,6 +37,7 @@
 #include "media.h"
 #include "object.h"
 #include "resources.h"
+#include "copy.h"
 
 /**
  * Get the dss_resource_ops structure appropriate for managing resources of
@@ -66,6 +67,8 @@ static const struct dss_resource_ops *get_resource_ops(enum dss_type type)
         return &media_ops;
     case DSS_OBJECT:
         return &object_ops;
+    case DSS_COPY:
+        return &copy_ops;
     default:
         return NULL;
     }
