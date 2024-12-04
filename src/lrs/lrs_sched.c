@@ -915,7 +915,7 @@ static char *build_tag_filter(const struct string_array *tags)
         GOTO(out, -ENOMEM);
 
     /* Convert to string for formatting */
-    tag_filter_json = json_dumps(tag_filters, 0);
+    tag_filter_json = json_dumps(and_filter, 0);
 
 out:
     json_decref(tag_filters);
