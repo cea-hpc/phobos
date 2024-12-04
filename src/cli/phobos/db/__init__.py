@@ -35,7 +35,7 @@ ORDERED_SCHEMAS = [
     "1.1", "1.2", "1.91", "1.92", "1.93", "1.95",
     "2.0", "2.1", "2.2"
 ]
-FUTURE_SCHEMAS = []
+FUTURE_SCHEMAS = ["3.0"]
 CURRENT_SCHEMA_VERSION = ORDERED_SCHEMAS[-1]
 AVAIL_SCHEMAS = set(ORDERED_SCHEMAS) | set(FUTURE_SCHEMAS)
 
@@ -70,6 +70,7 @@ class Migrator: # pylint: disable=too-many-public-methods
             "1.95": ("2.0", self.convert_1_95_to_2_0),
             "2.0": ("2.1", self.convert_2_0_to_2_1),
             "2.1": ("2.2", self.convert_2_1_to_2_2),
+            "2.2": ("3.0", self.convert_2_2_to_3),
         }
 
         self.reachable_versions = set(
@@ -653,6 +654,46 @@ class Migrator: # pylint: disable=too-many-public-methods
         """Convert DB from v2.1 to v2.2"""
         with self.connect():
             self.convert_schema_2_1_to_2_2()
+
+    def convert_schema_2_2_to_3(self):
+        """DB schema changes: create copy table"""
+        default_copy_name = cfg.get_default_copy_name()
+        cur = self.conn.cursor()
+        cur.execute(f"""
+            -- create copy table
+            CREATE TABLE copy (
+                object_uuid     varchar(36),
+                version         integer DEFAULT 1 NOT NULL,
+                copy_name       varchar(1024),
+
+                PRIMARY KEY (object_uuid, version, copy_name)
+            );
+
+            INSERT INTO copy (object_uuid, version, copy_name)
+                SELECT object_uuid, version, '{default_copy_name}'
+                FROM object;
+
+            INSERT INTO copy (object_uuid, version, copy_name)
+                SELECT object_uuid, version, '{default_copy_name}'
+                FROM deprecated_object;
+
+            -- update layout table
+            ALTER TABLE layout ADD copy_name varchar(1024);
+            UPDATE layout SET copy_name = '{default_copy_name}';
+            ALTER TABLE layout DROP CONSTRAINT layout_pkey;
+            ALTER TABLE layout ADD PRIMARY KEY
+                (object_uuid, version, layout_index, copy_name);
+
+            -- update current schema version
+            UPDATE schema_info SET version = '3.0';
+        """)
+        self.conn.commit()
+        cur.close()
+
+    def convert_2_2_to_3(self):
+        """Convert DB from v2.2 to v3.0"""
+        with self.connect():
+            self.convert_schema_2_2_to_3()
 
     def migrate(self, target_version=None):
         """Convert DB schema up to a given phobos version"""

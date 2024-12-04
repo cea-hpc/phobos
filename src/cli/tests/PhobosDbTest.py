@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  all rights reserved (c) 2014-2022 cea/dam.
+#  all rights reserved (c) 2014-2024 cea/dam.
 #
 #  this file is part of phobos.
 #
@@ -190,6 +190,44 @@ class MigratorTest(unittest.TestCase):
             [
                 ('dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 1, ext_uuids[0][0], 0),
                 ('dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 1, ext_uuids[1][0], 1)
+            ]
+        )
+        self.migrator.drop_tables()
+
+    def test_2_2_to_3(self):
+        """Test migration between 2.2 and 3.0"""
+        self.migrator.create_schema("2.2")
+
+        self.migrator.execute("""
+            INSERT INTO object(oid, object_uuid, version)
+                VALUES ('aries', 'dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 2);
+
+            INSERT INTO deprecated_object(oid, object_uuid, version)
+                VALUES ('aries', 'dacfaeba-24ef-431b-a7b3-205dc1e8a34b', 1);
+
+            INSERT INTO layout (object_uuid, version, layout_index) VALUES
+                ('dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 2, 1),
+                ('dacfaeba-24ef-431b-a7b3-205dc1e8a34b', 1, 1)
+        """)
+
+        self.migrator.migrate("3.0")
+        self.assertEqual(self.migrator.schema_version(), "3.0")
+        self.assertEqual(
+            self.migrator.execute("SELECT * FROM copy ORDER BY version;",
+                                  output=True),
+            [
+                ('dacfaeba-24ef-431b-a7b3-205dc1e8a34b', 1, 'source'),
+                ('dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 2, 'source')
+            ]
+        )
+        self.assertEqual(
+            self.migrator.execute("""
+                SELECT object_uuid, version, copy_name FROM layout
+                ORDER BY version;
+            """, output=True),
+            [
+                ('dacfaeba-24ef-431b-a7b3-205dc1e8a34b', 1, 'source'),
+                ('dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 2, 'source')
             ]
         )
         self.migrator.drop_tables()
