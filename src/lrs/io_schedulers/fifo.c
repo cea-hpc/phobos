@@ -253,9 +253,11 @@ static int find_write_device(struct io_scheduler *io_sched,
     pho_req_write_t *wreq = reqc->req->walloc;
     struct media_info **medium =
         &reqc->params.rwalloc.media[index].alloc_medium;
+    const char *targeted_grouping = wreq->grouping;
     device_select_func_t dev_select_policy;
     bool one_drive_available;
     struct string_array tags;
+    bool need_new_grouping;
     bool sched_ready;
     size_t size;
     int rc;
@@ -273,9 +275,11 @@ static int find_write_device(struct io_scheduler *io_sched,
     tags.strings = wreq->media[index]->tags;
     size = wreq->media[index]->size;
 
+search_again:
+    need_new_grouping = false;
     /* 1a) is there a mounted filesystem with enough room? */
     *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_MOUNTED, wreq->library,
-                      wreq->grouping, dev_select_policy, size, &tags, NULL,
+                      targeted_grouping, dev_select_policy, size, &tags, NULL,
                       true, wreq->media[index]->empty_medium,
                       &one_drive_available);
     /* If we find a dev, we exit. */
@@ -285,7 +289,7 @@ static int find_write_device(struct io_scheduler *io_sched,
 
     /* 1b) is there a loaded media with enough room? */
     *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_LOADED, wreq->library,
-                      wreq->grouping, dev_select_policy, size, &tags, NULL,
+                      targeted_grouping, dev_select_policy, size, &tags, NULL,
                       true, wreq->media[index]->empty_medium,
                       &one_drive_available);
     if (*dev || !one_drive_available)
@@ -297,8 +301,14 @@ static int find_write_device(struct io_scheduler *io_sched,
      */
     pho_verb("No loaded media with enough space found: selecting another one");
     rc = sched_select_medium(io_sched, medium, size, wreq->family,
-                             wreq->library, wreq->grouping, &tags, reqc,
-                             handle_error ? wreq->n_media : index, index);
+                             wreq->library, targeted_grouping, &tags, reqc,
+                             handle_error ? wreq->n_media : index, index,
+                             &need_new_grouping);
+    if (need_new_grouping) {
+        targeted_grouping = NULL;
+        goto search_again;
+    }
+
     if (rc)
         return rc;
 

@@ -405,7 +405,8 @@ int sched_select_medium(struct io_scheduler *io_sched,
                         const struct string_array *tags,
                         struct req_container *reqc,
                         size_t n_med,
-                        size_t not_alloc)
+                        size_t not_alloc,
+                        bool *need_new_grouping)
 {
     *p_media = mock_ptr_type(struct media_info *);
 

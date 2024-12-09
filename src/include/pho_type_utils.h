@@ -123,6 +123,11 @@ bool string_array_in(const struct string_array *haystack,
                      const struct string_array *needle);
 
 /**
+ * Add \p string to the end of string_array.
+ */
+void string_array_add(struct string_array *string_array, const char *string);
+
+/**
  * Return true if the given string is in the string_array, false otherwise.
  */
 bool string_exists(const struct string_array *string_array, const char *string);

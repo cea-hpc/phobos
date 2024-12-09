@@ -130,6 +130,7 @@ void media_info_copy(struct media_info *dst, const struct media_info *src)
     dst->rsc.model = xstrdup_safe(src->rsc.model);
     string_array_dup(&dst->tags, &src->tags);
     pho_lock_cpy(&dst->lock, &src->lock);
+    string_array_dup(&dst->groupings, &src->groupings);
 }
 
 struct media_info *media_info_dup(const struct media_info *mda)
@@ -305,6 +306,15 @@ bool string_array_in(const struct string_array *haystack,
     }
 
     return true;
+}
+
+void string_array_add(struct string_array *string_array, const char *string)
+{
+    string_array->count += 1;
+    string_array->strings = xrealloc(string_array->strings,
+                                     sizeof(*string_array->strings) *
+                                         string_array->count);
+    string_array->strings[string_array->count - 1] = xstrdup_safe(string);
 }
 
 void str2string_array(const char *str, struct string_array *string_array)

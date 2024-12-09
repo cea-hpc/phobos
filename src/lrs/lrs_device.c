@@ -444,6 +444,7 @@ static void sync_params_init(struct sync_params *params)
     params->oldest_tosync.tv_nsec = 0;
     params->tosync_size = 0;
     params->tosync_nb_extents = 0;
+    params->groupings_to_update = false;
 }
 
 static const struct timespec MINSLEEP = {
@@ -592,6 +593,7 @@ static void clean_tosync_array(struct lrs_dev *dev, int rc)
     dev->ld_sync_params.tosync_nb_extents = 0;
     dev->ld_sync_params.oldest_tosync.tv_sec = 0;
     dev->ld_sync_params.oldest_tosync.tv_nsec = 0;
+    dev->ld_sync_params.groupings_to_update = false;
     dev->ld_needs_sync = false;
     MUTEX_UNLOCK(&dev->ld_mutex);
 }
@@ -612,7 +614,11 @@ static int tosync_rc(struct req_container *reqc, int index)
 void push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
                              size_t medium_index)
 {
+    const char *sync_grouping =
+        reqc->req->release->media[medium_index]->grouping;
     struct sync_params *sync_params = &dev->ld_sync_params;
+    struct string_array *dev_medium_groupings;
+
     struct sub_request *req_tosync;
 
     ENTRY;
@@ -637,6 +643,12 @@ void push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
      */
     if (reqc->req->release->partial)
         dev->ld_needs_sync = true;
+
+    dev_medium_groupings = &dev->ld_dss_media_info->groupings;
+    if (sync_grouping && !string_exists(dev_medium_groupings, sync_grouping)) {
+        string_array_add(dev_medium_groupings, sync_grouping);
+        sync_params->groupings_to_update = true;
+    }
 
     MUTEX_UNLOCK(&dev->ld_mutex);
 
@@ -766,7 +778,8 @@ int medium_sync(struct lrs_dev *dev)
  * lock on \p dev.
  */
 static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
-                                int media_rc, long long nb_new_obj)
+                                int media_rc, long long nb_new_obj,
+                                bool groupings_to_update)
 {
     struct media_info *media_info = dev->ld_dss_media_info;
     struct dss_handle *dss = &dev->ld_device_thread.dss;
@@ -840,6 +853,9 @@ static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
         }
     }
 
+    if (groupings_to_update)
+        fields |= GROUPINGS;
+
     /* TODO update nb_load, nb_errors, last_load */
 
     assert(fields);
@@ -867,7 +883,8 @@ static int dev_sync(struct lrs_dev *dev)
         rc = dev->ld_last_client_rc;
 
     rc2 = lrs_dev_media_update(dev, sync_params->tosync_size, rc,
-                               sync_params->tosync_nb_extents);
+                               sync_params->tosync_nb_extents,
+                               sync_params->groupings_to_update);
     dev->ld_last_client_rc = 0;
 
     MUTEX_UNLOCK(&dev->ld_mutex);

@@ -428,6 +428,43 @@ static int append_tags_update_request(PGconn *conn, GString *request,
 }
 
 /**
+ * Append an escaped groupings update to the GString \p request.
+ *
+ * \param[in]  conn       The connection to the database, used to escape the
+ *                        tags
+ * \param[out] request    The request in which to add the groupings update
+ * \param[in]  medium     The medium to extract the groupings from
+ * \param[in]  add_comma  Whether a comma and space should be added in \p
+ *                        request
+ *
+ * \return 0 on success, -EINVAL if the groupings encoding or escaping fail
+ */
+static int append_groupings_update_request(PGconn *conn, GString *request,
+                                           struct media_info *medium,
+                                           bool add_comma)
+{
+    char *tmp_groupings = NULL;
+    char *groupings = NULL;
+
+    tmp_groupings = dss_string_array_encode(&medium->groupings);
+    if (!tmp_groupings)
+        LOG_RETURN(-EINVAL,
+                   "Failed to encode groupings for media update");
+
+    groupings = dss_char4sql(conn, tmp_groupings);
+    free(tmp_groupings);
+
+    if (!groupings)
+        LOG_RETURN(-EINVAL,
+                   "Failed to build groupings media update SQL request");
+
+    append_update_request(request, "groupings = %s", groupings, add_comma);
+    free_dss_char4sql(groupings);
+
+    return 0;
+}
+
+/**
  * Append an escaped stats string update to the GString \p request.
  *
  * \param[in]  conn       The connection to the database, used to escape the
@@ -507,6 +544,13 @@ static int media_update_query(PGconn *conn, void *src_med, void *dst_med,
                 return rc;
         }
 
+        if (GROUPINGS & fields) {
+            rc = append_groupings_update_request(conn, sub_request, dst,
+                                                 (fields ^= GROUPINGS) != 0);
+            if (rc)
+                return rc;
+        }
+
         if (PUT_ACCESS & fields)
             append_update_request(sub_request,
                                   "put = %s",
@@ -525,20 +569,17 @@ static int media_update_query(PGconn *conn, void *src_med, void *dst_med,
                                   bool2sqlbool(dst->flags.delete),
                                   (fields ^= DELETE_ACCESS) != 0);
 
-        if (IS_STAT(fields)) {
-            rc = append_stat_update_request(conn, sub_request, dst, false);
-            if (rc)
-                return rc;
-
-            fields = 0;
-        }
-
         if (LIBRARY & fields)
             append_update_request(sub_request,
                                   "library = '%s'",
                                   dst->rsc.id.library,
                                   (fields ^= LIBRARY) != 0);
 
+        if (IS_STAT(fields)) {
+            rc = append_stat_update_request(conn, sub_request, dst, false);
+            if (rc)
+                return rc;
+        }
 
         g_string_append_printf(sub_request,
                                " WHERE family = '%s' AND id = '%s' AND "

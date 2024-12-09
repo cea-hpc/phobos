@@ -1002,6 +1002,9 @@ static int medium_in_devices(const struct media_info *medium,
  * @param[in]  not_alloc     Index to ignore in \p reqc allocated media (can
  *                           be set to n_med or more if every already allocated
  *                           media should be taken into account)
+ * @param[out] need_new_grouping Set to true if a grouping is asked and no
+ *                               available medium can be found, else, set to
+ *                               false
  */
 mockable
 int sched_select_medium(struct io_scheduler *io_sched,
@@ -1013,7 +1016,8 @@ int sched_select_medium(struct io_scheduler *io_sched,
                         const struct string_array *tags,
                         struct req_container *reqc,
                         size_t n_med,
-                        size_t not_alloc)
+                        size_t not_alloc,
+                        bool *need_new_grouping)
 {
     struct lock_handle *lock_handle = io_sched->io_sched_hdl->lock_handle;
     bool with_tags = tags != NULL && tags->count > 0;
@@ -1029,6 +1033,8 @@ int sched_select_medium(struct io_scheduler *io_sched,
     int i;
 
     ENTRY;
+
+    *need_new_grouping = false;
 
     if (with_tags) {
         tag_filter_json = build_tag_filter(tags);
@@ -1110,6 +1116,9 @@ int sched_select_medium(struct io_scheduler *io_sched,
         pho_warn("No medium found matching query: %s", dump);
         dss_filter_free(&filter);
         free(dump);
+        if (grouping)
+            *need_new_grouping = true;
+
         GOTO(free_res, rc = -ENOSPC);
     }
 
@@ -1182,6 +1191,9 @@ int sched_select_medium(struct io_scheduler *io_sched,
     if (avail_size < required_size) {
         pho_warn("Available space on all media: %zd, required size : %zd",
                  avail_size, required_size);
+        if (grouping)
+            *need_new_grouping = true;
+
         GOTO(free_res, rc = -ENOSPC);
     }
 
@@ -1196,6 +1208,9 @@ int sched_select_medium(struct io_scheduler *io_sched,
                  chosen_media->rsc.id.name, chosen_media->rsc.id.library);
     } else {
         pho_debug("No medium available, wait for one");
+        if (grouping)
+            *need_new_grouping = true;
+
         GOTO(free_res, rc = -EAGAIN);
     }
 

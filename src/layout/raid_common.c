@@ -735,6 +735,8 @@ static int write_split_fini(struct pho_encoder *enc, int io_rc,
         release->media[i]->rc = io_rc;
         release->media[i]->size_written += iod->iod_size;
         release->media[i]->nb_extents_written += 1;
+        release->media[i]->grouping =
+            xstrdup_safe(enc->xfer->xd_params.put.grouping);
         ext_location.extent->size = iod->iod_size;
         if (i < io_context->n_data_extents)
             /* We need to remove the size written from to_write. But to_write

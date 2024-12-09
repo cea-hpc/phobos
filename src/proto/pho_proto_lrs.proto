@@ -84,7 +84,8 @@ message PhoRequest {
             required bool to_sync         = 5;  // Whether the client requires
                                                 // the LRS to perform a sync or
                                                 // not.
-                    }
+            optional string grouping = 6;       // Targeted grouping
+        }
 
         repeated Elt media    = 1;  // Description of the media to release.
         required bool partial = 2;  // Whether the client requires the LRS to

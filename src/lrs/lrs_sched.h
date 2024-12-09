@@ -434,7 +434,8 @@ int sched_select_medium(struct io_scheduler *io_sched,
                         const struct string_array *tags,
                         struct req_container *reqc,
                         size_t n_med,
-                        size_t not_alloc);
+                        size_t not_alloc,
+                        bool *need_new_grouping);
 
 int fetch_and_check_medium_info(struct lock_handle *lock_handle,
                                 struct req_container *reqc,

@@ -184,6 +184,10 @@ struct sync_params {
                                     /**< total number of extents written in
                                      *   \p tosync_array
                                      */
+    bool             groupings_to_update;
+                                    /**< A new grouping was added to the medium.
+                                     *   The grouping field need to be updated.
+                                     */
 };
 
 /**

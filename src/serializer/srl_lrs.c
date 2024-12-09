@@ -125,7 +125,9 @@ void pho_srl_request_write_alloc(pho_req_t *req, size_t n_media,
     req->walloc->n_media = n_media;
     req->walloc->media = xmalloc(n_media * sizeof(*req->walloc->media));
     req->walloc->prevent_duplicate = false;
+    req->walloc->library = NULL;
     req->walloc->no_split = false;
+    req->walloc->grouping = NULL;
 
     for (i = 0; i < n_media; ++i) {
         req->walloc->media[i] = xmalloc(sizeof(*req->walloc->media[i]));
@@ -178,6 +180,8 @@ void pho_srl_request_release_alloc(pho_req_t *req, size_t n_media)
         req->release->media[i]->med_id =
             xmalloc(sizeof(*req->release->media[i]->med_id));
         pho_resource_id__init(req->release->media[i]->med_id);
+
+        req->release->media[i]->grouping = NULL;
     }
     req->release->partial = false;
 }
@@ -269,6 +273,7 @@ void pho_srl_request_free(pho_req_t *req, bool unpack)
             free(req->release->media[i]->med_id->name);
             free(req->release->media[i]->med_id->library);
             free(req->release->media[i]->med_id);
+            free(req->release->media[i]->grouping);
             free(req->release->media[i]);
         }
         free(req->release->media);
