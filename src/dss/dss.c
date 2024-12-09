@@ -746,6 +746,13 @@ int dss_copy_insert(struct dss_handle *handle, struct copy_info *copy_list,
                            DSS_SET_INSERT);
 }
 
+int dss_copy_update(struct dss_handle *handle, struct copy_info *src_list,
+                    struct copy_info *dst_list, int copy_count, int64_t fields)
+{
+    return dss_generic_update(handle, DSS_COPY, (void *)src_list,
+                              (void *)dst_list, copy_count, fields);
+}
+
 int dss_copy_get(struct dss_handle *handle, const struct dss_filter *filter,
                  struct copy_info **copy_list, int *copy_count,
                  struct dss_sort *sort)

@@ -127,6 +127,7 @@ struct dss_field {
     const char *(*get_value)(void *resource);
 };
 
+/* Will be removed when updating to the new db schema */
 static inline const char *get_access_time(void *object)
 {
     static __thread char str[PHO_TIMEVAL_MAX_LEN] = "";
@@ -139,6 +140,20 @@ static inline const char *get_access_time(void *object)
 static inline const char *get_obj_status(void *object)
 {
     return obj_status2str(((struct object_info *) object)->obj_status);
+}
+
+static inline const char *get_access_time_cpy(void *copy)
+{
+    static __thread char str[PHO_TIMEVAL_MAX_LEN] = "";
+
+    timeval2str(&((struct copy_info *) copy)->access_time, str);
+
+    return (const char *)str;
+}
+
+static inline const char *get_copy_status(void *copy)
+{
+    return obj_status2str(((struct copy_info *) copy)->copy_status);
 }
 
 static inline const char *get_oid(void *object)

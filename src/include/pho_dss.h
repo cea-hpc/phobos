@@ -86,6 +86,12 @@ enum dss_object_operations {
     DSS_OBJECT_UPDATE_OID = (1 << 3),
 };
 
+/** The different types of update allowed for copies */
+enum dss_copy_operations {
+    DSS_COPY_UPDATE_ACCESS_TIME = (1 << 0),
+    DSS_COPY_UPDATE_COPY_STATUS = (1 << 1),
+};
+
 /**
  * get dss_type enum from string
  * @param[in]  str  dss_type string representation.
@@ -685,6 +691,20 @@ int dss_deprecated_object_delete(struct dss_handle *handle,
  */
 int dss_copy_insert(struct dss_handle *handle, struct copy_info *copy_list,
                     int copy_count);
+
+/**
+ * Update the information of one or many copies in DSS.
+ *
+ * @param[in]  handle        valid connection handle
+ * @param[in]  src_list      array of entries to select
+ * @param[in]  dst_list      array of entries to update
+ * @param[in]  copy_count    number of items in the list
+ * @param[in]  fields        fields to update
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_copy_update(struct dss_handle *handle, struct copy_info *src_list,
+                    struct copy_info *dst_list, int copy_count, int64_t fields);
 
 /**
  * Retrieve copy information from DSS.
