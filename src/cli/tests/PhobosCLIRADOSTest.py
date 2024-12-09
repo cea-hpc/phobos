@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -19,12 +19,12 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-""" RADOS Unit tests for phobos.cli These should be executed only if RADOS
+""" RADOS Unit tests for phobos These should be executed only if RADOS
     modules are installed """
 
 import unittest
 import errno
-import rados
+import rados # pylint: disable=import-error
 import PhobosCLITest
 from phobos.core.dss import Client
 

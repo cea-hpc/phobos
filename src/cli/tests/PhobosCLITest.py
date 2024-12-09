@@ -19,7 +19,7 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""Unit tests for phobos.cli"""
+"""Unit tests for phobos CLI"""
 
 import errno
 import os
@@ -31,7 +31,7 @@ from contextlib import contextmanager
 from io import StringIO
 from socket import gethostname
 
-from phobos.cli import PhobosActionContext
+from phobos import PhobosActionContext
 from phobos.core.dss import MediaManager
 import phobos.core.cfg as cfg
 

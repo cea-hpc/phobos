@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -46,7 +46,7 @@ import sys
 
 import psycopg2
 
-from phobos.cli import PhobosActionContext
+from phobos import PhobosActionContext
 from phobos.db import Migrator, CURRENT_SCHEMA_VERSION, db_config
 from phobos.core import cfg
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -23,7 +23,7 @@
 
 import unittest
 
-from phobos.cli import attr_convert
+from phobos import attr_convert
 
 class AttrConvertTest(unittest.TestCase):
     """

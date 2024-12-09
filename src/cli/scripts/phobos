@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -23,7 +23,7 @@
 phobos control and administration command-line tool.
 """
 
-from phobos.cli import phobos_main
+from phobos import phobos_main
 
 
 if __name__ == '__main__':

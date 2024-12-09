@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -26,7 +26,7 @@ This file is for testing the parser used for the "put --file" command line.
 
 import unittest
 
-from phobos.cli import mput_file_line_parser
+from phobos import mput_file_line_parser
 
 class CliTestMultiPutParser(unittest.TestCase):
     """Try to parse a mput line entry to detect broken strings."""
