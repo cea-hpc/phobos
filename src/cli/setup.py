@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -23,7 +23,13 @@
 Build and installation information for phobos CLI.
 """
 
-from distutils.core import setup, Extension
+# distutils will be removed from python3.12
+try:
+    from setuptools import setup, Extension
+# setuptools not available with python3.6 on RHEL8
+except ImportError:
+    from distutils.core import setup
+    from distutils.extension import Extension
 
 # Macros to use for every C extension we build
 GLOBAL_MACROS = [('HAVE_CONFIG_H', 1)]

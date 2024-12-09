@@ -61,6 +61,9 @@ Requires: %{python_prefix}-PyYAML
 Requires: %{python_prefix}-clustershell
 Requires: %{python_prefix}-psycopg2
 Requires: %{python_prefix}-tabulate
+%if 0%{?rhel} > 8
+Requires: %{python_prefix}-setuptools
+%endif
 Requires: protobuf
 Requires: protobuf-c
 Requires: openssl >= 0.9.7
