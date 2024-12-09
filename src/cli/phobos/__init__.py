@@ -49,8 +49,10 @@ from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=n
                                ADM_STATUS, TAGS, PUT_ACCESS, GET_ACCESS,
                                DELETE_ACCESS, PHO_RSC_TAPE, PHO_RSC_NONE,
                                PHO_OPERATION_INVALID, fs_type2str,
-                               str2operation_type)
-from phobos.core.dss import Client as DSSClient
+                               str2operation_type, DSS_STATUS_FILTER_ALL,
+                               DSS_STATUS_FILTER_COMPLETE,
+                               DSS_STATUS_FILTER_INCOMPLETE,
+                               DSS_STATUS_FILTER_READABLE)
 from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
                              MediaInfo, ObjectInfo, ResourceFamily,
                              CLIManagedResourceMixin, FSType, Id, LogFilter,
@@ -58,20 +60,12 @@ from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
 from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
 from phobos.output import dump_object_list
 
-from phobos.cli.common import BaseOptHandler, PhobosActionContext
-from phobos.cli.common.args import add_put_arguments
+from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
+                               DSSInteractHandler, BaseResourceOptHandler,
+                               env_error_format)
+from phobos.cli.common.args import (add_put_arguments, check_output_attributes,
+                                    get_params_status)
 from phobos.cli.target.copy import CopyOptHandler
-
-def env_error_format(exc):
-    """Return a human readable representation of an environment exception."""
-    if exc.errno and exc.strerror:
-        return "%s (%s)" % (exc.strerror, os.strerror(abs(exc.errno)))
-    elif exc.errno:
-        return "%s (%s)" % (os.strerror(abs(exc.errno)), abs(exc.errno))
-    elif exc.strerror:
-        return exc.strerror
-
-    return ""
 
 def attr_convert(usr_attr):
     """Convert k/v pairs as expressed by the user into a dictionnary."""
@@ -100,24 +94,6 @@ def mput_file_line_parser(line):
                          + str(len(file_entry)))
 
     return file_entry
-
-
-class DSSInteractHandler(BaseOptHandler):
-    """Option handler for actions that interact with the DSS."""
-    def __init__(self, params, **kwargs):
-        """Initialize a new instance."""
-        super(DSSInteractHandler, self).__init__(params, **kwargs)
-        self.client = None
-
-    def __enter__(self):
-        """Initialize a DSS Client."""
-        self.client = DSSClient()
-        self.client.connect()
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        """Release resources associated to a DSS handle."""
-        self.client.disconnect()
 
 
 class XferOptHandler(BaseOptHandler):
@@ -1237,14 +1213,6 @@ def handle_sort_option(params, resource, logger, **kwargs):
     return kwargs
 
 
-class BaseResourceOptHandler(DSSInteractHandler):
-    """Generic interface for resources manipulation."""
-    label = None
-    descr = None
-    family = None
-    library = None
-    verbs = []
-
 class ObjectOptHandler(BaseResourceOptHandler):
     """Shared interface for objects."""
     label = 'object'
@@ -1258,12 +1226,7 @@ class ObjectOptHandler(BaseResourceOptHandler):
         attrs = list(DeprecatedObjectInfo().get_display_dict().keys()
                      if self.params.get('deprecated')
                      else ObjectInfo().get_display_dict().keys())
-        attrs.extend(['*', 'all'])
-        out_attrs = self.params.get('output')
-        bad_attrs = set(out_attrs).difference(set(attrs))
-        if bad_attrs:
-            self.logger.error("Bad output attributes: %s", " ".join(bad_attrs))
-            sys.exit(os.EX_USAGE)
+        check_output_attributes(attrs, self.params.get('output'), self.logger)
 
         metadata = []
         if self.params.get('metadata'):
@@ -1274,19 +1237,8 @@ class ObjectOptHandler(BaseResourceOptHandler):
                                       "'key=value'", elt)
                     sys.exit(os.EX_USAGE)
 
-        status_number = 0
-        if self.params.get('status'):
-            status_possibilities = {'i': 1, 'r': 2, 'c': 4}
-            status_str = self.params.get('status')
-            for letter in status_str:
-                if letter not in status_possibilities:
-                    self.logger.error("status parameter '%s' must be composed "
-                                      "excusively of i, r or c", status_str)
-                    sys.exit(os.EX_USAGE)
-                status_number += status_possibilities[letter]
-        else:
-            status_number = 7
-
+        status_number = get_params_status(self.params.get('status'),
+                                          self.logger)
         kwargs = {}
         if self.params.get('deprecated'):
             kwargs = handle_sort_option(self.params, DeprecatedObjectInfo(),
@@ -1309,10 +1261,11 @@ class ObjectOptHandler(BaseResourceOptHandler):
                 max_width = (None if self.params.get('no_trunc')
                              else self.params.get('max_width'))
 
-                dump_object_list(objs, attr=out_attrs, max_width=max_width,
+                dump_object_list(objs, attr=self.params.get('output'),
+                                 max_width=max_width,
                                  fmt=self.params.get('format'))
 
-            client.list_free(objs, len(objs))
+            client.list_obj_free(objs, len(objs))
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
@@ -1868,12 +1821,7 @@ class MediaOptHandler(BaseResourceOptHandler):
     def exec_list(self):
         """List media and display results."""
         attrs = list(MediaInfo().get_display_dict().keys())
-        attrs.extend(['*', 'all'])
-        out_attrs = self.params.get('output')
-        bad_attrs = set(out_attrs).difference(set(attrs))
-        if bad_attrs:
-            self.logger.error("Bad output attributes: %s", " ".join(bad_attrs))
-            sys.exit(os.EX_USAGE)
+        check_output_attributes(attrs, self.params.get('output'), self.logger)
 
         kwargs = {}
         if self.params.get('tags'):
@@ -2340,12 +2288,7 @@ class DriveOptHandler(DeviceOptHandler):
     def exec_list(self):
         """List devices and display results."""
         attrs = list(DevInfo().get_display_dict().keys())
-        attrs.extend(['*', 'all'])
-        out_attrs = self.params.get('output')
-        bad_attrs = set(out_attrs).difference(set(attrs))
-        if bad_attrs:
-            self.logger.error("Bad output attributes: %s", " ".join(bad_attrs))
-            sys.exit(os.EX_USAGE)
+        check_output_attributes(attrs, self.params.get('output'), self.logger)
 
         kwargs = {}
         if self.params.get('model'):
@@ -2542,12 +2485,7 @@ class ExtentOptHandler(BaseResourceOptHandler):
     def exec_list(self):
         """List extents."""
         attrs = list(LayoutInfo().get_display_dict().keys())
-        attrs.extend(['*', 'all'])
-        out_attrs = self.params.get('output')
-        bad_attrs = set(out_attrs).difference(set(attrs))
-        if bad_attrs:
-            self.logger.error("Bad output attributes: %s", " ".join(bad_attrs))
-            sys.exit(os.EX_USAGE)
+        check_output_attributes(attrs, self.params.get('output'), self.logger)
 
         kwargs = {}
         if self.params.get('library'):
@@ -2566,7 +2504,7 @@ class ExtentOptHandler(BaseResourceOptHandler):
                     **kwargs)
 
                 if len(obj_list) > 0:
-                    dump_object_list(obj_list, attr=out_attrs,
+                    dump_object_list(obj_list, attr=self.params.get('output'),
                                      fmt=self.params.get('format'))
 
                 adm.layout_list_free(p_objs, n_objs)

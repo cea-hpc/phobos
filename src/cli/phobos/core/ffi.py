@@ -717,6 +717,50 @@ class DeprecatedObjectInfo(ObjectInfo):
             'grouping': None,
         }
 
+class CopyInfo(Structure, CLIManagedResourceMixin):
+    """Copy descriptor."""
+    _fields_ = [
+        ('_uuid', c_char_p),
+        ('version', c_int),
+        ('_copy_name', c_char_p),
+        ('status', c_int),
+        ('creation_time', Timeval),
+        ('access_time', Timeval),
+    ]
+
+    def get_display_fields(self, max_width):
+        """Return a dict of available fields and optional display formatters."""
+        return {
+            'uuid': None,
+            'version': None,
+            'copy_name': None,
+            'status': obj_status2str,
+            'creation_time': Timeval.to_string,
+            'access_time': Timeval.to_string,
+        }
+
+    @property
+    def uuid(self):
+        """Wrapper to get uuid"""
+        return self._uuid.decode('utf-8') if self._uuid else None
+
+    @uuid.setter
+    def uuid(self, val):
+        """Wrapper to set uuid"""
+        # pylint: disable=attribute-defined-outside-init
+        self._uuid = val.encode('utf-8') if val else None
+
+    @property
+    def copy_name(self):
+        """Wrapper to get copy_name"""
+        return self._copy_name.decode('utf-8') if self._copy_name else None
+
+    @copy_name.setter
+    def copy_name(self, val):
+        """Wrapper to set copy_name"""
+        # pylint: disable=attribute-defined-outside-init
+        self.copy_name = val.encode('utf-8') if val else None
+
 class Buffer(Structure): # pylint: disable=too-few-public-methods
     """String buffer."""
     _fields_ = [

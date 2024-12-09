@@ -32,7 +32,7 @@ from ctypes import (byref, c_bool, c_char_p, c_int, c_ssize_t, c_void_p, cast,
                     CFUNCTYPE, pointer, POINTER, py_object, Structure, Union)
 
 from phobos.core.ffi import (LIBPHOBOS, DeprecatedObjectInfo, ObjectInfo,
-                             StringArray)
+                             StringArray, CopyInfo)
 from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OBJ_BEST_HOST, # pylint: disable=no-name-in-module
                                PHO_XFER_OBJ_HARD_DEL,
                                PHO_XFER_OP_GET, PHO_XFER_OP_GETMD,
@@ -579,7 +579,7 @@ class UtilClient:
         return objs
 
     @staticmethod
-    def list_free(objs, n_objs):
+    def list_obj_free(objs, n_objs):
         """Free a previously obtained object list."""
         LIBPHOBOS.phobos_store_object_list_free(objs, n_objs)
 
@@ -614,3 +614,36 @@ class UtilClient:
 
         return (hostname.value.decode('utf-8') if hostname.value else "",
                 nb_new_lock)
+
+    @staticmethod
+    def copy_list(res, status_number):
+        """List copies."""
+        n_copy = c_int(0)
+        copy = POINTER(CopyInfo)()
+
+        n_status_number = c_int(status_number)
+
+        enc_res = [elt.encode('utf-8') for elt in res]
+        c_res_strlist = c_char_p * len(enc_res)
+
+        rc = LIBPHOBOS.phobos_store_copy_list(c_res_strlist(*enc_res),
+                                              len(enc_res),
+                                              n_status_number,
+                                              byref(copy),
+                                              byref(n_copy),
+                                              None)
+
+        if rc:
+            raise EnvironmentError(rc, "Failed to list %s" %
+                                   ("copies '%s'" % res
+                                    if res else "all copies"))
+
+        copy = (CopyInfo * n_copy.value).from_address(
+            cast(copy, c_void_p).value)
+
+        return copy
+
+    @staticmethod
+    def list_cpy_free(copy, n_copy):
+        """Free a previously obtained copy list."""
+        LIBPHOBOS.phobos_store_copy_list_free(copy, n_copy)

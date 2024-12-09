@@ -31,4 +31,7 @@ class ListOptHandler(ActionOptHandler):
     @classmethod
     def add_options(cls, parser):
         super(ListOptHandler, cls).add_options(parser)
-        parser.add_argument('rsc', help='resource to list')
+        parser.add_argument('res', nargs='*', help='resource to list')
+        parser.add_argument('-f', '--format', default='human',
+                            help="output format human/xml/json/csv/yaml " \
+                                 "(default: human)")

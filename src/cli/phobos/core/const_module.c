@@ -371,5 +371,11 @@ PyMODINIT_FUNC PyInit_const(void)
     /* enum operation_type */
     PyModule_AddIntMacro(mod, PHO_OPERATION_INVALID);
 
+    /* enum dss_status_filter */
+    PyModule_AddIntMacro(mod, DSS_STATUS_FILTER_INCOMPLETE);
+    PyModule_AddIntMacro(mod, DSS_STATUS_FILTER_READABLE);
+    PyModule_AddIntMacro(mod, DSS_STATUS_FILTER_COMPLETE);
+    PyModule_AddIntMacro(mod, DSS_STATUS_FILTER_ALL);
+
     return mod;
 }

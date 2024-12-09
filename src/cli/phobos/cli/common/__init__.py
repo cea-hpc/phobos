@@ -29,7 +29,19 @@ from logging.handlers import SysLogHandler
 import os
 
 from phobos.core import cfg
+from phobos.core.dss import Client as DSSClient
 from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
+
+def env_error_format(exc):
+    """Return a human readable representation of an environment exception."""
+    if exc.errno and exc.strerror:
+        return "%s (%s)" % (exc.strerror, os.strerror(abs(exc.errno)))
+    elif exc.errno:
+        return "%s (%s)" % (os.strerror(abs(exc.errno)), abs(exc.errno))
+    elif exc.strerror:
+        return exc.strerror
+
+    return ""
 
 def phobos_log_handler(log_record):
     """
@@ -126,6 +138,33 @@ class BaseOptHandler:
                 verb.subparser_register(v_parser)
 
         return subparser
+
+
+class DSSInteractHandler(BaseOptHandler):
+    """Option handler for actions that interact with the DSS."""
+    def __init__(self, params, **kwargs):
+        """Initialize a new instance."""
+        super(DSSInteractHandler, self).__init__(params, **kwargs)
+        self.client = None
+
+    def __enter__(self):
+        """Initialize a DSS Client."""
+        self.client = DSSClient()
+        self.client.connect()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Release resources associated to a DSS handle."""
+        self.client.disconnect()
+
+
+class BaseResourceOptHandler(DSSInteractHandler):
+    """Generic interface for resources manipulation."""
+    label = None
+    descr = None
+    family = None
+    library = None
+    verbs = []
 
 SYSLOG_LOG_LEVELS = ["critical", "error", "warning", "info", "debug"]
 
