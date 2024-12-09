@@ -229,4 +229,18 @@ int dss_update_extent_state(struct dss_handle *handle, const char **uuids,
 int dss_update_gc_for_tape(struct dss_handle *handle,
                            const struct pho_id *tape);
 
+/**
+ * Find the default copy
+ *
+ * This function is lazy because there is no lock and the existing copies could
+ * change any time.
+ *
+ * @param[in]   uuid    UUID to find
+ * @param[in]   version Version to find
+ * @param[out]  copy    Found and allocated copy or NULL if error
+ *
+ * @return 0 or negative error code
+ */
+int dss_lazy_find_default_copy(struct dss_handle *handle, const char *uuid,
+                               int version, struct copy_info **copy);
 #endif

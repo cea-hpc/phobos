@@ -210,6 +210,30 @@ void object_info_free(struct object_info *obj)
     free(obj);
 }
 
+struct copy_info *copy_info_dup(const struct copy_info *copy)
+{
+    struct copy_info *copy_out = NULL;
+
+    copy_out = xcalloc(sizeof(*copy_out), 1);
+
+    copy_out->object_uuid = xstrdup_safe(copy->object_uuid);
+    copy_out->version = copy->version;
+    copy_out->copy_name = xstrdup_safe(copy->copy_name);
+    copy_out->copy_status = copy->copy_status;
+
+    return copy_out;
+}
+
+void copy_info_free(struct copy_info *copy)
+{
+    if (!copy)
+        return;
+
+    free(copy->object_uuid);
+    free((char *) copy->copy_name);
+    free(copy);
+}
+
 void string_array_dup(struct string_array *string_array_dst,
                       const struct string_array *string_array_src)
 {

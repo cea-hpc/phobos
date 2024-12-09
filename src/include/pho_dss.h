@@ -234,8 +234,10 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::LOG::start", "time"},
     {"DSS::LOG::end", "time"},
     /* Copy related fields */
-    {"DSS::COPY::object_uuid", "object_uuid"},
+    {"DSS::COPY::copy_name", "copy_name"},
     {"DSS::COPY::copy_status", "copy_status"},
+    {"DSS::COPY::object_uuid", "object_uuid"},
+    {"DSS::COPY::version", "version"},
     {NULL, NULL}
 };
 

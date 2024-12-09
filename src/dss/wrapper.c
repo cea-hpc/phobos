@@ -34,6 +34,7 @@
 #include "pho_dss.h"
 #include "pho_dss_wrapper.h"
 #include "pho_type_utils.h"
+#include "pho_cfg.h"
 
 #include "dss_utils.h"
 #include "filters.h"
@@ -626,4 +627,42 @@ int dss_update_gc_for_tape(struct dss_handle *handle, const struct pho_id *tape)
         return rc;
 
     return check_orphan(handle, tape);
+}
+
+int dss_lazy_find_default_copy(struct dss_handle *handle, const char *uuid,
+                               int version, struct copy_info **copy)
+{
+    const char *default_copy_name = NULL;
+    struct copy_info *copy_list = NULL;
+    struct dss_filter filter;
+    int copy_cnt = 0;
+    int rc;
+
+    ENTRY;
+
+    rc = get_cfg_default_copy_name(&default_copy_name);
+    if (rc)
+        LOG_RETURN(rc, "Cannot get default_copy_name from conf");
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "     {\"DSS::COPY::object_uuid\": \"%s\"},"
+                          "     {\"DSS::COPY::version\": \"%d\"},"
+                          "     {\"DSS::COPY::copy_name\": \"%s\"}"
+                          "]}", uuid, version, default_copy_name);
+    if (rc)
+        LOG_RETURN(rc, "Cannot build filter");
+
+    rc = dss_copy_get(handle, &filter, &copy_list, &copy_cnt, NULL);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc, "Cannot fetch copy '%s' for objuuid:'%s'",
+                   default_copy_name, uuid);
+
+    assert(copy_cnt == 1);
+
+    *copy = copy_info_dup(copy_list);
+
+    dss_res_free(copy_list, copy_cnt);
+    return rc;
 }

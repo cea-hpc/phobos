@@ -92,6 +92,12 @@ struct object_info *object_info_dup(const struct object_info *obj);
 /** free an object_info structure */
 void object_info_free(struct object_info *obj);
 
+/** duplicate an copy_info structure, cannot return NULL */
+struct copy_info *copy_info_dup(const struct copy_info *copy);
+
+/** free an copy_info structure */
+void copy_info_free(struct copy_info *copy);
+
 /**
  * Init string_array by strdup'ing strings.
  */
