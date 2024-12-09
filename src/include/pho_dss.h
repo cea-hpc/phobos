@@ -92,6 +92,15 @@ enum dss_copy_operations {
     DSS_COPY_UPDATE_COPY_STATUS = (1 << 1),
 };
 
+/** The different status filter */
+enum dss_status_filter {
+    DSS_STATUS_FILTER_INCOMPLETE = (1 << 0),
+    DSS_STATUS_FILTER_READABLE   = (1 << 1),
+    DSS_STATUS_FILTER_COMPLETE   = (1 << 2),
+    DSS_STATUS_FILTER_ALL        = DSS_STATUS_FILTER_INCOMPLETE |
+        DSS_STATUS_FILTER_READABLE | DSS_STATUS_FILTER_COMPLETE,
+};
+
 /**
  * get dss_type enum from string
  * @param[in]  str  dss_type string representation.
@@ -224,6 +233,9 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::LOG::cause", "cause"},
     {"DSS::LOG::start", "time"},
     {"DSS::LOG::end", "time"},
+    /* Copy related fields */
+    {"DSS::COPY::object_uuid", "object_uuid"},
+    {"DSS::COPY::copy_status", "copy_status"},
     {NULL, NULL}
 };
 

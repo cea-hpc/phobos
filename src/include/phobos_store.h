@@ -422,4 +422,37 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
  */
 void phobos_store_object_list_free(struct object_info *objs, int n_objs);
 
+/**
+ * Retrieve the copies that match the given uuid.
+ * If given multiple uuids, retrieve every item with uuid matching any of those
+ * uuids.
+ *
+ * The caller must release the list calling phobos_store_copy_list_free().
+ *
+ * \param[in]       res             Uuids.
+ * \param[in]       n_res           Number of requested uuids.
+ * \param[in]       status_filter   Number corresponding to the cpy_status
+ *                                  filter
+ * \param[out]      objs            Retrieved copies.
+ * \param[out]      n_objs          Number of retrieved items.
+ *
+ * \return                          0     on success,
+ *                                 -errno on failure.
+ *
+ * This must be called after phobos_init.
+ */
+int phobos_store_copy_list(const char **res, int n_res, int status_filter,
+                           struct copy_info **copy, int *n_copy,
+                           struct dss_sort *sort);
+
+/**
+ * Release the list retrieved using phobos_store_copy_list().
+ *
+ * \param[in]       copy            Copies to release.
+ * \param[in]       n_copy          Number of copies to release.
+ *
+ * This must be called after phobos_init.
+ */
+void phobos_store_copy_list_free(struct copy_info *copy, int n_copy);
+
 #endif

@@ -60,15 +60,14 @@ static void phobos_construct_metadata(GString *metadata_str,
  * \param[in]       n_res       Number of requested ressources.
  * \param[in]       is_pattern  True if search done using POSIX pattern.
  */
-static void phobos_construct_res(GString *res_str, const char **res,
-                                 int n_res, bool is_pattern)
+static void phobos_construct_res_obj(GString *res_str, const char **res,
+                                     int n_res, bool is_pattern)
 {
     char *res_prefix = (is_pattern ? "{\"$REGEXP\" : " : "");
     char *res_suffix = (is_pattern ? "}" : "");
     int i;
 
-    if (n_res > 1)
-        g_string_append_printf(res_str, "{\"$OR\" : [");
+    g_string_append_printf(res_str, "{\"$OR\" : [");
 
     for (i = 0; i < n_res; ++i)
         g_string_append_printf(res_str,
@@ -78,12 +77,36 @@ static void phobos_construct_res(GString *res_str, const char **res,
                                res_suffix,
                                (i + 1 != n_res) ? "," : "");
 
-    if (n_res > 1)
-        g_string_append_printf(res_str, "]}");
+    g_string_append_printf(res_str, "]}");
 }
 
 /**
- * Construct the status string for the object list filter.
+ * Construct the resource string for the copy list filter.
+ *
+ * The caller must ensure res_str is initialized before calling.
+ *
+ * \param[in,out]   res_str     Empty resource string.
+ * \param[in]       res         List of object UUID.
+ * \param[in]       n_res       Number of requested ressources.
+ */
+static void phobos_construct_res_cpy(GString *res_str, const char **res,
+                                     int n_res)
+{
+    int i;
+
+    g_string_append_printf(res_str, "{\"$OR\" : [");
+
+    for (i = 0; i < n_res; ++i)
+        g_string_append_printf(res_str,
+                               "{\"DSS::COPY::object_uuid\":\"%s\"} %s",
+                               res[i],
+                               (i + 1 != n_res) ? "," : "");
+
+    g_string_append_printf(res_str, "]}");
+}
+
+/**
+ * Construct the status string for the copy list filter.
  *
  * \param[in,out]   status_str      Empty status string.
  * \param[in]       status_filter   Status filter number.
@@ -98,25 +121,24 @@ static void phobos_construct_status(GString *status_str, int status_filter)
      * are either 0 or 1. If one field is 1, the filter must incorporate the
      * corresponding status (c <-> complete, r <-> readable, i <-> incomplete)
      */
-    bool i = (status_filter & 1);
-    bool r = (status_filter & 2)/2;
-    bool c = (status_filter & 4)/4;
+    bool i = (status_filter & DSS_STATUS_FILTER_INCOMPLETE);
+    bool r = (status_filter & DSS_STATUS_FILTER_READABLE)/2;
+    bool c = (status_filter & DSS_STATUS_FILTER_COMPLETE)/4;
 
-    if (i+r+c > 1)
-        g_string_append_printf(status_str, "{\"$OR\" : [");
+    g_string_append_printf(status_str, "{\"$OR\" : [");
 
     g_string_append_printf(status_str, "%s %s",
                            i ? " {\"DSS::OBJ::obj_status\":\"incomplete\"} "
                              : "",
                            i && (r || c) ? "," : "");
     g_string_append_printf(status_str, "%s %s",
-                           r ? " {\"DSS::OBJ::obj_status\":\"readable\"} " : "",
+                           r ? " {\"DSS::OBJ::obj_status\":\"readable\"} "
+                             : "",
                            r && c ? "," : "");
     g_string_append_printf(status_str, "%s",
                            c ? " {\"DSS::OBJ::obj_status\":\"complete\"} " :
                                "");
-    if (i+r+c > 1)
-        g_string_append_printf(status_str, "]}");
+    g_string_append_printf(status_str, "]}");
 }
 
 int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
@@ -133,8 +155,10 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
     GString *res_str;
     int rc;
 
-    if (status_filter <= 0 || status_filter > 7)
-        LOG_RETURN(-EINVAL, "status_filter must be an integer between 1 and 7");
+    if (status_filter <= 0 || status_filter > DSS_STATUS_FILTER_ALL)
+        LOG_RETURN(-EINVAL,
+                   "status_filter must be an integer between %d and %d",
+                   DSS_STATUS_FILTER_INCOMPLETE, DSS_STATUS_FILTER_ALL);
 
     rc = pho_cfg_init_local(NULL);
     if (rc && rc != -EALREADY)
@@ -157,9 +181,10 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
 
     /**
      * No need to construct the status filter if all obj_status are wanted,
-     * which happens if status_filter number is set to 7 (= 111 in decimal)
+     * which happens if status_filter number is set to
+     * DSS_STATUS_FILTER_ALL (= 111 in binary)
      */
-    if (status_filter != 7)
+    if (status_filter != DSS_STATUS_FILTER_ALL)
         phobos_construct_status(status_str, status_filter);
 
     /**
@@ -167,9 +192,9 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
      * each request.
      */
     if (n_res)
-        phobos_construct_res(res_str, res, n_res, is_pattern);
+        phobos_construct_res_obj(res_str, res, n_res, is_pattern);
 
-    if (n_res || n_metadata || status_filter != 7) {
+    if (n_res || n_metadata || status_filter != DSS_STATUS_FILTER_ALL) {
         /**
          * Finally, if the request has at least one metadata, one resource or
          * a status filter, we build the filter in the following way:
@@ -183,22 +208,20 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
          */
         rc = dss_filter_build(&filter,
                               "%s %s %s %s %s %s %s",
-                              (((n_metadata > 0) + (n_res > 0) +
-                               (status_filter != 7) > 1) || (n_metadata > 1))
-                                    ? "{\"$AND\" : [" : "",
+                              "{\"$AND\" : [",
                               res_str->str != NULL ? res_str->str : "",
                               ((n_res > 0) &&
-                               ((n_metadata > 0) || (status_filter != 7)))
+                               ((n_metadata > 0) ||
+                                (status_filter != DSS_STATUS_FILTER_ALL)))
                                     ? ", " : "",
                               metadata_str->str != NULL ?
                                 metadata_str->str : "",
-                              (n_metadata && (status_filter != 7))
+                              (n_metadata &&
+                               (status_filter != DSS_STATUS_FILTER_ALL))
                                     ? ", " : "",
                               status_str->str != NULL ?
                                 status_str->str : "",
-                              (((n_metadata > 0) + (n_res > 0) +
-                               (status_filter != 7) > 1) || (n_metadata > 1))
-                                    ? "]}" : "");
+                              "]}");
         if (rc)
             GOTO(err, rc);
 
@@ -226,4 +249,81 @@ err:
 void phobos_store_object_list_free(struct object_info *objs, int n_objs)
 {
     dss_res_free(objs, n_objs);
+}
+
+int phobos_store_copy_list(const char **res, int n_res, int status_filter,
+                           struct copy_info **copy, int *n_copy,
+                           struct dss_sort *sort)
+{
+    struct dss_filter *filter_ptr = NULL;
+    struct dss_filter filter;
+    struct dss_handle dss;
+    GString *status_str;
+    GString *res_str;
+    int rc;
+
+    if (status_filter <= 0 || status_filter > DSS_STATUS_FILTER_ALL)
+        LOG_RETURN(-EINVAL,
+                   "status_filter must be an integer between %d and %d",
+                   DSS_STATUS_FILTER_INCOMPLETE, DSS_STATUS_FILTER_ALL);
+
+    rc = pho_cfg_init_local(NULL);
+    if (rc && rc != -EALREADY)
+        return rc;
+
+    rc = dss_init(&dss);
+    if (rc != 0)
+        return rc;
+
+    status_str = g_string_new(NULL);
+    res_str = g_string_new(NULL);
+
+    /**
+     * No need to construct the status filter if all obj_status are wanted,
+     * which happens if status_filter number is set to
+     * DSS_STATUS_FILTER_ALL(= 111 in decimal)
+     */
+    if (status_filter != DSS_STATUS_FILTER_ALL)
+        phobos_construct_status(status_str, status_filter);
+
+    /**
+     * If there are at least one resource, we construct a string containing
+     * each request.
+     */
+    if (n_res)
+        phobos_construct_res_cpy(res_str, res, n_res);
+
+    if (n_res || status_filter != DSS_STATUS_FILTER_ALL) {
+        rc = dss_filter_build(&filter,
+                              "%s %s %s %s %s",
+                              "{\"$AND\" : [",
+                              res_str->str != NULL ? res_str->str : "",
+                              ((n_res > 0) &&
+                               (status_filter != DSS_STATUS_FILTER_ALL)) ?
+                                    ", " : "",
+                              status_str->str != NULL ?
+                                    status_str->str : "",
+                              "]}");
+        if (rc)
+            GOTO(err, rc);
+
+        filter_ptr = &filter;
+    }
+
+    rc = dss_copy_get(&dss, filter_ptr, copy, n_copy, sort);
+    if (rc)
+        pho_error(rc, "Cannot fetch copies");
+
+    dss_filter_free(filter_ptr);
+
+err:
+    g_string_free(status_str, true);
+    dss_fini(&dss);
+
+    return rc;
+}
+
+void phobos_store_copy_list_free(struct copy_info *copy, int n_copy)
+{
+    dss_res_free(copy, n_copy);
 }
