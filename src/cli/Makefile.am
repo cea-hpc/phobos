@@ -7,6 +7,7 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/output.py \
 	   phobos/cli/__init__.py \
 	   phobos/cli/common/__init__.py \
+	   phobos/cli/common/args.py \
 	   phobos/core/__init__.py \
 	   phobos/core/admin.py \
 	   phobos/core/cfg.py \

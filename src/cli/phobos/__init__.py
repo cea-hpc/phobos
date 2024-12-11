@@ -59,6 +59,7 @@ from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
 from phobos.output import dump_object_list
 
 from phobos.cli.common import BaseOptHandler, PhobosActionContext
+from phobos.cli.common.args import add_put_arguments
 
 def env_error_format(exc):
     """Return a human readable representation of an environment exception."""
@@ -246,25 +247,7 @@ class StorePutHandler(XferOptHandler):
         super(StorePutHandler, cls).add_options(parser)
         # The type argument allows to transform 'a,b,c' into ['a', 'b', 'c'] at
         # parse time rather than post processing it
-        parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
-                            help='Only use media that contain all these tags '
-                                 '(comma-separated: foo,bar)')
-        parser.add_argument('-f', '--family',
-                            choices=list(map(rsc_family2str, ResourceFamily)),
-                            help='Targeted storage family')
-        parser.add_argument('--library',
-                            help='Desired library (if not set, any available '
-                            'library will be used)')
-        parser.add_argument('-l', '--layout', '--lyt',
-                            choices=["raid1", "raid4"],
-                            help='Desired storage layout')
-        parser.add_argument('-p', '--profile',
-                            help='Desired profile for family, tags and layout. '
-                            'Specifically set family and layout supersede the '
-                            'profile, tags are joined.')
-        parser.add_argument('-P', '--layout-params', '--lyt-params',
-                            help='Comma-separated list of key=value for layout '
-                            'specific parameters.')
+        add_put_arguments(parser)
         parser.add_argument('--grouping',
                             help='Set the grouping of the new objects')
 
