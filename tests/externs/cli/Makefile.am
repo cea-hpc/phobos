@@ -45,6 +45,7 @@ check_PROGRAMS=test_fair_share \
 
 check_SCRIPTS=acceptance.test \
               test_compatible_drive_exists.test \
+              test_copy_list.test \
               test_delete.test \
               test_drive_list.test \
               test_drive_lookup.test \
