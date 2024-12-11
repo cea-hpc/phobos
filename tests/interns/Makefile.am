@@ -47,6 +47,7 @@ check_PROGRAMS=test_attrs \
                test_common \
                test_communication \
                test_dev_tape \
+               test_dss_copy \
                test_dss_extent \
                test_dss_lazy_find_object \
                test_dss_lock \
@@ -96,6 +97,10 @@ test_dev_tape_CFLAGS=$(AM_CFLAGS) -I..
 test_dss_extent_SOURCES=test_dss_extent.c
 test_dss_extent_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_dss_extent_CFLAGS=$(AM_CFLAGS) $(TESTS_LIB_INCLUDES)
+
+test_dss_copy_SOURCES=test_dss_copy.c
+test_dss_copy_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
+test_dss_copy_CFLAGS=$(AM_CFLAGS) $(TESTS_LIB_INCLUDES)
 
 test_dss_lazy_find_object_SOURCES=test_dss_lazy_find_object.c
 test_dss_lazy_find_object_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
