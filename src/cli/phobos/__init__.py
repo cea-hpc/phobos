@@ -30,10 +30,7 @@ actions.
 """
 
 import argparse
-import errno
 import json
-import logging
-from logging.handlers import SysLogHandler
 from shlex import shlex
 import sys
 import datetime
@@ -41,7 +38,6 @@ import datetime
 import os
 import os.path
 
-from abc import ABCMeta, abstractmethod
 from ctypes import (c_int, c_long, byref, pointer, c_bool)
 
 from ClusterShell.NodeSet import NodeSet
@@ -59,44 +55,10 @@ from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
                              MediaInfo, ObjectInfo, ResourceFamily,
                              CLIManagedResourceMixin, FSType, Id, LogFilter,
                              Timeval)
-from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
 from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
 from phobos.output import dump_object_list
 
-def phobos_log_handler(log_record):
-    """
-    Receive log records emitted from lower layers and inject them into the
-    currently configured logger.
-    """
-    rec = log_record.contents
-    msg = rec.plr_msg
-
-    # Append ': <errmsg>' to the original message if err_code was set
-    if rec.plr_err != 0:
-        msg += ": %s"
-        args = (os.strerror(abs(rec.plr_err)), )
-    else:
-        args = tuple()
-
-    level = LogControl.level_pho2py(rec.plr_level)
-
-    attrs = {
-        'name': 'internals',
-        'levelno': level,
-        'levelname': LogControl.level_name(level),
-        'process': rec.plr_tid,
-        'filename': rec.plr_file,
-        'funcName': rec.plr_func,
-        'lineno': rec.plr_line,
-        'exc_info': None,
-        'msg': msg,
-        'args': args,
-        'created': rec.plr_time.tv_sec,
-    }
-
-    record = logging.makeLogRecord(attrs)
-    logger = logging.getLogger(__name__)
-    logger.handle(record)
+from phobos.cli.common import BaseOptHandler, PhobosActionContext
 
 def env_error_format(exc):
     """Return a human readable representation of an environment exception."""
@@ -136,67 +98,6 @@ def mput_file_line_parser(line):
                          + str(len(file_entry)))
 
     return file_entry
-
-
-class BaseOptHandler:
-    """
-    Skeleton for action handlers. It can register a corresponding argument
-    subparser to a top-level one, with targeted object, description and
-    supported actions.
-    """
-    label = '(undef)'
-    descr = '(undef)'
-    alias = []
-    epilog = None
-    verbs = []
-
-    __metaclass__ = ABCMeta
-
-    def __init__(self, params, **kwargs):
-        """
-        Initialize action handler with command line parameters. These are to be
-        re-checked later by the specialized chk_* methods.
-        """
-        super(BaseOptHandler, self).__init__(**kwargs)
-        self.params = params
-        self.logger = logging.getLogger(__name__)
-
-    @abstractmethod
-    def __enter__(self):
-        """
-        Optional method handlers can implement to prepare execution context.
-        """
-
-    @abstractmethod
-    def __exit__(self, exc_type, exc_value, traceback):
-        """
-        Optional method handlers can implement to release resources after
-        execution.
-        """
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add options for this specific command-line subsection."""
-
-    @classmethod
-    def subparser_register(cls, base_parser):
-        """Register the subparser to a top-level one."""
-        subparser = base_parser.add_parser(cls.label, description=cls.descr,
-                                           help=cls.descr,
-                                           epilog=cls.epilog,
-                                           aliases=cls.alias)
-
-        # Register options relating to the current media
-        cls.add_options(subparser)
-
-        # Register supported verbs and associated options
-        if cls.verbs:
-            v_parser = subparser.add_subparsers(dest='verb')
-            v_parser.required = True
-            for verb in cls.verbs:
-                verb.subparser_register(v_parser)
-
-        return subparser
 
 
 class DSSInteractHandler(BaseOptHandler):
@@ -2832,193 +2733,38 @@ class LocksOptHandler(BaseOptHandler):
 
         self.logger.info("Clean command executed successfully")
 
-SYSLOG_LOG_LEVELS = ["critical", "error", "warning", "info", "debug"]
 
-class PhobosActionContext:
-    """
-    Find, initialize and operate an appropriate action execution context for the
-    specified command line.
-    """
-    CLI_LOG_FORMAT_REG = "%(asctime)s <%(levelname)s> %(message)s"
-    CLI_LOG_FORMAT_DEV = "%(asctime)s <%(levelname)s> [%(process)d/" \
-                         "%(funcName)s:%(filename)s:%(lineno)d] %(message)s"
+HANDLERS = [
+    # Resource interfaces
+    DeleteOptHandler,
+    DirOptHandler,
+    DriveOptHandler,
+    ExtentOptHandler,
+    LibOptHandler,
+    LocateOptHandler,
+    LocksOptHandler,
+    LogsOptHandler,
+    ObjectOptHandler,
+    PingOptHandler,
+    RadosPoolOptHandler,
+    RenameOptHandler,
+    SchedOptHandler,
+    TapeOptHandler,
+    UndeleteOptHandler,
 
-    supported_handlers = [
-        # Resource interfaces
-        DirOptHandler,
-        TapeOptHandler,
-        RadosPoolOptHandler,
-        DriveOptHandler,
-        ObjectOptHandler,
-        ExtentOptHandler,
-        LibOptHandler,
-        DeleteOptHandler,
-        UndeleteOptHandler,
-        PingOptHandler,
-        RenameOptHandler,
-        LocateOptHandler,
-        LocksOptHandler,
-        SchedOptHandler,
-        LogsOptHandler,
-
-        # Store command interfaces
-        StoreGetHandler,
-        StorePutHandler,
-        StoreMPutHandler,
-        StoreGetMDHandler,
-    ]
-
-    def __init__(self, args, **kwargs):
-        """Initialize a PAC instance."""
-        super(PhobosActionContext, self).__init__(**kwargs)
-        self.parser = None
-        self.parameters = None
-
-        self.install_arg_parser()
-
-        self.args = self.parser.parse_args(args)
-        self.parameters = vars(self.args)
-
-        self.load_config()
-
-        self.log_ctx = LogControl()
-
-    def __enter__(self):
-        self.configure_app_logging()
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.log_ctx.set_callback(None)
-
-    def install_arg_parser(self):
-        """Initialize hierarchical command line parser."""
-        # Top-level parser for common options
-        self.parser = argparse.ArgumentParser('phobos',
-                                              description= \
-                                              'phobos command line interface')
-
-        verb_grp = self.parser.add_mutually_exclusive_group()
-        verb_grp.add_argument('-v', '--verbose', help='Increase verbosity',
-                              action='count', default=0)
-        verb_grp.add_argument('-q', '--quiet', help='Decrease verbosity',
-                              action='count', default=0)
-
-        self.parser.add_argument('-s', '--syslog', choices=SYSLOG_LOG_LEVELS,
-                                 help='also log via syslog with a given '
-                                      'verbosity')
-        self.parser.add_argument('-c', '--config',
-                                 help='Alternative configuration file')
-
-        sub = self.parser.add_subparsers(dest='goal')
-        sub.required = True
-
-        # Register misc actions handlers
-        for handler in self.supported_handlers:
-            handler.subparser_register(sub)
-
-    def load_config(self):
-        """Load configuration file."""
-        cpath = self.parameters.get('config')
-        # Try to open configuration file
-        try:
-            cfg.load_file(cpath)
-        except IOError as exc:
-            if exc.errno == errno.ENOENT or exc.errno == errno.EALREADY:
-                return
-            raise
-
-    def configure_app_logging(self):
-        """
-        Configure a multilayer logger according to command line specifications.
-        """
-        fmt = self.CLI_LOG_FORMAT_REG # default
-
-        # Both are mutually exclusive
-        lvl = self.parameters.get('verbose')
-        lvl -= self.parameters.get('quiet')
-        syslog_level = self.parameters.get('syslog')
-
-        if lvl >= 2:
-            # -vv
-            pylvl = DEBUG
-            fmt = self.CLI_LOG_FORMAT_DEV
-        elif lvl == 1:
-            # -v
-            pylvl = VERBOSE
-        elif lvl == 0:
-            # default
-            pylvl = INFO
-        elif lvl == -1:
-            # -q
-            pylvl = WARNING
-        elif lvl <= -2:
-            # -qq
-            pylvl = DISABLED
-
-        # Basic root logger configuration: log to console
-        root_logger = logging.getLogger()
-        base_formatter = logging.Formatter(fmt)
-        stream_handler = logging.StreamHandler()
-        stream_handler.setLevel(pylvl)
-        stream_handler.setFormatter(base_formatter)
-        root_logger.addHandler(stream_handler)
-
-        # Add a syslog handler if asked on the CLI (maybe this could be done
-        # with the config file too)
-        if syslog_level is not None:
-            syslog_handler = SysLogHandler(address="/dev/log")
-            syslog_handler.setLevel(syslog_level.upper())
-
-            # Set the syslog formatter according to the syslog level
-            if syslog_handler.level <= logging.DEBUG:
-                syslog_fmt = self.CLI_LOG_FORMAT_DEV
-            else:
-                syslog_fmt = self.CLI_LOG_FORMAT_REG
-            syslog_formatter = logging.Formatter(
-                'phobos[%(process)d]: ' + syslog_fmt
-            )
-            syslog_handler.setFormatter(syslog_formatter)
-            root_logger.addHandler(syslog_handler)
-
-            # The actual log level will be the most verbose of the console and
-            # syslog ones (lesser value is more verbose)
-            pylvl = min(pylvl, syslog_handler.level)
-
-        # Set the root logger level
-        root_logger.setLevel(pylvl)
-
-        self.log_ctx.set_callback(phobos_log_handler)
-        self.log_ctx.set_level(pylvl)
-
-    def run(self):
-        """
-        Invoke the desired method on the selected media handler.
-        It is assumed that all checks have happened already to make sure that
-        the execution order refers to a valid method of the target object.
-        """
-
-        target = self.parameters.get('goal')
-        action = self.parameters.get('verb')
-
-        assert target is not None
-        assert action is not None
-
-        for handler in self.supported_handlers:
-            if handler.label == target or target in handler.alias:
-                with handler(self.parameters) as target_inst:
-                    # Invoke target::exec_{action}
-                    getattr(target_inst, 'exec_%s' % action.replace('-', '_'))()
-                return
-
-        # The command line parser must catch such mistakes
-        raise NotImplementedError("Unexpected parameters: '%s' '%s'" % (target,
-                                                                        action))
+    # Store command interfaces
+    StoreGetHandler,
+    StoreGetMDHandler,
+    StoreMPutHandler,
+    StorePutHandler,
+]
 
 def phobos_main(args=None):
     """
     Entry point for the `phobos' command. Indirectly provides
     argument parsing and execution of the appropriate actions.
     """
-    with PhobosActionContext(args if args is not None else sys.argv[1::]) \
-                                                                        as pac:
+    with PhobosActionContext(HANDLERS,
+                             args if args is not None else sys.argv[1::]
+                            ) as pac:
         pac.run()

@@ -63,7 +63,11 @@ glue_module = Extension( # pylint: disable=invalid-name
 
 setup(
     name='phobos',
-    packages=['phobos', 'phobos.core', 'phobos.db'],
+    packages=[
+        'phobos',
+        'phobos.cli', 'phobos.cli.common',
+        'phobos.core', 'phobos.db'
+    ],
     ext_package='phobos.core',
     ext_modules=[
         const_module,

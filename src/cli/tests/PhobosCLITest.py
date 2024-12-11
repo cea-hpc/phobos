@@ -31,7 +31,8 @@ from contextlib import contextmanager
 from io import StringIO
 from socket import gethostname
 
-from phobos import PhobosActionContext
+from phobos import HANDLERS
+from phobos.cli.common import PhobosActionContext
 from phobos.core.dss import MediaManager
 import phobos.core.cfg as cfg
 
@@ -58,7 +59,7 @@ class CLIParametersTest(unittest.TestCase):
     @staticmethod
     def check_cmdline_valid(args):
         """Make sure a command line is seen as valid."""
-        PhobosActionContext(args)
+        PhobosActionContext(HANDLERS, args)
 
     def check_cmdline_exit(self, args, code=0):
         """Make sure a command line exits with a given error code."""
@@ -342,7 +343,7 @@ class BasicExecutionTest(unittest.TestCase):
             params = ['-c', self.TEST_CFG_FILE] + params
 
         try:
-            with PhobosActionContext(params) as pac:
+            with PhobosActionContext(HANDLERS, params) as pac:
                 pac.run()
         except SystemExit as exc:
             self.assertEqual(exc.code, code)

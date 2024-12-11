@@ -46,9 +46,9 @@ import sys
 
 import psycopg2
 
-from phobos import PhobosActionContext
-from phobos.db import Migrator, CURRENT_SCHEMA_VERSION, db_config
+from phobos.cli.common import PhobosActionContext
 from phobos.core import cfg
+from phobos.db import Migrator, CURRENT_SCHEMA_VERSION, db_config
 
 LOGGER = logging.getLogger(__name__)
 
