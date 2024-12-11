@@ -80,10 +80,8 @@ enum dss_device_operations {
 
 /** The different types of update allowed for objects */
 enum dss_object_operations {
-    DSS_OBJECT_UPDATE_ACCESS_TIME = (1 << 0),
-    DSS_OBJECT_UPDATE_OBJ_STATUS = (1 << 1),
-    DSS_OBJECT_UPDATE_USER_MD = (1 << 2),
-    DSS_OBJECT_UPDATE_OID = (1 << 3),
+    DSS_OBJECT_UPDATE_USER_MD = (1 << 0),
+    DSS_OBJECT_UPDATE_OID = (1 << 1),
 };
 
 /** The different types of update allowed for copies */
@@ -173,7 +171,6 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::OBJ::oid", "oid"},
     {"DSS::OBJ::uuid", "object_uuid"},
     {"DSS::OBJ::version", "version"},
-    {"DSS::OBJ::obj_status", "obj_status"},
     {"DSS::OBJ::user_md", "user_md"},
     {"DSS::OBJ::layout_info", "lyt_info"},
     {"DSS::OBJ::layout_type", "lyt_info->>'name'"},
@@ -185,6 +182,7 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::LYT::version", "version"},
     {"DSS::LYT::extent_uuid", "extent_uuid"},
     {"DSS::LYT::layout_index", "layout_index"},
+    {"DSS::LYT::copy_name", "copy_name"},
     /* Extent related fields */
     {"DSS::EXT::uuid", "extent_uuid"},
     {"DSS::EXT::state", "state"},

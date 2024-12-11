@@ -48,7 +48,7 @@ static int deprecated_insert_query(PGconn *conn, void *void_deprecated,
     g_string_append(
         request,
         "INSERT INTO deprecated_object (oid, object_uuid, version, user_md,"
-        " obj_status, _grouping) VALUES "
+        "  _grouping) VALUES "
     );
 
     for (int i = 0; i < item_cnt; ++i) {
@@ -63,17 +63,15 @@ static int deprecated_insert_query(PGconn *conn, void *void_deprecated,
 
         if (object->grouping)
             g_string_append_printf(request,
-                                   "('%s', '%s', %d, '%s', '%s', '%s')",
+                                   "('%s', '%s', %d, '%s', '%s')",
                                    object->oid, object->uuid,
                                    object->version, object->user_md,
-                                   obj_status2str(object->obj_status),
                                    object->grouping);
         else
             g_string_append_printf(request,
-                                   "('%s', '%s', %d, '%s', '%s', NULL)",
+                                   "('%s', '%s', %d, '%s', NULL)",
                                    object->oid, object->uuid,
-                                   object->version, object->user_md,
-                                   obj_status2str(object->obj_status));
+                                   object->version, object->user_md);
 
         if (i < item_cnt - 1)
             g_string_append(request, ", ");
@@ -85,8 +83,6 @@ static int deprecated_insert_query(PGconn *conn, void *void_deprecated,
 }
 
 static struct dss_field FIELDS[] = {
-    { DSS_OBJECT_UPDATE_ACCESS_TIME, "access_time = '%s'", get_access_time },
-    { DSS_OBJECT_UPDATE_OBJ_STATUS, "obj_status = '%s'", get_obj_status },
     { DSS_OBJECT_UPDATE_OID, "oid = '%s'", get_oid },
 };
 
@@ -104,7 +100,7 @@ static int deprecated_update_query(PGconn *conn, void *src_deprecated,
 
         g_string_append(sub_request, "UPDATE deprecated_object SET ");
 
-        update_fields(dst, fields, FIELDS, 3, sub_request);
+        update_fields(dst, fields, FIELDS, 1, sub_request);
 
         g_string_append_printf(sub_request,
                                " WHERE object_uuid = '%s' AND version = %d;",
@@ -121,9 +117,8 @@ static int deprecated_select_query(GString **conditions, int n_conditions,
                                    GString *request, struct dss_sort *sort)
 {
     g_string_append(request,
-                    "SELECT oid, object_uuid, version, user_md, obj_status,"
-                    " creation_time, access_time, _grouping, deprec_time"
-                    " FROM deprecated_object");
+                    "SELECT oid, object_uuid, version, user_md, creation_time,"
+                    "  _grouping, deprec_time FROM deprecated_object");
 
     if (n_conditions == 1)
         g_string_append(request, conditions[0]->str);
@@ -162,7 +157,7 @@ static int deprecated_from_pg_row(struct dss_handle *handle, void *void_object,
     int rc;
 
     rc = create_resource(DSS_OBJECT, handle, void_object, res, row_num);
-    rc = rc ? : str2timeval(get_str_value(res, row_num, 8),
+    rc = rc ? : str2timeval(get_str_value(res, row_num, 6),
                             &object->deprec_time);
 
     return rc;

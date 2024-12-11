@@ -41,6 +41,7 @@
 #define PHO_EA_XXH128_NAME          "xxh128"
 #define PHO_EA_LAYOUT_NAME          "layout"
 #define PHO_EA_EXTENT_OFFSET_NAME   "extent_offset"
+#define PHO_EA_COPY_NAME            "copy_name"
 
 #define PHO_ATTR_BACKUP_JSON_FLAGS (JSON_COMPACT | JSON_SORT_KEYS)
 
@@ -78,6 +79,7 @@ struct object_metadata {
     int object_version;
     const char *layout_name;
     const char *object_uuid;
+    const char *copy_name;
 };
 
 /**

@@ -69,7 +69,7 @@ static int copy_insert_query(PGconn *conn, void *void_copy, int item_cnt,
 }
 
 static struct dss_field FIELDS[] = {
-    { DSS_COPY_UPDATE_ACCESS_TIME, "access_time = '%s'", get_access_time_cpy },
+    { DSS_COPY_UPDATE_ACCESS_TIME, "access_time = '%s'", get_access_time },
     { DSS_COPY_UPDATE_COPY_STATUS, "copy_status = '%s'", get_copy_status },
 };
 

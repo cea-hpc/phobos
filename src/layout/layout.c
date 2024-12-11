@@ -58,6 +58,7 @@ static int build_layout_name(const char *layout_name, char *path, size_t len)
 int layout_encoder(struct pho_data_processor *encoder,
                    struct pho_xfer_desc *xfer)
 {
+    const char *default_copy_name;
     char layout_name[NAME_MAX];
     struct layout_module *mod;
     int rc;
@@ -88,9 +89,15 @@ int layout_encoder(struct pho_data_processor *encoder,
     encoder->xfer = xfer;
     encoder->layout = xcalloc(encoder->xfer->xd_ntargets,
                               sizeof(*encoder->layout));
+
+    rc = get_cfg_default_copy_name(&default_copy_name);
+    if (rc)
+        return rc;
+
     for (i = 0; i < encoder->xfer->xd_ntargets; i++) {
         encoder->layout[i].oid = xfer->xd_targets[i].xt_objid;
         encoder->layout[i].wr_size = xfer->xd_targets[i].xt_size;
+        encoder->layout[i].copy_name = xstrdup(default_copy_name);
     }
 
     /* get io_block_size from conf */
@@ -229,7 +236,7 @@ int layout_get_specific_attrs(struct pho_io_descr *iod,
                                         &layout->layout_desc.mod_attrs);
 }
 
-int layout_reconstruct(struct layout_info lyt, struct object_info *obj)
+int layout_reconstruct(struct layout_info lyt, struct copy_info *copy)
 {
     char layout_name[NAME_MAX];
     struct layout_module *mod;
@@ -246,7 +253,7 @@ int layout_reconstruct(struct layout_info lyt, struct object_info *obj)
     if (rc)
         return rc;
 
-    return mod->ops->reconstruct(lyt, obj);
+    return mod->ops->reconstruct(lyt, copy);
 }
 
 void layout_destroy(struct pho_data_processor *proc)
@@ -258,6 +265,7 @@ void layout_destroy(struct pho_data_processor *proc)
         for (i = 0; i < proc->xfer->xd_ntargets; i++) {
             pho_attrs_free(&proc->layout[i].layout_desc.mod_attrs);
             layout_info_free_extents(&proc->layout[i]);
+            free(proc->layout[i].copy_name);
         }
         free(proc->layout);
         proc->layout = NULL;

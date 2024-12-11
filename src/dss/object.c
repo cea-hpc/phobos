@@ -43,13 +43,12 @@ static int object_insert_query(PGconn *conn, void *void_object, int item_cnt,
 {
     if (fields & INSERT_OBJECT)
         g_string_append(request,
-                        "INSERT INTO object (oid, user_md, obj_status,"
-                        " _grouping) VALUES ");
+                        "INSERT INTO object (oid, user_md, _grouping) VALUES ");
     else
         g_string_append(
             request,
             "INSERT INTO object (oid, object_uuid, version, user_md,"
-            " obj_status, _grouping) VALUES "
+            " _grouping) VALUES "
         );
 
     for (int i = 0; i < item_cnt; ++i) {
@@ -57,29 +56,25 @@ static int object_insert_query(PGconn *conn, void *void_object, int item_cnt,
 
         if (fields & INSERT_OBJECT) {
             if (object->grouping)
-                g_string_append_printf(request, "('%s', '%s', '%s', '%s')",
+                g_string_append_printf(request, "('%s', '%s', '%s')",
                                        object->oid, object->user_md,
-                                       obj_status2str(object->obj_status),
                                        object->grouping);
             else
-                g_string_append_printf(request, "('%s', '%s', '%s', NULL)",
-                                       object->oid, object->user_md,
-                                       obj_status2str(object->obj_status));
+                g_string_append_printf(request, "('%s', '%s', NULL)",
+                                       object->oid, object->user_md);
         } else {
             if (object->grouping)
                 g_string_append_printf(request,
-                                       "('%s', '%s', %d, '%s', '%s', '%s')",
+                                       "('%s', '%s', %d, '%s', '%s')",
                                        object->oid, object->uuid,
                                        object->version, object->user_md,
-                                       obj_status2str(object->obj_status),
                                        object->grouping);
 
             else
                 g_string_append_printf(request,
-                                       "('%s', '%s', %d, '%s', '%s', NULL)",
+                                       "('%s', '%s', %d, '%s', NULL)",
                                        object->oid, object->uuid,
-                                       object->version, object->user_md,
-                                       obj_status2str(object->obj_status));
+                                       object->version, object->user_md);
         }
 
         if (i < item_cnt - 1)
@@ -97,8 +92,6 @@ static inline const char *_get_user_md(void *object)
 }
 
 static struct dss_field FIELDS[] = {
-    { DSS_OBJECT_UPDATE_ACCESS_TIME, "access_time = '%s'", get_access_time },
-    { DSS_OBJECT_UPDATE_OBJ_STATUS, "obj_status = '%s'", get_obj_status },
     { DSS_OBJECT_UPDATE_USER_MD, "user_md = '%s'", _get_user_md },
     { DSS_OBJECT_UPDATE_OID, "oid = '%s'", get_oid },
 };
@@ -115,7 +108,7 @@ static int object_update_query(PGconn *conn, void *src_object, void *dst_object,
 
         g_string_append(sub_request, " UPDATE object SET ");
 
-        update_fields(dst, fields, FIELDS, 4, sub_request);
+        update_fields(dst, fields, FIELDS, 2, sub_request);
 
         if (fields == DSS_OBJECT_UPDATE_OID)
             g_string_append_printf(sub_request, " WHERE object_uuid = '%s';",
@@ -135,9 +128,8 @@ static int object_select_query(GString **conditions, int n_conditions,
                                GString *request, struct dss_sort *sort)
 {
     g_string_append(request,
-                    "SELECT oid, object_uuid, version, user_md, obj_status,"
-                    " creation_time, access_time, _grouping"
-                    " FROM object");
+                    "SELECT oid, object_uuid, version, user_md, creation_time,"
+                    "_grouping FROM object");
 
     if (n_conditions == 1)
         g_string_append(request, conditions[0]->str);
@@ -175,13 +167,10 @@ static int object_from_pg_row(struct dss_handle *handle, void *void_object,
     object->uuid        = get_str_value(res, row_num, 1);
     object->version     = atoi(PQgetvalue(res, row_num, 2));
     object->user_md     = get_str_value(res, row_num, 3);
-    object->obj_status  = str2obj_status(PQgetvalue(res, row_num, 4));
     object->deprec_time.tv_sec = 0;
     object->deprec_time.tv_usec = 0;
-    rc = str2timeval(get_str_value(res, row_num, 5), &object->creation_time);
-    rc = rc ? : str2timeval(get_str_value(res, row_num, 6),
-                            &object->access_time);
-    object->grouping = get_str_value(res, row_num, 7);
+    rc = str2timeval(get_str_value(res, row_num, 4), &object->creation_time);
+    object->grouping = get_str_value(res, row_num, 5);
 
     return rc;
 }

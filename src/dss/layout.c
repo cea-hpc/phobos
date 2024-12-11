@@ -103,8 +103,8 @@ static int layout_insert_query(PGconn *conn, void *void_layout, int item_cnt,
 
     g_string_append(
         request,
-        "INSERT INTO layout (object_uuid, version, extent_uuid, layout_index)"
-        " VALUES "
+        "INSERT INTO layout (object_uuid, version, extent_uuid, layout_index,"
+        " copy_name) VALUES "
     );
 
     for (int i = 0; i < item_cnt; ++i) {
@@ -118,9 +118,9 @@ static int layout_insert_query(PGconn *conn, void *void_layout, int item_cnt,
                 "((select object_uuid from object where oid = '%s'),"
                 " (select version from object where oid = '%s'),"
                 " (select extent_uuid from extent where address = '%s'),"
-                " %d)",
+                " %d, '%s')",
                 layout->oid, layout->oid, extent->address.buff,
-                extent->layout_idx
+                extent->layout_idx, layout->copy_name
             );
 
             if (j < layout->ext_count - 1)
@@ -143,9 +143,11 @@ static int layout_insert_query(PGconn *conn, void *void_layout, int item_cnt,
 
         g_string_append_printf(
             request,
-            "UPDATE object SET lyt_info = '%s' WHERE oid = '%s';",
-            layout_description,
-            layout->oid
+            "UPDATE copy SET lyt_info = '%s' WHERE "
+            "object_uuid = (SELECT object_uuid FROM object WHERE oid = '%s') "
+            "AND version = (SELECT version FROM object WHERE oid = '%s') AND "
+            "copy_name = '%s';",
+            layout_description, layout->oid, layout->oid, layout->copy_name
         );
 
         free(layout_description);
@@ -158,13 +160,19 @@ static int layout_select_query(GString **conditions, int n_conditions,
                                GString *request, struct dss_sort *sort)
 {
     g_string_append(request,
-                    "SELECT oid, object_uuid, version, lyt_info,"
+                    "SELECT oid, object_uuid, version, lyt_info, copy_name,"
                     " json_agg(extent_uuid ORDER BY layout_index)"
                     " FROM layout"
                     " LEFT JOIN ("
                     "  SELECT oid, object_uuid, version, lyt_info FROM object"
+                    "   LEFT JOIN ("
+                    "    SELECT object_uuid, version, lyt_info FROM copy)"
+                    "    AS tmpO USING (object_uuid, version)"
                     "  UNION SELECT oid, object_uuid, version, lyt_info"
                     "   FROM deprecated_object"
+                    "    LEFT JOIN ("
+                    "     SELECT object_uuid, version, lyt_info FROM copy)"
+                    "     AS tmpD USING (object_uuid, version)"
                     " ) AS tmp USING (object_uuid, version)");
 
     if (n_conditions == 1)
@@ -172,7 +180,9 @@ static int layout_select_query(GString **conditions, int n_conditions,
     else if (n_conditions >= 2)
         return -ENOTSUP;
 
-    g_string_append(request, " GROUP BY oid, object_uuid, version, lyt_info;");
+    g_string_append(request,
+                    " GROUP BY oid, object_uuid, version, lyt_info,"
+                    " copy_name;");
 
     return 0;
 }
@@ -186,8 +196,9 @@ static int layout_delete_query(void *void_layout, int item_cnt,
         g_string_append_printf(request,
                                "DELETE FROM layout"
                                " WHERE object_uuid = '%s'"
-                               "  AND version = '%d';",
-                               layout->uuid, layout->version);
+                               "  AND version = '%d' AND copy_name = '%s';",
+                               layout->uuid, layout->version,
+                               layout->copy_name);
     }
 
     return 0;
@@ -268,10 +279,11 @@ static int layout_from_pg_row(struct dss_handle *handle, void *void_layout,
     layout->uuid = PQgetvalue(res, row_num, 1);
     layout->version = atoi(PQgetvalue(res, row_num, 2));
     rc = layout_desc_decode(&layout->layout_desc, PQgetvalue(res, row_num, 3));
+    layout->copy_name = PQgetvalue(res, row_num, 4);
     pho_debug("Decoding JSON representation for extents: '%s'",
-              PQgetvalue(res, row_num, 4));
+              PQgetvalue(res, row_num, 5));
 
-    root = json_loads(PQgetvalue(res, row_num, 4), JSON_REJECT_DUPLICATES,
+    root = json_loads(PQgetvalue(res, row_num, 5), JSON_REJECT_DUPLICATES,
                       &json_error);
     if (!root)
         LOG_RETURN(-EINVAL, "Failed to parse json data: %s", json_error.text);

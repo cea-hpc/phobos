@@ -38,7 +38,7 @@ static int full_layout_select_query(GString **conditions, int n_conditions,
                                     GString *request, struct dss_sort *sort)
 {
     g_string_append(request,
-                    "SELECT oid, object_uuid, version, lyt_info,"
+                    "SELECT oid, object_uuid, version, lyt_info, copy_name,"
                     " json_agg(json_build_object("
                     "  'extent_uuid', extent_uuid, 'sz', size,"
                     "  'offsetof', offsetof, 'fam', medium_family,"
@@ -48,13 +48,19 @@ static int full_layout_select_query(GString **conditions, int n_conditions,
                     " ) ORDER BY layout_index)"
                     " FROM extent"
                     " RIGHT JOIN ("
-                    "  SELECT oid, object_uuid, version, lyt_info, extent_uuid,"
-                    "         layout_index"
+                    "  SELECT oid, object_uuid, version, lyt_info, copy_name,"
+                    "         extent_uuid, layout_index"
                     "   FROM layout"
                     "   LEFT JOIN ("
                     "    SELECT oid, object_uuid, version, lyt_info FROM object"
+                    "     LEFT JOIN ("
+                    "      SELECT object_uuid, version, lyt_info FROM copy)"
+                    "      AS tmpO USING (object_uuid, version)"
                     "    UNION SELECT oid, object_uuid, version, lyt_info"
                     "     FROM deprecated_object"
+                    "      LEFT JOIN ("
+                    "       SELECT object_uuid, version, lyt_info FROM copy)"
+                    "       AS tmpD USING (object_uuid, version)"
                     "   ) AS inner_table USING (object_uuid, version)");
 
     if (n_conditions >= 1)
@@ -67,7 +73,7 @@ static int full_layout_select_query(GString **conditions, int n_conditions,
         g_string_append(request, conditions[1]->str);
 
     g_string_append(request,
-                    " GROUP BY oid, object_uuid, version, lyt_info");
+                    " GROUP BY oid, object_uuid, version, lyt_info, copy_name");
     if (sort)
         dss_sort2sql(request, sort);
     else
@@ -203,8 +209,9 @@ static int full_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
     rc = layout_desc_decode(&layout->layout_desc, PQgetvalue(res, row_num, 3));
     if (rc)
         LOG_RETURN(rc, "dss_layout_desc decode error");
+    layout->copy_name = PQgetvalue(res, row_num, 4);
     rc = layout_extents_decode(&layout->extents, &layout->ext_count,
-                               PQgetvalue(res, row_num, 4));
+                               PQgetvalue(res, row_num, 5));
     if (rc)
         LOG_RETURN(rc, "dss_extent decode error");
 

@@ -2011,11 +2011,9 @@ int phobos_admin_media_import(struct admin_handle *adm,
                               int med_cnt,
                               bool check_hash)
 {
-    struct object_info *depr;
     struct dss_filter filter;
-    struct object_info *obj;
-    int depr_cnt;
-    int obj_cnt;
+    struct copy_info *copy;
+    int cpy_cnt;
     int rc = 0;
     int rc2;
     int i;
@@ -2054,47 +2052,32 @@ int phobos_admin_media_import(struct admin_handle *adm,
 
     rc = dss_filter_build(&filter,
                           "{\"$OR\": [ "
-                            "{\"DSS::OBJ::obj_status\": \"incomplete\"},"
-                            "{\"DSS::OBJ::obj_status\": \"readable\"}"
+                            "{\"DSS::COPY::copy_status\": \"incomplete\"},"
+                            "{\"DSS::COPY::copy_status\": \"readable\"}"
                           "]}");
     if (rc)
         return rc;
 
-    rc = dss_object_get(&adm->dss, &filter, &obj, &obj_cnt, NULL);
-    if (rc) {
-        dss_filter_free(&filter);
-        return rc;
-    }
-
-    rc = dss_deprecated_object_get(&adm->dss, &filter, &depr, &depr_cnt, NULL);
+    rc = dss_copy_get(&adm->dss, &filter, &copy, &cpy_cnt, NULL);
     dss_filter_free(&filter);
-    if (rc) {
-        dss_res_free(obj, obj_cnt);
+    if (rc)
+        return rc;
+
+    if (cpy_cnt == 0) {
+        dss_res_free(copy, cpy_cnt);
         return rc;
     }
 
-    for (int i = 0; i < obj_cnt; i++) {
-        rc2 = reconstruct_object(adm, &obj[i], false);
+    for (int i = 0; i < cpy_cnt; i++) {
+        rc2 = reconstruct_copy(adm, &copy[i]);
         if (rc2) {
-            pho_error(rc2, "Failed to reconstruct object '%s', skipping it",
-                      obj[i].oid);
+            pho_error(rc2, "Failed to reconstruct copy '%s', skipping it",
+                      copy[i].copy_name);
             rc = rc ? : rc2;
         }
     }
 
-    dss_res_free(obj, obj_cnt);
-
-    for (int i = 0; i < depr_cnt; i++) {
-        rc2 = reconstruct_object(adm, &depr[i], true);
-        if (rc2) {
-            pho_error(rc2, "Failed to reconstruct object '%s', skipping it",
-                      depr[i].oid);
-            rc = rc ? : rc2;
-        }
-    }
-
-    dss_res_free(depr, depr_cnt);
-
+    dss_res_free(copy, cpy_cnt);
     return rc;
 }
 

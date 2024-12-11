@@ -45,6 +45,8 @@
 #include "pho_srl_lrs.h"
 #include "pho_layout.h"
 #include "pho_ldm.h"
+#include "pho_type_utils.h"
+#include "pho_cfg.h"
 
 #include "import.h"
 #include "io_posix_common.h"
@@ -268,8 +270,10 @@ static int _add_extent_to_dss(struct dss_handle *dss,
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                               "{\"DSS::LYT::object_uuid\": \"%s\"}, "
-                              "{\"DSS::LYT::version\": \"%d\"}"
-                          "]}", lyt_insert->uuid, lyt_insert->version);
+                              "{\"DSS::LYT::version\": \"%d\"},"
+                              "{\"DSS::LYT::copy_name\": \"%s\"}"
+                          "]}", lyt_insert->uuid, lyt_insert->version,
+                          lyt_insert->copy_name);
     if (rc)
         LOG_RETURN(rc, "Could not construct filter for extent");
 
@@ -280,9 +284,10 @@ static int _add_extent_to_dss(struct dss_handle *dss,
 
     if (layout_count > 1)
         LOG_GOTO(lyt_info_get_free, rc = -ENOTSUP,
-                 "UUID '%s' and version '%d' should uniquely identify a layout,"
-                 " found '%d' layouts matching",
-                 lyt_insert->uuid, lyt_insert->version, layout_count);
+                 "UUID '%s', version '%d' and copy_name '%s' should uniquely "
+                 "identify a layout, found '%d' layouts matching",
+                 lyt_insert->uuid, lyt_insert->version, lyt_insert->copy_name,
+                 layout_count);
 
     if (layout_count == 1)
         ext_cnt = lyt_get[0].ext_count;
@@ -310,12 +315,14 @@ lyt_info_get_free:
 static int
 insert_object_with_different_uuid(struct dss_handle *dss,
                                   struct object_info *obj_to_insert,
+                                  struct copy_info *copy_to_insert,
                                   struct object_info *depr_obj_get,
                                   int depr_obj_cnt)
 {
     time_t current_time = time(NULL);
     bool found_in_depr = false;
     char *modified_oid = NULL;
+    struct object_info *obj;
     int rc;
     int i;
 
@@ -330,6 +337,10 @@ insert_object_with_different_uuid(struct dss_handle *dss,
         rc = dss_deprecated_object_insert(dss, obj_to_insert, 1);
         if (rc)
             pho_error(rc, "Could not set deprecated object");
+
+        rc = dss_copy_insert(dss, copy_to_insert, 1);
+        if (rc)
+            pho_error(rc, "Could not set copy");
 
         return rc;
     }
@@ -347,6 +358,17 @@ insert_object_with_different_uuid(struct dss_handle *dss,
     if (rc)
         pho_error(rc, "Could not create new object");
 
+    rc = dss_lazy_find_object(dss, obj_to_insert->oid, NULL, 0, &obj);
+    if (rc)
+        LOG_RETURN(rc, "Could not get new object imported");
+
+    copy_to_insert->object_uuid = obj->uuid;
+    rc = dss_copy_insert(dss, copy_to_insert, 1);
+    if (rc)
+        pho_error(rc, "Could not set copy");
+
+    object_info_free(obj);
+
     return rc;
 }
 
@@ -361,7 +383,8 @@ insert_object_with_different_uuid(struct dss_handle *dss,
  *              -errno on failure.
  */
 static int _add_object_to_dss(struct dss_handle *dss,
-                              struct object_info *object_to_insert)
+                              struct object_info *object_to_insert,
+                              struct copy_info *copy_to_insert)
 {
     struct object_info *deprecated_objects = NULL;
     struct object_info *objects = NULL;
@@ -401,12 +424,20 @@ static int _add_object_to_dss(struct dss_handle *dss,
                       "version '%d'", object_to_insert->oid,
                       object_to_insert->uuid, object_to_insert->version);
 
+        rc = dss_copy_insert(dss, copy_to_insert, 1);
+        if (rc)
+            pho_error(rc,
+                      "Could not insert copy with uuid '%s', version '%d' and "
+                      "copy_name '%s'", copy_to_insert->object_uuid,
+                      copy_to_insert->version, copy_to_insert->copy_name);
+
         goto objects_free;
     }
 
     if (objects_count == 1) {
         if (strcmp(object_to_insert->uuid, objects->uuid)) {
             rc = insert_object_with_different_uuid(dss, object_to_insert,
+                                                   copy_to_insert,
                                                    deprecated_objects,
                                                    deprecated_objects_count);
             if (rc)
@@ -424,7 +455,7 @@ static int _add_object_to_dss(struct dss_handle *dss,
                              objects->oid);
 
                 rc = dss_object_insert(dss, object_to_insert, 1,
-                                    DSS_SET_FULL_INSERT);
+                                       DSS_SET_FULL_INSERT);
                 if (rc)
                     LOG_GOTO(objects_free, rc,
                              "Could not insert object '%s' after moving one "
@@ -437,6 +468,10 @@ static int _add_object_to_dss(struct dss_handle *dss,
                              "Could not insert deprecated object '%s'",
                              object_to_insert->oid);
             }
+
+            rc = dss_copy_insert(dss, copy_to_insert, 1);
+            if (rc)
+                LOG_GOTO(objects_free, rc, "Could not insert copy");
         }
 
         goto objects_free;
@@ -448,6 +483,10 @@ static int _add_object_to_dss(struct dss_handle *dss,
     if (rc)
         LOG_GOTO(objects_free, rc, "Could not insert deprecated object '%s'",
                  object_to_insert->oid);
+
+    rc = dss_copy_insert(dss, copy_to_insert, 1);
+    if (rc)
+        LOG_GOTO(objects_free, rc, "Could not insert copy");
 
 objects_free:
     dss_res_free(objects, objects_count);
@@ -465,9 +504,10 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
                                int height, struct pho_id med_id,
                                size_t *size_written, long long *nb_new_obj)
 {
+    struct object_info obj_to_insert = {0};
     struct extent ext_to_insert = {0};
     struct layout_info lyt_to_insert;
-    struct object_info obj_to_insert;
+    struct copy_info copy_to_insert;
     struct io_adapter_module *ioa;
     struct pho_io_descr iod;
     struct pho_ext_loc loc;
@@ -513,7 +553,10 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
     ext_to_insert.address.buff = xstrdup(rootpath);
     ext_to_insert.state = PHO_EXT_ST_SYNC;
 
-    obj_to_insert.obj_status = PHO_OBJ_STATUS_INCOMPLETE;
+    copy_to_insert.copy_name = lyt_to_insert.copy_name;
+    copy_to_insert.object_uuid = obj_to_insert.uuid;
+    copy_to_insert.version = obj_to_insert.version;
+    copy_to_insert.copy_status = PHO_OBJ_STATUS_INCOMPLETE;
 
     rc = dss_lock(&adm->dss, DSS_OBJECT, &obj_to_insert, 1);
     if (rc)
@@ -521,7 +564,7 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
 
     save_oid = obj_to_insert.oid;
 
-    rc = _add_object_to_dss(&adm->dss, &obj_to_insert);
+    rc = _add_object_to_dss(&adm->dss, &obj_to_insert, &copy_to_insert);
     if (rc)
         LOG_RETURN(rc, "Could not add object to DSS");
 
@@ -772,8 +815,7 @@ request_free:
     return rc;
 }
 
-int reconstruct_object(struct admin_handle *adm, struct object_info *obj,
-                       bool deprecated)
+int reconstruct_copy(struct admin_handle *adm, struct copy_info *copy)
 {
     struct dss_filter filter;
     struct layout_info *lyt;
@@ -783,8 +825,10 @@ int reconstruct_object(struct admin_handle *adm, struct object_info *obj,
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                               "{\"DSS::LYT::object_uuid\": \"%s\"}, "
-                              "{\"DSS::LYT::version\": \"%d\"}"
-                          "]}", obj->uuid, obj->version);
+                              "{\"DSS::LYT::version\": \"%d\"},"
+                              "{\"DSS::LYT::copy_name\": \"%s\"}"
+                          "]}", copy->object_uuid, copy->version,
+                          copy->copy_name);
     if (rc)
         return rc;
 
@@ -797,23 +841,18 @@ int reconstruct_object(struct admin_handle *adm, struct object_info *obj,
     assert(lyt_cnt <= 1);
 
     if (lyt_cnt == 0) {
-        obj->obj_status = PHO_OBJ_STATUS_INCOMPLETE;
+        copy->copy_status = PHO_OBJ_STATUS_INCOMPLETE;
         goto end;
     }
 
-    rc = layout_reconstruct(lyt[0], obj);
+    rc = layout_reconstruct(lyt[0], copy);
 
 end:
     dss_res_free(lyt, lyt_cnt);
     if (rc)
         return rc;
 
-    if (deprecated)
-        rc = dss_deprecated_object_update(&adm->dss, obj, obj, 1,
-                                          DSS_OBJECT_UPDATE_OBJ_STATUS);
-    else
-        rc = dss_object_update(&adm->dss, obj, obj, 1,
-                               DSS_OBJECT_UPDATE_OBJ_STATUS);
-
+    rc = dss_copy_update(&adm->dss, copy, copy, 1,
+                         DSS_COPY_UPDATE_COPY_STATUS);
     return rc;
 }

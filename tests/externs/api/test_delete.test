@@ -37,14 +37,16 @@ function setup
     setup_tables
 
     $PSQL << EOF
-    INSERT INTO object(oid, user_md, object_uuid, version, lyt_info,
-        obj_status) VALUES
-        ('test-oid1', '{}', '00112233445566778899aabbccddeef1', 1, '{}',
-         'complete'),
-        ('test-oid2', '{}', '00112233445566778899aabbccddeef2', 1, '{}',
-         'complete'),
-        ('test-oid3', '{}', '00112233445566778899aabbccddeef3', 1, '{}',
-         'complete');
+    INSERT INTO object(oid, user_md, object_uuid, version) VALUES
+        ('test-oid1', '{}', '00112233445566778899aabbccddeef1', 1),
+        ('test-oid2', '{}', '00112233445566778899aabbccddeef2', 1),
+        ('test-oid3', '{}', '00112233445566778899aabbccddeef3', 1);
+
+    INSERT INTO copy (object_uuid, version, copy_name, lyt_info,
+        copy_status) VALUES
+        ('00112233445566778899aabbccddeef1', 1, 'source', '{}', 'complete'),
+        ('00112233445566778899aabbccddeef2', 1, 'source', '{}', 'complete'),
+        ('00112233445566778899aabbccddeef3', 1, 'source', '{}', 'complete');
 EOF
 
     invoke_lrs

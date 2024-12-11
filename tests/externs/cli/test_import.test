@@ -138,11 +138,11 @@ function generation_compare
     return 1
 }
 
-function obj_status_compare
+function copy_status_compare
 {
     local i=$1
-    local oid=$2
-    local ob=$($phobos object list -o status $oid)
+    local uuid=$2
+    local ob=$($phobos copy list -o status $uuid)
     case $i in
         0 | 1)
             [[ "$ob" == "incomplete" ]] && return 0 || return 1
@@ -254,10 +254,10 @@ function test_generation
     rm -rf "$dir_path"
 }
 
-function test_obj_status
+function test_copy_status
 {
     # The object is split in two different splits each copied twice. The test
-    # compares at each tape imported the obj_status of the imported object,
+    # compares at each tape imported the copy_status of the imported object,
     # which should be imported for the first and second tapes (one split only),
     # then readable (two splits, one with two copies and one with one copy),
     # and finally complete (all copies).
@@ -282,7 +282,8 @@ function test_obj_status
 
     for tape in $(nodeset -e "${tapes}"); do
         $phobos tape import --unlock -t lto5 "${tape}" || error "import failed"
-        obj_status_compare $i "$oid" || error "Obj_status mismatch"
+        local uuid=$($phobos object list -o uuid "$oid")
+        copy_status_compare $i "$uuid" || error "Default copy status mismatch"
         i=$(($i+1))
     done
 }
@@ -386,6 +387,6 @@ export PHOBOS_LRS_families="dir,tape"
 
 TESTS=("db_setup; test_import; db_cleanup")
 TESTS+=("db_setup; test_generation; db_cleanup")
-TESTS+=("db_setup; test_obj_status; db_cleanup")
+TESTS+=("db_setup; test_copy_status; db_cleanup")
 TESTS+=("db_setup; test_media; db_cleanup")
 TESTS+=("db_setup; test_import_with_live; db_cleanup")

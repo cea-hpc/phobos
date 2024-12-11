@@ -635,10 +635,8 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
         ('_oid', c_char_p),
         ('_uuid', c_char_p),
         ('version', c_int),
-        ('status', c_int),
         ('_user_md', c_char_p),
         ('creation_time', Timeval),
-        ('access_time', Timeval),
         ('deprec_time', Timeval),
         ('_grouping', c_char_p),
     ]
@@ -649,9 +647,7 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
             'oid': None,
             'uuid': None,
             'version': None,
-            'status': obj_status2str,
             'creation_time': Timeval.to_string,
-            'access_time': Timeval.to_string,
             'user_md': (lambda obj, width=max_width: truncate_user_md(obj,
                                                                       width)),
             'grouping': None,
@@ -711,8 +707,6 @@ class DeprecatedObjectInfo(ObjectInfo):
             'version': None,
             'user_md': None,
             'creation_time': Timeval.to_string,
-            'access_time': Timeval.to_string,
-            'status': obj_status2str,
             'deprec_time': Timeval.to_string,
             'grouping': None,
         }
@@ -825,7 +819,8 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
         ('layout_desc', ModuleDesc),
         ('wr_size', c_size_t),
         ('extents', POINTER(ExtentInfo)),
-        ('ext_count', c_int)
+        ('ext_count', c_int),
+        ('_copy_name', c_char_p),
     ]
 
     def get_display_fields(self, max_width=None):
@@ -847,6 +842,7 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
             'xxh128': None,
             'md5': None,
             'library': None,
+            'copy_name': None,
         }
 
     def get_sort_fields(self): # pylint: disable=no-self-use
@@ -859,6 +855,11 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
             'version': None,
             'size': None,
         }
+
+    @property
+    def copy_name(self):
+        """Wrapper to get copy_name"""
+        return self._copy_name.decode('utf-8') if self._copy_name else None
 
     @property
     def oid(self):

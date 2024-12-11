@@ -75,8 +75,8 @@ struct pho_layout_module_ops {
                               struct extent *extent,
                               struct pho_attrs *layout_md);
 
-    /** Updates the status of an object based on its extents */
-    int (*reconstruct)(struct layout_info lyt, struct object_info *obj);
+    /** Updates the status of an copy based on its extents */
+    int (*reconstruct)(struct layout_info lyt, struct copy_info *copy);
 };
 
 /** Operations provided by a given data processor.
@@ -326,11 +326,11 @@ int layout_get_specific_attrs(struct pho_io_descr *iod,
  * Updates the status of the object according to its detected extents
  *
  * @param[in]   lyt     The layout containing the extents.
- * @param[out]  obj     The object to update.
+ * @param[out]  copy    The copy to update.
  *
  * @return 0 on success, -errno on error.
  */
-int layout_reconstruct(struct layout_info lyt, struct object_info *obj);
+int layout_reconstruct(struct layout_info lyt, struct copy_info *copy);
 
 /**
  * Destroy this data processor and all associated resources.

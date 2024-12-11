@@ -170,20 +170,28 @@ static int decoder_build(struct pho_data_processor *decoder,
 {
     struct layout_info *layout;
     struct dss_filter filter;
+    struct copy_info *copy;
     int cnt = 0;
     int rc;
 
     assert(xfer->xd_op == PHO_XFER_OP_GET || xfer->xd_op == PHO_XFER_OP_DEL);
 
+    rc = dss_lazy_find_default_copy(dss, xfer->xd_targets->xt_objuuid,
+                                    xfer->xd_targets->xt_version, &copy);
+    if (rc)
+        LOG_RETURN(rc, "Cannot get copy");
+
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                               "{\"DSS::LYT::object_uuid\": \"%s\"}, "
-                              "{\"DSS::LYT::version\": \"%d\"}"
+                              "{\"DSS::LYT::version\": \"%d\"},"
+                              "{\"DSS::LYT::copy_name\": \"%s\"}"
                           "]}",
                           xfer->xd_targets->xt_objuuid,
-                          xfer->xd_targets->xt_version);
+                          xfer->xd_targets->xt_version,
+                          copy->copy_name);
     if (rc)
-        LOG_RETURN(rc, "Cannot build filter");
+        LOG_GOTO(err, rc, "Cannot build filter");
 
     rc = dss_full_layout_get(dss, &filter, NULL, &layout, &cnt, NULL);
     dss_filter_free(&filter);
@@ -201,8 +209,10 @@ static int decoder_build(struct pho_data_processor *decoder,
         GOTO(err, rc);
 
 err:
+    copy_info_free(copy);
     if (rc)
         dss_res_free(layout, cnt);
+
     return rc;
 }
 
@@ -327,6 +337,7 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
     GString *md_repr = g_string_new(NULL);
     struct object_info *obj_res = NULL;
     struct object_info obj = {0};
+    struct copy_info copy = {0};
     struct dss_filter filter;
     int obj_cnt;
     int rc2;
@@ -339,7 +350,6 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
         LOG_GOTO(out_md, rc, "Cannot convert attributes into JSON");
 
     obj.oid = xfer->xt_objid;
-    obj.obj_status = PHO_OBJ_STATUS_INCOMPLETE;
     obj.user_md = md_repr->str;
 
     rc = dss_lock(dss, DSS_OBJECT, &obj, 1);
@@ -396,8 +406,6 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
         if (!pho_attrs_is_empty(&xfer->xt_attrs))
             obj_res->user_md = md_repr->str;
 
-        obj_res->obj_status = obj.obj_status;
-
         rc = dss_object_insert(dss, obj_res, 1, DSS_SET_FULL_INSERT);
         if (rc)
             LOG_GOTO(out_res, rc, "object_insert failed for objid:'%s'",
@@ -416,6 +424,17 @@ out_update:
     if (rc)
         LOG_GOTO(out_filt, rc, "Cannot fetch objid:'%s'", xfer->xt_objid);
 
+    copy.object_uuid = obj_res->uuid;
+    copy.version = obj_res->version;
+    copy.copy_status = PHO_OBJ_STATUS_INCOMPLETE;
+    rc = get_cfg_default_copy_name(&copy.copy_name);
+    if (rc)
+        LOG_GOTO(out_res, rc, "Cannot get default copy_name from conf");
+
+    rc = dss_copy_insert(dss, &copy, 1);
+    if (rc)
+        LOG_GOTO(out_res, rc, "Cannot insert copy");
+
     xfer->xt_version = obj_res->version;
     xfer->xt_objuuid = xstrdup(obj_res->uuid);
 
@@ -433,6 +452,7 @@ out_unlock:
                   "Couldn't unlock object:'%s'. Database may be corrupted.",
                   xfer->xt_objid);
     }
+
 out_md:
     g_string_free(md_repr, true);
 
@@ -449,6 +469,7 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_target *xfer)
     struct object_info *prev_obj = NULL;
     struct layout_info *layout = NULL;
     struct object_info *obj = NULL;
+    struct copy_info *copy = NULL;
     bool need_undelete = false;
     struct dss_filter filter;
     int prev_cnt = 0;
@@ -482,7 +503,6 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_target *xfer)
         LOG_GOTO(out_res, rc = -EINVAL, "object '%s' does not exist",
                  xfer->xt_objid);
 
-
     /* Check if the performed operation was an overwrite PUT */
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
@@ -503,44 +523,59 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_target *xfer)
     if (prev_cnt == 1)
         need_undelete = true;
 
+    /* Retrieve default copy of the object */
+    rc = dss_lazy_find_default_copy(dss, obj->uuid, obj->version, &copy);
+    if (rc)
+        LOG_GOTO(out_prev, rc, "Cannot find copy for objid:'%s'", obj->oid);
+
     /* Ensure the oid isn't used by an existing layout before deleting it */
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                           "  {\"DSS::LYT::object_uuid\": \"%s\"},"
-                          "  {\"DSS::LYT::version\": %d}"
-                          "]}", obj->uuid, obj->version);
+                          "  {\"DSS::LYT::version\": %d},"
+                          "  {\"DSS::LYT::copy_name\": \"%s\"}"
+                          "]}", obj->uuid, obj->version, copy->copy_name);
     if (rc)
-        LOG_GOTO(out_prev, rc,
+        LOG_GOTO(out_copy, rc,
                  "Couldn't build filter in md_del for extent uuid:'%s'.",
                  obj->uuid);
 
     rc = dss_layout_get(dss, &filter, &layout, &cnt);
     dss_filter_free(&filter);
     if (rc)
-        LOG_GOTO(out_prev, rc, "dss_layout_get failed for uuid:'%s'",
+        LOG_GOTO(out_copy, rc, "dss_layout_get failed for uuid:'%s'",
                  xfer->xt_objuuid);
 
     dss_res_free(layout, cnt);
 
     if (cnt > 0)
-        LOG_GOTO(out_prev, rc = -EEXIST,
+        LOG_GOTO(out_copy, rc = -EEXIST,
                  "Cannot rollback objid:'%s' from DSS, a layout still exists "
                  "for this objid", xfer->xt_objid);
 
     /* Then the rollback can safely happen */
     pho_verb("Rolling back obj oid:'%s', obj uuid:'%s' and obj version:'%d' "
              "from DSS", obj->oid, obj->uuid, obj->version);
+
+    rc = dss_copy_delete(dss, copy, 1);
+    if (rc)
+        LOG_GOTO(out_copy, rc, "dss_copy_delete failed for objid:'%s'",
+                 xfer->xt_objid);
+
     rc = dss_object_delete(dss, obj, 1);
     if (rc)
-        LOG_GOTO(out_prev, rc, "dss_object_insert failed for objid:'%s'",
+        LOG_GOTO(out_copy, rc, "dss_object_delete failed for objid:'%s'",
                  xfer->xt_objid);
 
     if (need_undelete) {
         rc = dss_move_deprecated_to_object(dss, prev_obj, prev_cnt);
         if (rc)
-            LOG_GOTO(out_prev, rc, "dss_object_move failed for uuid:'%s'",
+            LOG_GOTO(out_copy, rc, "dss_object_move failed for uuid:'%s'",
                      obj->uuid);
     }
+
+out_copy:
+    copy_info_free(copy);
 
 out_prev:
     dss_res_free(prev_obj, prev_cnt);
@@ -824,6 +859,7 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
                            struct dss_handle *dss, struct pho_xfer_desc *xfer)
 {
     struct object_info *obj;
+    struct copy_info *copy;
     int rc;
 
     if (xfer->xd_op == PHO_XFER_OP_PUT)
@@ -861,14 +897,22 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
         LOG_RETURN(rc, "Cannot find metadata for objid:'%s'",
                    xfer->xd_targets->xt_objid);
 
-    if (obj->obj_status == PHO_OBJ_STATUS_INCOMPLETE)
-        LOG_RETURN(-ENOENT, "Status of object '%s' is incomplete, "
-                   "cannot be reconstructed", obj->oid);
+    rc = dss_lazy_find_default_copy(dss, obj->uuid, obj->version, &copy);
+    if (rc)
+        LOG_RETURN(rc, "Cannot find copy for objid:'%s'", obj->oid);
 
-    if (obj->obj_status != PHO_OBJ_STATUS_COMPLETE)
-        pho_warn("Object '%s' status is %s.", obj->oid,
-                 obj_status2str(obj->obj_status));
+    if (copy->copy_status == PHO_OBJ_STATUS_INCOMPLETE) {
+        copy_info_free(copy);
+        LOG_RETURN(-ENOENT, "Status of copy '%s' for the object '%s' is "
+                   "incomplete, cannot be reconstructed", copy->copy_name,
+                   obj->oid);
+    }
 
+    if (copy->copy_status != PHO_OBJ_STATUS_COMPLETE)
+        pho_warn("Copy '%s' status for the object '%s' is %s.", copy->copy_name,
+                 obj->oid, obj_status2str(copy->copy_status));
+
+    copy_info_free(copy);
     rc = object_info_copy_into_xfer(obj, xfer->xd_targets);
     object_info_free(obj);
     if (rc)
@@ -896,11 +940,11 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
     int ext_count = proc->layout->ext_count;
     struct dss_handle *dss = &pho->dss;
     struct layout_info *layouts;
+    struct copy_info *copy;
     struct object_info obj = {
         .oid = xfer->xd_targets->xt_objid,
         .uuid = xfer->xd_targets->xt_objuuid,
         .version = xfer->xd_targets->xt_version,
-        .obj_status = PHO_OBJ_STATUS_COMPLETE,
     };
     struct dss_filter filter;
     bool medium_is_tape;
@@ -912,26 +956,32 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
         extents[0].media.family == PHO_RSC_TAPE :
         false;
 
+    rc = dss_lazy_find_default_copy(&pho->dss, obj.uuid, obj.version, &copy);
+    if (rc)
+        LOG_RETURN(rc, "Cannot find copy for objid:'%s'", obj.oid);
+
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                           "  {\"DSS::LYT::object_uuid\": \"%s\"},"
-                          "  {\"DSS::LYT::version\": %d}"
-                          "]}", obj.uuid, obj.version);
+                          "  {\"DSS::LYT::version\": %d},"
+                          "  {\"DSS::LYT::copy_name\": \"%s\"}"
+                          "]}", obj.uuid, obj.version, copy->copy_name);
     if (rc)
-        LOG_RETURN(rc, "Unable to build uuid filter in object hard delete");
+        LOG_GOTO(clean_cpy, rc,
+                 "Unable to build uuid filter in object hard delete");
 
     rc = dss_layout_get(dss, &filter, &layouts, &count);
     dss_filter_free(&filter);
     if (rc)
-        LOG_RETURN(rc, "Unable to retrieve layouts from object '%s:%d'",
-                   obj.uuid, obj.version);
+        LOG_GOTO(clean_cpy, rc,
+                 "Unable to retrieve layouts from object '%s:%d'",
+                 obj.uuid, obj.version);
 
     rc = dss_layout_delete(dss, layouts, count);
     dss_res_free(layouts, count);
-    if (rc) {
-        LOG_RETURN(rc, "Unable to delete layouts for object '%s:%d'",
-                   obj.uuid, obj.version);
-    }
+    if (rc)
+        LOG_GOTO(clean_cpy, rc, "Unable to delete layouts for object '%s:%d'",
+                 obj.uuid, obj.version);
 
     if (ext_count > 0) {
         if (medium_is_tape) {
@@ -943,14 +993,22 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
         }
     }
     if (rc)
-        LOG_RETURN(rc, "Unable to %s object '%s:%d' extents",
-                   medium_is_tape ? "update" : "delete",
-                   obj.uuid, obj.version);
+        LOG_GOTO(clean_cpy, rc, "Unable to %s object '%s:%d' extents",
+                 medium_is_tape ? "update" : "delete",
+                 obj.uuid, obj.version);
+
+    rc = dss_copy_delete(dss, copy, 1);
+    if (rc)
+        LOG_GOTO(clean_cpy, rc, "Unable to delete copy of object '%s:%d'",
+                 obj.uuid, obj.version);
 
     rc = dss_object_delete(dss, &obj, 1);
     if (rc)
         pho_error(rc, "Unable to delete object '%s:%d'",
                   obj.uuid, obj.version);
+
+clean_cpy:
+    copy_info_free(copy);
 
     return rc;
 }
@@ -1018,16 +1076,18 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
                     }
                     break;
                 } else {
-                    struct object_info obj = {
-                        .oid = xfer->xd_targets[i].xt_objid,
-                        .obj_status = PHO_OBJ_STATUS_COMPLETE,
+                    struct copy_info copy = {
+                        .object_uuid = xfer->xd_targets[i].xt_objuuid,
+                        .version = xfer->xd_targets[i].xt_version,
+                        .copy_name = proc->layout[i].copy_name,
+                        .copy_status = PHO_OBJ_STATUS_COMPLETE,
                     };
 
-                    rc2 = dss_object_update(&pho->dss, &obj, &obj, 1,
-                                           DSS_OBJECT_UPDATE_OBJ_STATUS);
+                    rc2 = dss_copy_update(&pho->dss, &copy, &copy, 1,
+                                          DSS_COPY_UPDATE_COPY_STATUS);
                     if (rc2) {
                         pho_error(rc2,
-                                  "Error while updating object status "
+                                  "Error while updating copy status "
                                   "to complete");
                         rc = rc ? : rc2;
                         break;
@@ -1039,34 +1099,28 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
 
 
     if (xfer->xd_rc == 0 && rc == 0 && xfer->xd_op == PHO_XFER_OP_GET) {
-        struct object_info *obj;
+        struct copy_info *copy;
 
-        rc = dss_lazy_find_object(&pho->dss, xfer->xd_targets->xt_objid,
-                                  xfer->xd_targets->xt_objuuid,
-                                  xfer->xd_targets->xt_version, &obj);
+        rc = dss_lazy_find_default_copy(&pho->dss, xfer->xd_targets->xt_objuuid,
+                                        xfer->xd_targets->xt_version, &copy);
         if (rc)
             LOG_GOTO(cont, rc,
-                     "Error while retrieving object info, "
+                     "Error while retrieving copy info, "
                      "will skip access time update");
 
-        rc = gettimeofday(&obj->access_time, NULL);
+        rc = gettimeofday(&copy->access_time, NULL);
         if (rc) {
-            object_info_free(obj);
+            copy_info_free(copy);
             LOG_GOTO(cont, rc,
                      "Error while retrieving current time, "
                      "will skip access time update");
         }
 
-        if (obj->deprec_time.tv_sec == 0 && obj->deprec_time.tv_usec == 0)
-            rc = dss_object_update(&pho->dss, obj, obj, 1,
-                                   DSS_OBJECT_UPDATE_ACCESS_TIME);
-        else
-            rc = dss_deprecated_object_update(&pho->dss, obj, obj, 1,
-                                              DSS_OBJECT_UPDATE_ACCESS_TIME);
-
-        object_info_free(obj);
+        rc = dss_copy_update(&pho->dss, copy, copy, 1,
+                             DSS_COPY_UPDATE_ACCESS_TIME);
+        copy_info_free(copy);
         if (rc)
-            pho_error(rc, "Error while updating object access time");
+            pho_error(rc, "Error while updating copy access time");
     }
 
     if (xfer->xd_op == PHO_XFER_OP_DEL &&
@@ -1737,6 +1791,7 @@ int phobos_locate(const char *oid, const char *uuid, int version,
                   const char *focus_host, char **hostname, int *nb_new_lock)
 {
     struct object_info *obj = NULL;
+    struct copy_info *copy = NULL;
     struct layout_info *layout;
     struct dss_filter filter;
     struct dss_handle dss;
@@ -1763,13 +1818,20 @@ int phobos_locate(const char *oid, const char *uuid, int version,
     if (rc)
         LOG_GOTO(clean, rc, "Unable to find object to locate");
 
+    /* find default copy */
+    rc = dss_lazy_find_default_copy(&dss, obj->uuid, obj->version, &copy);
+    if (rc)
+        LOG_GOTO(clean, rc,
+                 "Unable to find the default copy of the object to locate");
+
     /* find layout to locate media */
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                               "{\"DSS::LYT::object_uuid\": \"%s\"}, "
-                              "{\"DSS::LYT::version\": \"%d\"}"
+                              "{\"DSS::LYT::version\": \"%d\"},"
+                              "{\"DSS::LYT::copy_name\": \"%s\"}"
                           "]}",
-                          obj->uuid, obj->version);
+                          obj->uuid, obj->version, copy->copy_name);
     if (rc)
         LOG_GOTO(clean, rc,
                  "Unable to build filter oid %s uuid %s version %d to get "
@@ -1787,6 +1849,7 @@ int phobos_locate(const char *oid, const char *uuid, int version,
     dss_res_free(layout, cnt);
 
 clean:
+    copy_info_free(copy);
     object_info_free(obj);
     dss_fini(&dss);
     return rc;

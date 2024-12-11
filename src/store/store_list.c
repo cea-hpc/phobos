@@ -128,37 +128,30 @@ static void phobos_construct_status(GString *status_str, int status_filter)
     g_string_append_printf(status_str, "{\"$OR\" : [");
 
     g_string_append_printf(status_str, "%s %s",
-                           i ? " {\"DSS::OBJ::obj_status\":\"incomplete\"} "
+                           i ? " {\"DSS::COPY::copy_status\":\"incomplete\"} "
                              : "",
                            i && (r || c) ? "," : "");
     g_string_append_printf(status_str, "%s %s",
-                           r ? " {\"DSS::OBJ::obj_status\":\"readable\"} "
+                           r ? " {\"DSS::COPY::copy_status\":\"readable\"} "
                              : "",
                            r && c ? "," : "");
     g_string_append_printf(status_str, "%s",
-                           c ? " {\"DSS::OBJ::obj_status\":\"complete\"} " :
+                           c ? " {\"DSS::COPY::copy_status\":\"complete\"} " :
                                "");
     g_string_append_printf(status_str, "]}");
 }
 
 int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
                              const char **metadata, int n_metadata,
-                             bool deprecated, int status_filter,
-                             struct object_info **objs, int *n_objs,
-                             struct dss_sort *sort)
+                             bool deprecated, struct object_info **objs,
+                             int *n_objs, struct dss_sort *sort)
 {
     struct dss_filter *filter_ptr = NULL;
     struct dss_filter filter;
     struct dss_handle dss;
     GString *metadata_str;
-    GString *status_str;
     GString *res_str;
     int rc;
-
-    if (status_filter <= 0 || status_filter > DSS_STATUS_FILTER_ALL)
-        LOG_RETURN(-EINVAL,
-                   "status_filter must be an integer between %d and %d",
-                   DSS_STATUS_FILTER_INCOMPLETE, DSS_STATUS_FILTER_ALL);
 
     rc = pho_cfg_init_local(NULL);
     if (rc && rc != -EALREADY)
@@ -169,7 +162,6 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
         return rc;
 
     metadata_str = g_string_new(NULL);
-    status_str = g_string_new(NULL);
     res_str = g_string_new(NULL);
 
     /**
@@ -180,47 +172,32 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
         phobos_construct_metadata(metadata_str, metadata, n_metadata);
 
     /**
-     * No need to construct the status filter if all obj_status are wanted,
-     * which happens if status_filter number is set to
-     * DSS_STATUS_FILTER_ALL (= 111 in binary)
-     */
-    if (status_filter != DSS_STATUS_FILTER_ALL)
-        phobos_construct_status(status_str, status_filter);
-
-    /**
      * If there are at least one resource, we construct a string containing
      * each request.
      */
     if (n_res)
         phobos_construct_res_obj(res_str, res, n_res, is_pattern);
 
-    if (n_res || n_metadata || status_filter != DSS_STATUS_FILTER_ALL) {
+    if (n_res || n_metadata) {
         /**
-         * Finally, if the request has at least one metadata, one resource or
-         * a status filter, we build the filter in the following way:
+         * Finally, if the request has at least one metadata or one resource, we
+         * build the filter in the following way:
          * if there is more than one metadata or exactly one metadata and
-         * resource or status, then using an AND is necessary
+         * resource, then using an AND is necessary
          * (which correspond to the first and last "%s").
-         * After that, we add to the filter the resource metadata and status
-         * if any is present, which are the second, fourth and sixth "%s".
+         * After that, we add to the filter the resource metadata
+         * if any is present, which are the second and fourth "%s".
          * Finally, commas may be necessary depending on the number of fields
-         * (metadata, resource or status) wanted (third and fifth "%s").
+         * (metadata or resource) wanted (third "%s").
          */
         rc = dss_filter_build(&filter,
-                              "%s %s %s %s %s %s %s",
+                              "%s %s %s %s %s",
                               "{\"$AND\" : [",
                               res_str->str != NULL ? res_str->str : "",
-                              ((n_res > 0) &&
-                               ((n_metadata > 0) ||
-                                (status_filter != DSS_STATUS_FILTER_ALL)))
+                              ((n_res > 0) && (n_metadata > 0))
                                     ? ", " : "",
                               metadata_str->str != NULL ?
                                 metadata_str->str : "",
-                              (n_metadata &&
-                               (status_filter != DSS_STATUS_FILTER_ALL))
-                                    ? ", " : "",
-                              status_str->str != NULL ?
-                                status_str->str : "",
                               "]}");
         if (rc)
             GOTO(err, rc);

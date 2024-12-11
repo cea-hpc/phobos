@@ -70,14 +70,19 @@ insert into media (family, model, id, adm_status, fs_type, address_type,
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
           "nb_errors":0,"last_load":0}', '["mytag"]', 'legacy');
 
-insert into object (oid, user_md, lyt_info, obj_status)
-    values ('01230123ABC', '{}',
-            '{"name":"raid1","major":0,"minor":1,"repl_count":1}', 'complete');
+insert into object (oid, user_md)
+    values ('01230123ABC', '{}');
 
-insert into deprecated_object (oid, object_uuid, version, user_md, lyt_info,
-                               obj_status)
-    values ('01230123ABD', '00112233445566778899aabbccddeeff', 1, '{}',
-            '{"name":"raid1","major":0,"minor":1,"repl_count":1}', 'complete');
+insert into copy (object_uuid, version, copy_name, lyt_info, copy_status) VALUES
+    ((select object_uuid from object where oid = '01230123ABC'), 1, 'source',
+     '{"name":"raid1","major":0,"minor":1,"repl_count":1}', 'complete');
+
+insert into deprecated_object (oid, object_uuid, version, user_md)
+    values ('01230123ABD', '00112233445566778899aabbccddeeff', 1, '{}');
+
+insert into copy (object_uuid, version, copy_name, lyt_info, copy_status) VALUES
+        ('00112233445566778899aabbccddeeff', 1, 'source',
+         '{"name":"raid1","major":0,"minor":1,"repl_count":1}', 'complete');
 
 insert into extent (state, size, offsetof, medium_family, medium_id,
                     medium_library, address, hash)
@@ -86,14 +91,14 @@ insert into extent (state, size, offsetof, medium_family, medium_id,
            ('pending', 2112555, 0, 'dir', '/tmp/pho_testdir2', 'legacy',
             'test4/oid4.v4.lyt-0_4.uuid4', '{}');
 
-insert into layout (object_uuid, version, extent_uuid, layout_index)
+insert into layout (object_uuid, version, extent_uuid, layout_index, copy_name)
     values ((select object_uuid from object where oid = '01230123ABC'), 1,
             (select extent_uuid from extent where address =
-                'test3/oid3.v3.lyt-0_3.uuid3'), 0),
+                'test3/oid3.v3.lyt-0_3.uuid3'), 0, 'source'),
            ((select object_uuid from deprecated_object
                where oid = '01230123ABD'), 1,
             (select extent_uuid from extent where address =
-                'test4/oid4.v4.lyt-0_4.uuid4'), 0);
+                'test4/oid4.v4.lyt-0_4.uuid4'), 0, 'source');
 EOF
 }
 

@@ -717,6 +717,7 @@ static int write_split_fini(struct pho_data_processor *encoder, int io_rc,
         .object_version = encoder->xfer->xd_targets[target_idx].xt_version,
         .layout_name = io_context->name,
         .object_uuid = encoder->xfer->xd_targets[target_idx].xt_objuuid,
+        .copy_name = encoder->layout[target_idx].copy_name,
     };
     size_t total_written = 0;
     int rc = 0;

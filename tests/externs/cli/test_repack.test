@@ -280,14 +280,19 @@ function test_dedup_repack_setup
 
     size=$(stat --printf="%s" /etc/hosts)
     $PSQL << EOF
-INSERT INTO object(oid, user_md, obj_status, lyt_info)
-  VALUES ('oid-3', '{}', 'complete',
-    '{"name":"raid1","major":0,"minor":2,
-      "attrs":{"raid1.repl_count":"1","raid1.object_size":"$size"}}');
-INSERT INTO layout(object_uuid, version, extent_uuid, layout_index)
-  VALUES ('${object_uuid1}', '1', '${extent_uuid1}', '1'),
+INSERT INTO object(oid, user_md)
+  VALUES ('oid-3', '{}');
+
+INSERT INTO copy(object_uuid, version, copy_name, lyt_info, copy_status) VALUES
+    ((SELECT object_uuid FROM object WHERE oid='oid-3'), 1, 'source',
+     '{"name":"raid1","major":0,"minor":2,
+       "attrs":{"raid1.repl_count":"1","raid1.object_size":"$size"}}',
+       'complete');
+
+INSERT INTO layout(object_uuid, version, extent_uuid, layout_index, copy_name)
+  VALUES ('${object_uuid1}', '1', '${extent_uuid1}', '1', 'source'),
          ((SELECT object_uuid FROM object WHERE oid='oid-3'), '1',
-          '${extent_uuid2}', '0');
+          '${extent_uuid2}', '0', 'source');
 EOF
 
     $phobos del oid-1

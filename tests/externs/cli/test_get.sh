@@ -100,13 +100,14 @@ function test_creation_and_access_times
                  version,creation_time oid-time | grep "1," | cut -d',' -f2)
     ctm1=$(date -d "$ctm1" +"%s")
 
-    local atm3=$($phobos object list --output access_time oid-time)
+    local atm3=$($phobos copy list --format csv -o version,access_time \
+                 "$uuid" | grep "3," | cut -d',' -f2)
     atm3=$(date -d "$atm3" +"%s")
-    local atm2=$($phobos object list --format csv --deprecated --output \
-                 version,access_time oid-time | grep "2," | cut -d',' -f2)
+    local atm2=$($phobos copy list --format csv --output \
+                 version,access_time "$uuid" | grep "2," | cut -d',' -f2)
     atm2=$(date -d "$atm2" +"%s")
-    local atm1=$($phobos object list --format csv --deprecated --output \
-                 version,access_time oid-time | grep "1," | cut -d',' -f2)
+    local atm1=$($phobos copy list --format csv --output \
+                 version,access_time "$uuid" | grep "1," | cut -d',' -f2)
     atm1=$(date -d "$atm1" +"%s")
 
     [ $ctm1 -le $ctm2 ] \
@@ -122,20 +123,21 @@ function test_creation_and_access_times
     $valg_phobos get --uuid $uuid --version 1 oid-time /tmp/out
     rm /tmp/out
 
-    local atm=$($phobos object list --format csv --deprecated --output \
-                version,access_time oid-time | grep "1," | cut -d',' -f2)
+    local atm=$($phobos copy list --format csv --output \
+                version,access_time "$uuid" | grep "1," | cut -d',' -f2)
     atm=$(date -d "$atm" +"%s")
     [ $atm1 -lt $atm ] \
         || error "Access time of 1st version was not updated"
     atm1=$atm
 
-    atm=$($phobos object list --format csv --deprecated --output \
-          version,access_time oid-time | grep "2," | cut -d',' -f2)
+    atm=$($phobos copy list --format csv --output \
+          version,access_time "$uuid" | grep "2," | cut -d',' -f2)
     atm=$(date -d "$atm" +"%s")
     [ $atm2 -eq $atm ] \
         || error "Access time of 2nd version was updated, only 1st should be"
 
-    atm=$($phobos object list --output access_time oid-time)
+    atm=$($phobos copy list --format csv --output version,access_time "$uuid" |
+          grep "3," | cut -d',' -f2)
     atm=$(date -d "$atm" +"%s")
     [ $atm3 -eq $atm ] \
         || error "Access time of 3rd version was updated, only 1st should be"
@@ -143,19 +145,20 @@ function test_creation_and_access_times
     $valg_phobos get oid-time /tmp/out
     rm /tmp/out
 
-    atm=$($phobos object list --format csv --deprecated --output \
-                version,access_time oid-time | grep "1," | cut -d',' -f2)
+    atm=$($phobos copy list --format csv --output \
+                version,access_time "$uuid" | grep "1," | cut -d',' -f2)
     atm=$(date -d "$atm" +"%s")
     [ $atm1 -eq $atm ] \
         || error "Access time of 1st version was updated, only 3rd should be"
 
-    atm=$($phobos object list --format csv --deprecated --output \
-          version,access_time oid-time | grep "2," | cut -d',' -f2)
+    atm=$($phobos copy list --format csv --output \
+          version,access_time "$uuid" | grep "2," | cut -d',' -f2)
     atm=$(date -d "$atm" +"%s")
     [ $atm2 -eq $atm ] \
         || error "Access time of 2nd version was updated, only 3rd should be"
 
-    atm=$($phobos object list --output access_time oid-time)
+    atm=$($phobos copy list --format csv --output version,access_time "$uuid" |
+          grep "3," | cut -d',' -f2)
     atm=$(date -d "$atm" +"%s")
     [ $atm3 -lt $atm ] \
         || error "Access time of 3rd version was not updated"
@@ -164,34 +167,36 @@ function test_creation_and_access_times
     $valg_phobos get --uuid $uuid --version 2 oid-time /tmp/out
     rm /tmp/out
 
-    atm=$($phobos object list --format csv --deprecated --output \
-                version,access_time oid-time | grep "1," | cut -d',' -f2)
+    atm=$($phobos copy list --format csv --output \
+                version,access_time "$uuid" | grep "1," | cut -d',' -f2)
     atm=$(date -d "$atm" +"%s")
     [ $atm1 -eq $atm ] \
         || error "Access time of 1st version was updated, only 2nd should be"
 
-    atm=$($phobos object list --format csv --deprecated --output \
-          version,access_time oid-time | grep "2," | cut -d',' -f2)
+    atm=$($phobos copy list --format csv --output \
+          version,access_time "$uuid" | grep "2," | cut -d',' -f2)
     atm=$(date -d "$atm" +"%s")
     [ $atm2 -lt $atm ] \
         || error "Access time of 2nd version was not updated"
     atm2=$atm
 
-    atm=$($phobos object list --output access_time oid-time)
+    atm=$($phobos copy list --format csv --output version,access_time "$uuid" |
+          grep "3," | cut -d',' -f2)
     atm=$(date -d "$atm" +"%s")
     [ $atm3 -eq $atm ] \
         || error "Access time of 3rd version was updated, only 2nd should be"
 
     sleep 1
     $phobos del oid-time
-    atm=$($phobos object list --format csv --deprecated --output \
-          version,access_time oid-time | grep "3," | cut -d',' -f2)
+    atm=$($phobos copy list --format csv --output \
+          version,access_time "$uuid" | grep "3," | cut -d',' -f2)
     atm=$(date -d "$atm" +"%s")
     [ $atm3 -eq $atm ] \
         || error "Access time should not be updated on delete operation"
 
     $phobos undel oid oid-time
-    atm=$($phobos object list --output access_time oid-time)
+    atm=$($phobos copy list --format csv --output version,access_time "$uuid" |
+          grep "3," | cut -d',' -f2)
     atm=$(date -d "$atm" +"%s")
     [ $atm3 -eq $atm ] \
         || error "Access time should not be updated on undelete operation"
@@ -214,10 +219,12 @@ function test_errors
         && error "Get operation should fail on invalid version" || true
 
     $PSQL << EOF
-UPDATE object SET obj_status = 'incomplete' WHERE oid = 'oid1';
+UPDATE copy SET copy_status = 'incomplete' WHERE
+    object_uuid = (SELECT object_uuid FROM object WHERE oid = 'oid1');
 EOF
     $valg_phobos get oid1 /tmp/out &&
-        error "Incomplete status of object should have failed the test" || true
+        error "Incomplete status of default copy should have failed the test" ||
+            true
 }
 
 trap cleanup EXIT

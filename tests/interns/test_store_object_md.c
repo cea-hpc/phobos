@@ -119,6 +119,41 @@ do {                                                                           \
         will_return(dss_object_get, _cnt);                                     \
 } while (0)
 
+int dss_copy_insert(struct dss_handle *hdl, struct copy_info *copy_lst,
+                    int copy_cnt)
+{
+    (void)hdl; (void)copy_lst; (void)copy_cnt;
+
+    return (int)mock();
+}
+
+int dss_lazy_find_default_copy(struct dss_handle *hdl, const char *uuid,
+                               int version, struct copy_info **copy)
+{
+    int rc = (int)mock();
+    void *copy_container;
+
+    (void)hdl;
+
+    if (rc != 0)
+        return rc;
+
+    copy_container = xmalloc(1 * sizeof(**copy));
+    *copy = (struct copy_info *)(copy_container);
+
+    memset(*copy, 0, 1 * sizeof(**copy));
+
+    return rc;
+}
+
+int dss_copy_delete(struct dss_handle *hdl, struct copy_info *copy_lst,
+                    int copy_cnt)
+{
+    (void)hdl; (void)copy_lst; (void)copy_cnt;
+
+    return (int)mock();
+}
+
 int dss_deprecated_object_get(struct dss_handle *hdl,
                               const struct dss_filter *filter,
                               struct object_info **obj_ls, int *obj_cnt,
@@ -431,6 +466,7 @@ static void oms_dss_unlock_failure(void **state)
     will_return(dss_object_insert, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
+    will_return(dss_copy_insert, 0);
     will_return(dss_unlock, -ENOLCK);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, -ENOLCK);
@@ -450,6 +486,7 @@ static void oms_success_without_overwrite(void **state)
     will_return(dss_object_insert, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
+    will_return(dss_copy_insert, 0);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, 0);
@@ -471,6 +508,7 @@ static void oms_success_with_fake_overwrite(void **state)
     will_return(dss_object_insert, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
+    will_return(dss_copy_insert, 0);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, 0);
@@ -493,6 +531,7 @@ static void oms_success_with_overwrite(void **state)
     will_return(dss_object_insert, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
+    will_return(dss_copy_insert, 0);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite);
     assert_int_equal(rc, 0);
@@ -603,6 +642,7 @@ static void omd_dss_filter_build_for_layout_failure(void **state)
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
+    will_return(dss_lazy_find_default_copy, 0);
     will_return(dss_filter_build, -ENOMEM);
     will_return(dss_unlock, 0);
     rc = object_md_del(NULL, xfer.xd_targets);
@@ -621,6 +661,7 @@ static void omd_dss_full_layout_get_failure(void **state)
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
+    will_return(dss_lazy_find_default_copy, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(-EINVAL, 0);
     will_return(dss_unlock, 0);
@@ -632,6 +673,7 @@ static void omd_dss_full_layout_get_failure(void **state)
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
+    will_return(dss_lazy_find_default_copy, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(0, 1);
     will_return(dss_unlock, 0);
@@ -651,8 +693,10 @@ static void omd_dss_object_delete_failure(void **state)
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
+    will_return(dss_lazy_find_default_copy, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(0, 0);
+    will_return(dss_copy_delete, 0);
     will_return(dss_object_delete, -EINVAL);
     will_return(dss_unlock, 0);
     rc = object_md_del(NULL, xfer.xd_targets);
@@ -671,8 +715,10 @@ static void omd_dss_object_move_failure(void **state)
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
+    will_return(dss_lazy_find_default_copy, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(0, 0);
+    will_return(dss_copy_delete, 0);
     will_return(dss_object_delete, 0);
     will_return(dss_move_deprecated_to_object, -ENOENT);
     will_return(dss_unlock, 0);
@@ -692,8 +738,10 @@ static void omd_dss_unlock_failure(void **state)
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 0);
+    will_return(dss_lazy_find_default_copy, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(0, 0);
+    will_return(dss_copy_delete, 0);
     will_return(dss_object_delete, 0);
     will_return(dss_unlock, -ENOLCK);
     rc = object_md_del(NULL, xfer.xd_targets);
@@ -712,8 +760,10 @@ static void omd_success(void **state)
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
+    will_return(dss_lazy_find_default_copy, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(0, 0);
+    will_return(dss_copy_delete, 0);
     will_return(dss_object_delete, 0);
     will_return(dss_move_deprecated_to_object, 0);
     will_return(dss_unlock, 0);
@@ -725,8 +775,10 @@ static void omd_success(void **state)
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 0);
+    will_return(dss_lazy_find_default_copy, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(0, 0);
+    will_return(dss_copy_delete, 0);
     will_return(dss_object_delete, 0);
     will_return(dss_unlock, 0);
     rc = object_md_del(NULL, xfer.xd_targets);

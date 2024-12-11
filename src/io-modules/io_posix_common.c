@@ -31,6 +31,7 @@
 #include "pho_common.h"
 #include "pho_io.h"
 #include "pho_mapper.h"
+#include "pho_cfg.h"
 
 #include <attr/xattr.h>
 #include <attr/attributes.h>
@@ -857,6 +858,7 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
     const char *tmp_user_md;
     const char *tmp_version;
     struct module_desc mod;
+    const char *tmp_copy;
     struct pho_attrs md;
     char *filename;
     char *tmp_uuid;
@@ -897,6 +899,7 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
     pho_attr_set(&md, PHO_EA_MD5_NAME, NULL);
     pho_attr_set(&md, PHO_EA_XXH128_NAME, NULL);
     pho_attr_set(&md, PHO_EA_EXTENT_OFFSET_NAME, NULL);
+    pho_attr_set(&md, PHO_EA_COPY_NAME, NULL);
 
     rc = pho_posix_md_get(NULL, iod->iod_fd, &md);
     if (rc)
@@ -942,11 +945,22 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
                  "Invalid extent offset found on '%s': '%ld'",
                  filename, extent_to_insert->offset);
 
+    tmp_copy = pho_attr_get(&md, PHO_EA_COPY_NAME);
+    if (tmp_copy == NULL) {
+        rc = get_cfg_default_copy_name(&tmp_copy);
+        if (rc)
+            LOG_GOTO(free_oid_uuid, rc = -EINVAL,
+                     "Failed to retrieve copy name of file '%s'",
+                     filename);
+    }
+
     lyt_info->version = version;
     obj_info->version = version;
 
     lyt_info->uuid = xstrdup(tmp_object_uuid);
     obj_info->uuid = xstrdup(tmp_object_uuid);
+
+    lyt_info->copy_name = xstrdup(tmp_copy);
 
     mod.mod_name = xstrdup(tmp_layout_name);
 

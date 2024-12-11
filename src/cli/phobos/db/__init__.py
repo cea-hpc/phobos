@@ -33,9 +33,10 @@ from phobos.core.ffi import (LIBPHOBOS, ResourceFamily)
 
 ORDERED_SCHEMAS = [
     "1.1", "1.2", "1.91", "1.92", "1.93", "1.95",
-    "2.0", "2.1", "2.2"
+    "2.0", "2.1", "2.2", "3.0"
 ]
-FUTURE_SCHEMAS = ["3.0"]
+
+FUTURE_SCHEMAS = []
 CURRENT_SCHEMA_VERSION = ORDERED_SCHEMAS[-1]
 AVAIL_SCHEMAS = set(ORDERED_SCHEMAS) | set(FUTURE_SCHEMAS)
 

@@ -204,14 +204,18 @@ test_check_set "media" "delete"
 test_check_get "media" '{"$LIKE": {"DSS::MDA::id": "%COPY%"}}'
 echo "**** TEST: DSS_SET OBJECT AND LAYOUT ****"
 test_check_set "object" "insert"
+psql phobos_test phobos -c "INSERT INTO copy (object_uuid, version, copy_name)
+    VALUES ((select object_uuid from object where oid = '01230123ABCCOPY'), 1,
+    'source')"
 test_check_get "object" '{"$REGEXP": {"DSS::OBJ::oid": ".*COPY.*"}}'
 test_check_get "object" '{"$NOT": {"$REGEXP": {"DSS::OBJ::oid": ".*COPY.*"}}}'
 test_check_set "object" "update"
 test_check_set "layout" "insert"
 # XXX Until DSS requests are refacto, hard set a layout to the copy object
-psql phobos_test phobos -c "update object set \
+psql phobos_test phobos -c "update copy set \
     lyt_info='{\"name\": \"simple\", \"major\": 0, \"minor\": 1}' \
-    where oid = '01230123ABCCOPY'"
+    where object_uuid = (select object_uuid from object \
+    where oid = '01230123ABCCOPY')"
 test_check_get "full_layout" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
 test_check_get "full_layout" '{"$NOT": {"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}}'
 test_check_get "full_layout" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'

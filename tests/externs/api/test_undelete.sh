@@ -37,14 +37,18 @@ function setup
 {
     setup_tables
     $PSQL << EOF
-    INSERT INTO deprecated_object(oid, object_uuid, version, user_md, lyt_info,
-                                  obj_status) VALUES
-        ('test-oid1', '00112233445566778899aabbccddeef1', 1, '{}', '{}',
-         'complete'),
-        ('test-oid1', '00112233445566778899aabbccddeef1', 2, '{}', '{}',
-         'complete'),
-        ('test-oid2', '00112233445566778899aabbccddeef2', 1, '{}', '{}',
-         'complete');
+    INSERT INTO deprecated_object(oid, object_uuid, version, user_md) VALUES
+        ('test-oid1', '00112233445566778899aabbccddeef1', 1, '{}'),
+        ('test-oid1', '00112233445566778899aabbccddeef1', 2, '{}'),
+        ('test-oid2', '00112233445566778899aabbccddeef2', 1, '{}');
+
+    INSERT INTO copy (object_uuid, version copy_name, lyt_info, copy_status)
+        VALUES ('00112233445566778899aabbccddeef1', 1, 'source', '{}',
+                'complete'),
+               ('00112233445566778899aabbccddeef1', 2, 'source', '{}',
+                'complete'),
+               ('00112233445566778899aabbccddeef2', 1, 'source', '{}',
+                'complete');
 EOF
     invoke_lrs
 }

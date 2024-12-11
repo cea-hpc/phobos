@@ -106,7 +106,7 @@ static int local_setup(void **state, char *oid)
 
     /* get object info */
     rc = phobos_store_object_list((const char **)&oid, 1,
-                                  false, NULL, 0, false, 7, &pl_state->objs,
+                                  false, NULL, 0, false, &pl_state->objs,
                                   &pl_state->n_objs, NULL);
     assert_return_code(rc, -rc);
     assert_int_equal(pl_state->n_objs, 1);

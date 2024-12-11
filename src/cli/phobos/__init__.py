@@ -716,11 +716,6 @@ class ObjectListOptHandler(ListOptHandler):
         parser.add_argument('-p', '--pattern', action='store_true',
                             help="filter using POSIX regexp instead of exact "
                                  "objid")
-        parser.add_argument('-s', '--status', action='store',
-                            help="filter items according to their obj_status, "
-                                 "choose one or multiple letters from {i r c} "
-                                 "for respectively: incomplete, readable and "
-                                 "complete")
         parser.add_argument('-t', '--no-trunc', action='store_true',
                             help="do not truncate the user_md column (takes "
                                  "precedency over the 'max-width' argument)")
@@ -737,12 +732,6 @@ class ObjectListOptHandler(ListOptHandler):
                             help=("attribute to sort the output in descending "
                                   "order, choose from "
                                   "{" + " ".join(base_attrs)+ "} "))
-        parser.epilog = """About the status of the object:
-        incomplete: the object cannot be rebuilt because it lacks some of its
-                    extents,
-        readable:   the object can be rebuilt, however some of its extents were
-                    not found,
-        complete:   the object is complete."""
 
 class DeleteOptHandler(BaseOptHandler):
     """Delete objects handler."""
@@ -1237,8 +1226,6 @@ class ObjectOptHandler(BaseResourceOptHandler):
                                       "'key=value'", elt)
                     sys.exit(os.EX_USAGE)
 
-        status_number = get_params_status(self.params.get('status'),
-                                          self.logger)
         kwargs = {}
         if self.params.get('deprecated'):
             kwargs = handle_sort_option(self.params, DeprecatedObjectInfo(),
@@ -1254,7 +1241,6 @@ class ObjectOptHandler(BaseResourceOptHandler):
                                       self.params.get('pattern'),
                                       metadata,
                                       self.params.get('deprecated'),
-                                      status_number,
                                       **kwargs)
 
             if objs:

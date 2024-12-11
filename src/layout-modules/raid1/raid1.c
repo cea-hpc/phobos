@@ -539,7 +539,7 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
 }
 
 static int layout_raid1_reconstruct(struct layout_info lyt,
-                                    struct object_info *obj)
+                                    struct copy_info *copy)
 {
     ssize_t extent_sizes = 0;
     ssize_t replica_size = 0;
@@ -556,7 +556,7 @@ static int layout_raid1_reconstruct(struct layout_info lyt,
     if (rc)
         LOG_RETURN(rc,
                    "Failed to get replica count for reconstruction of object '%s'",
-                   obj->oid);
+                   lyt.oid);
 
     ext_cnt = lyt.ext_count;
     extents = lyt.extents;
@@ -565,13 +565,13 @@ static int layout_raid1_reconstruct(struct layout_info lyt,
     if (buffer == NULL)
         LOG_RETURN(-EINVAL,
                    "Failed to get object size for reconstruction of object '%s'",
-                   obj->oid);
+                   lyt.oid);
 
     obj_size = str2int64(buffer);
     if (obj_size < 0)
         LOG_RETURN(-EINVAL,
                    "Invalid object size for reconstruction of object '%s': '%d'",
-                   obj->oid, obj_size);
+                   lyt.oid, obj_size);
 
     for (i = 0; i < ext_cnt; i++) {
         if (replica_size == extents[i].offset)
@@ -581,11 +581,11 @@ static int layout_raid1_reconstruct(struct layout_info lyt,
     }
 
     if (extent_sizes == repl_cnt * obj_size)
-        obj->obj_status = PHO_OBJ_STATUS_COMPLETE;
+        copy->copy_status = PHO_OBJ_STATUS_COMPLETE;
     else if (replica_size == obj_size)
-        obj->obj_status = PHO_OBJ_STATUS_READABLE;
+        copy->copy_status = PHO_OBJ_STATUS_READABLE;
     else
-        obj->obj_status = PHO_OBJ_STATUS_INCOMPLETE;
+        copy->copy_status = PHO_OBJ_STATUS_INCOMPLETE;
 
     return 0;
 }

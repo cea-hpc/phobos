@@ -116,6 +116,7 @@ struct layout_info {
     size_t               wr_size;       /**< Encoding write size */
     struct extent       *extents;       /**< List of data extents */
     int                  ext_count;     /**< Number of extents in the list */
+    char                *copy_name;     /**< Name of the copy */
 };
 
 /**
@@ -571,10 +572,8 @@ struct object_info {
     char *oid;
     char *uuid;
     int version;
-    enum obj_status obj_status;
     char *user_md;
     struct timeval creation_time;
-    struct timeval access_time;
     struct timeval deprec_time;
     char *grouping;
 };
