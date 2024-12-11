@@ -60,6 +60,7 @@ from phobos.output import dump_object_list
 
 from phobos.cli.common import BaseOptHandler, PhobosActionContext
 from phobos.cli.common.args import add_put_arguments
+from phobos.cli.target.copy import CopyOptHandler
 
 def env_error_format(exc):
     """Return a human readable representation of an environment exception."""
@@ -2719,6 +2720,7 @@ class LocksOptHandler(BaseOptHandler):
 
 HANDLERS = [
     # Resource interfaces
+    CopyOptHandler,
     DeleteOptHandler,
     DirOptHandler,
     DriveOptHandler,

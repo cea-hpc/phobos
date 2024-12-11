@@ -6,8 +6,14 @@ C_MODULES_SO=phobos/core/const.so \
 EXTRA_DIST=phobos/__init__.py \
 	   phobos/output.py \
 	   phobos/cli/__init__.py \
+	   phobos/cli/action/__init__.py \
+	   phobos/cli/action/create.py \
+	   phobos/cli/action/delete.py \
+	   phobos/cli/action/list.py \
 	   phobos/cli/common/__init__.py \
 	   phobos/cli/common/args.py \
+	   phobos/cli/target/__init__.py \
+	   phobos/cli/target/copy.py \
 	   phobos/core/__init__.py \
 	   phobos/core/admin.py \
 	   phobos/core/cfg.py \

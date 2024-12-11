@@ -65,7 +65,8 @@ setup(
     name='phobos',
     packages=[
         'phobos',
-        'phobos.cli', 'phobos.cli.common',
+        'phobos.cli',
+        'phobos.cli.action', 'phobos.cli.common', 'phobos.cli.target',
         'phobos.core', 'phobos.db'
     ],
     ext_package='phobos.core',

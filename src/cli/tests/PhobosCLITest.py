@@ -199,6 +199,15 @@ class CLIParametersTest(unittest.TestCase):
                                   'name'])
         self.check_cmdline_valid(['dir', 'rename', '--library', 'legacy',
                                   '--new-library', 'blob', 'name'])
+        self.check_cmdline_valid(['copy', 'create', 'oid', 'name'])
+        self.check_cmdline_valid(['copy', 'create', '--family', 'tape', 'oid',
+                                  'name'])
+        self.check_cmdline_valid(['copy', 'create', '--profile', 'p1', 'oid',
+                                  'name'])
+        self.check_cmdline_valid(['copy', 'create', '--lyt-params', 'a=b',
+                                  'oid', 'name'])
+        self.check_cmdline_valid(['copy', 'delete', 'oid', 'name'])
+        self.check_cmdline_valid(['copy', 'list', 'oid'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['get', '--version', 'nan', 'objid', 'file'],
