@@ -102,7 +102,7 @@ int raid_encoder_init(struct pho_encoder *enc,
     int rc;
     int i;
 
-    assert(!enc->is_decoder);
+    assert(is_encoder(enc));
 
     /* The ops field is set early to allow the caller to call the destroy
      * function on error.
@@ -174,7 +174,7 @@ void raid_encoder_destroy(struct pho_encoder *enc)
 
         close_posix_iod(enc, i);
 
-        if (!enc->is_decoder) {
+        if (is_encoder(enc)) {
             if (io_context->write.written_extents)
                 g_array_free(io_context->write.written_extents, TRUE);
 
@@ -187,7 +187,7 @@ void raid_encoder_destroy(struct pho_encoder *enc)
             free(io_context->iods);
             g_string_free(io_context->write.user_md, TRUE);
 
-        } else if (!enc->delete_action) {
+        } else if (is_decoder(enc)) {
             free(io_context->read.extents);
             free(io_context->iods);
         } else {
@@ -218,7 +218,7 @@ int raid_decoder_init(struct pho_encoder *dec,
     if (dec->xfer->xd_targets->xt_fd < 0)
         LOG_RETURN(rc = -EBADF, "Invalid decoder xfer file descriptor");
 
-    assert(dec->is_decoder);
+    assert(is_decoder(dec));
 
     dec->ops = enc_ops;
     io_context->ops = raid_ops;
@@ -246,7 +246,7 @@ int raid_delete_decoder_init(struct pho_encoder *dec,
     struct raid_io_context *io_context = dec->priv_enc;
     size_t n_extents = n_total_extents(io_context);
 
-    assert(dec->is_decoder);
+    assert(is_delete(dec));
     dec->ops = enc_ops;
     io_context->ops = raid_ops;
 
@@ -262,7 +262,7 @@ static size_t remaining_io_size(struct pho_encoder *enc, int idx)
     const struct raid_io_context *io_context =
             &((struct raid_io_context *) enc->priv_enc)[idx];
 
-    if (enc->is_decoder)
+    if (is_decoder(enc))
         return io_context->read.to_read;
     else
         return io_context->write.to_write;
@@ -282,7 +282,7 @@ static bool no_more_alloc(struct pho_encoder *enc, int idx)
         return false;
 
     /* decoder with no more to read */
-    if (enc->is_decoder)
+    if (is_decoder(enc))
         return true;
 
     /* encoder with nothing more to write and at least one written extent */
@@ -299,9 +299,9 @@ static char *raid_enc_root_path(struct pho_encoder *enc,
     struct raid_io_context *io_context =
         &((struct raid_io_context *) enc->priv_enc)[target_idx];
 
-    if (!enc->is_decoder)
+    if (is_encoder(enc))
         return io_context->write.resp->media[i]->root_path;
-    else if (!enc->delete_action)
+    else if (is_decoder(enc))
         return io_context->read.resp->media[i]->root_path;
     else
         return io_context->delete.resp->media[i]->root_path;
@@ -313,9 +313,9 @@ static enum address_type raid_enc_addr_type(struct pho_encoder *enc,
     struct raid_io_context *io_context =
         &((struct raid_io_context *) enc->priv_enc)[target_idx];
 
-    if (!enc->is_decoder)
+    if (is_encoder(enc))
         return io_context->write.resp->media[i]->addr_type;
-    else if (!enc->delete_action)
+    else if (is_decoder(enc))
         return io_context->read.resp->media[i]->addr_type;
     else
         return io_context->delete.resp->media[i]->addr_type;
@@ -327,9 +327,9 @@ static struct extent *raid_enc_extent(struct pho_encoder *enc,
     struct raid_io_context *io_context =
         &((struct raid_io_context *) enc->priv_enc)[target_idx];
 
-    if (!enc->is_decoder)
+    if (is_encoder(enc))
         return &io_context->write.extents[i];
-    else if (!enc->delete_action)
+    else if (is_decoder(enc))
         return io_context->read.extents[i];
     else
         return io_context->delete.extents[i];
@@ -367,10 +367,10 @@ static int raid_io_context_open(struct raid_io_context *io_context,
 
         iod->iod_size = 0;
         iod->iod_loc = &ext_location;
-        if (!enc->is_decoder || !enc->delete_action) {
+        if (!is_delete(enc)) {
             rc = ioa_open(iod->iod_ioa,
                           enc->xfer->xd_targets[target_idx].xt_objid, iod,
-                          !enc->is_decoder);
+                          is_encoder(enc));
             if (rc)
                 LOG_GOTO(out_close, rc,
                          "raid: unable to open extent for '%s' on '%s':'%s'",
@@ -592,7 +592,7 @@ static size_t best_io_size(struct pho_encoder *enc, int target_idx)
          */
         return enc->io_block_size;
 
-    if (enc->is_decoder)
+    if (is_decoder(enc))
         nb_extents = io_context->n_data_extents;
     else
         nb_extents = n_total_extents(io_context);
@@ -1367,11 +1367,11 @@ static int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
         enc->done = true;
         LOG_RETURN(enc->xfer->xd_rc,
                    "%s %d received error %s to last request",
-                   enc->is_decoder ? "Decoder" : "Encoder",
-                   resp->req_id, pho_srl_error_kind_str(resp->error));
+                   encoder_type2str(enc), resp->req_id,
+                   pho_srl_error_kind_str(resp->error));
 
     } else if (pho_response_is_write(resp)) {
-        if (enc->is_decoder)
+        if (is_decoder(enc))
             LOG_RETURN(-EINVAL, "Decoder received a write response");
 
         for (i = 0; i < enc->xfer->xd_ntargets; i++) {
@@ -1390,10 +1390,10 @@ static int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
     } else if (pho_response_is_read(resp)) {
         io_context = enc->priv_enc;
         io_context->requested_alloc = false;
-        if (!enc->is_decoder)
+        if (is_encoder(enc))
             LOG_RETURN(-EINVAL, "Encoder received a read response");
 
-        if (enc->delete_action) {
+        if (is_delete(enc)) {
             if (resp->ralloc->n_media != n_total_extents(io_context))
                 LOG_RETURN(-EINVAL,
                            "Unexpected number of media. "
@@ -1418,7 +1418,7 @@ static int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
 
     } else if (pho_response_is_release(resp)) {
 
-        if (!enc->is_decoder)
+        if (is_encoder(enc))
             return raid_write_handle_release_resp(enc, resp->release);
         else
             return 0;
@@ -1438,10 +1438,9 @@ int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
     ENTRY;
 
     for (i = 0; i < enc->xfer->xd_ntargets; i++) {
-        if (enc->xfer->xd_targets[i].xt_fd < 0 &&
-            !(enc->is_decoder && enc->delete_action))
+        if (enc->xfer->xd_targets[i].xt_fd < 0 && !is_delete(enc))
             LOG_RETURN(-EBADF, "No file descriptor in %s",
-                       enc->is_decoder ? "decoder" : "encoder");
+                       encoder_type2str(enc));
     }
 
     /* At most 2 requests will be emitted, allocate optimistically */
@@ -1466,11 +1465,10 @@ int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
 
 alloc:
     /* Build next request */
-    if (enc->is_decoder) {
-        if (enc->delete_action)
-            raid_build_delete_allocation_req(enc, *reqs + *n_reqs);
-        else
-            raid_build_read_allocation_req(enc, *reqs + *n_reqs);
+    if (is_decoder(enc)) {
+        raid_build_read_allocation_req(enc, *reqs + *n_reqs);
+    } else if (is_delete(enc)) {
+        raid_build_delete_allocation_req(enc, *reqs + *n_reqs);
     } else {
         rc = raid_build_write_allocation_req(enc, *reqs + *n_reqs);
         if (rc)

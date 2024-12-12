@@ -239,8 +239,7 @@ static int encoder_communicate(struct pho_encoder *enc,
 
         req = requests + i;
 
-        pho_debug("%s emitted a request of type %s",
-                  enc->is_decoder ? "Decoder" : "Encoder",
+        pho_debug("%s emitted a request of type %s", encoder_type2str(enc),
                   pho_srl_request_kind_str(req));
 
         /* req_id is used to route responses to the appropriate encoder */
@@ -846,7 +845,7 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
         /* create dummy decoder if no I/O operations are made */
         enc->xfer = xfer;
         enc->done = true;
-        enc->is_decoder = true;
+        enc->type = PHO_ENC_DECODER;
         return 0;
     }
 
@@ -985,7 +984,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     enc->done = true;
 
     /* Once the encoder is done and successful, save the layout and metadata */
-    if (!enc->is_decoder && xfer->xd_rc == 0 && rc == 0) {
+    if (is_encoder(enc) && xfer->xd_rc == 0 && rc == 0) {
         for (i = 0; i < xfer->xd_ntargets; i++) {
             pho_debug("Saving layout for objid:'%s'",
                       xfer->xd_targets[i].xt_objid);
@@ -1119,7 +1118,7 @@ static void store_fini(struct phobos_handle *pho, int rc)
          * hence we also free them.
          */
         if (pho->encoders) {
-            if (pho->encoders[i].is_decoder) {
+            if (is_decoder(&pho->encoders[i])) {
                 dss_res_free(pho->encoders[i].layout, 1);
                 pho->encoders[i].layout = NULL;
             }
@@ -1218,8 +1217,8 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
     /* Initialize all the encoders */
     for (i = 0; i < n_xfers; i++) {
         pho_debug("Initializing %s %ld for %d objid(s)",
-                  pho->encoders[i].is_decoder ? "decoder" : "encoder",
-                  i, pho->xfers[i].xd_ntargets);
+                  encoder_type2str(&pho->encoders[i]), i,
+                  pho->xfers[i].xd_ntargets);
         rc = init_enc_or_dec(&pho->encoders[i], &pho->dss, &pho->xfers[i]);
         if (rc)
             pho_error(rc, "Error while creating encoders for %d objid(s)",
@@ -1243,7 +1242,7 @@ static int store_lrs_response_process(struct phobos_handle *pho,
     int rc;
 
     pho_debug("%s %d for %d objid(s) received a response of type %s",
-              encoder->is_decoder ? "Decoder" : "Encoder", resp->req_id,
+              encoder_type2str(encoder), resp->req_id,
               encoder->xfer->xd_ntargets, pho_srl_response_kind_str(resp));
 
     rc = encoder_communicate(encoder, &pho->comm, resp, resp->req_id);
@@ -1254,7 +1253,7 @@ static int store_lrs_response_process(struct phobos_handle *pho,
 
     if (rc)
         pho_error(rc, "Error while sending response to layout for %s %d",
-                  encoder->is_decoder ? "decoder" : "encoder", resp->req_id);
+                  encoder_type2str(encoder), resp->req_id);
 
     return rc;
 }

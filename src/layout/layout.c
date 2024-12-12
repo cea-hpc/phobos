@@ -82,7 +82,7 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
      * this type have been destroyed, since they all hold a reference to the
      * module's code. In this implementation, the module is never unloaded.
      */
-    enc->is_decoder = false;
+    enc->type = PHO_ENC_ENCODER;
     enc->done = false;
     enc->xfer = xfer;
     enc->layout = xcalloc(enc->xfer->xd_ntargets, sizeof(*enc->layout));
@@ -126,8 +126,7 @@ int layout_decode(struct pho_encoder *enc, struct pho_xfer_desc *xfer,
         return rc;
 
     /* See notes in layout_encode */
-    enc->is_decoder = true;
-    enc->delete_action = false;
+    enc->type = PHO_ENC_DECODER;
     enc->done = false;
     enc->xfer = xfer;
     enc->layout = layout;
@@ -167,8 +166,7 @@ int layout_delete(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
         return rc;
 
     /* See notes in layout_encode */
-    dec->is_decoder = true;
-    dec->delete_action = true;
+    dec->type = PHO_ENC_ERASER;
     dec->done = false;
     dec->xfer = xfer;
     dec->layout = layout;
@@ -252,7 +250,7 @@ void layout_destroy(struct pho_encoder *enc)
     int i;
 
     /* Only encoders own their layout */
-    if (!enc->is_decoder && enc->layout != NULL) {
+    if (is_encoder(enc) && enc->layout != NULL) {
         for (i = 0; i < enc->xfer->xd_ntargets; i++) {
             pho_attrs_free(&enc->layout[i].layout_desc.mod_attrs);
             layout_info_free_extents(&enc->layout[i]);

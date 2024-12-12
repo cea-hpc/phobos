@@ -110,14 +110,21 @@ struct layout_module {
     const struct pho_layout_module_ops *ops; /**< Operations of this layout */
 };
 
+/**
+ * The different types of the encoder
+ */
+enum encoder_type {
+    PHO_ENC_ENCODER,
+    PHO_ENC_DECODER,
+    PHO_ENC_ERASER,
+};
+
+
 /** An encoder encoding or decoding one object on a set of media */
 struct pho_encoder {
     void *priv_enc;                 /**< Layouts specific data */
     const struct pho_enc_ops *ops;  /**< Layouts specific operations */
-    bool is_decoder;                /**< This encoder is a decoder */
-    bool delete_action;             /**< This encoder will delete objects (only
-                                      *  works with decoder)
-                                      */
+    enum encoder_type type;         /**< Type of the encoder */
     bool done;                      /**< True if this encoder has no more work
                                       *  to do (check rc to know if an error
                                       *  happened)
@@ -135,6 +142,44 @@ struct pho_encoder {
                                       *  resp)
                                       */
 };
+
+/**
+ * Check is the encoder is of type encoder.
+ */
+static inline bool is_encoder(struct pho_encoder *enc)
+{
+    return enc->type == PHO_ENC_ENCODER;
+}
+
+/**
+ * Check is the encoder is of type decoder.
+ */
+static inline bool is_decoder(struct pho_encoder *dec)
+{
+    return dec->type == PHO_ENC_DECODER;
+}
+
+/**
+ * Check is the encoder is of type delete.
+ */
+static inline bool is_delete(struct pho_encoder *dec)
+{
+    return dec->type == PHO_ENC_ERASER;
+}
+
+static inline const char *encoder_type2str(struct pho_encoder *enc)
+{
+    switch (enc->type) {
+    case PHO_ENC_ENCODER:
+        return "encoder";
+    case PHO_ENC_DECODER:
+        return "decoder";
+    case PHO_ENC_ERASER:
+        return "eraser encoder";
+    default:
+        return "unknow";
+    }
+}
 
 /**
  * @defgroup pho_layout_mod Public API for layout modules
