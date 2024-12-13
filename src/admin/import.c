@@ -556,7 +556,7 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
     copy_to_insert.copy_name = lyt_to_insert.copy_name;
     copy_to_insert.object_uuid = obj_to_insert.uuid;
     copy_to_insert.version = obj_to_insert.version;
-    copy_to_insert.copy_status = PHO_OBJ_STATUS_INCOMPLETE;
+    copy_to_insert.copy_status = PHO_COPY_STATUS_INCOMPLETE;
 
     rc = dss_lock(&adm->dss, DSS_OBJECT, &obj_to_insert, 1);
     if (rc)
@@ -841,7 +841,7 @@ int reconstruct_copy(struct admin_handle *adm, struct copy_info *copy)
     assert(lyt_cnt <= 1);
 
     if (lyt_cnt == 0) {
-        copy->copy_status = PHO_OBJ_STATUS_INCOMPLETE;
+        copy->copy_status = PHO_COPY_STATUS_INCOMPLETE;
         goto end;
     }
 

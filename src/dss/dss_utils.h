@@ -138,7 +138,7 @@ static inline const char *get_access_time(void *copy)
 
 static inline const char *get_copy_status(void *copy)
 {
-    return obj_status2str(((struct copy_info *) copy)->copy_status);
+    return copy_status2str(((struct copy_info *) copy)->copy_status);
 }
 
 static inline const char *get_oid(void *object)

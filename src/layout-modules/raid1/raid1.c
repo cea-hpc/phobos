@@ -581,11 +581,11 @@ static int layout_raid1_reconstruct(struct layout_info lyt,
     }
 
     if (extent_sizes == repl_cnt * obj_size)
-        copy->copy_status = PHO_OBJ_STATUS_COMPLETE;
+        copy->copy_status = PHO_COPY_STATUS_COMPLETE;
     else if (replica_size == obj_size)
-        copy->copy_status = PHO_OBJ_STATUS_READABLE;
+        copy->copy_status = PHO_COPY_STATUS_READABLE;
     else
-        copy->copy_status = PHO_OBJ_STATUS_INCOMPLETE;
+        copy->copy_status = PHO_COPY_STATUS_INCOMPLETE;
 
     return 0;
 }

@@ -120,28 +120,28 @@ static PyObject *py_fs_status2str(PyObject *self, PyObject *args)
     return Py_BuildValue("s", str_repr);
 }
 
-static PyObject *py_obj_status2str(PyObject *self, PyObject *args)
+static PyObject *py_copy_status2str(PyObject *self, PyObject *args)
 {
-    enum obj_status status;
+    enum copy_status status;
     const char *str_repr;
 
     if (!PyArg_ParseTuple(args, "i", &status))
         return NULL;
 
-    str_repr = obj_status2str(status);
+    str_repr = copy_status2str(status);
 
     return Py_BuildValue("s", str_repr);
 }
 
-static PyObject *py_str2obj_status(PyObject *self, PyObject *args)
+static PyObject *py_str2copy_status(PyObject *self, PyObject *args)
 {
-    const char *str_objstatus;
-    enum obj_status status;
+    const char *str_copystatus;
+    enum copy_status status;
 
-    if (!PyArg_ParseTuple(args, "s", &str_objstatus))
+    if (!PyArg_ParseTuple(args, "s", &str_copystatus))
         return NULL;
 
-    status = str2fs_type(str_objstatus);
+    status = str2fs_type(str_copystatus);
 
     return Py_BuildValue("i", status);
 }
@@ -236,10 +236,10 @@ static PyMethodDef ConstMethods[] = {
      "printable fs status."},
     {"fs_status2str", py_fs_status2str, METH_VARARGS,
      "printable fs status."},
-    {"obj_status2str", py_obj_status2str, METH_VARARGS,
-     "printable obj status."},
-    {"str2obj_status", py_str2obj_status, METH_VARARGS,
-     "obj status enum from name."},
+    {"copy_status2str", py_copy_status2str, METH_VARARGS,
+     "printable copy status."},
+    {"str2copy_status", py_str2copy_status, METH_VARARGS,
+     "copy status enum from name."},
     {"fs_type2str", py_fs_type2str, METH_VARARGS,
      "printable fs type."},
     {"str2fs_type", py_str2fs_type, METH_VARARGS,
@@ -297,12 +297,12 @@ PyMODINIT_FUNC PyInit_const(void)
     PyModule_AddIntMacro(mod, PHO_RSC_ADM_ST_FAILED);
     PyModule_AddIntMacro(mod, PHO_RSC_ADM_ST_LAST);
 
-    /* enum obj_status */
-    PyModule_AddIntMacro(mod, PHO_OBJ_STATUS_INVAL);
-    PyModule_AddIntMacro(mod, PHO_OBJ_STATUS_INCOMPLETE);
-    PyModule_AddIntMacro(mod, PHO_OBJ_STATUS_READABLE);
-    PyModule_AddIntMacro(mod, PHO_OBJ_STATUS_COMPLETE);
-    PyModule_AddIntMacro(mod, PHO_OBJ_STATUS_LAST);
+    /* enum copy_status */
+    PyModule_AddIntMacro(mod, PHO_COPY_STATUS_INVAL);
+    PyModule_AddIntMacro(mod, PHO_COPY_STATUS_INCOMPLETE);
+    PyModule_AddIntMacro(mod, PHO_COPY_STATUS_READABLE);
+    PyModule_AddIntMacro(mod, PHO_COPY_STATUS_COMPLETE);
+    PyModule_AddIntMacro(mod, PHO_COPY_STATUS_LAST);
 
     /* enum lib_type */
     PyModule_AddIntMacro(mod, PHO_LIB_INVAL);

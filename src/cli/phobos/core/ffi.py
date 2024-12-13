@@ -39,7 +39,7 @@ from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX, # pylint: disable
                                PHO_TIMEVAL_MAX_LEN, MD5_BYTE_LENGTH,
                                fs_type2str, fs_status2str, rsc_adm_status2str,
                                rsc_family2str, extent_state2str,
-                               obj_status2str)
+                               copy_status2str)
 
 LIBPHOBOS_NAME = "libphobos_store.so"
 LIBPHOBOS = CDLL(LIBPHOBOS_NAME)
@@ -728,7 +728,7 @@ class CopyInfo(Structure, CLIManagedResourceMixin):
             'uuid': None,
             'version': None,
             'copy_name': None,
-            'status': obj_status2str,
+            'status': copy_status2str,
             'creation_time': Timeval.to_string,
             'access_time': Timeval.to_string,
         }

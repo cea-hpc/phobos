@@ -61,7 +61,7 @@ static int copy_insert_query(PGconn *conn, void *void_copy, int item_cnt,
         g_string_append_printf(request, "('%s', '%d', '%s', '%s')%s",
                                copy->object_uuid, copy->version,
                                copy->copy_name,
-                               obj_status2str(copy->copy_status),
+                               copy_status2str(copy->copy_status),
                                i < item_cnt - 1 ? ", " : ";");
     }
 
@@ -142,7 +142,7 @@ static int copy_from_pg_row(struct dss_handle *handle, void *void_copy,
     copy->object_uuid = get_str_value(res, row_num, 0);
     copy->version     = atoi(PQgetvalue(res, row_num, 1));
     copy->copy_name   = get_str_value(res, row_num, 2);
-    copy->copy_status = str2obj_status(PQgetvalue(res, row_num, 3));
+    copy->copy_status = str2copy_status(PQgetvalue(res, row_num, 3));
     rc = str2timeval(get_str_value(res, row_num, 4), &copy->creation_time);
     rc = rc ? : str2timeval(get_str_value(res, row_num, 5), &copy->access_time);
 

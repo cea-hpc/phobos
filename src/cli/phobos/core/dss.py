@@ -80,7 +80,6 @@ ATTRS2DSS = {
 
     # "Object" table
     'uuid'                : 'object_uuid',
-    'status'              : 'obj_status',
 
     # "Extent"
     'ext_count'           : 'count(\'json_agg\')',

@@ -525,45 +525,42 @@ struct media_info {
                                            */
 };
 
-enum obj_status {
-    PHO_OBJ_STATUS_INVAL = -1,
-    PHO_OBJ_STATUS_INCOMPLETE = 0,  /**< Object has not enough splits */
-    PHO_OBJ_STATUS_READABLE,        /**< Enough splits to reconstruct a copy */
-    PHO_OBJ_STATUS_COMPLETE,        /**< All copies */
-    PHO_OBJ_STATUS_LAST
+enum copy_status {
+    PHO_COPY_STATUS_INVAL = -1,
+    PHO_COPY_STATUS_INCOMPLETE = 0,  /**< Copy has not enough splits */
+    PHO_COPY_STATUS_READABLE,        /**< Enough splits to reconstruct a copy */
+    PHO_COPY_STATUS_COMPLETE,        /**< All copies */
+    PHO_COPY_STATUS_LAST
 };
 
-static const char * const OBJ_STATUS_NAMES[] = {
-    [PHO_OBJ_STATUS_INCOMPLETE] = "incomplete",
-    [PHO_OBJ_STATUS_READABLE]   = "readable",
-    [PHO_OBJ_STATUS_COMPLETE]   = "complete"
+static const char * const COPY_STATUS_NAMES[] = {
+    [PHO_COPY_STATUS_INCOMPLETE] = "incomplete",
+    [PHO_COPY_STATUS_READABLE]   = "readable",
+    [PHO_COPY_STATUS_COMPLETE]   = "complete"
 };
 
-static inline const char *obj_status2str(enum obj_status status)
+static inline const char *copy_status2str(enum copy_status status)
 {
-    if (status >= PHO_OBJ_STATUS_LAST || status < 0)
+    if (status >= PHO_COPY_STATUS_LAST || status < 0)
         return NULL;
-    return OBJ_STATUS_NAMES[status];
+    return COPY_STATUS_NAMES[status];
 }
 
-static inline enum obj_status str2obj_status(const char *str)
+static inline enum copy_status str2copy_status(const char *str)
 {
     int i;
 
-    for (i = 0; i < PHO_OBJ_STATUS_LAST; i++)
-        if (!strcmp(str, OBJ_STATUS_NAMES[i]))
+    for (i = 0; i < PHO_COPY_STATUS_LAST; i++)
+        if (!strcmp(str, COPY_STATUS_NAMES[i]))
             return i;
-    return PHO_OBJ_STATUS_INVAL;
+    return PHO_COPY_STATUS_INVAL;
 }
 
 struct copy_info {
     char *object_uuid;
     int version;
     const char *copy_name;
-    /* Enum obj_status will change to copy_status when switching with
-     * the 3.0 schema
-     */
-    enum obj_status copy_status;
+    enum copy_status copy_status;
     struct timeval creation_time;
     struct timeval access_time;
 };

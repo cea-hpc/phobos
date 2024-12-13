@@ -426,7 +426,7 @@ out_update:
 
     copy.object_uuid = obj_res->uuid;
     copy.version = obj_res->version;
-    copy.copy_status = PHO_OBJ_STATUS_INCOMPLETE;
+    copy.copy_status = PHO_COPY_STATUS_INCOMPLETE;
     rc = get_cfg_default_copy_name(&copy.copy_name);
     if (rc)
         LOG_GOTO(out_res, rc, "Cannot get default copy_name from conf");
@@ -901,16 +901,16 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
     if (rc)
         LOG_RETURN(rc, "Cannot find copy for objid:'%s'", obj->oid);
 
-    if (copy->copy_status == PHO_OBJ_STATUS_INCOMPLETE) {
+    if (copy->copy_status == PHO_COPY_STATUS_INCOMPLETE) {
         copy_info_free(copy);
         LOG_RETURN(-ENOENT, "Status of copy '%s' for the object '%s' is "
                    "incomplete, cannot be reconstructed", copy->copy_name,
                    obj->oid);
     }
 
-    if (copy->copy_status != PHO_OBJ_STATUS_COMPLETE)
+    if (copy->copy_status != PHO_COPY_STATUS_COMPLETE)
         pho_warn("Copy '%s' status for the object '%s' is %s.", copy->copy_name,
-                 obj->oid, obj_status2str(copy->copy_status));
+                 obj->oid, copy_status2str(copy->copy_status));
 
     copy_info_free(copy);
     rc = object_info_copy_into_xfer(obj, xfer->xd_targets);
@@ -1080,7 +1080,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
                         .object_uuid = xfer->xd_targets[i].xt_objuuid,
                         .version = xfer->xd_targets[i].xt_version,
                         .copy_name = proc->layout[i].copy_name,
-                        .copy_status = PHO_OBJ_STATUS_COMPLETE,
+                        .copy_status = PHO_COPY_STATUS_COMPLETE,
                     };
 
                     rc2 = dss_copy_update(&pho->dss, &copy, &copy, 1,
