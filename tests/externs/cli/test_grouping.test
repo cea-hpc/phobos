@@ -86,18 +86,18 @@ function test_grouping_dir () {
 }
 
 function test_grouping_tape () {
-    TAPE=$(get_tapes L6 1)
+    TAPES=( $(get_tapes L6 2 | nodeset -e) )
     DRIVE=$(get_lto_drives 6 1)
 
-    $phobos tape add -t LTO6 ${TAPE}
+    $phobos tape add -t LTO6 ${TAPES[0]}
     $phobos drive add --unlock ${DRIVE}
-    $phobos tape format --unlock ${TAPE}
+    $phobos tape format --unlock ${TAPES[0]}
 
     # put without any grouping
     $phobos put -f tape --grouping my_group ${FILES[0]} tape_object ||
         error "Put on tape must success without any grouping tape available"
 
-    tape_groupings=$($phobos tape list -o groupings ${TAPE})
+    tape_groupings=$($phobos tape list -o groupings ${TAPES[0]})
     if [[ "${tape_groupings}" != "['my_group']" ]]; then
         error "Tape groupings must be '['my_group']' instead of "
               "'${tape_groupings}'"
@@ -107,10 +107,21 @@ function test_grouping_tape () {
     $phobos put -f tape --grouping my_group_bis ${FILES[0]} tape_object_bis ||
         error "Put on tape must success without any bis grouping tape available"
 
-    tape_groupings=$($phobos tape list -o groupings ${TAPE})
+    tape_groupings=$($phobos tape list -o groupings ${TAPES[0]})
     if [[ "${tape_groupings}" != "['my_group', 'my_group_bis']" ]]; then
         error "Tape groupings must be '['my_group', 'my_group_bis']' instead" \
               "of '${tape_groupings}'"
+    fi
+
+    # unload tape with grouping and check it is used instead of the loaded one
+    $phobos tape add -t LTO6 ${TAPES[1]}
+    $phobos tape format --unlock ${TAPES[1]}
+    $phobos put -f tape --grouping my_group ${FILES[0]} tape_object_ter ||
+        error "Put on tape must success with grouping tape unloaded"
+    tape_object=$($phobos extent list -o media_name tape_object_ter)
+    if [[ "${tape_object}" != "['${TAPES[0]}']" ]]; then
+        error "Grouping tape of the object must be ['${TAPES[0]}'] instead" \
+              "of '${tape_object}'"
     fi
 }
 
