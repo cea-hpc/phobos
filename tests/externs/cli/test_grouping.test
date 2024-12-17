@@ -68,36 +68,36 @@ function test_grouping_dir () {
     $phobos dir format --unlock ${DIR1}
 
     # put without any grouping
-    $phobos put -f dir --grouping my_group ${FILES[0]} dir_object ||
+    $valg_phobos put -f dir --grouping my_group ${FILES[0]} dir_object ||
         error "Put on dir must success without any grouping dir available"
 
-    dir_groupings=$($phobos dir list -o groupings ${DIR1})
+    dir_groupings=$($valg_phobos dir list -o groupings ${DIR1})
     if [[ "${dir_groupings}" != "['my_group']" ]]; then
         error "Dir groupings must be '['my_group']' instead of" \
               "'${dir_groupings}'"
     fi
 
     # check with a second grouping and that is also added
-    $phobos put -f dir --grouping my_group_bis ${FILES[0]} dir_object_bis ||
+    $valg_phobos put -f dir --grouping my_group_bis ${FILES[0]} dir_object_bis ||
         error "Put on dir must success without any bis grouping dir available"
 
-    dir_groupings=$($phobos dir list -o groupings ${DIR1})
+    dir_groupings=$($valg_phobos dir list -o groupings ${DIR1})
     if [[ "${dir_groupings}" != "['my_group', 'my_group_bis']" ]]; then
         error "Dir groupings must be '['my_group', 'my_group_bis']' instead" \
               "of '${dir_groupings}'"
     fi
 
     # current dir must be full
-    $phobos put -f dir --grouping my_group ${FILES[0]} dir_object_ter &&
+    $valg_phobos put -f dir --grouping my_group ${FILES[0]} dir_object_ter &&
         error "Put on dir must fail with only full dir available"
 
     # check new dir is chosen
     $phobos dir add ${DIR2}
     $phobos dir format --unlock ${DIR2}
-    $phobos put -f dir --grouping my_group ${FILES[0]} dir_object_ter ||
+    $valg_phobos put -f dir --grouping my_group ${FILES[0]} dir_object_ter ||
         error "Put on new dir must success without any grouping dir available"
 
-    dir_groupings=$($phobos dir list -o groupings ${DIR2})
+    dir_groupings=$($valg_phobos dir list -o groupings ${DIR2})
     if [[ "${dir_groupings}" != "['my_group']" ]]; then
         error "Dir groupings on new dir must be '['my_group']' instead of" \
               "'${dir_groupings}'"
@@ -113,20 +113,21 @@ function test_grouping_tape () {
     $phobos tape format --unlock ${TAPES[0]}
 
     # put without any grouping
-    $phobos put -f tape --grouping my_group ${FILES[0]} tape_object ||
+    $valg_phobos put -f tape --grouping my_group ${FILES[0]} tape_object ||
         error "Put on tape must success without any grouping tape available"
 
-    tape_groupings=$($phobos tape list -o groupings ${TAPES[0]})
+    tape_groupings=$($valg_phobos tape list -o groupings ${TAPES[0]})
     if [[ "${tape_groupings}" != "['my_group']" ]]; then
         error "Tape groupings must be '['my_group']' instead of "
               "'${tape_groupings}'"
     fi
 
     # check with a second grouping and that is also added
-    $phobos put -f tape --grouping my_group_bis ${FILES[0]} tape_object_bis ||
+    $valg_phobos put -f tape --grouping my_group_bis ${FILES[0]} \
+        tape_object_bis ||
         error "Put on tape must success without any bis grouping tape available"
 
-    tape_groupings=$($phobos tape list -o groupings ${TAPES[0]})
+    tape_groupings=$($valg_phobos tape list -o groupings ${TAPES[0]})
     if [[ "${tape_groupings}" != "['my_group', 'my_group_bis']" ]]; then
         error "Tape groupings must be '['my_group', 'my_group_bis']' instead" \
               "of '${tape_groupings}'"
@@ -135,9 +136,9 @@ function test_grouping_tape () {
     # unload tape with grouping and check it is used instead of the loaded one
     $phobos tape add -t LTO6 ${TAPES[1]}
     $phobos tape format --unlock ${TAPES[1]}
-    $phobos put -f tape --grouping my_group ${FILES[0]} tape_object_ter ||
+    $valg_phobos put -f tape --grouping my_group ${FILES[0]} tape_object_ter ||
         error "Put on tape must success with grouping tape unloaded"
-    tape_object=$($phobos extent list -o media_name tape_object_ter)
+    tape_object=$($valg_phobos extent list -o media_name tape_object_ter)
     if [[ "${tape_object}" != "['${TAPES[0]}']" ]]; then
         error "Grouping tape of the object must be ['${TAPES[0]}'] instead" \
               "of '${tape_object}'"
