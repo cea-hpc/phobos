@@ -38,7 +38,7 @@ function setup_dir
     invoke_lrs
 
     setup_test_dirs
-    setup_dummy_files 1
+    setup_dummy_files 1 1k 1
 
     dirs=("$DIR_TEST_IN/tmp1" "$DIR_TEST_IN/tmp2" "$DIR_TEST_IN/tmp3")
 
@@ -53,7 +53,7 @@ function setup_tape
     invoke_daemons
 
     setup_test_dirs
-    setup_dummy_files 1
+    setup_dummy_files 1 1k 1
 
     export drive="$(get_lto_drives 5 1)"
     export medium="$(get_tapes L5 1)"

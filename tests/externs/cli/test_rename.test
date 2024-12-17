@@ -49,7 +49,7 @@ function setup
     n_tests=${#TESTS[@]}
 
     n_files=$((2*n_tests+1))
-    setup_dummy_files $n_files
+    setup_dummy_files $n_files 1k 1
 }
 
 function cleanup

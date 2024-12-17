@@ -33,7 +33,7 @@ function setup()
 
     setup_test_dirs
     rm -f "$PHOBOS_LRS_lock_file"
-    setup_dummy_files 1
+    setup_dummy_files 1 1k 1
 
     setup_tables
     invoke_lrs_debug &

@@ -52,7 +52,7 @@ function setup()
     invoke_lrs
 
     setup_test_dirs
-    setup_dummy_files 1
+    setup_dummy_files 1 1k 1
 
     setup_dir
 }

@@ -30,7 +30,7 @@ test_dir=$(dirname $(readlink -e $0))
 function setup()
 {
     setup_test_dirs
-    setup_dummy_files 1
+    setup_dummy_files 1 1k 1
     setup_tables
     drain_all_drives
     export PHOBOS_IO_SCHED_TAPE_read_algo="grouped_read"

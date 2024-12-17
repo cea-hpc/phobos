@@ -559,7 +559,7 @@ function test_retry_on_error_setup()
     invoke_daemons
 
     setup_test_dirs
-    setup_dummy_files 2
+    setup_dummy_files 2 1k 1
 }
 
 function test_retry_on_error_cleanup()

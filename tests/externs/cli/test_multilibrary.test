@@ -47,7 +47,7 @@ function setup_daemons
     invoke_tlc
     invoke_tlc_bis
     invoke_lrs
-    setup_dummy_files 2
+    setup_dummy_files 2 1k 1
 }
 
 function test_device_add_library

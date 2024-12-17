@@ -15,6 +15,8 @@ function cleanup_test_dirs
 function setup_dummy_files
 {
     local nb_files=$1
+    local bs=$2
+    local count=$3
     local i=0
 
     FILES=()
@@ -24,7 +26,7 @@ function setup_dummy_files
     while [ $i -lt $nb_files ]
     do
         FILES+=("$(mktemp $DIR_TEST_IN/XXXXXX)")
-        dd if=/dev/urandom of=${FILES[$i]} bs=1k count=1 &>/dev/null
+        dd if=/dev/urandom of=${FILES[$i]} bs=${bs} count=${count} &>/dev/null
         i=$((i+1))
     done
     set -x

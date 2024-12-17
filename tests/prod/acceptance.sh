@@ -104,7 +104,7 @@ function setup_test
     fi
 
     setup_test_dirs
-    setup_dummy_files 30
+    setup_dummy_files 30 1k 1
 }
 
 function cleanup_test

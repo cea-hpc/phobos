@@ -37,14 +37,16 @@ test_dir=$(dirname $(readlink -e $0))
 function setup()
 {
     setup_tables
+    export PHOBOS_DIR_dir_full_threshold=50
     if [[ -w /dev/changer ]]; then
         invoke_daemons
     else
         invoke_lrs
     fi
 
-    setup_test_dirs
-    setup_dummy_files 1
+    DIR1=$(make_tmp_fs 300M)
+    DIR2=$(make_tmp_fs 300M)
+    setup_dummy_files 1 1M 100
 }
 
 function cleanup() {
@@ -56,19 +58,20 @@ function cleanup() {
     fi
 
     drop_tables
-    cleanup_test_dirs
+    cleanup_tmp_fs ${DIR1}
+    cleanup_tmp_fs ${DIR2}
     cleanup_dummy_files 1
 }
 
 function test_grouping_dir () {
-    $phobos dir add ${DIR_TEST}
-    $phobos dir format --unlock ${DIR_TEST}
+    $phobos dir add ${DIR1}
+    $phobos dir format --unlock ${DIR1}
 
     # put without any grouping
     $phobos put -f dir --grouping my_group ${FILES[0]} dir_object ||
         error "Put on dir must success without any grouping dir available"
 
-    dir_groupings=$($phobos dir list -o groupings ${DIR_TEST})
+    dir_groupings=$($phobos dir list -o groupings ${DIR1})
     if [[ "${dir_groupings}" != "['my_group']" ]]; then
         error "Dir groupings must be '['my_group']' instead of" \
               "'${dir_groupings}'"
@@ -78,10 +81,26 @@ function test_grouping_dir () {
     $phobos put -f dir --grouping my_group_bis ${FILES[0]} dir_object_bis ||
         error "Put on dir must success without any bis grouping dir available"
 
-    dir_groupings=$($phobos dir list -o groupings ${DIR_TEST})
+    dir_groupings=$($phobos dir list -o groupings ${DIR1})
     if [[ "${dir_groupings}" != "['my_group', 'my_group_bis']" ]]; then
         error "Dir groupings must be '['my_group', 'my_group_bis']' instead" \
               "of '${dir_groupings}'"
+    fi
+
+    # current dir must be full
+    $phobos put -f dir --grouping my_group ${FILES[0]} dir_object_ter &&
+        error "Put on dir must fail with only full dir available"
+
+    # check new dir is chosen
+    $phobos dir add ${DIR2}
+    $phobos dir format --unlock ${DIR2}
+    $phobos put -f dir --grouping my_group ${FILES[0]} dir_object_ter ||
+        error "Put on new dir must success without any grouping dir available"
+
+    dir_groupings=$($phobos dir list -o groupings ${DIR2})
+    if [[ "${dir_groupings}" != "['my_group']" ]]; then
+        error "Dir groupings on new dir must be '['my_group']' instead of" \
+              "'${dir_groupings}'"
     fi
 }
 
