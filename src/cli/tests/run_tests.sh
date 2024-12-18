@@ -33,19 +33,22 @@ PHO_STORELIB_PATH="$cur_dir/../../store/.libs/"
 PHO_ADMINLIB_PATH="$cur_dir/../../admin/.libs/"
 PHO_LAYOUTLIB_PATH="$cur_dir/../../layout-modules/.libs/"
 PHO_LDMLIB_PATH="$cur_dir/../../ldm-modules/.libs/"
+PHO_IOLIB_PATH="$cur_dir/../../io-modules/.libs/"
 
 export LD_LIBRARY_PATH="$PHO_STORELIB_PATH:$PHO_ADMINLIB_PATH:\
-$PHO_PYTHON_PATH:$PHO_LAYOUTLIB_PATH:$PHO_LDMLIB_PATH"
+$PHO_PYTHON_PATH:$PHO_LAYOUTLIB_PATH:$PHO_LDMLIB_PATH:$PHO_IOLIB_PATH"
 export PYTHONPATH="$PHO_PYTHON_PATH"
 
 PHOBOS_DB="$cur_dir/../../../scripts/phobos_db"
 
-phobos_conf="$cur_dir/../../../tests/phobos.conf"
+export PHOBOS_CFG_FILE="$cur_dir/../../../tests/phobos.conf"
 # get the connect string from the test conf, get the string after the first '='
-conn_str="$(grep "dbname" "$phobos_conf")"
+conn_str="$(grep "dbname" "$PHOBOS_CFG_FILE")"
 conn_str="${conn_str#*=}"
 
 export PHOBOS_DSS_connect_string="$conn_str"
+export phobos="$cur_dir/../scripts/phobos"
+export phobosd="$cur_dir/../../lrs/phobosd"
 
 TESTS=$(ls *Test.py)
 
