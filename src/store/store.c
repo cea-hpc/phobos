@@ -75,7 +75,8 @@ const struct pho_config_item cfg_store[] = {
 struct phobos_handle {
     struct dss_handle dss;          /**< DSS handle, configured from conf */
     struct pho_xfer_desc *xfers;    /**< Transfers being handled */
-    struct pho_encoder *encoders;   /**< Encoders corresponding to xfers */
+    struct pho_data_processor *processors;
+                                    /**< Processors corresponding to xfers */
     size_t n_xfers;                 /**< Number of xfers */
     size_t n_ended_xfers;           /**< Number of "true" in `ended_xfers`,
                                       *  maintained for performance purposes
@@ -158,14 +159,14 @@ static int pho_xfer_desc_flag_check(const struct pho_xfer_desc *xfer)
  * Build a decoder for this xfer by retrieving the xfer layout and initializing
  * the decoder from it. Only valid for GET xfers.
  *
- * @param[out]  dec     The decoder to be initialized
+ * @param[out]  decoder The decoder to be initialized
  * @param[in]   xfer    The xfer to be decoded
  * @param[in]   dss     A DSS handle to retrieve layout information for xfer
  *
  * @return 0 on success, -errno on error.
  */
-static int decoder_build(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
-                         struct dss_handle *dss)
+static int decoder_build(struct pho_data_processor *decoder,
+                         struct pho_xfer_desc *xfer, struct dss_handle *dss)
 {
     struct layout_info *layout;
     struct dss_filter filter;
@@ -194,8 +195,8 @@ static int decoder_build(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
 
     /* @FIXME: duplicate layout to avoid calling dss functions to free this? */
     rc = xfer->xd_op == PHO_XFER_OP_GET ?
-        layout_decode(dec, xfer, layout) :
-        layout_delete(dec, xfer, layout);
+        layout_decoder(decoder, xfer, layout) :
+        layout_eraser(decoder, xfer, layout);
     if (rc)
         GOTO(err, rc);
 
@@ -206,21 +207,21 @@ err:
 }
 
 /**
- * Forward a response from the LRS to its destination encoder, collect this
- * encoder's next requests and forward them back to the LRS.
+ * Forward a response from the LRS to its destination processor, collect this
+ * processor's next requests and forward them back to the LRS.
  *
- * @param[in/out]   enc     The encoder to give the response to.
+ * @param[in/out]   proc    The data processor to give the response to.
  * @param[in]       ci      Communication information.
- * @param[in]       resp    The response to be forwarded to \a enc. Can be NULL
- *                          to generate the first request from \a enc.
- * @param[in]       enc_id  Identifier of this encoder (for request / response
- *                          tracking).
+ * @param[in]       resp    The response to be forwarded to \a proc. Can be NULL
+ *                          to generate the first request from \a proc.
+ * @param[in]       enc_id  Identifier of this data processor (for request or
+ *                          response tracking).
  *
  * @return 0 on success, -errno on error.
  */
-static int encoder_communicate(struct pho_encoder *enc,
-                               struct pho_comm_info *comm, pho_resp_t *resp,
-                               int enc_id)
+static int processor_communicate(struct pho_data_processor *proc,
+                                 struct pho_comm_info *comm, pho_resp_t *resp,
+                                 int enc_id)
 {
     pho_req_t *requests = NULL;
     struct pho_comm_data data;
@@ -228,7 +229,7 @@ static int encoder_communicate(struct pho_encoder *enc,
     size_t i = 0;
     int rc;
 
-    rc = layout_step(enc, resp, &requests, &n_reqs);
+    rc = layout_step(proc, resp, &requests, &n_reqs);
     if (rc)
         pho_error(rc, "Error while communicating with encoder");
 
@@ -239,17 +240,17 @@ static int encoder_communicate(struct pho_encoder *enc,
 
         req = requests + i;
 
-        pho_debug("%s emitted a request of type %s", encoder_type2str(enc),
+        pho_debug("%s emitted a request of type %s", processor_type2str(proc),
                   pho_srl_request_kind_str(req));
 
         /* req_id is used to route responses to the appropriate encoder */
         req->id = enc_id;
         if (pho_request_is_write(req)) {
-            req->walloc->family = enc->xfer->xd_params.put.family;
+            req->walloc->family = proc->xfer->xd_params.put.family;
             req->walloc->library =
-                xstrdup_safe(enc->xfer->xd_params.put.library);
+                xstrdup_safe(proc->xfer->xd_params.put.library);
             req->walloc->grouping =
-                xstrdup_safe(enc->xfer->xd_params.put.grouping);
+                xstrdup_safe(proc->xfer->xd_params.put.grouping);
         }
 
         data = pho_comm_data_init(comm);
@@ -816,18 +817,18 @@ static int object_info_copy_into_xfer(struct object_info *obj,
 }
 
 /**
- * Initialize an encoder or a decoder to perform \a xfer, according to
- * xfer->xd_op and xfer->xd_flags.
+ * Initialize a data processor to perform \a xfer, according to xfer->xd_op and
+ * xfer->xd_flags.
  */
-static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
-                           struct pho_xfer_desc *xfer)
+static int init_enc_or_dec(struct pho_data_processor *proc,
+                           struct dss_handle *dss, struct pho_xfer_desc *xfer)
 {
     struct object_info *obj;
     int rc;
 
     if (xfer->xd_op == PHO_XFER_OP_PUT)
         /* Handle encoder creation for PUT */
-        return layout_encode(enc, xfer);
+        return layout_encoder(proc, xfer);
 
     /* can't get md for undel without any objid */
     /* TODO: really necessary to create decoder for getmd, del and undel OP ? */
@@ -843,9 +844,9 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
          !(xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL)) ||
         xfer->xd_op == PHO_XFER_OP_UNDEL) {
         /* create dummy decoder if no I/O operations are made */
-        enc->xfer = xfer;
-        enc->done = true;
-        enc->type = PHO_ENC_DECODER;
+        proc->xfer = xfer;
+        proc->done = true;
+        proc->type = PHO_PROC_DECODER;
         return 0;
     }
 
@@ -873,7 +874,7 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
     if (rc)
         return rc;
 
-    return decoder_build(enc, xfer, dss);
+    return decoder_build(proc, xfer, dss);
 }
 
 static bool is_uuid_arg(struct pho_xfer_target *xfer, enum pho_xfer_op xd_op)
@@ -889,10 +890,10 @@ static const char *oid_or_uuid_val(struct pho_xfer_target *xfer,
 
 static int store_end_delete_xfer(struct phobos_handle *pho,
                                  struct pho_xfer_desc *xfer,
-                                 struct pho_encoder *enc)
+                                 struct pho_data_processor *proc)
 {
-    struct extent *extents = enc->layout->extents;
-    int ext_count = enc->layout->ext_count;
+    struct extent *extents = proc->layout->extents;
+    int ext_count = proc->layout->ext_count;
     struct dss_handle *dss = &pho->dss;
     struct layout_info *layouts;
     struct object_info obj = {
@@ -955,21 +956,21 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
 }
 
 /**
- * Mark the end of a transfer (successful or not) by updating the encoder
- * structure, saving the encoder layout to the DSS if necessary, properly
+ * Mark the end of a transfer (successful or not) by updating the processor
+ * structure, saving the data processor layout to the DSS if necessary, properly
  * positioning xfer->xd_rc and calling the termination callback.
  *
  * If this function is called twice for the same transfer, the operations will
  * only be performed once.
  *
- * @param[in]   pho         The phobos handle handling this encoder.
+ * @param[in]   pho         The phobos handle handling this processor.
  * @param[in]   xfer_idx    The index of the terminating xfer in \a pho.
  * @param[in]   rc          The outcome of the xfer (replaces the xfer's xd_rc
  *                          if it was 0).
  */
 static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
 {
-    struct pho_encoder *enc = &pho->encoders[xfer_idx];
+    struct pho_data_processor *proc = &pho->processors[xfer_idx];
     struct pho_xfer_desc *xfer = &pho->xfers[xfer_idx];
     int rc2 = 0;
     int i, j;
@@ -981,33 +982,33 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     /* Remember we ended this encoder */
     pho->ended_xfers[xfer_idx] = true;
     pho->n_ended_xfers++;
-    enc->done = true;
+    proc->done = true;
 
     /* Once the encoder is done and successful, save the layout and metadata */
-    if (is_encoder(enc) && xfer->xd_rc == 0 && rc == 0) {
+    if (is_encoder(proc) && xfer->xd_rc == 0 && rc == 0) {
         for (i = 0; i < xfer->xd_ntargets; i++) {
             pho_debug("Saving layout for objid:'%s'",
                       xfer->xd_targets[i].xt_objid);
-            rc2 = dss_extent_insert(&pho->dss, enc->layout[i].extents,
-                                    enc->layout[i].ext_count);
+            rc2 = dss_extent_insert(&pho->dss, proc->layout[i].extents,
+                                    proc->layout[i].ext_count);
             if (rc2) {
                 pho_error(rc2, "Error while saving extents for objid: '%s'",
                           xfer->xd_targets[i].xt_objid);
                 rc = rc ? : rc2;
                 break;
             } else {
-                rc2 = dss_layout_insert(&pho->dss, &enc->layout[i], 1);
+                rc2 = dss_layout_insert(&pho->dss, &proc->layout[i], 1);
                 if (rc2) {
                     pho_error(rc2, "Error while saving layout for objid: '%s'",
                               xfer->xd_targets[i].xt_objid);
                     rc = rc ? : rc2;
 
-                    for (j = 0; j < enc->layout[i].ext_count; ++j)
-                        enc->layout[i].extents[j].state = PHO_EXT_ST_ORPHAN;
+                    for (j = 0; j < proc->layout[i].ext_count; ++j)
+                        proc->layout[i].extents[j].state = PHO_EXT_ST_ORPHAN;
 
-                    rc2 = dss_extent_update(&pho->dss, enc->layout[i].extents,
-                                            enc->layout[i].extents,
-                                            enc->layout[i].ext_count);
+                    rc2 = dss_extent_update(&pho->dss, proc->layout[i].extents,
+                                            proc->layout[i].extents,
+                                            proc->layout[i].ext_count);
 
                     if (rc2) {
                         pho_error(rc2,
@@ -1070,7 +1071,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
 
     if (xfer->xd_op == PHO_XFER_OP_DEL &&
         xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL && xfer->xd_rc == 0 && rc == 0)
-        rc = store_end_delete_xfer(pho, xfer, enc);
+        rc = store_end_delete_xfer(pho, xfer, proc);
 
 cont:
     /* Only overwrite xd_rc if it was 0 */
@@ -1104,7 +1105,7 @@ static void store_fini(struct phobos_handle *pho, int rc)
 {
     size_t i;
 
-    /* Cleanup encoders */
+    /* Cleanup processors */
     for (i = 0; i < pho->n_xfers; i++) {
         /**
          * Encoders that have not finished at this point are marked as failed
@@ -1117,19 +1118,19 @@ static void store_fini(struct phobos_handle *pho, int rc)
          * We allocated the decoder layouts from the dss (in decoder_build),
          * hence we also free them.
          */
-        if (pho->encoders) {
-            if (is_decoder(&pho->encoders[i])) {
-                dss_res_free(pho->encoders[i].layout, 1);
-                pho->encoders[i].layout = NULL;
+        if (pho->processors) {
+            if (is_decoder(&pho->processors[i])) {
+                dss_res_free(pho->processors[i].layout, 1);
+                pho->processors[i].layout = NULL;
             }
-            layout_destroy(&pho->encoders[i]);
+            layout_destroy(&pho->processors[i]);
         }
     }
 
-    free(pho->encoders);
+    free(pho->processors);
     free(pho->ended_xfers);
     free(pho->md_created);
-    pho->encoders = NULL;
+    pho->processors = NULL;
     pho->ended_xfers = NULL;
     pho->md_created = NULL;
 
@@ -1168,7 +1169,7 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
     pho->udata = udata;
     pho->n_ended_xfers = 0;
     pho->ended_xfers = NULL;
-    pho->encoders = NULL;
+    pho->processors = NULL;
     pho->md_created = NULL;
 
     /* Check xfers consistency */
@@ -1202,28 +1203,28 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
     if (rc)
         LOG_GOTO(out, rc, "Cannot contact 'phobosd': will abort");
 
-    /* Allocate memory for the encoders */
-    pho->encoders = xcalloc(n_xfers, sizeof(*pho->encoders));
+    /* Allocate memory for the processors */
+    pho->processors = xcalloc(n_xfers, sizeof(*pho->processors));
 
-    /* Allocate array of ended encoders for completion tracking */
+    /* Allocate array of ended processors for completion tracking */
     pho->ended_xfers = xcalloc(n_xfers, sizeof(*pho->ended_xfers));
 
     /*
-     * Allocate array of booleans to track which encoders had their metadata
+     * Allocate array of booleans to track which processors had their metadata
      * created.
      */
     pho->md_created = xcalloc(n_xfers, sizeof(*pho->md_created));
 
-    /* Initialize all the encoders */
+    /* Initialize all the processors */
     for (i = 0; i < n_xfers; i++) {
         pho_debug("Initializing %s %ld for %d objid(s)",
-                  encoder_type2str(&pho->encoders[i]), i,
+                  processor_type2str(&pho->processors[i]), i,
                   pho->xfers[i].xd_ntargets);
-        rc = init_enc_or_dec(&pho->encoders[i], &pho->dss, &pho->xfers[i]);
+        rc = init_enc_or_dec(&pho->processors[i], &pho->dss, &pho->xfers[i]);
         if (rc)
-            pho_error(rc, "Error while creating encoders for %d objid(s)",
+            pho_error(rc, "Error while creating processors for %d objid(s)",
                       pho->xfers[i].xd_ntargets);
-        if (rc || pho->encoders[i].done)
+        if (rc || pho->processors[i].done)
             store_end_xfer(pho, i, rc);
         rc = 0;
     }
@@ -1238,22 +1239,22 @@ out:
 static int store_lrs_response_process(struct phobos_handle *pho,
                                       pho_resp_t *resp)
 {
-    struct pho_encoder *encoder = &pho->encoders[resp->req_id];
+    struct pho_data_processor *proc = &pho->processors[resp->req_id];
     int rc;
 
     pho_debug("%s %d for %d objid(s) received a response of type %s",
-              encoder_type2str(encoder), resp->req_id,
-              encoder->xfer->xd_ntargets, pho_srl_response_kind_str(resp));
+              processor_type2str(proc), resp->req_id,
+              proc->xfer->xd_ntargets, pho_srl_response_kind_str(resp));
 
-    rc = encoder_communicate(encoder, &pho->comm, resp, resp->req_id);
+    rc = processor_communicate(proc, &pho->comm, resp, resp->req_id);
 
     /* Success or failure final callback */
-    if (rc || encoder->done)
+    if (rc || proc->done)
         store_end_xfer(pho, resp->req_id, rc);
 
     if (rc)
         pho_error(rc, "Error while sending response to layout for %s %d",
-                  encoder_type2str(encoder), resp->req_id);
+                  processor_type2str(proc), resp->req_id);
 
     return rc;
 }
@@ -1284,7 +1285,7 @@ static int store_dispatch_loop(struct phobos_handle *pho)
         free(responses);
     }
 
-    /* Dispatch LRS responses to encoders */
+    /* Dispatch LRS responses to processors */
     for (i = 0; i < n_responses; i++) {
         /*
          * If an error occured on the deserialization, resps[i] is now null
@@ -1325,10 +1326,10 @@ static int store_dispatch_loop(struct phobos_handle *pho)
 
 /**
  * Perform the main store loop:
- * - collect requests from encoders
+ * - collect requests from processors
  * - forward them to the LRS
  * - collect responses from the LRS
- * - dispatch them to the corresponding encoders
+ * - dispatch them to the corresponding processors
  * - handle potential xfer termination (successful or not)
  *
  * @param[in]   pho     Phobos handle describing the transfer.
@@ -1387,24 +1388,24 @@ static int store_perform_xfers(struct phobos_handle *pho)
             }
         }
 
-        if (rc && !pho->encoders[i].done) {
+        if (rc && !pho->processors[i].done) {
             store_end_xfer(pho, i, rc);
             break;
         }
         pho->md_created[i] = true;
     }
 
-    /* Generate all first requests of encoders */
+    /* Generate all first requests of processors */
     for (i = 0; i < pho->n_xfers; i++) {
-        if (pho->encoders[i].done)
+        if (pho->processors[i].done)
             continue;
 
-        rc = encoder_communicate(&pho->encoders[i], &pho->comm, NULL, i);
+        rc = processor_communicate(&pho->processors[i], &pho->comm, NULL, i);
         if (rc)
             store_end_xfer(pho, i, rc);
     }
 
-    /* Handle all encoders and forward messages between them and the LRS */
+    /* Handle all processors and forward messages between them and the LRS */
     while (pho->n_ended_xfers < pho->n_xfers) {
         rc = store_dispatch_loop(pho);
         if (rc)

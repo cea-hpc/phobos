@@ -52,9 +52,9 @@ static struct raid_ops RAID4_OPS = {
     .get_block_size = raid4_get_block_size,
 };
 
-static const struct pho_enc_ops RAID4_ENCODER_OPS = {
-    .step       = raid_encoder_step,
-    .destroy    = raid_encoder_destroy,
+static const struct pho_proc_ops RAID4_PROCESSOR_OPS = {
+    .step       = raid_processor_step,
+    .destroy    = raid_processor_destroy,
 };
 
 /**
@@ -89,7 +89,7 @@ const struct pho_config_item raid4_cfg_items[] = {
     },
 };
 
-static int layout_raid4_encode(struct pho_encoder *enc)
+static int layout_raid4_encode(struct pho_data_processor *encoder)
 {
     struct raid_io_context *io_contexts;
     struct raid_io_context *io_context;
@@ -98,15 +98,15 @@ static int layout_raid4_encode(struct pho_encoder *enc)
 
     ENTRY;
 
-    io_contexts = xcalloc(enc->xfer->xd_ntargets, sizeof(*io_contexts));
-    enc->priv_enc = io_contexts;
+    io_contexts = xcalloc(encoder->xfer->xd_ntargets, sizeof(*io_contexts));
+    encoder->private_processor = io_contexts;
 
-    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
+    for (i = 0; i < encoder->xfer->xd_ntargets; i++) {
         io_context = &io_contexts[i];
         io_context->name = PLUGIN_NAME;
         io_context->n_data_extents = 2;
         io_context->n_parity_extents = 1;
-        io_context->write.to_write = enc->xfer->xd_targets[i].xt_size;
+        io_context->write.to_write = encoder->xfer->xd_targets[i].xt_size;
         io_context->nb_hashes = 3;
         io_context->hashes = xcalloc(io_context->nb_hashes,
                                      sizeof(*io_context->hashes));
@@ -126,7 +126,7 @@ static int layout_raid4_encode(struct pho_encoder *enc)
         }
     }
 
-    return raid_encoder_init(enc, &RAID4_MODULE_DESC, &RAID4_ENCODER_OPS,
+    return raid_encoder_init(encoder, &RAID4_MODULE_DESC, &RAID4_PROCESSOR_OPS,
                              &RAID4_OPS);
 
 out_hash:
@@ -141,7 +141,7 @@ out_hash:
     return rc;
 }
 
-static int layout_raid4_decode(struct pho_encoder *dec)
+static int layout_raid4_decode(struct pho_data_processor *decoder)
 {
     struct raid_io_context *io_context;
     int rc;
@@ -150,7 +150,7 @@ static int layout_raid4_decode(struct pho_encoder *dec)
     ENTRY;
 
     io_context = xcalloc(1, sizeof(*io_context));
-    dec->priv_enc = io_context;
+    decoder->private_processor = io_context;
     io_context->name = PLUGIN_NAME;
     io_context->n_data_extents = 2;
     io_context->n_parity_extents = 1;
@@ -165,56 +165,56 @@ static int layout_raid4_decode(struct pho_encoder *dec)
                                      sizeof(*io_context->hashes));
     }
 
-    rc = raid_decoder_init(dec, &RAID4_MODULE_DESC, &RAID4_ENCODER_OPS,
+    rc = raid_decoder_init(decoder, &RAID4_MODULE_DESC, &RAID4_PROCESSOR_OPS,
                            &RAID4_OPS);
     if (rc)
         return rc;
 
-    /* Size is the sum of the extent sizes, dec->layout->wr_size is not
+    /* Size is the sum of the extent sizes, decoder->layout->wr_size is not
      * positioned properly by the dss
      */
-    if (dec->layout->ext_count % 3 != 0)
+    if (decoder->layout->ext_count % 3 != 0)
         LOG_RETURN(-EINVAL,
                    "raid4 Xor layout extents count (%d) is not a multiple of 3",
-                   dec->layout->ext_count);
+                   decoder->layout->ext_count);
 
-    for (i = 0; i < dec->layout->ext_count; i = i + 3)
-        io_context->read.to_read += dec->layout->extents[i].size;
+    for (i = 0; i < decoder->layout->ext_count; i = i + 3)
+        io_context->read.to_read += decoder->layout->extents[i].size;
 
     /* Empty GET does not need any IO */
     if (io_context->read.to_read == 0)
-        dec->done = true;
+        decoder->done = true;
 
     return 0;
 }
 
-static int layout_raid4_delete(struct pho_encoder *dec)
+static int layout_raid4_erase(struct pho_data_processor *eraser)
 {
     struct raid_io_context *io_context;
     int rc;
 
     io_context = xcalloc(1, sizeof(*io_context));
-    dec->priv_enc = io_context;
+    eraser->private_processor = io_context;
     io_context->name = PLUGIN_NAME;
     io_context->n_data_extents = 2;
     io_context->n_parity_extents = 1;
 
-    rc = raid_delete_decoder_init(dec, &RAID4_MODULE_DESC, &RAID4_ENCODER_OPS,
-                           &RAID4_OPS);
+    rc = raid_eraser_init(eraser, &RAID4_MODULE_DESC, &RAID4_PROCESSOR_OPS,
+                          &RAID4_OPS);
 
     if (rc) {
-        dec->priv_enc = NULL;
+        eraser->private_processor = NULL;
         free(io_context);
     }
 
     io_context->delete.to_delete = 0;
     /* No hard removal on tapes */
-    if (dec->layout->ext_count != 0 &&
-        dec->layout->extents[0].media.family != PHO_RSC_TAPE)
-        io_context->delete.to_delete = dec->layout->ext_count;
+    if (eraser->layout->ext_count != 0 &&
+        eraser->layout->extents[0].media.family != PHO_RSC_TAPE)
+        io_context->delete.to_delete = eraser->layout->ext_count;
 
     if (io_context->delete.to_delete == 0)
-        dec->done = true;
+        eraser->done = true;
 
     return rc;
 }
@@ -231,7 +231,7 @@ static int layout_raid4_locate(struct dss_handle *dss,
 static const struct pho_layout_module_ops LAYOUT_RAID4_OPS = {
     .encode = layout_raid4_encode,
     .decode = layout_raid4_decode,
-    .delete = layout_raid4_delete,
+    .erase = layout_raid4_erase,
     .locate = layout_raid4_locate,
     .get_specific_attrs = NULL,
     .reconstruct = NULL,
@@ -250,13 +250,13 @@ int pho_module_register(void *module, void *context)
     return 0;
 }
 
-int raid4_get_block_size(struct pho_encoder *enc, size_t *block_size)
+int raid4_get_block_size(struct pho_data_processor *proc, size_t *block_size)
 {
     struct extent *extent;
     const char *attr;
     int64_t value;
 
-    extent = &enc->layout->extents[0];
+    extent = &proc->layout->extents[0];
     attr = pho_attr_get(&extent->info, "raid4.chunk_size");
     if (!attr)
         LOG_RETURN(-EINVAL,

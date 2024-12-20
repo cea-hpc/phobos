@@ -133,34 +133,35 @@ struct raid_io_context {
 };
 
 struct raid_ops {
-    int (*write_split)(struct pho_encoder *enc, size_t split_size, int idx);
-    int (*read_split)(struct pho_encoder *enc);
-    int (*delete_split)(struct pho_encoder *enc);
-    int (*get_block_size)(struct pho_encoder *enc, size_t *block_size);
+    int (*write_split)(struct pho_data_processor *proc, size_t split_size,
+                       int idx);
+    int (*read_split)(struct pho_data_processor *proc);
+    int (*delete_split)(struct pho_data_processor *proc);
+    int (*get_block_size)(struct pho_data_processor *proc, size_t *block_size);
 };
 
-int raid_encoder_init(struct pho_encoder *enc,
+int raid_encoder_init(struct pho_data_processor *encoder,
                       const struct module_desc *module,
-                      const struct pho_enc_ops *enc_ops,
+                      const struct pho_proc_ops *enc_ops,
                       const struct raid_ops *raid_ops);
 
-int raid_decoder_init(struct pho_encoder *dec,
+int raid_decoder_init(struct pho_data_processor *decoder,
                       const struct module_desc *module,
-                      const struct pho_enc_ops *enc_ops,
+                      const struct pho_proc_ops *enc_ops,
                       const struct raid_ops *raid_ops);
 
-int raid_delete_decoder_init(struct pho_encoder *dec,
-                             const struct module_desc *module,
-                             const struct pho_enc_ops *enc_ops,
-                             const struct raid_ops *raid_ops);
+int raid_eraser_init(struct pho_data_processor *eraser,
+                     const struct module_desc *module,
+                     const struct pho_proc_ops *enc_ops,
+                     const struct raid_ops *raid_ops);
 
-int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
-                      pho_req_t **reqs, size_t *n_reqs);
+int raid_processor_step(struct pho_data_processor *proc, pho_resp_t *resp,
+                        pho_req_t **reqs, size_t *n_reqs);
 
 /**
  * Generic implementation of raid_ops::delete_split
  */
-int raid_delete_split(struct pho_encoder *dec);
+int raid_delete_split(struct pho_data_processor *eraser);
 
 /**
  * Generic implementation of pho_layout_module_ops::locate
@@ -175,7 +176,7 @@ int raid_locate(struct dss_handle *dss, struct layout_info *layout,
                 const char *focus_host, char **hostname,
                 int *nb_new_lock);
 
-void raid_encoder_destroy(struct pho_encoder *enc);
+void raid_processor_destroy(struct pho_data_processor *proc);
 
 size_t n_total_extents(struct raid_io_context *io_context);
 
@@ -193,7 +194,7 @@ int extent_hash_copy(struct extent_hash *hash, struct extent *extent);
 
 int extent_hash_compare(struct extent_hash *hash, struct extent *extent);
 
-struct pho_ext_loc make_ext_location(struct pho_encoder *enc, size_t i,
+struct pho_ext_loc make_ext_location(struct pho_data_processor *proc, size_t i,
                                      int idx);
 
 #endif

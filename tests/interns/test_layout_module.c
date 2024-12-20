@@ -38,8 +38,8 @@
 
 static void le_valid_module(void **data)
 {
+    struct pho_data_processor processor = {0};
     struct pho_xfer_target target = {0};
-    struct pho_encoder encoder = {0};
     struct pho_xfer_desc xfer = {0};
     int rc;
 
@@ -50,15 +50,15 @@ static void le_valid_module(void **data)
     xfer.xd_params.put.layout_name = "raid1";
     xfer.xd_params.put.lyt_params.attr_set = NULL;
 
-    rc = layout_encode(&encoder, &xfer);
+    rc = layout_encoder(&processor, &xfer);
     assert_return_code(rc, -rc);
-    layout_destroy(&encoder);
+    layout_destroy(&processor);
 }
 
 static void le_invalid_module(void **data)
 {
+    struct pho_data_processor processor = {0};
     struct pho_xfer_target target = {0};
-    struct pho_encoder encoder = {0};
     struct pho_xfer_desc xfer = {0};
     int rc;
 
@@ -67,14 +67,14 @@ static void le_invalid_module(void **data)
     xfer.xd_targets = &target;
     xfer.xd_params.put.layout_name = "unknown";
 
-    rc = layout_encode(&encoder, &xfer);
+    rc = layout_encoder(&processor, &xfer);
     assert_int_equal(rc, -EINVAL);
 }
 
 static void le_invalid_layout_io_size(void **data)
 {
+    struct pho_data_processor processor = {0};
     struct pho_xfer_target target = {0};
-    struct pho_encoder encoder = {0};
     struct pho_xfer_desc xfer = {0};
     int rc;
 
@@ -89,13 +89,13 @@ static void le_invalid_layout_io_size(void **data)
     rc = setenv("PHOBOS_IO_io_block_size", "dir=-1,tape=1024", 1);
     assert_int_equal(rc, 0);
 
-    rc = layout_encode(&encoder, &xfer);
+    rc = layout_encoder(&processor, &xfer);
     assert_int_equal(rc, -EINVAL);
 
     rc = setenv("PHOBOS_IO_io_block_size", "dir=bla,tape=1024", 1);
     assert_int_equal(rc, 0);
 
-    rc = layout_encode(&encoder, &xfer);
+    rc = layout_encoder(&processor, &xfer);
     assert_int_equal(rc, -EINVAL);
 
     /* integer beyond 64bits (highest 64bits ~ 18*10^18) */
@@ -103,14 +103,14 @@ static void le_invalid_layout_io_size(void **data)
                 "dir=19446744073709551615,tape=1024", 1);
     assert_int_equal(rc, 0);
 
-    rc = layout_encode(&encoder, &xfer);
+    rc = layout_encoder(&processor, &xfer);
     assert_int_equal(rc, -EINVAL);
 }
 
 static void le_valid_layout_io_size(void **data)
 {
+    struct pho_data_processor processor = {0};
     struct pho_xfer_target target = {0};
-    struct pho_encoder encoder = {0};
     struct pho_xfer_desc xfer = {0};
     int rc;
 
@@ -125,18 +125,18 @@ static void le_valid_layout_io_size(void **data)
     /* 0 is allowed in cfg */
     rc = setenv("PHOBOS_IO_io_block_size", "dir=0,tape=1024", 1);
 
-    rc = layout_encode(&encoder, &xfer);
+    rc = layout_encoder(&processor, &xfer);
     assert_int_equal(rc, 0);
-    assert_int_equal(encoder.io_block_size, 0);
-    layout_destroy(&encoder);
+    assert_int_equal(processor.io_block_size, 0);
+    layout_destroy(&processor);
 
     /* other positive value is allowed */
     rc = setenv("PHOBOS_IO_io_block_size", "dir=1024,tape=0", 1);
 
-    rc = layout_encode(&encoder, &xfer);
+    rc = layout_encoder(&processor, &xfer);
     assert_int_equal(rc, 0);
-    assert_int_equal(encoder.io_block_size, 1024);
-    layout_destroy(&encoder);
+    assert_int_equal(processor.io_block_size, 1024);
+    layout_destroy(&processor);
 }
 
 

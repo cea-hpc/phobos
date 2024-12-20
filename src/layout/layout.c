@@ -55,7 +55,8 @@ static int build_layout_name(const char *layout_name, char *path, size_t len)
     return 0;
 }
 
-int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
+int layout_encoder(struct pho_data_processor *encoder,
+                   struct pho_xfer_desc *xfer)
 {
     char layout_name[NAME_MAX];
     struct layout_module *mod;
@@ -82,33 +83,35 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
      * this type have been destroyed, since they all hold a reference to the
      * module's code. In this implementation, the module is never unloaded.
      */
-    enc->type = PHO_ENC_ENCODER;
-    enc->done = false;
-    enc->xfer = xfer;
-    enc->layout = xcalloc(enc->xfer->xd_ntargets, sizeof(*enc->layout));
-    for (i = 0; i < enc->xfer->xd_ntargets; i++) {
-        enc->layout[i].oid = xfer->xd_targets[i].xt_objid;
-        enc->layout[i].wr_size = xfer->xd_targets[i].xt_size;
+    encoder->type = PHO_PROC_ENCODER;
+    encoder->done = false;
+    encoder->xfer = xfer;
+    encoder->layout = xcalloc(encoder->xfer->xd_ntargets,
+                              sizeof(*encoder->layout));
+    for (i = 0; i < encoder->xfer->xd_ntargets; i++) {
+        encoder->layout[i].oid = xfer->xd_targets[i].xt_objid;
+        encoder->layout[i].wr_size = xfer->xd_targets[i].xt_size;
     }
 
     /* get io_block_size from conf */
-    rc = get_cfg_io_block_size(&enc->io_block_size, xfer->xd_params.put.family);
+    rc = get_cfg_io_block_size(&encoder->io_block_size,
+                               xfer->xd_params.put.family);
     if (rc) {
-        layout_destroy(enc);
+        layout_destroy(encoder);
         return rc;
     }
 
-    rc = mod->ops->encode(enc);
+    rc = mod->ops->encode(encoder);
     if (rc) {
-        layout_destroy(enc);
+        layout_destroy(encoder);
         LOG_RETURN(rc, "Unable to create encoder");
     }
 
     return rc;
 }
 
-int layout_decode(struct pho_encoder *enc, struct pho_xfer_desc *xfer,
-                  struct layout_info *layout)
+int layout_decoder(struct pho_data_processor *decoder,
+                   struct pho_xfer_desc *xfer, struct layout_info *layout)
 {
     char layout_name[NAME_MAX];
     struct layout_module *mod;
@@ -126,28 +129,29 @@ int layout_decode(struct pho_encoder *enc, struct pho_xfer_desc *xfer,
         return rc;
 
     /* See notes in layout_encode */
-    enc->type = PHO_ENC_DECODER;
-    enc->done = false;
-    enc->xfer = xfer;
-    enc->layout = layout;
+    decoder->type = PHO_PROC_DECODER;
+    decoder->done = false;
+    decoder->xfer = xfer;
+    decoder->layout = layout;
 
     /* get io_block_size from conf */
-    rc = get_cfg_io_block_size(&enc->io_block_size, xfer->xd_params.put.family);
+    rc = get_cfg_io_block_size(&decoder->io_block_size,
+                               xfer->xd_params.put.family);
     if (rc) {
-        layout_destroy(enc);
+        layout_destroy(decoder);
         LOG_RETURN(rc, "Unable to get io_block_size");
     }
 
-    rc = mod->ops->decode(enc);
+    rc = mod->ops->decode(decoder);
     if (rc) {
-        layout_destroy(enc);
+        layout_destroy(decoder);
         LOG_RETURN(rc, "Unable to create decoder");
     }
 
     return rc;
 }
 
-int layout_delete(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
+int layout_eraser(struct pho_data_processor *eraser, struct pho_xfer_desc *xfer,
                   struct layout_info *layout)
 {
     char layout_name[NAME_MAX];
@@ -166,15 +170,15 @@ int layout_delete(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
         return rc;
 
     /* See notes in layout_encode */
-    dec->type = PHO_ENC_ERASER;
-    dec->done = false;
-    dec->xfer = xfer;
-    dec->layout = layout;
+    eraser->type = PHO_PROC_ERASER;
+    eraser->done = false;
+    eraser->xfer = xfer;
+    eraser->layout = layout;
 
-    rc = mod->ops->delete(dec);
+    rc = mod->ops->erase(eraser);
     if (rc) {
-        layout_destroy(dec);
-        LOG_RETURN(rc, "Unable to create decoder");
+        layout_destroy(eraser);
+        LOG_RETURN(rc, "Unable to create eraser");
     }
 
     return rc;
@@ -245,31 +249,31 @@ int layout_reconstruct(struct layout_info lyt, struct object_info *obj)
     return mod->ops->reconstruct(lyt, obj);
 }
 
-void layout_destroy(struct pho_encoder *enc)
+void layout_destroy(struct pho_data_processor *proc)
 {
     int i;
 
     /* Only encoders own their layout */
-    if (is_encoder(enc) && enc->layout != NULL) {
-        for (i = 0; i < enc->xfer->xd_ntargets; i++) {
-            pho_attrs_free(&enc->layout[i].layout_desc.mod_attrs);
-            layout_info_free_extents(&enc->layout[i]);
+    if (is_encoder(proc) && proc->layout != NULL) {
+        for (i = 0; i < proc->xfer->xd_ntargets; i++) {
+            pho_attrs_free(&proc->layout[i].layout_desc.mod_attrs);
+            layout_info_free_extents(&proc->layout[i]);
         }
-        free(enc->layout);
-        enc->layout = NULL;
+        free(proc->layout);
+        proc->layout = NULL;
     }
 
-    if (enc->last_resp != NULL) {
-        pho_srl_response_free(enc->last_resp, false);
-        free(enc->last_resp);
-        enc->last_resp = NULL;
+    if (proc->last_resp != NULL) {
+        pho_srl_response_free(proc->last_resp, false);
+        free(proc->last_resp);
+        proc->last_resp = NULL;
     }
 
     /* Not fully initialized */
-    if (enc->ops == NULL)
+    if (proc->ops == NULL)
         return;
 
-    CHECK_ENC_OP(enc, destroy);
+    CHECK_ENC_OP(proc, destroy);
 
-    enc->ops->destroy(enc);
+    proc->ops->destroy(proc);
 }

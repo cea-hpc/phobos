@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2024 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -30,12 +30,12 @@
 
 #include <unistd.h>
 
-static int write_with_xor(struct pho_encoder *dec,
+static int write_with_xor(struct pho_data_processor *dec,
                           struct pho_io_descr *iod1,
                           struct pho_io_descr *iod2,
                           bool second_part_missing)
 {
-    struct raid_io_context *io_context = dec->priv_enc;
+    struct raid_io_context *io_context = dec->private_processor;
     struct pho_io_descr *posix = &io_context->posix;
     size_t buf_size = io_context->buffers[0].size;
     struct extent *split_extents;
@@ -142,11 +142,11 @@ static int write_with_xor(struct pho_encoder *dec,
     return 0;
 }
 
-static int write_without_xor(struct pho_encoder *dec,
+static int write_without_xor(struct pho_data_processor *dec,
                              struct pho_io_descr *iod1,
                              struct pho_io_descr *iod2)
 {
-    struct raid_io_context *io_context = dec->priv_enc;
+    struct raid_io_context *io_context = dec->private_processor;
     struct pho_io_descr *posix = &io_context->posix;
     size_t written = 0;
     ssize_t data_read;
@@ -233,9 +233,9 @@ static int write_without_xor(struct pho_encoder *dec,
  * necessarily in the first position of the list. The same way, if the xor is
  * present, it is necessarily in the second position.
  */
-int raid4_read_split(struct pho_encoder *dec)
+int raid4_read_split(struct pho_data_processor *decoder)
 {
-    struct raid_io_context *io_context = dec->priv_enc;
+    struct raid_io_context *io_context = decoder->private_processor;
     struct pho_io_descr *iods = io_context->iods;
     bool has_part1 = (io_context->read.extents[0]->layout_idx % 3) == 0;
     bool has_xor = (io_context->read.extents[1]->layout_idx % 3) == 2;
@@ -244,11 +244,11 @@ int raid4_read_split(struct pho_encoder *dec)
     ENTRY;
 
     if (has_part1 && has_part2)
-        return write_without_xor(dec, &iods[0], &iods[1]);
+        return write_without_xor(decoder, &iods[0], &iods[1]);
     else if (has_part1 && has_xor)
-        return write_with_xor(dec, &iods[0], &iods[1], !has_part2);
+        return write_with_xor(decoder, &iods[0], &iods[1], !has_part2);
     else if (has_part2 && has_xor)
-        return write_with_xor(dec, &iods[0], &iods[1], !has_part2);
+        return write_with_xor(decoder, &iods[0], &iods[1], !has_part2);
 
     pho_error(0, "%s: unexpected split combination, abort.", __func__);
     abort();
