@@ -527,6 +527,26 @@ static int pho_rados_sync(const char *root_path, json_t **message)
     return 0;
 }
 
+static size_t pho_rados_size(struct pho_io_descr *iod)
+{
+    struct pho_rados_io_ctx *rados_io_ctx;
+    char *rados_object_name;
+    uint64_t extent_size;
+    int rc;
+
+    ENTRY;
+
+    rados_io_ctx = iod->iod_ctx;
+    rados_object_name = iod->iod_loc->extent->address.buff;
+
+    rc = rados_stat(rados_io_ctx->pool_io_ctx, rados_object_name, &extent_size,
+                    NULL);
+    if (rc < 0)
+        return rc;
+
+    return (size_t) extent_size;
+}
+
 /** RADOS adapter */
 static const struct pho_io_adapter_module_ops IO_ADAPTER_RADOS_OPS = {
     .ioa_get            = pho_rados_get,
@@ -539,6 +559,7 @@ static const struct pho_io_adapter_module_ops IO_ADAPTER_RADOS_OPS = {
     .ioa_preferred_io_size = NULL,
     .ioa_set_md         = pho_rados_set_md,
     .ioa_get_common_xattrs_from_extent  = NULL,
+    .ioa_size           = pho_rados_size,
 };
 
 /** IO adapter module registration entry point */

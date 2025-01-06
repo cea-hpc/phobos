@@ -293,6 +293,22 @@ function corrupt_the_extent
     echo -ne \\x${first_byte_hex} | dd conv=notrunc bs=1 count=1 of="${extent}"
 }
 
+function extend_the_extent
+{
+    local extent=$1
+    local first_byte_hex=$(hexdump -n 1 -e \"%X\" ${extent})
+
+    echo -ne \\x${first_byte_hex} | dd conv=notrunc bs=1 count=1 >> "${extent}"
+}
+
+function shrink_the_extent
+{
+    local extent=$1
+    local extent_size=$(($(stat -c "%s" ${extent}) - 1))
+
+    truncate -s "$extent_size" ${extent}
+}
+
 function test_put_get()
 {
     local oid=$FUNCNAME
@@ -520,6 +536,38 @@ function test_put_get_corrupted()
     rm "$file"
 }
 
+function test_put_get_extended_shrinked()
+{
+    local func=$1
+    local oid="${FUNCNAME}_${func}"
+    local file=$(make_file 512k)
+
+    $valg_phobos put "$file" $oid
+    check_extent_md $oid "$file"
+
+    local addresses=($(get_extent_info "$oid" address))
+    local media=($(get_extent_mount_point "$oid"))
+    local size=($(get_extent_info "$oid" size))
+
+    # We test here only for the two halves of the object
+    for (( i = 0; i < ${#addresses[@]} - 1; i++ )); do
+        local copy=$(mktemp)
+        local extent="${media[i]}/${addresses[i]}"
+        local out=/tmp/out.$$
+
+        cp "$extent" "$copy"
+
+        $func $extent
+        $valg_phobos get $oid $out &&
+            error "phobos get $oid should have failed"
+
+        cp "$copy" "$extent"
+        rm "$copy"
+    done
+
+    rm "$file"
+}
+
 function test_read_with_missing_extent_corrupted()
 {
     local oid=$FUNCNAME
@@ -692,6 +740,8 @@ TESTS=(
      test_read_with_missing_extent; \
      test_with_different_block_size; \
      test_put_get_corrupted; \
+     test_put_get_extended_shrinked extend_the_extent; \
+     test_put_get_extended_shrinked shrink_the_extent; \
      test_put_get_without_xxh128; \
      test_read_with_missing_extent_corrupted; \
      test_put_get_without_check_hash; \
@@ -711,6 +761,8 @@ TESTS=(
      test_read_with_missing_extent; \
      test_with_different_block_size; \
      test_put_get_corrupted; \
+     test_put_get_extended_shrinked extend_the_extent; \
+     test_put_get_extended_shrinked shrink_the_extent; \
      test_put_get_without_xxh128; \
      test_read_with_missing_extent_corrupted; \
      test_put_get_without_check_hash; \

@@ -988,3 +988,20 @@ free_filename:
 
     return rc;
 }
+
+ssize_t pho_posix_size(struct pho_io_descr *iod)
+{
+    struct posix_io_ctx *io_ctx;
+    struct stat statbuf;
+
+    ENTRY;
+
+    io_ctx = iod->iod_ctx;
+    if (!io_ctx || io_ctx->fd < 0)
+        return -EINVAL;
+
+    if (fstat(io_ctx->fd, &statbuf) != 0)
+        return -errno;
+
+    return statbuf.st_size;
+}

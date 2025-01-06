@@ -110,6 +110,7 @@ struct pho_io_adapter_module_ops {
                                              struct layout_info *lyt_info,
                                              struct extent *extent_to_insert,
                                              struct object_info *obj_info);
+    ssize_t (*ioa_size)(struct pho_io_descr *iod);
 };
 
 struct io_adapter_module {
@@ -124,7 +125,7 @@ struct io_adapter_module {
 int get_io_adapter(enum fs_type fstype, struct io_adapter_module **ioa);
 
 /**
- * Get an object from a media.
+ * Get an extent from a media.
  * All I/O adapters must implement this call.
  *
  * The I/O descriptor must be filled as follow:
@@ -155,7 +156,7 @@ static inline int ioa_get(const struct io_adapter_module *ioa,
 }
 
 /**
- * Remove object from the backend.
+ * Remove extent from the backend.
  * All I/O adapters must implement this call.
  *
  * \param[in]  ioa  Suitable I/O adapter for the media.
@@ -376,6 +377,26 @@ ioa_get_common_xattrs_from_extent(const struct io_adapter_module *ioa,
     return ioa->ops->ioa_get_common_xattrs_from_extent(iod, lyt_info,
                                                        extent_to_insert,
                                                        obj_info);
+}
+
+/**
+ * Retrieves the size of the extent.
+ *
+ * \param[in]       ioa         Suitable I/O adapter for the media
+ * \param[in,out]   iod         I/O descriptor (see above)
+ *
+ * \return a positive size on success, negative error code on failure
+ * \retval -ENOTSUP the I/O adapter does not provide this function
+ */
+static inline ssize_t ioa_size(const struct io_adapter_module *ioa,
+                               struct pho_io_descr *iod)
+{
+    assert(ioa != NULL);
+    assert(ioa->ops != NULL);
+    if (ioa->ops->ioa_size == NULL)
+        return -ENOTSUP;
+
+    return ioa->ops->ioa_size(iod);
 }
 
 /**

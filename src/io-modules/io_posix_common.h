@@ -64,4 +64,6 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
                                       struct extent *extent_to_insert,
                                       struct object_info *obj_info);
 
+ssize_t pho_posix_size(struct pho_io_descr *iod);
+
 #endif

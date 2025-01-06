@@ -77,6 +77,7 @@ static const struct pho_io_adapter_module_ops IO_ADAPTER_LTFS_OPS = {
     .ioa_preferred_io_size = pho_posix_preferred_io_size,
     .ioa_set_md            = pho_posix_set_md,
     .ioa_get_common_xattrs_from_extent  = pho_get_common_xattrs_from_extent,
+    .ioa_size              = pho_posix_size,
 };
 
 /** IO adapter module registration entry point */

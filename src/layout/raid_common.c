@@ -919,6 +919,23 @@ static int read_split_setup(struct pho_data_processor *decoder,
     for (i = 0; i < n_extents; i++)
         pho_buff_alloc(&io_context->buffers[i], decoder->io_block_size);
 
+    for (i = 0; i < io_context->n_data_extents; i++) {
+        ssize_t size;
+
+        size = ioa_size(io_context->iods[i].iod_ioa, &io_context->iods[i]);
+        /* If not supported, skip the check */
+        if (size == -ENOTSUP)
+            break;
+        if (size < 0)
+            return size;
+
+        if (size != io_context->read.extents[i]->size)
+            LOG_RETURN(-EINVAL,
+                       "Extent size mismatch: the size of '%s' in the "
+                       "DSS differ",
+                       io_context->read.extents[i]->address.buff);
+    }
+
     if (io_context->read.check_hash) {
         for (i = 0; i < io_context->nb_hashes; i++) {
             rc = extent_hash_init(&io_context->hashes[i],
