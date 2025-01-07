@@ -64,11 +64,23 @@ function test_drive_list_library()
         "${drives[0]}"
 }
 
+function test_drive_list_status()
+{
+    drives=($(get_lto_drives 6 2))
+    $phobos drive add ${drives[0]}
+    $phobos drive add --unlock ${drives[1]}
+
+    output=$($phobos drive list --status locked -o path)
+    echo "$output" | grep "${drives[0]}" && ! echo "$output" | grep \
+        "${drives[1]}"
+    output=$($phobos drive list --status unlocked -o path)
+    echo "$output" | grep "${drives[1]}" && ! echo "$output" | grep \
+        "${drives[0]}"
+}
 
 if [[ ! -w /dev/changer ]]; then
     skip "Drives required for this test"
 fi
 
-TEST_SETUP=setup
-TESTS=("test_drive_list_library")
-TEST_CLEANUP=cleanup
+TESTS=("setup; test_drive_list_library; cleanup"
+       "setup; test_drive_list_status; cleanup")

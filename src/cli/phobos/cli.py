@@ -770,6 +770,10 @@ class DriveListOptHandler(ListOptHandler):
         parser.add_argument('--library',
                             help="attribute to filter the output by library"
                                  "name")
+        parser.add_argument('--status',
+                            help="filter the output by status name, "
+                                 " {locked, unlocked, failed} ")
+
 class MediaListOptHandler(ListOptHandler):
     """
     Specific version of the 'list' command for media, with a couple
@@ -2464,6 +2468,9 @@ class DriveOptHandler(DeviceOptHandler):
 
         if self.params.get('library'):
             kwargs['library'] = self.params.get('library')
+
+        if self.params.get('status'):
+            kwargs["adm_status"] = self.params.get('status')
 
         kwargs = handle_sort_option(self.params, DevInfo(), self.logger,
                                     **kwargs)
