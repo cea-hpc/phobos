@@ -800,6 +800,9 @@ class MediaListOptHandler(ListOptHandler):
                                  ))
         parser.add_argument('--library',
                             help="filter the output by library name")
+        parser.add_argument('--status',
+                            help="filter the output by status name, choose from"
+                                 " {locked, unlocked, failed} ")
         parser.formatter_class = argparse.RawDescriptionHelpFormatter
         parser.epilog = """About file system status `fs.status`:
     blank: medium is not formatted
@@ -1989,6 +1992,9 @@ class MediaOptHandler(BaseResourceOptHandler):
 
         if self.params.get('library'):
             kwargs["library"] = self.params.get('library')
+
+        if self.params.get('status'):
+            kwargs["adm_status"] = self.params.get('status')
 
         kwargs = handle_sort_option(self.params, MediaInfo(), self.logger,
                                     **kwargs)
