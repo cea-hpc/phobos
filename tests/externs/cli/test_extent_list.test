@@ -163,8 +163,9 @@ function test_extent_list_tapes_lib() {
     $phobos tape format --unlock ${tapes[0]} --library lib3
     $phobos tape format --unlock ${tapes[1]} --library lib4
 
-    $phobos put -l raid1 -p repl_count=2 /tmp/extent3 extent3
-    $phobos put -l raid1 -p repl_count=1 /tmp/extent4 extent4 --library lib4
+    $phobos put -l raid1 --lyt-params repl_count=2 /tmp/extent3 extent3
+    $phobos put -l raid1 --lyt-params repl_count=1 /tmp/extent4 extent4 \
+        --library lib4
 
     output=$($phobos extent list --library lib3)
     echo "$output" | grep "extent3" && ! echo "$output" | grep "extent4"
