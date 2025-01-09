@@ -46,6 +46,7 @@ check_PROGRAMS=test_attrs \
                test_cfg \
                test_common \
                test_communication \
+               test_copy_cfg \
                test_dev_tape \
                test_dss_copy \
                test_dss_extent \
@@ -89,6 +90,10 @@ test_common_CFLAGS=$(AM_CFLAGS) -I..
 test_communication_SOURCES=test_communication.c
 test_communication_LDADD=$(COMMUNICATION_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_communication_CFLAGS=$(AM_CFLAGS) -I..
+
+test_copy_cfg_SOURCES=test_copy_cfg.c
+test_copy_cfg_LDADD=$(CFG_LIB) $(COMMON_LIB)
+test_copy_cfg_CFLAGS=$(AM_CFLAGS) -I..
 
 test_dev_tape_SOURCES=test_dev_tape.c
 test_dev_tape_LDADD=$(SCSI_TAPE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)

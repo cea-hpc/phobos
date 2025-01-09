@@ -220,4 +220,16 @@ int pho_cfg_get_substring_value(const char *section, const char *name,
  */
 int get_cfg_default_copy_name(const char **copy_name);
 
+/**
+ * Retrieve the get preferred order for the copies.
+ *
+ * The array of copies must be freed by the caller.
+ *
+ * @param[out] values    Array of copies to be retrieved in priority order.
+ * @param[out] count     Size of values.
+ *
+ * @return 0 on success, negative error code on failure
+ */
+int get_cfg_preferred_order(char ***values, size_t *count);
+
 #endif

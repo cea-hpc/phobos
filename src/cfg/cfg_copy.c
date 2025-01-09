@@ -27,15 +27,17 @@
 #include "pho_cfg.h"
 #include "pho_common.h"
 
-#define DEFAULT_COPY_NAME_ATTR_KEY "default_copy_name"
+#define DEFAULT_COPY_NAME_ATTR_KEY   "default_copy_name"
+#define GET_PREFERRED_ORDER_ATTR_KEY "get_preferred_order"
 
 enum pho_cfg_params_io {
     /* Actual parameters */
     PHO_CFG_COPY_default_copy_name,
+    PHO_CFG_COPY_get_preferred_order,
 
     /* Delimiters, update when modifying options */
     PHO_CFG_COPY_FIRST = PHO_CFG_COPY_default_copy_name,
-    PHO_CFG_COPY_LAST  = PHO_CFG_COPY_default_copy_name,
+    PHO_CFG_COPY_LAST  = PHO_CFG_COPY_get_preferred_order,
 };
 
 const struct pho_config_item cfg_copy[] = {
@@ -43,6 +45,11 @@ const struct pho_config_item cfg_copy[] = {
         .section = "copy",
         .name    = DEFAULT_COPY_NAME_ATTR_KEY,
         .value   = "source"
+    },
+    [PHO_CFG_COPY_get_preferred_order] = {
+        .section = "copy",
+        .name    = GET_PREFERRED_ORDER_ATTR_KEY,
+        .value   = NULL,
     },
 };
 
@@ -55,5 +62,21 @@ int get_cfg_default_copy_name(const char **copy_name)
         return -EINVAL;
 
     *copy_name = default_copy_name;
+    return 0;
+}
+
+int get_cfg_preferred_order(char ***values, size_t *count)
+{
+    const char *preferred_order;
+
+    preferred_order = PHO_CFG_GET(cfg_copy, PHO_CFG_COPY, get_preferred_order);
+    if (!preferred_order)
+        return -ENODATA;
+
+    get_val_csv(preferred_order, values, count);
+
+    if (*count <= 0)
+        return -EINVAL;
+
     return 0;
 }
