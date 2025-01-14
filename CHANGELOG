@@ -1,10 +1,34 @@
 # CHANGELOG UPDATES
 
-## next
+## 2.2.0
+ * WARNING: the db schema moves from 2.1 to 2.2 and a migration is needed
+ * WARNING: XFER structure is modified to old N objects and the API
+   compatibility is broken. (For example, the lhsm_phobos copytool must be
+   also updated to version 1.3 or greater.)
  * WARNING: the `alias` feature is renamed `profile`. In that extent, all
    `-a`/`--alias` options are renamed `-p`/`--profile`.
  * WARNING: the `-p` option, standing for `--lyt-params`, is uppercased, thus
    changed to `-P`.
+ * WARNING: the mput is replaced by `put --file`
+ * WARNING: tlc daemon is renamed phobos_tlc
+ * grouping: this new feature is available to group objects on similar media.
+ * no-split: we add a new `no-split` mode to put a list of object on the same
+   medium.
+ * `--new-library`: this new admin option is available to change the library of
+   a drive, a dir, a tape or a rados pool.
+ * `library` parameter is added to alias.
+ * `distutils` dependency is changed to `setuptools`.
+ * `io_block_size` parameter is extended by family.
+ * `dir_full_threshold` and `rados_pool_full_threshold` options complete the
+   `tape_full_threshold` option.
+ * `listen_interface` setting is added for tlc.
+ * `--library` option is added to phobos extent list.
+ * `--errors` option is added to clear logs.
+ * `--status` option is added to `phobos media list` and `phobos drive list`.
+ * m4 scripts are updated.
+ * build output are added to .gitignore.
+ * refactoring of the CLI code has begun.
+ * object copy feature developpement has begun.
 
 ## 2.1.0
  * WARNING: the db schema moves from 2.0 to 2.1 and a migration is needed
