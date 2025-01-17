@@ -46,7 +46,24 @@ struct extent_hash {
 
 struct read_io_context {
     pho_resp_read_t *resp;
-    size_t to_read;
+    size_t to_read;             /*< Remaining size to read per extent
+                                 *  aggregated on all splits
+                                 */
+    /*
+     * OUTPUT FD: [0123456]
+     * RAID 1 with one replica, SPLIT 0 : extent_0 [0123]  extent_1 [0123]
+     *                                            <sz0r1> = 4
+     * RAID 1 with one replica; SPLIT 1 : extent_2 [456]  extent_3 [456]
+     *                                            <sz2r1> = 3
+     * RAID 1 init to_read: 7 = <sz0r1> + <sz2r1>
+     * RAID 1 init to_read is the size of the object.
+     *
+     * RAID 4 SPLIT 0 : extent_0 [01] extent_1 [23] extent_2 [PP]
+     *                         <sz0r4> = 2
+     * RAID 4 SPLIT 1 : extent_3 [45] extent_4 [6-] extent_5 [PP]
+     *                         <sz3r4> = 2
+     * RAID 4 init to_read: 4 = <sz0r4> + <sz3r4>
+     */
     struct extent **extents;
     bool check_hash;
 };
@@ -59,7 +76,7 @@ struct delete_io_context {
 
 struct write_io_context {
     pho_resp_write_t *resp;
-    size_t to_write;
+    size_t to_write;            /*< Whole object remaining size to write */
     GString *user_md;
     struct extent *extents;
 
