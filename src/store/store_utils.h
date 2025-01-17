@@ -29,7 +29,7 @@
 #include "pho_dss.h"
 
 int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
-                   bool overwrite);
+                   bool overwrite, const char *grouping);
 int object_md_del(struct dss_handle *dss, struct pho_xfer_target *xfer);
 int object_md_get(struct dss_handle *dss, struct pho_xfer_target *xfer);
 

@@ -77,6 +77,12 @@ function test_grouping_dir () {
               "'${dir_groupings}'"
     fi
 
+    obj_grouping=$($valg_phobos object list -o grouping dir_object)
+    if [[ "${obj_grouping}" != "my_group" ]]; then
+        error "dir object grouping must be 'my_group' instead of" \
+              "'${obj_grouping}'"
+    fi
+
     # check with a second grouping and that is also added
     $valg_phobos put -f dir --grouping my_group_bis ${FILES[0]} dir_object_bis ||
         error "Put on dir must success without any bis grouping dir available"
@@ -85,6 +91,12 @@ function test_grouping_dir () {
     if [[ "${dir_groupings}" != "['my_group', 'my_group_bis']" ]]; then
         error "Dir groupings must be '['my_group', 'my_group_bis']' instead" \
               "of '${dir_groupings}'"
+    fi
+
+    obj_grouping=$($valg_phobos object list -o grouping dir_object_bis)
+    if [[ "${obj_grouping}" != "my_group_bis" ]]; then
+        error "dir object grouping bis must be 'my_group_bis' instead of" \
+              "'${obj_grouping}'"
     fi
 
     # current dir must be full
@@ -101,6 +113,12 @@ function test_grouping_dir () {
     if [[ "${dir_groupings}" != "['my_group']" ]]; then
         error "Dir groupings on new dir must be '['my_group']' instead of" \
               "'${dir_groupings}'"
+    fi
+
+    obj_grouping=$($valg_phobos object list -o grouping dir_object_ter)
+    if [[ "${obj_grouping}" != "my_group" ]]; then
+        error "dir object grouping ter must be 'my_group' instead of" \
+              "'${obj_grouping}'"
     fi
 }
 
@@ -122,6 +140,12 @@ function test_grouping_tape () {
               "'${tape_groupings}'"
     fi
 
+    obj_grouping=$($valg_phobos object list -o grouping tape_object)
+    if [[ "${obj_grouping}" != "my_group" ]]; then
+        error "tape object grouping must be 'my_group' instead of" \
+              "'${obj_grouping}'"
+    fi
+
     # check with a second grouping and that is also added
     $valg_phobos put -f tape --grouping my_group_bis ${FILES[0]} \
         tape_object_bis ||
@@ -133,6 +157,12 @@ function test_grouping_tape () {
               "of '${tape_groupings}'"
     fi
 
+    obj_grouping=$($valg_phobos object list -o grouping tape_object_bis)
+    if [[ "${obj_grouping}" != "my_group_bis" ]]; then
+        error "tape object bis grouping must be 'my_group_bis' instead of" \
+              "'${obj_grouping}'"
+    fi
+
     # unload tape with grouping and check it is used instead of the loaded one
     $phobos tape add -t LTO6 ${TAPES[1]}
     $phobos tape format --unlock ${TAPES[1]}
@@ -142,6 +172,12 @@ function test_grouping_tape () {
     if [[ "${tape_object}" != "['${TAPES[0]}']" ]]; then
         error "Grouping tape of the object must be ['${TAPES[0]}'] instead" \
               "of '${tape_object}'"
+    fi
+
+    obj_grouping=$($valg_phobos object list -o grouping tape_object_ter)
+    if [[ "${obj_grouping}" != "my_group" ]]; then
+        error "tape object ter grouping must be 'my_group' instead of" \
+              "'${obj_grouping}'"
     fi
 }
 

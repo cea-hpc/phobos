@@ -332,7 +332,7 @@ filt_free:
  * Save this xfer oid and metadata (xd_attrs) into the DSS.
  */
 int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
-                   bool overwrite)
+                   bool overwrite, const char *grouping)
 {
     GString *md_repr = g_string_new(NULL);
     struct object_info *obj_res = NULL;
@@ -351,6 +351,7 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
 
     obj.oid = xfer->xt_objid;
     obj.user_md = md_repr->str;
+    obj.grouping = grouping;
 
     rc = dss_lock(dss, DSS_OBJECT, &obj, 1);
     if (rc)
@@ -368,6 +369,8 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
 
         goto out_update;
     } else {
+        const char *save_obj_res_grouping;
+
         rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}", obj.oid);
         if (rc)
             LOG_GOTO(out_unlock, rc,
@@ -402,11 +405,14 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
             LOG_GOTO(out_res, rc, "object_move failed for objid:'%s'",
                      xfer->xt_objid);
 
+        save_obj_res_grouping = obj_res->grouping;
+        obj_res->grouping = grouping;
         ++obj_res->version;
         if (!pho_attrs_is_empty(&xfer->xt_attrs))
             obj_res->user_md = md_repr->str;
 
         rc = dss_object_insert(dss, obj_res, 1, DSS_SET_FULL_INSERT);
+        obj_res->grouping = save_obj_res_grouping;
         if (rc)
             LOG_GOTO(out_res, rc, "object_insert failed for objid:'%s'",
                      xfer->xt_objid);
@@ -1433,7 +1439,8 @@ static int store_perform_xfers(struct phobos_handle *pho)
             continue;
         for (j = 0; j < pho->xfers[i].xd_ntargets; j++) {
             rc2 = object_md_save(&pho->dss, &pho->xfers[i].xd_targets[j],
-                                 pho->xfers[i].xd_params.put.overwrite);
+                                 pho->xfers[i].xd_params.put.overwrite,
+                                 pho->xfers[i].xd_params.put.grouping);
             if (rc2) {
                 pho_error(rc2, "Error while saving metadata for objid:'%s'",
                           pho->xfers[i].xd_targets[i].xt_objid);
