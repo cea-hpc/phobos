@@ -21,17 +21,17 @@
 Copy target for Phobos CLI
 """
 
+import os
 import sys
 
 from phobos.cli.action.create import CreateOptHandler
 from phobos.cli.action.delete import DeleteOptHandler
 from phobos.cli.action.list import ListOptHandler
 from phobos.cli.common import env_error_format, XferOptHandler
-from phobos.cli.common.args import add_put_arguments
+from phobos.cli.common.args import add_put_arguments, add_object_arguments
 from phobos.cli.common.utils import (check_output_attributes, create_put_params,
-                                     get_params_status)
-from phobos.core.const import (DSS_OBJ_ALIVE, DSS_OBJ_DEPRECATED, # pylint: disable=no-name-in-module
-                               DSS_OBJ_DEPRECATED_ONLY)
+                                     get_params_status, get_scope)
+from phobos.core.const import DSS_OBJ_ALIVE #pylint: disable=no-name-in-module
 from phobos.core.ffi import CopyInfo
 from phobos.core.store import (DelParams, GetParams, UtilClient, XferPutParams,
                                XferGetParams, XferCopyParams)
@@ -61,19 +61,12 @@ class CopyDeleteOptHandler(DeleteOptHandler):
         super(CopyDeleteOptHandler, cls).add_options(parser)
         parser.add_argument('oid', help='targeted object')
         parser.add_argument('copy', help='copy name')
-        parser.add_argument('--uuid', help='UUID of the object')
-        parser.add_argument('--version', type=int, default=0,
-                            help='Version of the object')
-        group_deprec = parser.add_mutually_exclusive_group()
-        group_deprec.add_argument('-d', '--deprecated', action='store_true',
-                                  help="target alive and deprecated objects")
-        group_deprec.add_argument('-D', '--deprecated-only', action='store_true',
-                                  help="target only deprecated objects")
+        add_object_arguments(parser)
 
 
 class CopyListOptHandler(ListOptHandler):
     """Option handler for list action of copy target"""
-    descr = 'list all copies'
+    descr = 'list copies of objects'
 
     @classmethod
     def add_options(cls, parser):
@@ -82,6 +75,8 @@ class CopyListOptHandler(ListOptHandler):
         attrs = list(CopyInfo().get_display_dict().keys())
         attrs.sort()
 
+        add_object_arguments(parser)
+        parser.add_argument('-c', '--copy-name', help='copy name')
         parser.add_argument('-o', '--output', type=lambda t: t.split(','),
                             default='copy_name',
                             help=("attributes to output, comma-separated, "
@@ -143,12 +138,8 @@ class CopyOptHandler(XferOptHandler):
         oid = self.params.get('oid')
         uuid = self.params.get('uuid')
         version = self.params.get('version')
-        scope = DSS_OBJ_ALIVE
 
-        if deprec:
-            scope = DSS_OBJ_DEPRECATED
-        elif deprec_only:
-            scope = DSS_OBJ_DEPRECATED_ONLY
+        scope = get_scope(deprec, deprec_only)
 
         try:
             client.copy_delete(oid, uuid, version,
@@ -162,13 +153,26 @@ class CopyOptHandler(XferOptHandler):
         attrs = list(CopyInfo().get_display_dict().keys())
         check_output_attributes(attrs, self.params.get('output'), self.logger)
 
+        copy = self.params.get('copy_name')
+        deprecated = self.params.get('deprecated')
+        deprecated_only = self.params.get('deprecated_only')
+        oids = self.params.get('res')
         status_number = get_params_status(self.params.get('status'),
                                           self.logger)
+        uuid = self.params.get('uuid')
+        version = self.params.get('version')
+
+        if len(oids) != 1 and uuid is not None:
+            self.logger.error("only one oid can be provided with the --uuid "
+                              "option")
+            sys.exit(os.EX_USAGE)
 
         client = UtilClient()
 
+        scope = get_scope(deprecated, deprecated_only)
+
         try:
-            copies = client.copy_list(self.params.get('res'),
+            copies = client.copy_list(oids, uuid, version, copy, scope,
                                       status_number)
 
             if copies:

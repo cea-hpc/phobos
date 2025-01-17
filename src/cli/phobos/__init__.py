@@ -41,8 +41,6 @@ from ctypes import (c_int, c_long, byref, pointer, c_bool)
 
 from phobos.core.admin import Client as AdminClient
 from phobos.core.const import (rsc_family2str, # pylint: disable=no-name-in-module
-                               DSS_OBJ_ALIVE, DSS_OBJ_DEPRECATED,
-                               DSS_OBJ_DEPRECATED_ONLY,
                                PHO_RSC_TAPE, PHO_RSC_NONE,
                                PHO_OPERATION_INVALID,
                                str2operation_type)
@@ -53,8 +51,10 @@ from phobos.core.store import (attrs_as_dict, DelParams, PutParams,
 from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
                                DSSInteractHandler, BaseResourceOptHandler,
                                env_error_format, XferOptHandler)
-from phobos.cli.common.args import add_put_arguments
-from phobos.cli.common.utils import set_library, create_put_params, attr_convert
+from phobos.cli.common.args import add_put_arguments, add_object_arguments
+from phobos.cli.common.utils import (attr_convert, check_output_attributes,
+                                     create_put_params, get_params_status,
+                                     set_library, get_scope)
 from phobos.cli.target.copy import CopyOptHandler
 from phobos.cli.target.dir import DirOptHandler
 from phobos.cli.target.drive import DriveOptHandler
@@ -333,21 +333,9 @@ class DeleteOptHandler(BaseOptHandler):
 
         parser.add_argument('oids', nargs='+',
                             help='Object IDs to delete')
-        parser.add_argument('--uuid', help='UUID of the object to delete')
-        parser.add_argument('--version', type=int,
-                            help='Version of the objec to delete')
-        deprec_group = parser.add_mutually_exclusive_group()
-        deprec_group.add_argument('-d', '--deprecated', action='store_true',
-                                  help=('allow to delete also deprecated '
-                                        'objects, can only be used with '
-                                        '--hard option'))
-        deprec_group.add_argument('-D', '--deprecated-only',
-                                  action='store_true',
-                                  help=('allow to delete only deprecated '
-                                        'objects, can only be used with '
-                                        '--hard option'))
         parser.add_argument('--hard', action='store_true',
                             help='Require a hardware remove of the object')
+        add_object_arguments(parser)
         parser.set_defaults(verb=cls.label)
 
     def exec_delete(self):
@@ -359,7 +347,6 @@ class DeleteOptHandler(BaseOptHandler):
         oids = self.params.get('oids')
         uuid = self.params.get('uuid')
         version = self.params.get('version')
-        scope = DSS_OBJ_ALIVE
 
         if not self.params.get('hard') and (deprec or deprec_only):
             self.logger.error("--deprecated or --deprecated-only can only be "
@@ -371,10 +358,7 @@ class DeleteOptHandler(BaseOptHandler):
                               "--version option")
             sys.exit(os.EX_USAGE)
 
-        if deprec:
-            scope = DSS_OBJ_DEPRECATED
-        elif deprec_only:
-            scope = DSS_OBJ_DEPRECATED_ONLY
+        scope = get_scope(deprec, deprec_only)
 
         try:
             client.object_delete(oids, uuid, version,

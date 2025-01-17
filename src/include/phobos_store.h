@@ -513,25 +513,31 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
 void phobos_store_object_list_free(struct object_info *objs, int n_objs);
 
 /**
- * Retrieve the copies that match the given uuid.
- * If given multiple uuids, retrieve every item with uuid matching any of those
- * uuids.
+ * Retrieve the copies that match the given oids.
  *
  * The caller must release the list calling phobos_store_copy_list_free().
  *
- * \param[in]       res             Uuids.
- * \param[in]       n_res           Number of requested uuids.
+ * \param[in]       res             Oids.
+ * \param[in]       n_res           Number of requested oids.
+ * \param[in]       uuid            Uuid's object filter.
+ * \param[in]       version         Version's object filter.
+ * \param[in]       copy_name       Copy's name filter.
+ * \param[in]       scope           Retrieve only/also in the deprecated
+ *                                  objects.
  * \param[in]       status_filter   Number corresponding to the cpy_status
  *                                  filter
- * \param[out]      objs            Retrieved copies.
- * \param[out]      n_objs          Number of retrieved items.
+ * \param[out]      copy            Retrieved copies.
+ * \param[out]      n_copy          Number of retrieved items.
+ * \param[in]       sort            Sort filter.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
  *
  * This must be called after phobos_init.
  */
-int phobos_store_copy_list(const char **res, int n_res, int status_filter,
+int phobos_store_copy_list(const char **res, int n_res, char *uuid,
+                           int version, char *copy_name,
+                           enum dss_obj_scope scope, int status_filter,
                            struct copy_info **copy, int *n_copy,
                            struct dss_sort *sort);
 

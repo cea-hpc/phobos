@@ -733,7 +733,7 @@ class UtilClient:
                 nb_new_lock)
 
     @staticmethod
-    def copy_list(res, status_number):
+    def copy_list(res, uuid, version, copy_name, scope, status_number): # pylint: disable=too-many-arguments
         """List copies."""
         n_copy = c_int(0)
         copy = POINTER(CopyInfo)()
@@ -743,8 +743,15 @@ class UtilClient:
         enc_res = [elt.encode('utf-8') for elt in res]
         c_res_strlist = c_char_p * len(enc_res)
 
+        enc_copy_name = copy_name.encode('utf-8') if copy_name else None
+        enc_uuid = uuid.encode('utf-8') if uuid else None
+
         rc = LIBPHOBOS.phobos_store_copy_list(c_res_strlist(*enc_res),
                                               len(enc_res),
+                                              enc_uuid,
+                                              version,
+                                              enc_copy_name,
+                                              scope,
                                               n_status_number,
                                               byref(copy),
                                               byref(n_copy),

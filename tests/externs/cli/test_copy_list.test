@@ -53,18 +53,17 @@ function test_copy_list
     $phobos put -f dir /etc/hosts oid2
     $phobos del oid2
 
-    local count=$($valg_phobos copy list | wc -l)
+    local count=$($valg_phobos copy list -d | wc -l)
     if [[ $count -ne 2 ]]; then
         error "Should be 2 copy names, got $count"
     fi
 
-    local uuid1=$($phobos object list -o uuid oid1)
-    local res=$($valg_phobos copy list $uuid1)
+    local res=$($valg_phobos copy list oid1)
     if [[ $res != "cache" ]]; then
         error "Copy name should be cache, got $res"
     fi
 
-    res=$($valg_phobos copy list -o version $uuid1)
+    res=$($valg_phobos copy list -o version oid1)
     if [[ $res != "1" ]]; then
         error "Version should be 1, got $res"
     fi

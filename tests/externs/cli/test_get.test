@@ -101,14 +101,13 @@ function test_creation_and_access_times()
                  version,creation_time oid-time | grep "1," | cut -d',' -f2)
     ctm1=$(date -d "$ctm1" +"%s")
 
-    local atm3=$($phobos copy list --format csv -o version,access_time \
-                 "$uuid" | grep "3," | cut -d',' -f2)
+    local atm3=$($phobos copy list oid-time --output access_time)
     atm3=$(date -d "$atm3" +"%s")
-    local atm2=$($phobos copy list --format csv --output \
-                 version,access_time "$uuid" | grep "2," | cut -d',' -f2)
+    local atm2=$($phobos copy list oid-time --deprecated-only --version 2 \
+                 --output access_time)
     atm2=$(date -d "$atm2" +"%s")
-    local atm1=$($phobos copy list --format csv --output \
-                 version,access_time "$uuid" | grep "1," | cut -d',' -f2)
+    local atm1=$($phobos copy list oid-time --deprecated-only --version 1 \
+                 --output access_time)
     atm1=$(date -d "$atm1" +"%s")
 
     [ $ctm1 -le $ctm2 ] \
@@ -121,24 +120,25 @@ function test_creation_and_access_times()
         || error "Access time of 2nd version is greater than 3rd version one"
 
     sleep 1
+    $phobos copy list oid-time -d -o all
     $valg_phobos get --uuid $uuid --version 1 oid-time /tmp/out
     rm /tmp/out
+    $phobos copy list oid-time -d -o all
 
-    local atm=$($phobos copy list --format csv --output \
-                version,access_time "$uuid" | grep "1," | cut -d',' -f2)
+    local atm=$($phobos copy list oid-time --deprecated-only --version 1 \
+                --output access_time)
     atm=$(date -d "$atm" +"%s")
     [ $atm1 -lt $atm ] \
         || error "Access time of 1st version was not updated"
     atm1=$atm
 
-    atm=$($phobos copy list --format csv --output \
-          version,access_time "$uuid" | grep "2," | cut -d',' -f2)
+    atm=$($phobos copy list oid-time --deprecated-only --version 2 \
+          --output access_time)
     atm=$(date -d "$atm" +"%s")
     [ $atm2 -eq $atm ] \
         || error "Access time of 2nd version was updated, only 1st should be"
 
-    atm=$($phobos copy list --format csv --output version,access_time "$uuid" |
-          grep "3," | cut -d',' -f2)
+    atm=$($phobos copy list oid-time --output access_time)
     atm=$(date -d "$atm" +"%s")
     [ $atm3 -eq $atm ] \
         || error "Access time of 3rd version was updated, only 1st should be"
@@ -146,20 +146,19 @@ function test_creation_and_access_times()
     $valg_phobos get oid-time /tmp/out
     rm /tmp/out
 
-    atm=$($phobos copy list --format csv --output \
-                version,access_time "$uuid" | grep "1," | cut -d',' -f2)
+    atm=$($phobos copy list oid-time --deprecated-only --version 1 \
+          --output access_time)
     atm=$(date -d "$atm" +"%s")
     [ $atm1 -eq $atm ] \
         || error "Access time of 1st version was updated, only 3rd should be"
 
-    atm=$($phobos copy list --format csv --output \
-          version,access_time "$uuid" | grep "2," | cut -d',' -f2)
+    atm=$($phobos copy list oid-time --deprecated-only --version 2 \
+          --output access_time)
     atm=$(date -d "$atm" +"%s")
     [ $atm2 -eq $atm ] \
         || error "Access time of 2nd version was updated, only 3rd should be"
 
-    atm=$($phobos copy list --format csv --output version,access_time "$uuid" |
-          grep "3," | cut -d',' -f2)
+    atm=$($phobos copy list oid-time --output access_time)
     atm=$(date -d "$atm" +"%s")
     [ $atm3 -lt $atm ] \
         || error "Access time of 3rd version was not updated"
@@ -168,36 +167,34 @@ function test_creation_and_access_times()
     $valg_phobos get --uuid $uuid --version 2 oid-time /tmp/out
     rm /tmp/out
 
-    atm=$($phobos copy list --format csv --output \
-                version,access_time "$uuid" | grep "1," | cut -d',' -f2)
+    atm=$($phobos copy list oid-time --deprecated-only --version 1 \
+          --output access_time)
     atm=$(date -d "$atm" +"%s")
     [ $atm1 -eq $atm ] \
         || error "Access time of 1st version was updated, only 2nd should be"
 
-    atm=$($phobos copy list --format csv --output \
-          version,access_time "$uuid" | grep "2," | cut -d',' -f2)
+    atm=$($phobos copy list oid-time --deprecated-only --version 2 \
+          --output access_time)
     atm=$(date -d "$atm" +"%s")
     [ $atm2 -lt $atm ] \
         || error "Access time of 2nd version was not updated"
     atm2=$atm
 
-    atm=$($phobos copy list --format csv --output version,access_time "$uuid" |
-          grep "3," | cut -d',' -f2)
+    atm=$($phobos copy list oid-time --output access_time)
     atm=$(date -d "$atm" +"%s")
     [ $atm3 -eq $atm ] \
         || error "Access time of 3rd version was updated, only 2nd should be"
 
     sleep 1
     $phobos del oid-time
-    atm=$($phobos copy list --format csv --output \
-          version,access_time "$uuid" | grep "3," | cut -d',' -f2)
+    atm=$($phobos copy list oid-time --deprecated-only --version 3 \
+          --output access_time)
     atm=$(date -d "$atm" +"%s")
     [ $atm3 -eq $atm ] \
         || error "Access time should not be updated on delete operation"
 
     $phobos undel oid oid-time
-    atm=$($phobos copy list --format csv --output version,access_time "$uuid" |
-          grep "3," | cut -d',' -f2)
+    atm=$($phobos copy list oid-time --output access_time)
     atm=$(date -d "$atm" +"%s")
     [ $atm3 -eq $atm ] \
         || error "Access time should not be updated on undelete operation"

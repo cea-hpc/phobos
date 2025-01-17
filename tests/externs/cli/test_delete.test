@@ -187,9 +187,9 @@ function test_dir_hard_delete_deprec_only
     local res=$($phobos object list --deprecated -f csv -o version,uuid oid)
     ! echo "$res" | grep -F "1,$uuid_gen2" &&
         echo "$res" | grep -F "1,$uuid_gen1"
-    res=$($phobos copy list -f csv -o version,uuid)
-    ! echo "$res" | grep -F "1,$uuid_gen2" &&
-        echo "$res" | grep -F "1,$uuid_gen1"
+    res=$($phobos copy list --version 1 --deprecated-only -f csv -o uuid oid)
+    ! echo "$res" | grep -F "$uuid_gen2" &&
+        echo "$res" | grep -F "$uuid_gen1"
 
     # Delete deprecated oid of gen 2
     $valg_phobos delete --hard --deprecated-only oid --uuid $uuid_gen2 ||
@@ -198,8 +198,10 @@ function test_dir_hard_delete_deprec_only
         error "Object should not be retrieved"
     res=$($phobos object list -f csv --deprecated -o version,uuid oid)
     ! echo "$res" | grep -F "2,$uuid_gen2"
-    res=$($phobos copy list -f csv -o version,uuid $uuid_gen2)
-    ! echo "$res" | grep -F "2,$uuid_gen2"
+    res=$($phobos copy list --uuid $uuid_gen2 --deprecated-only oid | wc -l)
+    if [[ $res -ne 0 ]]; then
+        error "There should be no copy, got $res"
+    fi
 }
 
 function test_dir_hard_delete_deprec
@@ -222,8 +224,10 @@ function test_dir_hard_delete_deprec
         error "Object should be deleted"
     $phobos get oid test_tmp && error "Object should not be retrieved"
     [ -z $($phobos object list -o version oid) ]
-    local res=$($phobos copy list -f csv -o version,uuid $uuid_gen2)
-    ! echo "$res" | grep -F "3,$uuid_gen2"
+    local res=$($phobos copy list oid | wc -l)
+    if [[ $res -ne 0 ]]; then
+        error "There should be no copy, got $res"
+    fi
 
     # Delete an object with uuid (should delete the deprec object gen 1)
     $valg_phobos delete --hard --deprecated oid --uuid $uuid_gen1 ||
@@ -232,8 +236,10 @@ function test_dir_hard_delete_deprec
         error "Object should not be retrieved"
     res=$($phobos object list -f csv --deprecated -o version,uuid oid)
     ! echo "$res" | grep -F "1,$uuid_gen1"
-    res=$($phobos copy list -f csv -o version,uuid $uuid_gen1)
-    ! echo "$res" | grep -F "1,$uuid_gen1"
+    res=$($phobos copy list --uuid $uuid_gen1 oid | wc -l)
+    if [[ $res -ne 0 ]]; then
+        error "There should be no copy, got $res"
+    fi
 
     # Delete with uuid not in alive table (should delete the last version in
     # deprecated table)
@@ -243,8 +249,10 @@ function test_dir_hard_delete_deprec
         error "Object should not be retrieved"
     res=$($phobos object list -f csv --deprecated -o version,uuid oid)
     ! echo "$res" | grep -F "2,$uuid_gen2"
-    res=$($phobos copy list -f csv -o version,uuid $uuid_gen2)
-    ! echo "$res" | grep -F "2,$uuid_gen2"
+    res=$($phobos copy list --version 2 --uuid $uuid_gen2 oid | wc -l)
+    if [[ $res -ne 0 ]]; then
+        error "There should be no copy, got $res"
+    fi
 }
 
 function test_tape_hard_delete

@@ -115,9 +115,9 @@ static int local_setup(void **state, char *oid)
     assert_string_equal(pl_state->objs[0].oid, oid);
 
     /* get copy_name */
-    rc = phobos_store_copy_list((const char **) &pl_state->objs[0].uuid, 1,
-                                DSS_STATUS_FILTER_ALL, &pl_state->copies,
-                                &pl_state->n_copy, NULL);
+    rc = phobos_store_copy_list((const char **) &oid, 1, pl_state->objs[0].uuid,
+                                1, NULL, DSS_OBJ_ALIVE, DSS_STATUS_FILTER_ALL,
+                                &pl_state->copies, &pl_state->n_copy, NULL);
     assert_return_code(rc, -rc);
     assert_int_equal(pl_state->n_copy, 1);
     assert_string_equal(pl_state->copies[0].object_uuid,

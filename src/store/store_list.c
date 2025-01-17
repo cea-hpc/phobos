@@ -26,6 +26,8 @@
 #include "phobos_store.h"
 #include "pho_cfg.h"
 #include "pho_dss.h"
+#include "pho_dss_wrapper.h"
+
 #include <glib.h>
 
 /**
@@ -60,8 +62,8 @@ static void phobos_construct_metadata(GString *metadata_str,
  * \param[in]       n_res       Number of requested ressources.
  * \param[in]       is_pattern  True if search done using POSIX pattern.
  */
-static void phobos_construct_res_obj(GString *res_str, const char **res,
-                                     int n_res, bool is_pattern)
+static void phobos_construct_res(GString *res_str, const char **res,
+                                 int n_res, bool is_pattern)
 {
     char *res_prefix = (is_pattern ? "{\"$REGEXP\" : " : "");
     char *res_suffix = (is_pattern ? "}" : "");
@@ -75,31 +77,6 @@ static void phobos_construct_res_obj(GString *res_str, const char **res,
                                res_prefix,
                                res[i],
                                res_suffix,
-                               (i + 1 != n_res) ? "," : "");
-
-    g_string_append_printf(res_str, "]}");
-}
-
-/**
- * Construct the resource string for the copy list filter.
- *
- * The caller must ensure res_str is initialized before calling.
- *
- * \param[in,out]   res_str     Empty resource string.
- * \param[in]       res         List of object UUID.
- * \param[in]       n_res       Number of requested ressources.
- */
-static void phobos_construct_res_cpy(GString *res_str, const char **res,
-                                     int n_res)
-{
-    int i;
-
-    g_string_append_printf(res_str, "{\"$OR\" : [");
-
-    for (i = 0; i < n_res; ++i)
-        g_string_append_printf(res_str,
-                               "{\"DSS::COPY::object_uuid\":\"%s\"} %s",
-                               res[i],
                                (i + 1 != n_res) ? "," : "");
 
     g_string_append_printf(res_str, "]}");
@@ -176,7 +153,7 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
      * each request.
      */
     if (n_res)
-        phobos_construct_res_obj(res_str, res, n_res, is_pattern);
+        phobos_construct_res(res_str, res, n_res, is_pattern);
 
     if (n_res || n_metadata) {
         /**
@@ -228,15 +205,19 @@ void phobos_store_object_list_free(struct object_info *objs, int n_objs)
     dss_res_free(objs, n_objs);
 }
 
-int phobos_store_copy_list(const char **res, int n_res, int status_filter,
+int phobos_store_copy_list(const char **res, int n_res, char *uuid,
+                           int version, char *copy_name,
+                           enum dss_obj_scope scope, int status_filter,
                            struct copy_info **copy, int *n_copy,
                            struct dss_sort *sort)
 {
     struct dss_filter *filter_ptr = NULL;
     struct dss_filter filter;
     struct dss_handle dss;
+    GString *filter_str;
     GString *status_str;
     GString *res_str;
+    int count = 0;
     int rc;
 
     if (status_filter <= 0 || status_filter > DSS_STATUS_FILTER_ALL)
@@ -252,49 +233,73 @@ int phobos_store_copy_list(const char **res, int n_res, int status_filter,
     if (rc != 0)
         return rc;
 
+    filter_str = g_string_new("{\"$AND\" : [");
     status_str = g_string_new(NULL);
     res_str = g_string_new(NULL);
 
-    /**
-     * No need to construct the status filter if all obj_status are wanted,
-     * which happens if status_filter number is set to
-     * DSS_STATUS_FILTER_ALL(= 111 in decimal)
-     */
-    if (status_filter != DSS_STATUS_FILTER_ALL)
-        phobos_construct_status(status_str, status_filter);
+    count += (status_filter != DSS_STATUS_FILTER_ALL ? 1 : 0);
+    count += (copy_name ? 1 : 0);
+    count += (version ? 1 : 0);
+    count += (n_res ? 1 : 0);
+    count += (uuid ? 1 : 0);
 
     /**
      * If there are at least one resource, we construct a string containing
      * each request.
      */
-    if (n_res)
-        phobos_construct_res_cpy(res_str, res, n_res);
+    if (n_res) {
+        phobos_construct_res(res_str, res, n_res, false);
+        g_string_append_printf(filter_str, "%s %s", res_str->str,
+                               --count != 0 ? "," : "");
+    }
 
-    if (n_res || status_filter != DSS_STATUS_FILTER_ALL) {
-        rc = dss_filter_build(&filter,
-                              "%s %s %s %s %s",
-                              "{\"$AND\" : [",
-                              res_str->str != NULL ? res_str->str : "",
-                              ((n_res > 0) &&
-                               (status_filter != DSS_STATUS_FILTER_ALL)) ?
-                                    ", " : "",
-                              status_str->str != NULL ?
-                                    status_str->str : "",
-                              "]}");
+    /**
+     * No need to construct the status filter if all copy_status are wanted,
+     * which happens if status_filter number is set to
+     * DSS_STATUS_FILTER_ALL(= 111 in binary)
+     */
+    if (status_filter != DSS_STATUS_FILTER_ALL) {
+        phobos_construct_status(status_str, status_filter);
+        g_string_append_printf(filter_str, "%s %s", status_str->str,
+                               --count != 0 ? "," : "");
+    }
+
+    if (uuid)
+        g_string_append_printf(filter_str,
+                               "{\"DSS::COPY::object_uuid\": \"%s\"} %s",
+                               uuid, --count != 0 ? "," : "");
+
+    if (copy_name)
+        g_string_append_printf(filter_str,
+                               "{\"DSS::COPY::copy_name\": \"%s\"} %s",
+                               copy_name, --count != 0 ? "," : "");
+    if (version)
+        g_string_append_printf(filter_str,
+                               "{\"DSS::COPY::version\": \"%d\"} %s",
+                               version, --count != 0 ? "," : "");
+
+    g_string_append(filter_str, "]}");
+
+    if (n_res || status_filter != DSS_STATUS_FILTER_ALL ||
+        copy_name || version || uuid) {
+
+        rc = dss_filter_build(&filter, "%s", filter_str->str);
         if (rc)
             GOTO(err, rc);
 
         filter_ptr = &filter;
     }
 
-    rc = dss_copy_get(&dss, filter_ptr, copy, n_copy, sort);
+    rc = dss_get_copy_from_object(&dss, copy, n_copy, filter_ptr, scope);
     if (rc)
         pho_error(rc, "Cannot fetch copies");
 
     dss_filter_free(filter_ptr);
 
 err:
+    g_string_free(filter_str, true);
     g_string_free(status_str, true);
+    g_string_free(res_str, true);
     dss_fini(&dss);
 
     return rc;

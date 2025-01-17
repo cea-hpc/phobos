@@ -141,8 +141,8 @@ function generation_compare
 function copy_status_compare
 {
     local i=$1
-    local uuid=$2
-    local ob=$($phobos copy list -o status $uuid)
+    local oid=$2
+    local ob=$($phobos copy list $oid --output status)
     case $i in
         0 | 1)
             [[ "$ob" == "incomplete" ]] && return 0 || return 1
@@ -282,8 +282,7 @@ function test_copy_status
 
     for tape in $(nodeset -e "${tapes}"); do
         $phobos tape import --unlock -t lto5 "${tape}" || error "import failed"
-        local uuid=$($phobos object list -o uuid "$oid")
-        copy_status_compare $i "$uuid" || error "Default copy status mismatch"
+        copy_status_compare $i "$oid" || error "Default copy status mismatch"
         i=$(($i+1))
     done
 }

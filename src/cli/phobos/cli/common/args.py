@@ -70,3 +70,14 @@ def add_list_arguments(parser, attr, default_output, sort_option=False, # pylint
         parser.add_argument('--status',
                             help=("filter the output by status name, choose "
                                   "from {locked, unlocked, failed}"))
+
+def add_object_arguments(parser):
+    """Default arguments for get object-like actions"""
+    parser.add_argument('--uuid', help='UUID of the object')
+    parser.add_argument('--version', type=int, default=0,
+                        help='Version of the object')
+    group_deprec = parser.add_mutually_exclusive_group()
+    group_deprec.add_argument('-d', '--deprecated', action='store_true',
+                              help="target alive and deprecated objects")
+    group_deprec.add_argument('-D', '--deprecated-only', action='store_true',
+                              help="target only deprecated objects")

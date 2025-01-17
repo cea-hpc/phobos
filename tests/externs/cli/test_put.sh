@@ -411,9 +411,7 @@ function test_user_copy_name
 {
     put_checkout oid_copytest "--copy-name copytest"
 
-    local uuid=$($phobos object list -o uuid oid_copytest)
-
-    output_checkout copy copy_name $uuid copytest
+    output_checkout copy copy_name oid_copytest copytest
 }
 
 test_overwrite_and_delete

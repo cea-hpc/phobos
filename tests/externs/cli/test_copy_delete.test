@@ -216,8 +216,9 @@ function check_copies()
     local output=$3
     local copy_list_filter=$4
     local expected_copy=$5
+    local scope=$6
 
-    local copies=$($phobos copy list -o $output -f csv $uuid |
+    local copies=$($phobos copy list oid -o $output -f csv --uuid $uuid $scope |
                     grep "$copy_list_filter")
 
     local count=$(echo "$copies" | wc -l)
@@ -267,7 +268,7 @@ function test_copy_delete_deprec()
     $valg_phobos copy delete --deprecated --version 2 oid source ||
         error "Copy should be deleted"
 
-    check_copies $uuid_gen2 1 "copy_name,version" "^source" "source,1"
+    check_copies $uuid_gen2 1 "copy_name,version" "^source" "source,1" "-d"
 
     check_extents $uuid_gen2 "--copy-name source" 1
 
@@ -276,7 +277,8 @@ function test_copy_delete_deprec()
     $valg_phobos copy delete --deprecated --uuid $uuid_gen1 oid source ||
         error "Copy should be deleted"
 
-    check_copies $uuid_gen1 1 "copy_name,version" "copy-source" "copy-source,1"
+    check_copies $uuid_gen1 1 "copy_name,version" "copy-source" \
+        "copy-source,1" "-d"
 
     check_extents $uuid_gen1 "" 1
 
@@ -284,7 +286,7 @@ function test_copy_delete_deprec()
     $valg_phobos copy delete --deprecated --uuid $uuid_gen2 --version 1 \
         oid source || error "Copy should be deleted"
 
-    check_copies $uuid_gen2 1 "uuid,version" "$uuid_gen2,1" "$uuid_gen2,1"
+    check_copies $uuid_gen2 1 "uuid,version" "$uuid_gen2,1" "$uuid_gen2,1" "-d"
 
     check_extents "$uuid_gen2,1" "" 1
 }
@@ -304,7 +306,8 @@ function test_copy_delete_deprec_only()
     $valg_phobos copy delete --deprecated-only --version 1 --uuid $uuid_gen2 \
         oid source || error "Copy delete should have worked"
 
-    check_copies $uuid_gen2 1 "copy_name,version" "copy-source" "copy-source,1"
+    check_copies $uuid_gen2 1 "copy_name,version" "copy-source" \
+        "copy-source,1" "-D"
 
     check_extents "$uuid_gen2,1" "" 1
 
@@ -312,7 +315,8 @@ function test_copy_delete_deprec_only()
     $valg_phobos copy delete --deprecated-only --uuid $uuid_gen1 oid source ||
         error "Copy delete should have worked"
 
-    check_copies $uuid_gen1 1 "copy_name,version" "copy-source" "copy-source,1"
+    check_copies $uuid_gen1 1 "copy_name,version" "copy-source" \
+        "copy-source,1" "-D"
 
     check_extents "$uuid_gen1,1" "" 1
 }
