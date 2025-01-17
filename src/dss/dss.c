@@ -161,18 +161,58 @@ static void _dss_result_free(struct dss_result *dss_res, int item_cnt)
 
 }
 
+int dss_execute_generic_get(struct dss_handle *handle, enum dss_type type,
+                            GString *clause, void **item_list, int *item_cnt)
+{
+    PGconn *conn = handle->dh_conn;
+    struct dss_result *dss_res;
+    size_t dss_res_size;
+    size_t item_size;
+    PGresult *res;
+    int rc = 0;
+    int i;
+
+    pho_debug("Executing request: '%s'", clause->str);
+
+    rc = execute(conn, clause->str, &res, PGRES_TUPLES_OK);
+    if (rc)
+        return rc;
+
+    item_size = get_resource_size(type);
+
+    dss_res_size = sizeof(struct dss_result) + PQntuples(res) * item_size;
+    dss_res = xcalloc(1, dss_res_size);
+
+    dss_res->item_type = type;
+    dss_res->pg_res = res;
+
+    for (i = 0; i < PQntuples(res); i++) {
+        void *item_ptr = (char *)&dss_res->items.raw + i * item_size;
+
+        rc = create_resource(type, handle, item_ptr, res, i);
+        if (rc)
+            return rc;
+    }
+
+    *item_list = &dss_res->items.raw;
+    *item_cnt = PQntuples(res);
+
+    if (rc)
+        /* Only free elements that were initialized, this also frees res */
+        _dss_result_free(dss_res, i);
+
+    return rc;
+}
+
 static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
                            const struct dss_filter **filters, int filters_count,
                            void **item_list, int *item_cnt,
                            struct dss_sort *sort)
 {
     PGconn *conn = handle->dh_conn;
-    struct dss_result *dss_res;
     GString *clause = NULL;
     GString **conditions;
-    size_t dss_res_size;
     size_t item_size;
-    PGresult *res;
     int rc = 0;
     int i = 0;
 
@@ -209,32 +249,9 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
         return rc;
     }
 
-    pho_debug("Executing request: '%s'", clause->str);
-
-    rc = execute(conn, clause->str, &res, PGRES_TUPLES_OK);
-    g_string_free(clause, true);
-    if (rc)
-        return rc;
+    rc = dss_execute_generic_get(handle, type, clause, item_list, item_cnt);
 
     item_size = get_resource_size(type);
-
-    dss_res_size = sizeof(struct dss_result) + PQntuples(res) * item_size;
-    dss_res = xcalloc(1, dss_res_size);
-
-    dss_res->item_type = type;
-    dss_res->pg_res = res;
-
-    for (i = 0; i < PQntuples(res); i++) {
-        void *item_ptr = (char *)&dss_res->items.raw + i * item_size;
-
-        rc = create_resource(type, handle, item_ptr, res, i);
-        if (rc)
-            goto out;
-    }
-
-    *item_list = &dss_res->items.raw;
-    *item_cnt = PQntuples(res);
-
     if (sort && !sort->psql_sort) {
         if (type == DSS_FULL_LAYOUT && !strcmp(sort->attr, "size")) {
             quicksort(item_list, 0, *item_cnt - 1, item_size, sort->reverse,
@@ -242,10 +259,7 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
         }
     }
 
-out:
-    if (rc)
-        /* Only free elements that were initialized, this also frees res */
-        _dss_result_free(dss_res, i);
+    g_string_free(clause, true);
 
     return rc;
 }

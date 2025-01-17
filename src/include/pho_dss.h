@@ -344,6 +344,18 @@ mockable
 void dss_res_free(void *item_list, int item_cnt);
 
 /**
+ * Execute a select query and store the result in item_list
+ *
+ * @param[in]  handle    Connection handle
+ * @param[in]  type      Type of the resource to get
+ * @param[in]  clause    Query to execute
+ * @param[out] item_list List of items retrieved
+ * @param[out] item_cnt  Number of items retrieved
+ */
+int dss_execute_generic_get(struct dss_handle *handle, enum dss_type type,
+                            GString *clause, void **item_list, int *item_cnt);
+
+/**
  * Insert information of one or many devices in DSS.
  *
  * @param[in]  handle        valid connection handle
