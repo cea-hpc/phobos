@@ -284,4 +284,21 @@ int dss_lazy_find_copy(struct dss_handle *handle, const char *uuid,
                        int version, const char *copy_name,
                        struct copy_info **copy);
 
+/**
+ * Retrieve copies of objects or/and deprecated_objects from DSS.
+ *
+ * @param[in]   handle    DSS handle
+ * @param[out]  copy_list List of retrieved copies to be freed
+ *                        w/ dss_res_free()
+ * @param[out]  copy_cnt  Number of copies retrieved
+ * @param[in]   filter    Assembled DSS filtering criteria
+ * @param[in]   scope     Retrieve only/also in the deprecated objects
+ *
+ * @return 0 or negative error code
+ */
+int dss_get_copy_from_object(struct dss_handle *handle,
+                             struct copy_info **copy_list, int *copy_cnt,
+                             const struct dss_filter *filter,
+                             enum dss_obj_scope scope);
+
 #endif

@@ -826,3 +826,43 @@ end:
 
     return rc;
 }
+
+int dss_get_copy_from_object(struct dss_handle *handle,
+                             struct copy_info **copy_list, int *copy_cnt,
+                             const struct dss_filter *filter,
+                             enum dss_obj_scope scope)
+{
+    GString *request = g_string_new("BEGIN;");
+    GString *union_req = g_string_new(NULL);
+    GString *clause = g_string_new(NULL);
+    int rc = 0;
+
+    g_string_append_printf(union_req, "(%s %s %s)",
+            (scope == DSS_OBJ_ALIVE || scope == DSS_OBJ_DEPRECATED) ?
+                "SELECT object_uuid, version, oid FROM object" : "",
+            scope == DSS_OBJ_DEPRECATED ? "UNION" : "",
+            (scope == DSS_OBJ_DEPRECATED || scope == DSS_OBJ_DEPRECATED_ONLY) ?
+                "SELECT object_uuid, version, oid FROM deprecated_object" : "");
+
+    if (filter) {
+        rc = clause_filter_convert(handle, clause, filter);
+        if (rc)
+            goto out;
+    }
+
+    g_string_append_printf(request,
+        "SELECT object_uuid, version, copy_name, copy_status, creation_time, "
+        "access_time FROM copy INNER JOIN %s as inner_table "
+        "USING (object_uuid, version) %s;",
+        union_req->str, clause->str != NULL ? clause->str : "");
+
+    rc = dss_execute_generic_get(handle, DSS_COPY, request, (void **) copy_list,
+                                 copy_cnt);
+
+out:
+    g_string_free(union_req, true);
+    g_string_free(request, true);
+    g_string_free(clause, true);
+
+    return rc;
+}
