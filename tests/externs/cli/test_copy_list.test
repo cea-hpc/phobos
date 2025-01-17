@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  All rights reserved (c) 2014-2024 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -26,15 +26,36 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/setup_db.sh
 . $test_dir/test_launch_daemon.sh
 
+function setup_objs
+{
+    $phobos put /etc/hosts oid1
+    $phobos copy create oid1 oid1-copy-deprec
+    $phobos put --overwrite /etc/hosts oid1
+    $phobos copy create oid1 oid1-copy
+
+    $phobos put --copy-name "oid2-gen1" /etc/hosts oid2
+    $phobos del oid2
+    $phobos put --copy-name "oid2-gen2" /etc/hosts oid2
+
+    $phobos put --copy-name "cache" /etc/hosts oid-cache
+    $phobos put /etc/hosts oid-source
+}
+
 function setup
 {
     setup_tables
     invoke_lrs
 
-    DIR=$(mktemp -d /tmp/test_pho.XXXX)
+    DIRS=($(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+         )
 
-    $phobos dir add $DIR
-    $phobos dir format --unlock $DIR
+    export PHOBOS_STORE_default_family=dir
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+
+    setup_objs
 }
 
 function cleanup
@@ -42,31 +63,123 @@ function cleanup
     waive_lrs
     drop_tables
 
-    rm -rf $DIR
+    rm -rf ${DIRS[@]}
 }
 
-function test_copy_list
+function test_list_oid
 {
-    export PHOBOS_COPY_default_copy_name="cache"
-    $phobos put -f dir /etc/hosts oid1
-    export PHOBOS_COPY_default_copy_name="source"
-    $phobos put -f dir /etc/hosts oid2
-    $phobos del oid2
+    local count=$($valg_phobos copy list | wc -l)
+    if [[ $count -ne 5 ]]; then
+        error "There should be 5 copies, got $count"
+    fi
 
-    local count=$($valg_phobos copy list -d | wc -l)
+    local count=$($valg_phobos copy list oid1 oid3 | wc -l)
     if [[ $count -ne 2 ]]; then
-        error "Should be 2 copy names, got $count"
-    fi
-
-    local res=$($valg_phobos copy list oid1)
-    if [[ $res != "cache" ]]; then
-        error "Copy name should be cache, got $res"
-    fi
-
-    res=$($valg_phobos copy list -o version oid1)
-    if [[ $res != "1" ]]; then
-        error "Version should be 1, got $res"
+        error "There should be 2 copy, got $count"
     fi
 }
 
-TESTS=("setup; test_copy_list; cleanup")
+function test_list_uuid
+{
+    $valg_phobos copy list --uuid aaaa-bbbb &&
+        error "phobos copy list should have failed"
+
+    $valg_phobos copy list oid1 oid2 --uuid aaaa-bbbb &&
+        error "phobos copy list should have failed"
+
+    local uuid_deprecated=$($phobos object list oid2 -d -o uuid)
+    local count=$($valg_phobos copy list oid3 --uuid $uuid_deprecated | wc -l)
+    if [[ $count -ne 0 ]]; then
+        error "There should be no copy, got $count"
+    fi
+
+    local res=$($valg_phobos copy list oid2 --uuid $uuid_deprecated -d)
+    if [[ "$res" != "oid2-gen1" ]]; then
+        error "This is the wrong copy, should be 'oid2-gen1', got $res"
+    fi
+}
+
+function test_list_deprecated
+{
+    local count=$($valg_phobos copy list --deprecated | wc -l)
+    if [[ $count -ne 8 ]]; then
+        error "There should be 8 copies, got $count"
+    fi
+
+    count=$($valg_phobos copy list --deprecated-only | wc -l)
+    if [[ $count -ne 3 ]]; then
+        error "There should be 3 copies, got $count"
+    fi
+}
+
+function test_list_copy_name
+{
+    local count=$($valg_phobos copy list --copy-name cache | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be one cache copy, got $count"
+    fi
+
+    count=$($valg_phobos copy list --copy-name fast | wc -l)
+    if [[ $count -ne 0 ]]; then
+        error "There should no copy, got $count"
+    fi
+
+    count=$($valg_phobos copy list --copy-name oid1-copy oid1 | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be one oid-copy copy, got $count"
+    fi
+}
+
+function test_list_version
+{
+    local count=$($valg_phobos copy list --version 1 | wc -l)
+    if [[ $count -ne 3 ]]; then
+        error "There should be 3 copies with version == 1, got $count"
+    fi
+
+    count=$($valg_phobos copy list -d --version 1 | wc -l)
+    if [[ $count -ne 6 ]]; then
+        error "There should be 6 copies with version == 1, got $count"
+    fi
+
+    count=$($valg_phobos copy list oid1 --version 2 | wc -l)
+    if [[ $count -ne 2 ]]; then
+        error "There should be 2 copy, got $count"
+    fi
+}
+
+function test_list_status
+{
+    local uuid1=$($phobos object list oid1 -o uuid)
+    local uuid2=$($phobos object list oid2 -o uuid)
+
+    $PSQL << EOF
+UPDATE copy SET copy_status = 'incomplete' WHERE
+    object_uuid = '$uuid1' AND version = 2;
+UPDATE copy SET copy_status = 'readable' WHERE object_uuid = '$uuid2';
+EOF
+
+    local count=$($valg_phobos copy list --status c | wc -l)
+    if [[ $count -ne 2 ]]; then
+        error "There should be 2 copies, got $count"
+    fi
+
+    count=$($valg_phobos copy list --status r | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be 1 copy, got $count"
+    fi
+
+    count=$($valg_phobos copy list --status i | wc -l)
+    if [[ $count -ne 2 ]]; then
+        error "There should be 2 copy, got $count"
+    fi
+}
+
+TESTS=("setup; \
+            test_list_oid; \
+            test_list_uuid; \
+            test_list_deprecated; \
+            test_list_copy_name; \
+            test_list_version; \
+            test_list_status; \
+        cleanup")
