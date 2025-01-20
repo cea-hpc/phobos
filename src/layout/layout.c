@@ -34,7 +34,9 @@
 #include "pho_type_utils.h"
 #include "pho_io.h"
 #include "pho_module_loader.h"
+#include "posix_layout.h"
 
+#include <assert.h>
 #include <dlfcn.h>
 #include <limits.h>
 #include <pthread.h>
@@ -94,8 +96,11 @@ int layout_encoder(struct pho_data_processor *encoder,
         copy_name = xfer->xd_params.put.copy_name;
     } else {
         rc = get_cfg_default_copy_name(&copy_name);
-        if (rc)
+        if (rc) {
+            free(encoder->layout);
+            encoder->layout = NULL;
             return rc;
+        }
     }
 
     for (i = 0; i < encoder->xfer->xd_ntargets; i++) {
@@ -116,6 +121,12 @@ int layout_encoder(struct pho_data_processor *encoder,
     if (rc) {
         layout_destroy(encoder);
         LOG_RETURN(rc, "Unable to create encoder");
+    }
+
+    rc = set_posix_reader(encoder);
+    if (rc) {
+        layout_destroy(encoder);
+        return rc;
     }
 
     return rc;
@@ -157,6 +168,12 @@ int layout_decoder(struct pho_data_processor *decoder,
     if (rc) {
         layout_destroy(decoder);
         LOG_RETURN(rc, "Unable to create decoder");
+    }
+
+    rc = set_posix_writer(decoder);
+    if (rc) {
+        layout_destroy(decoder);
+        return rc;
     }
 
     return rc;
@@ -263,6 +280,12 @@ int layout_reconstruct(struct layout_info lyt, struct copy_info *copy)
 void layout_destroy(struct pho_data_processor *proc)
 {
     int i;
+
+    if (proc->reader_ops)
+        proc->reader_ops->destroy(proc);
+
+    if (proc->writer_ops)
+        proc->writer_ops->destroy(proc);
 
     /* Only encoders own their layout */
     if (is_encoder(proc) && proc->layout != NULL) {

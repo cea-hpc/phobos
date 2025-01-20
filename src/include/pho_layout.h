@@ -142,6 +142,25 @@ struct pho_data_processor {
                                       *  a mput with no-split to keep the write
                                       *  resp)
                                       */
+    /*
+     * BEGIN UNDER CONSTRUCTION SECTION
+     */
+    int current_target;
+    size_t object_size;
+    size_t reader_offset;
+    size_t reader_stripe_size;
+    size_t writer_offset;
+    size_t writer_stripe_size;
+    /*
+     * buff size is the lowest common multiple of the reader and the writer
+     * stripe size.
+     * buff is filled with (reader_offset - writer_offset) bytes.
+     */
+    struct pho_buff buff;
+    void *private_reader;
+    const struct pho_proc_ops *reader_ops;
+    void *private_writer;
+    const struct pho_proc_ops *writer_ops;
 };
 
 /**
