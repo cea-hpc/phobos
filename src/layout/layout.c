@@ -44,6 +44,31 @@
 #include <stdlib.h>
 #include <string.h>
 
+int data_processor_read_into_buff(struct pho_data_processor *proc,
+                                  struct pho_io_descr *reader_iod, size_t size)
+{
+    size_t read_size;
+
+    read_size = ioa_read(reader_iod->iod_ioa, reader_iod,
+                         proc->buff.buff +
+                             (proc->reader_offset - proc->writer_offset), size);
+
+    if (read_size < 0)
+        LOG_RETURN(read_size,
+                   "reading %zu bytes fails in data processor at offset "
+                   "%zu", size, proc->reader_offset);
+
+    proc->reader_offset += read_size;
+
+    if (read_size < size)
+        LOG_RETURN(-EIO,
+                   "data processor reader expected %zu bytes to read and get "
+                   "only %zd bytes, at offset %zu",
+                   size, read_size, proc->reader_offset);
+
+    return 0;
+}
+
 static int build_layout_name(const char *layout_name, char *path, size_t len)
 {
     int rc;

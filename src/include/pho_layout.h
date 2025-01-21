@@ -143,7 +143,7 @@ struct pho_data_processor {
                                       *  resp)
                                       */
     /*
-     * BEGIN UNDER CONSTRUCTION SECTION
+     * XXX BEGIN UNDER CONSTRUCTION SECTION
      */
     int current_target;
     size_t object_size;
@@ -162,6 +162,20 @@ struct pho_data_processor {
     void *private_writer;
     const struct pho_proc_ops *writer_ops;
 };
+
+/**
+ * The data processor reader put data into the data processor buffer.
+ *
+ * \a proc buff is filled and its reader offset is updated.
+ *
+ * @param[in,out] proc          Data processor
+ * @param[in,out] reader_iod    IO descriptor given by the reader
+ * @param[in]     size          Number of bytes to read
+ *
+ * @return 0 on success, -errno on error.
+ */
+int data_processor_read_into_buff(struct pho_data_processor *proc,
+                                  struct pho_io_descr *reader_iod, size_t size);
 
 /**
  * Check if the data processor is of type encoder.

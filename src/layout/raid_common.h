@@ -120,6 +120,7 @@ struct raid_io_context {
      */
     struct pho_buff *buffers;
     size_t current_split;
+    size_t current_split_offset;
     /** Number of data extents for this layout. This doesn't include parity
      * extents and replication.
      */
@@ -155,6 +156,10 @@ struct raid_ops {
     int (*read_split)(struct pho_data_processor *proc);
     int (*delete_split)(struct pho_data_processor *proc);
     int (*get_block_size)(struct pho_data_processor *proc, size_t *block_size);
+    /*
+     * XXX BEGIN UNDER CONSTRUCTION SECTION
+     */
+    int (*read_into_buff)(struct pho_data_processor *proc);
 };
 
 int raid_encoder_init(struct pho_data_processor *encoder,

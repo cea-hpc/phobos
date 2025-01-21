@@ -43,30 +43,13 @@ static int posix_reader_step(struct pho_data_processor *proc, pho_resp_t *resp,
 {
     struct pho_io_descr *posix_reader =
         (struct pho_io_descr *)proc->private_reader;
-    ssize_t read_size;
     size_t to_read;
 
+    /* limit read : object -> buffer */
     to_read = min(proc->object_size - proc->reader_offset,
                   proc->buff.size -
                       (proc->reader_offset - proc->writer_offset));
-    read_size = ioa_read(posix_reader->iod_ioa, posix_reader,
-                         proc->buff.buff +
-                             (proc->reader_offset - proc->writer_offset),
-                         to_read);
-    if (read_size < 0)
-        LOG_RETURN(read_size,
-                   "Error when reading %zu bytes with posix reader at offset "
-                   "%zu", to_read, proc->reader_offset);
-
-    proc->reader_offset += read_size;
-
-    if (read_size < to_read)
-        LOG_RETURN(-EIO,
-                   "Error, a posix reader expected %zu bytes to read and get "
-                   "only %zd bytes, at offset %zu "
-                   "processor.", to_read, read_size, proc->reader_offset);
-
-    return 0;
+    return data_processor_read_into_buff(proc, posix_reader, to_read);
 }
 
 static void posix_reader_destroy(struct pho_data_processor *proc)

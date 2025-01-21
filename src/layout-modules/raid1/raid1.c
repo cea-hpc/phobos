@@ -312,6 +312,32 @@ static int raid1_read_split(struct pho_data_processor *dec)
     return ioa_get(iod->iod_ioa, dec->xfer->xd_targets->xt_objid, iod);
 }
 
+static int raid1_read_into_buff(struct pho_data_processor *proc)
+{
+    size_t buffer_offset = proc->reader_offset - proc->writer_offset;
+    struct raid_io_context *io_context =
+        (struct raid_io_context *)proc->private_reader;
+    size_t inside_split_offset = proc->reader_offset -
+                                 io_context->current_split_offset;
+    char *buff_start = proc->buff.buff + buffer_offset;
+    size_t to_read;
+    int rc;
+
+    /* limit read : object -> split -> buffer */
+    to_read = min(proc->object_size - proc->reader_offset,
+                  io_context->read.extents[0]->size - inside_split_offset);
+    to_read = min(to_read, proc->buff.size - buffer_offset);
+
+    rc = data_processor_read_into_buff(proc, &io_context->iods[0], to_read);
+    if (rc)
+        return rc;
+
+    if (io_context->read.check_hash)
+        return extent_hash_update(&io_context->hashes[0], buff_start, to_read);
+    else
+        return 0;
+}
+
 static int raid1_get_block_size(struct pho_data_processor *enc,
                                 size_t *block_size)
 {
@@ -331,6 +357,7 @@ static const struct raid_ops RAID1_OPS = {
     .read_split     = raid1_read_split,
     .delete_split   = raid_delete_split,
     .get_block_size = raid1_get_block_size,
+    .read_into_buff = raid1_read_into_buff,
 };
 
 static int raid1_get_repl_count(struct pho_data_processor *enc,

@@ -760,6 +760,7 @@ static int write_split_fini(struct pho_data_processor *encoder, int io_rc,
                                        &io_context->write.extents[i]);
 
         io_context->current_split++;
+        io_context->current_split_offset = encoder->writer_offset;
     }
 
     for (i = 0; i < n_extents; i++) {
@@ -891,6 +892,7 @@ static int read_split_setup(struct pho_data_processor *decoder,
         if (io_context->read.extents[i]->size > *split_size)
             *split_size = io_context->read.extents[i]->size;
     }
+
     sort_extents_by_layout_index(io_context->read.resp,
                                  io_context->read.extents,
                                  io_context->n_data_extents);
@@ -1315,6 +1317,7 @@ skip_io:
     if (!rc) {
         io_context->read.to_read -= split_size;
         io_context->current_split++;
+        io_context->current_split_offset = decoder->reader_offset;
     }
 
     /* Nothing more to read: the decoder is done */
