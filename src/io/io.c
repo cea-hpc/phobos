@@ -1,5 +1,5 @@
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -98,6 +98,7 @@ int get_cfg_fs_block_size(enum rsc_family family, size_t *size)
                                      &value);
     if (rc == 0) {
         *size = str2int64(value);
+        free(value);
         if (size < 0)
             LOG_RETURN(-EINVAL,
                        "Invalid value for fs_block_size with '%s' family",
@@ -265,10 +266,13 @@ int set_object_md(const struct io_adapter_module *ioa, struct pho_io_descr *iod,
     user_md = g_string_new(NULL);
     rc = pho_attrs_to_json(&object_md->object_attrs, user_md,
                            PHO_ATTR_BACKUP_JSON_FLAGS);
-    if (rc)
+    if (rc) {
+        g_string_free(user_md, true);
         LOG_RETURN(rc, "Unable to construct user attrs");
+    }
 
     pho_attr_set(&iod->iod_attrs, PHO_EA_UMD_NAME, user_md->str);
+    g_string_free(user_md, true);
 
     if (extent->with_md5) {
         const char *md5_buffer = uchar2hex(extent->md5, MD5_BYTE_LENGTH);
