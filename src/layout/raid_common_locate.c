@@ -502,6 +502,7 @@ static void cleanup_locks(struct dss_handle *dss,
  * on the selected host.
  */
 static int lock_extents(struct dss_handle *dss,
+                        GHashTable *hosts,
                         GPtrArray *extents,
                         int *nb_locks_per_split,
                         const char *hostname,
@@ -510,8 +511,12 @@ static int lock_extents(struct dss_handle *dss,
 {
     size_t extents_per_split = n_data_extents + n_parity_extents;
     struct pho_id *medium_locked[extents->len];
+    struct host_capabilities *host;
     int nb_new_locks = 0;
     int i, j;
+
+    host = g_hash_table_lookup(hosts, hostname);
+    assert(host);
 
     for (i = 0; i < extents->len / extents_per_split; i++) {
         if (nb_locks_per_split[i] >= n_data_extents)
@@ -528,6 +533,14 @@ static int lock_extents(struct dss_handle *dss,
                 continue;
 
             medium.rsc.id = loc->medium->rsc.id;
+
+            /* Check the host has a compatible device to read the extent. */
+            if (!has_compatible_devices(host->devices, loc)) {
+                pho_warn("Host %s has no device able to read medium %s in "
+                         "library %s", hostname, loc->medium->rsc.id.name,
+                         loc->medium->rsc.id.library);
+                continue;
+            }
             rc = dss_lock_hostname(dss, DSS_MEDIA, &medium, 1, hostname);
             if (rc == -EEXIST) {
                 /* somebody else took the lock */
@@ -579,7 +592,7 @@ static int reserve_locks(struct dss_handle *dss, GHashTable *hosts,
         }
     }
 
-    return lock_extents(dss, extents, nb_locks_per_split, hostname,
+    return lock_extents(dss, hosts, extents, nb_locks_per_split, hostname,
                         n_data_extents, n_parity_extents);
 }
 

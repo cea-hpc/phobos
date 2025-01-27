@@ -392,8 +392,9 @@ EOF
 
     # check that the tape in the other library is not lock by $other_hostname
     local lock_hostname=$($phobos tape list -o lock_hostname ${tape_bis})
-    if [ "${lock_hostname}" == "None" ]; then
-        error "${other_hostname} should have locked ${tape_bis}"
+    if [ "${lock_hostname}" != "None" ]; then
+        error "${other_hostname} shouldn't have locked ${tape_bis} as he has " \
+              "no compatible devices"
     fi
 }
 
