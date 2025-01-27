@@ -309,6 +309,7 @@ EOF
               "device and $self_hostname has a lock on a replica"
     fi
 }
+
 function test_locate_library
 {
     local drive_bis=$(get_lto_drives_bis 6 1)
@@ -346,6 +347,56 @@ EOF
     fi
 }
 
+function test_locate_prelocking_compatibility
+{
+    local self_hostname="$(hostname -s)"
+    local other_hostname="blob"
+
+    local drives=($(get_lto_drives 6 2))
+    local tapes=$(get_tapes L6 2)
+    local drive_bis=$(get_lto_drives_bis 6 1)
+    local tape_bis=$(get_tapes_bis L6 1)
+
+    $phobos drive add --library library_bis --unlock ${drive_bis}
+    $phobos drive add --unlock ${drives[@]}
+
+    $phobos tape add --type lto6 --unlock ${tapes[@]}
+    $phobos tape add --type lto6 --library library_bis --unlock ${tape_bis}
+    $phobos tape format ${tapes[@]}
+    $phobos tape format --library library_bis ${tape_bis}
+
+    $phobos put -l raid4 /etc/hosts oid
+    $phobos drive unload ${drives[0]}
+    $phobos drive unload ${drives[1]}
+    $phobos drive unload --library library_bis ${drive_bis}
+
+    waive_daemons
+    waive_tlc_bis
+    drain_all_drives
+
+    # change the host of drives in library bis to $other_hostname
+    $PSQL << EOF
+UPDATE device SET host = '$other_hostname' WHERE path = '${drives[0]}';
+UPDATE device SET host = '$other_hostname' WHERE path = '${drives[1]}';
+EOF
+
+    invoke_tlc_bis
+    invoke_daemons
+
+    local locate_hostname=$($valg_phobos locate --focus-host \
+                            $other_hostname oid)
+    if [ "${locate_hostname}" != "${other_hostname}" ]; then
+        error "locate should return ${other_hostname} that owns 2 drives in" \
+              "the good library instead of ${locate_hostname}"
+    fi
+
+    # check that the tape in the other library is not lock by $other_hostname
+    local lock_hostname=$($phobos tape list -o lock_hostname ${tape_bis})
+    if [ "${lock_hostname}" == "None" ]; then
+        error "${other_hostname} should have locked ${tape_bis}"
+    fi
+}
+
 TEST_CLEANUP=cleanup
 
 # test locate on dir
@@ -369,5 +420,8 @@ if [[ -w /dev/changer ]]; then
              tape_cleanup")
     TESTS+=("tape_init_setup; \
              test_locate_library; \
+             tape_cleanup")
+    TESTS+=("tape_init_setup; \
+             test_locate_prelocking_compatibility; \
              tape_cleanup")
 fi
