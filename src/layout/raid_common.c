@@ -265,8 +265,10 @@ static size_t remaining_io_size(struct pho_data_processor *proc, int idx)
 
     if (is_decoder(proc))
         return io_context->read.to_read;
-    else
+    else if (is_encoder(proc))
         return io_context->write.to_write;
+    else
+        return io_context->delete.to_delete;
 }
 
 static bool no_more_alloc(struct pho_data_processor *proc, int idx)
@@ -282,7 +284,7 @@ static bool no_more_alloc(struct pho_data_processor *proc, int idx)
         return false;
 
     /* decoder with no more to read */
-    if (is_decoder(proc))
+    if (is_decoder(proc) || is_eraser(proc))
         return true;
 
     /* encoder with nothing more to write and at least one written extent */
@@ -1354,11 +1356,9 @@ skip_io:
         io_context->current_split++;
 
     /* Nothing more to delete: the decoder is done */
-    if (io_context->delete.to_delete == 0) {
+    if (io_context->delete.to_delete == 0)
         pho_debug("Decoder for '%s' is now finished",
                   eraser->xfer->xd_targets->xt_objid);
-        eraser->done = true;
-    }
 
     (*n_reqs)++;
 
@@ -1433,8 +1433,11 @@ static int raid_proc_handle_resp(struct pho_data_processor *proc,
 
         if (is_encoder(proc))
             return raid_write_handle_release_resp(proc, resp->release);
-        else
-            return 0;
+
+        if (is_eraser(proc))
+            proc->done = true;
+
+        return 0;
     } else {
         LOG_RETURN(rc = -EPROTO, "Invalid response type '%s'",
                    pho_srl_response_kind_str(resp));
