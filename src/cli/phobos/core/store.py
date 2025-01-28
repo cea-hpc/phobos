@@ -34,10 +34,10 @@ from ctypes import (byref, c_bool, c_char_p, c_int, c_ssize_t, c_void_p, cast,
 from phobos.core.ffi import (LIBPHOBOS, DeprecatedObjectInfo, ObjectInfo,
                              StringArray, CopyInfo)
 from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OBJ_BEST_HOST, # pylint: disable=no-name-in-module
-                               PHO_XFER_OBJ_HARD_DEL, PHO_XFER_OP_COPY,
-                               PHO_XFER_OP_GET, PHO_XFER_OP_GETMD,
-                               PHO_XFER_OP_PUT, PHO_RSC_INVAL, str2rsc_family,
-                               DSS_OBJ_ALIVE)
+                               PHO_XFER_OBJ_HARD_DEL, PHO_XFER_COPY_HARD_DEL,
+                               PHO_XFER_OP_COPY, PHO_XFER_OP_GET,
+                               PHO_XFER_OP_GETMD, PHO_XFER_OP_PUT,
+                               PHO_RSC_INVAL, str2rsc_family, DSS_OBJ_ALIVE)
 from phobos.core.dss import dss_sort
 
 ATTRS_FOREACH_CB_TYPE = CFUNCTYPE(c_int, c_char_p, c_char_p, c_void_p)
@@ -763,3 +763,27 @@ class UtilClient:
     def list_cpy_free(copy, n_copy):
         """Free a previously obtained copy list."""
         LIBPHOBOS.phobos_store_copy_list_free(copy, n_copy)
+
+    @staticmethod
+    def copy_delete(oid, uuid, version, del_params):
+        """Delete copies."""
+        n_xfers = c_int(1)
+        xfer_array_type = XferDescriptor * 1
+        xfers = xfer_array_type()
+
+        xfers[0].xd_ntargets = 1
+        target = XferTarget * 1
+        xfers[0].xd_targets = target()
+        xfers[0].xd_targets[0].xt_objid = oid
+        if uuid is not None:
+            xfers[0].xd_targets[0].xt_objuuid = uuid
+        if version is not None:
+            xfers[0].xd_targets[0].xt_version = version
+        xfers[0].xd_params.delete = XferDelParams(del_params)
+        xfers[0].xd_flags = PHO_XFER_COPY_HARD_DEL
+
+        rc = LIBPHOBOS.phobos_copy_delete(xfers, n_xfers)
+
+        if rc:
+            raise EnvironmentError(rc, "Failed to delete '%s''s copy '%s' " %
+                                   (oid, del_params.copy_name))

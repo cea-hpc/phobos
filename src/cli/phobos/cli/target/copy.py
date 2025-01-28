@@ -30,9 +30,10 @@ from phobos.cli.common import env_error_format, XferOptHandler
 from phobos.cli.common.args import add_put_arguments
 from phobos.cli.common.utils import (check_output_attributes, create_put_params,
                                      get_params_status)
-from phobos.core.const import DSS_OBJ_ALIVE # pylint: disable=no-name-in-module
+from phobos.core.const import (DSS_OBJ_ALIVE, DSS_OBJ_DEPRECATED, # pylint: disable=no-name-in-module
+                               DSS_OBJ_DEPRECATED_ONLY)
 from phobos.core.ffi import CopyInfo
-from phobos.core.store import (GetParams, UtilClient, XferPutParams,
+from phobos.core.store import (DelParams, GetParams, UtilClient, XferPutParams,
                                XferGetParams, XferCopyParams)
 from phobos.output import dump_object_list
 
@@ -60,6 +61,14 @@ class CopyDeleteOptHandler(DeleteOptHandler):
         super(CopyDeleteOptHandler, cls).add_options(parser)
         parser.add_argument('oid', help='targeted object')
         parser.add_argument('copy', help='copy name')
+        parser.add_argument('--uuid', help='UUID of the object')
+        parser.add_argument('--version', type=int, default=0,
+                            help='Version of the object')
+        group_deprec = parser.add_mutually_exclusive_group()
+        group_deprec.add_argument('-d', '--deprecated', action='store_true',
+                                  help="target alive and deprecated objects")
+        group_deprec.add_argument('-D', '--deprecated-only', action='store_true',
+                                  help="target only deprecated objects")
 
 
 class CopyListOptHandler(ListOptHandler):
@@ -126,9 +135,27 @@ class CopyOptHandler(XferOptHandler):
 
     def exec_delete(self):
         """Copy deletion"""
-        raise NotImplementedError(
-            "This command will be implemented in a future version"
-        )
+        client = UtilClient()
+
+        copy = self.params.get('copy')
+        deprec = self.params.get('deprecated')
+        deprec_only = self.params.get('deprecated_only')
+        oid = self.params.get('oid')
+        uuid = self.params.get('uuid')
+        version = self.params.get('version')
+        scope = DSS_OBJ_ALIVE
+
+        if deprec:
+            scope = DSS_OBJ_DEPRECATED
+        elif deprec_only:
+            scope = DSS_OBJ_DEPRECATED_ONLY
+
+        try:
+            client.copy_delete(oid, uuid, version,
+                               DelParams(copy_name=copy, scope=scope))
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
     def exec_list(self):
         """Copy listing"""
