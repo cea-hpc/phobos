@@ -120,6 +120,10 @@ function test_dir_hard_delete
     $phobos put "${FILES[0]}" $oid || error "Object should be put"
     medium_list=$($phobos extent list -o media_name)
     path_list=$($phobos extent list -o address)
+    $valg_phobos delete --hard $oid --version 2 &&
+        error "Object should not be deleted"
+    $valg_phobos delete --hard $oid --uuid aaaa-bbbb &&
+        error "Object should not be deleted"
     $valg_phobos delete --hard $oid || error "Object should be deleted"
     $phobos get $oid test_tmp && error "Object should not be retrieved"
 
@@ -151,6 +155,96 @@ function test_dir_hard_delete
         [ $($phobos dir list -o stats.logc_spc_used $medium) -eq 0 ] ||
             error "Hard delete should have set correct logical space on dir"
     done
+}
+
+function test_dir_hard_delete_deprec_only
+{
+    export PHOBOS_STORE_default_family="dir"
+
+    $phobos put "${FILES[0]}" oid
+    local uuid_gen1=$($phobos object list -o uuid oid)
+    $phobos del oid
+    $phobos put "${FILES[0]}" oid
+    $phobos put --overwrite "${FILES[0]}" oid
+    $phobos put --overwrite "${FILES[0]}" oid
+
+    $valg_phobos delete --hard --deprecated-only oid &&
+        error "Delete should have failed, several object"
+
+    $valg_phobos delete --hard --deprecated-only oid --version 3 &&
+        error "Delete should have failed, wrong version"
+
+    $valg_phobos delete --hard --deprecated-only oid --version 1 &&
+        error "Delete should have failed, several object with the same version"
+
+    local uuid_gen2=$($phobos object list -o uuid oid)
+
+    # Delete oid version 1 of gen 2
+    $valg_phobos delete --hard --deprecated-only oid --version 1 \
+        --uuid $uuid_gen2 || error "Object should be deleted"
+    $phobos get oid --version 1 --uuid $uuid_gen2 test_tmp &&
+        error "Object should not be retrieved"
+    local res=$($phobos object list --deprecated -f csv -o version,uuid oid)
+    ! echo "$res" | grep -F "1,$uuid_gen2" &&
+        echo "$res" | grep -F "1,$uuid_gen1"
+    res=$($phobos copy list -f csv -o version,uuid)
+    ! echo "$res" | grep -F "1,$uuid_gen2" &&
+        echo "$res" | grep -F "1,$uuid_gen1"
+
+    # Delete deprecated oid of gen 2
+    $valg_phobos delete --hard --deprecated-only oid --uuid $uuid_gen2 ||
+        error "Object should be deleted"
+    $phobos get oid --version 2 --uuid $uuid_gen2 test_tmp &&
+        error "Object should not be retrieved"
+    res=$($phobos object list -f csv --deprecated -o version,uuid oid)
+    ! echo "$res" | grep -F "2,$uuid_gen2"
+    res=$($phobos copy list -f csv -o version,uuid $uuid_gen2)
+    ! echo "$res" | grep -F "2,$uuid_gen2"
+}
+
+function test_dir_hard_delete_deprec
+{
+    export PHOBOS_STORE_default_family="dir"
+
+    $phobos put "${FILES[0]}" oid
+    local uuid_gen1=$($phobos object list -o uuid oid)
+    $phobos del oid
+    $phobos put "${FILES[0]}" oid
+    $phobos put --overwrite "${FILES[0]}" oid
+    $phobos put --overwrite "${FILES[0]}" oid
+    local uuid_gen2=$($phobos object list -o uuid oid)
+
+    $valg_phobos delete --hard --deprecated oid --version 1 &&
+        error "Delete should have failed, several object with the same version"
+
+    # Delete an object with version (should delete the only alive object)
+    $valg_phobos delete --hard --deprecated oid --version 3 ||
+        error "Object should be deleted"
+    $phobos get oid test_tmp && error "Object should not be retrieved"
+    [ -z $($phobos object list -o version oid) ]
+    local res=$($phobos copy list -f csv -o version,uuid $uuid_gen2)
+    ! echo "$res" | grep -F "3,$uuid_gen2"
+
+    # Delete an object with uuid (should delete the deprec object gen 1)
+    $valg_phobos delete --hard --deprecated oid --uuid $uuid_gen1 ||
+        error "Object should be deleted"
+    $phobos get oid --uuid $uuid_gen1 test_tmp &&
+        error "Object should not be retrieved"
+    res=$($phobos object list -f csv --deprecated -o version,uuid oid)
+    ! echo "$res" | grep -F "1,$uuid_gen1"
+    res=$($phobos copy list -f csv -o version,uuid $uuid_gen1)
+    ! echo "$res" | grep -F "1,$uuid_gen1"
+
+    # Delete with uuid not in alive table (should delete the last version in
+    # deprecated table)
+    $valg_phobos delete --hard --deprecated oid --uuid $uuid_gen2 ||
+        error "Object should be deleted"
+    $phobos get oid --version 2 --uuid $uuid_gen2 test_tmp &&
+        error "Object should not be retrieved"
+    res=$($phobos object list -f csv --deprecated -o version,uuid oid)
+    ! echo "$res" | grep -F "2,$uuid_gen2"
+    res=$($phobos copy list -f csv -o version,uuid $uuid_gen2)
+    ! echo "$res" | grep -F "2,$uuid_gen2"
 }
 
 function test_tape_hard_delete
@@ -210,6 +304,8 @@ TESTS=(
     "setup_dir; test_dir_hard_delete raid1 1; cleanup_dir"
     "setup_dir; test_dir_hard_delete raid1 2; cleanup_dir"
     "setup_dir; test_dir_hard_delete raid4; cleanup_dir"
+    "setup_dir; test_dir_hard_delete_deprec; cleanup_dir"
+    "setup_dir; test_dir_hard_delete_deprec_only; cleanup_dir"
 )
 
 if [[ -w /dev/changer ]]; then
