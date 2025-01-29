@@ -363,6 +363,103 @@ out_free:
     return rc;
 }
 
+static int dss_find_deprec_object(struct dss_handle *hdl,
+                                  struct dss_filter *filter,
+                                  const char *oid, const char *uuid,
+                                  int version, struct object_info **obj)
+{
+    struct dss_sort sort = { "version", true, false, true };
+    struct object_info *obj_list = NULL;
+    int obj_cnt;
+    int rc;
+
+    ENTRY;
+
+    rc = dss_deprecated_object_get(hdl, filter, &obj_list, &obj_cnt, &sort);
+    if (rc)
+        LOG_RETURN(rc, "Cannot fetch deprecated objid: '%s'", oid);
+
+    if (obj_cnt == 0)
+        LOG_GOTO(out_free, rc = -ENOENT, "No such deprecated object");
+
+    if (obj_cnt > 1) {
+        if (!uuid && !version)
+            LOG_GOTO(out_free, rc = -EINVAL,
+                     "Several object found for the objid : '%s'", oid);
+        if (!uuid && version)
+            LOG_GOTO(out_free, rc = -EINVAL,
+                     "Several object found for the objid '%s' and "
+                     "version %d", oid, version);
+    }
+
+    *obj = object_info_dup(obj_list);
+
+out_free:
+    dss_res_free(obj_list, obj_cnt);
+
+    return rc;
+}
+
+int dss_find_object(struct dss_handle *hdl, const char *oid,
+                    const char *uuid, int version, enum dss_obj_scope scope,
+                    struct object_info **obj)
+{
+    GString *filter_str = g_string_new(NULL);
+    struct object_info *obj_list = NULL;
+    struct dss_filter filter;
+    int obj_cnt;
+    int rc;
+
+    ENTRY;
+
+    g_string_append_printf(filter_str,
+                           "{\"$AND\": [ "
+                           "{\"DSS::OBJ::oid\": \"%s\"}%s",
+                           oid, (uuid != NULL || version != 0) ? ", " : "");
+
+    if (uuid)
+        g_string_append_printf(filter_str, "{\"DSS::OBJ::uuid\": \"%s\"}%s",
+                               uuid, (version != 0) ? ", " : "");
+
+    if (version)
+        g_string_append_printf(filter_str, "{\"DSS::OBJ::version\": \"%d\"}",
+                               version);
+
+    g_string_append(filter_str, "]}");
+
+    rc = dss_filter_build(&filter, "%s", filter_str->str);
+    g_string_free(filter_str, true);
+    if (rc)
+        LOG_RETURN(rc, "Cannot build filter");
+
+    if (scope == DSS_OBJ_DEPRECATED_ONLY) {
+        rc = dss_find_deprec_object(hdl, &filter, oid, uuid, version, obj);
+    } else {
+        rc = dss_object_get(hdl, &filter, &obj_list, &obj_cnt, NULL);
+        if (rc)
+            LOG_GOTO(out_free, rc, "Cannot fetch objid: '%s'", oid);
+
+        assert(obj_cnt <= 1);
+
+        if (obj_cnt == 1) {
+            *obj = object_info_dup(obj_list);
+        } else if (scope == DSS_OBJ_DEPRECATED) {
+            /* If no object found in alive and deprec is True, search in
+             * deprecated object table
+             */
+            rc = dss_find_deprec_object(hdl, &filter, oid, uuid, version, obj);
+        } else {
+            rc = -ENOENT;
+        }
+    }
+
+out_free:
+    dss_res_free(obj_list, obj_cnt);
+    dss_filter_free(&filter);
+
+    return rc;
+}
+
 /**
  * Create a list of oids to query.
  *

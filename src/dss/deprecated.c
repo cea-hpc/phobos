@@ -125,6 +125,7 @@ static int deprecated_select_query(GString **conditions, int n_conditions,
     else if (n_conditions >= 2)
         return -ENOTSUP;
 
+    dss_sort2sql(request, sort);
     g_string_append(request, ";");
 
     return 0;

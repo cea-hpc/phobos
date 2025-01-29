@@ -162,6 +162,40 @@ int dss_lazy_find_object(struct dss_handle *hdl, const char *oid,
                          struct object_info **obj);
 
 /**
+ *  Enum to indicate the scope of objects to find
+ */
+enum dss_obj_scope {
+    DSS_OBJ_DEPRECATED_ONLY,
+    DSS_OBJ_DEPRECATED,
+    DSS_OBJ_ALIVE,
+};
+
+/**
+ * Find the corresponding object
+ *
+ * \p oid must not be NULL.
+ *
+ * It will search only alive objects par default. It's behavior can be extend
+ * with \p deprec and \p deprec_only to search also in the deprecated objects or
+ * only in the deprecated objects.
+ *
+ * If \p version is not provided (zero as input) the latest one is located.
+ *
+ * If \p uuid is not provided, returns an error if several objects are found.
+ *
+ * @param[in]   oid          OID to find
+ * @param[in]   uuid         UUID to find or NULL
+ * @param[in]   version      Version to find or 0
+ * @param[in]   scope        Search only/also in the deprecated objects
+ * @param[out]  obj          Found and allocated object or NULL if error
+ *
+ * @return 0 or negative error code
+ */
+int dss_find_object(struct dss_handle *hdl, const char *oid,
+                    const char *uuid, int version, enum dss_obj_scope scope,
+                    struct object_info **obj);
+
+/**
  * Move an object from the "object" table to the "deprecated_object" table
  *
  * @param[in] handle    DSS handle
