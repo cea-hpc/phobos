@@ -879,7 +879,9 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
 
     /* can't get md for undel without any objid */
     /* TODO: really necessary to create decoder for getmd, del and undel OP ? */
-    if (xfer->xd_op != PHO_XFER_OP_UNDEL && xfer->xd_op != PHO_XFER_OP_GET) {
+    if (xfer->xd_op != PHO_XFER_OP_UNDEL && xfer->xd_op != PHO_XFER_OP_GET &&
+        (xfer->xd_op != PHO_XFER_OP_DEL &&
+         !(xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL))) {
         rc = object_md_get(dss, xfer->xd_targets);
         if (rc)
             LOG_RETURN(rc, "Cannot find metadata for objid:'%s'",
@@ -901,11 +903,19 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
     if (!xfer->xd_targets->xt_objid && !xfer->xd_targets->xt_objuuid)
         LOG_RETURN(rc = -EINVAL, "uuid or oid must be provided");
 
-    rc = dss_lazy_find_object(dss, xfer->xd_targets->xt_objid,
-                              xfer->xd_targets->xt_objuuid,
-                              xfer->xd_targets->xt_version, &obj);
+    if (xfer->xd_op == PHO_XFER_OP_GET)
+        /* Keep dss_lazy_find with the get to keep the same behavior */
+        rc = dss_lazy_find_object(dss, xfer->xd_targets->xt_objid,
+                                  xfer->xd_targets->xt_objuuid,
+                                  xfer->xd_targets->xt_version, &obj);
+    else
+        rc = dss_find_object(dss, xfer->xd_targets->xt_objid,
+                             xfer->xd_targets->xt_objuuid,
+                             xfer->xd_targets->xt_version,
+                             xfer->xd_params.delete.scope,
+                             &obj);
     if (rc)
-        LOG_RETURN(rc, "Cannot find metadata for objid:'%s'",
+        LOG_RETURN(rc, "Cannot find object for objid:'%s'",
                    xfer->xd_targets->xt_objid);
 
     rc = dss_lazy_find_default_copy(dss, obj->uuid, obj->version, &copy);
@@ -913,10 +923,11 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
         LOG_RETURN(rc, "Cannot find copy for objid:'%s'", obj->oid);
 
     if (copy->copy_status == PHO_COPY_STATUS_INCOMPLETE) {
+        pho_error(rc = -ENOENT, "Status of copy '%s' for the object '%s' is "
+                  "incomplete, cannot be reconstructed", copy->copy_name,
+                  obj->oid);
         copy_info_free(copy);
-        LOG_RETURN(-ENOENT, "Status of copy '%s' for the object '%s' is "
-                   "incomplete, cannot be reconstructed", copy->copy_name,
-                   obj->oid);
+        return rc;
     }
 
     if (copy->copy_status != PHO_COPY_STATUS_COMPLETE)
@@ -1013,10 +1024,19 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
         LOG_GOTO(clean_cpy, rc, "Unable to delete copy of object '%s:%d'",
                  obj.uuid, obj.version);
 
-    rc = dss_object_delete(dss, &obj, 1);
+    /* The object to delete can be alive or deprecated but there is no way to
+     * know. So we move it to deprecated first, then we delete it.
+     */
+    if (xfer->xd_params.delete.scope != DSS_OBJ_DEPRECATED_ONLY) {
+        rc = dss_move_object_to_deprecated(dss, &obj, 1);
+        if (rc)
+            LOG_GOTO(clean_cpy, rc, "Unable to move object '%s:%d' to "
+                     "deprecated", obj.uuid, obj.version);
+    }
+
+    rc = dss_deprecated_object_delete(dss, &obj, 1);
     if (rc)
-        pho_error(rc, "Unable to delete object '%s:%d'",
-                  obj.uuid, obj.version);
+        pho_error(rc, "Unable to delete object '%s:%d'", obj.uuid, obj.version);
 
 clean_cpy:
     copy_info_free(copy);
@@ -1648,6 +1668,19 @@ int phobos_delete(struct pho_xfer_desc *xfers, size_t num_xfers)
     for (i = 0; i < num_xfers; i++) {
         xfers[i].xd_op = PHO_XFER_OP_DEL;
         xfers[i].xd_rc = 0;
+        /* If the uuid is given by the user, we don't own that memory.
+         * The simplest solution is to duplicate it here so that it can
+         * be freed at the end by pho_xfer_desc_clean().
+         *
+         * The user of this function must free any allocated string passed to
+         * the xfer.
+         *
+         * For the Python CLI, the garbage collector will take care of
+         * this pointer.
+         */
+        if (xfers[i].xd_targets->xt_objuuid)
+            xfers[i].xd_targets->xt_objuuid =
+                xstrdup(xfers[i].xd_targets->xt_objuuid);
     }
 
     return phobos_xfer(xfers, num_xfers, NULL, NULL);

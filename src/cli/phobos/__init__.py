@@ -52,7 +52,9 @@ from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=n
                                str2operation_type, DSS_STATUS_FILTER_ALL,
                                DSS_STATUS_FILTER_COMPLETE,
                                DSS_STATUS_FILTER_INCOMPLETE,
-                               DSS_STATUS_FILTER_READABLE)
+                               DSS_STATUS_FILTER_READABLE,
+                               DSS_OBJ_ALIVE, DSS_OBJ_DEPRECATED,
+                               DSS_OBJ_DEPRECATED_ONLY)
 from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
                              MediaInfo, ObjectInfo, ResourceFamily,
                              CLIManagedResourceMixin, FSType, Id, LogFilter,
@@ -757,6 +759,19 @@ class DeleteOptHandler(BaseOptHandler):
 
         parser.add_argument('oids', nargs='+',
                             help='Object IDs to delete')
+        parser.add_argument('--uuid', help='UUID of the object to delete')
+        parser.add_argument('--version', type=int,
+                            help='Version of the objec to delete')
+        deprec_group = parser.add_mutually_exclusive_group()
+        deprec_group.add_argument('-d', '--deprecated', action='store_true',
+                                  help=('allow to delete also deprecated '
+                                        'objects, can only be used with '
+                                        '--hard option'))
+        deprec_group.add_argument('-D', '--deprecated-only',
+                                  action='store_true',
+                                  help=('allow to delete only deprecated '
+                                        'objects, can only be used with '
+                                        '--hard option'))
         parser.add_argument('--hard', action='store_true',
                             help='Require a hardware remove of the object')
         parser.set_defaults(verb=cls.label)
@@ -764,8 +779,31 @@ class DeleteOptHandler(BaseOptHandler):
     def exec_delete(self):
         """Delete objects."""
         client = UtilClient()
+
+        deprec = self.params.get('deprecated')
+        deprec_only = self.params.get('deprecated_only')
+        oids = self.params.get('oids')
+        uuid = self.params.get('uuid')
+        version = self.params.get('version')
+        scope = DSS_OBJ_ALIVE
+
+        if not self.params.get('hard') and (deprec or deprec_only):
+            self.logger.error("--deprecated or --deprecated-only can only be "
+                              "used with the --hard option")
+            sys.exit(os.EX_USAGE)
+
+        if len(oids) > 1 and (uuid is not None or version is not None):
+            self.logger.error("Only one oid can be provided with the --uuid or "
+                              "--version option")
+            sys.exit(os.EX_USAGE)
+
+        if deprec:
+            scope = DSS_OBJ_DEPRECATED
+        elif deprec_only:
+            scope = DSS_OBJ_DEPRECATED_ONLY
+
         try:
-            client.object_delete(self.params.get('oids'),
+            client.object_delete(oids, uuid, version, scope,
                                  self.params.get('hard'))
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

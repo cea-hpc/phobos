@@ -528,7 +528,7 @@ class UtilClient:
         self.logger = logging.getLogger(__name__)
 
     @staticmethod
-    def object_delete(oids, hard_delete):
+    def object_delete(oids, uuid, version, scope, hard_delete):
         """Delete objects."""
         n_xfers = c_int(len(oids))
         xfer_array_type = XferDescriptor * len(oids)
@@ -539,7 +539,12 @@ class UtilClient:
             target = XferTarget * 1
             xfers[i].xd_targets = target()
             xfers[i].xd_targets[0].xt_objid = oid
+            if uuid is not None:
+                xfers[i].xd_targets[0].xt_objuuid = uuid
+            if version is not None:
+                xfers[i].xd_targets[0].xt_version = version
             xfers[i].xd_flags = PHO_XFER_OBJ_HARD_DEL if hard_delete else 0
+            xfers[i].xd_params.delete = XferDelParams(scope)
 
         rc = LIBPHOBOS.phobos_delete(xfers, n_xfers)
         if rc:
