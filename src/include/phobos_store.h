@@ -28,6 +28,7 @@
 #include "pho_attrs.h"
 #include "pho_types.h"
 #include "pho_dss.h"
+#include "pho_dss_wrapper.h"
 #include <stdlib.h>
 
 struct pho_xfer_desc;
@@ -122,12 +123,22 @@ struct pho_xfer_get_params {
     char *node_name;                    /**< Node name [out] */
 };
 
+/*
+ * DEL parameters.
+ */
+struct pho_xfer_del_params {
+    enum dss_obj_scope scope;  /**< Scope of the object to delete
+                                 *  (alive, deprecated, ...).
+                                 */
+};
+
 /**
  * Operation parameters.
  */
 union pho_xfer_params {
     struct pho_xfer_put_params put;     /**< PUT parameters. */
-    struct pho_xfer_get_params get;     /**< GET parameters */
+    struct pho_xfer_get_params get;     /**< GET parameters. */
+    struct pho_xfer_del_params delete;  /**< DEL parameters. */
 };
 
 /**

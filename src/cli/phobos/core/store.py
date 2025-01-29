@@ -195,11 +195,29 @@ class GetParams(namedtuple('GetParams', '')):
     """
 GetParams.__new__.__defaults__ = (None,) * len(GetParams._fields)
 
+class XferDelParams(Structure): # pylint: disable=too-few-public-methods, too-many-instance-attributes
+    """Phobos DEL parameters of the XferDescriptor."""
+    _fields_ = [
+        ("scope", c_int),
+    ]
+
+    def __init__(self, scope):
+        super().__init__()
+        self.scope = scope
+
+class DelParams(namedtuple('DelParams', '')):
+    """
+    Transition data structure for del parameters between
+    the CLI and the XFer data structure.
+    """
+DelParams.__new__.__defaults__ = (None,) * len(DelParams._fields)
+
 class XferOpParams(Union): # pylint: disable=too-few-public-methods
     """Phobos operation parameters of the XferDescriptor."""
     _fields_ = [
         ("put", XferPutParams),
         ("get", XferGetParams),
+        ("delete", XferDelParams),
     ]
 
 class XferTarget(Structure): # pylint: disable=too-many-instance-attributes

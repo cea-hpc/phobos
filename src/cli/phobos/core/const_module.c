@@ -377,5 +377,10 @@ PyMODINIT_FUNC PyInit_const(void)
     PyModule_AddIntMacro(mod, DSS_STATUS_FILTER_COMPLETE);
     PyModule_AddIntMacro(mod, DSS_STATUS_FILTER_ALL);
 
+    /* enum dss_obj_scope */
+    PyModule_AddIntMacro(mod, DSS_OBJ_DEPRECATED_ONLY);
+    PyModule_AddIntMacro(mod, DSS_OBJ_DEPRECATED);
+    PyModule_AddIntMacro(mod, DSS_OBJ_ALIVE);
+
     return mod;
 }
