@@ -253,3 +253,56 @@ int raid4_read_split(struct pho_data_processor *decoder)
     pho_error(0, "%s: unexpected split combination, abort.", __func__);
     abort();
 }
+
+static int raid4_read_into_buff_without_xor(struct pho_data_processor *proc)
+{
+    size_t buffer_offset = proc->reader_offset - proc->writer_offset;
+    struct raid_io_context *io_context =
+        (struct raid_io_context *)proc->private_reader;
+    size_t inside_split_offset = proc->reader_offset -
+                                 io_context->current_split_offset;
+    size_t split_size = io_context->read.extents[0]->size +
+                        io_context->read.extents[1]->size;
+    char *buff_start = proc->buff.buff + buffer_offset;
+    size_t current_extent = 0;
+    size_t to_read;
+
+    /* limit : object -> split -> buffer */
+    to_read = min(proc->object_size - proc->reader_offset,
+                  split_size - inside_split_offset);
+    to_read = min(to_read, proc->buff.size - buffer_offset);
+
+    while (to_read) {
+        /* add chunk level to the limit */
+        size_t extent_to_read = min(to_read,
+                                    io_context->current_split_chunk_size);
+        int rc;
+
+        rc = data_processor_read_into_buff(proc,
+                                           &io_context->iods[current_extent],
+                                           extent_to_read);
+        if (rc)
+            return rc;
+
+        to_read -= extent_to_read;
+
+        if (io_context->read.check_hash) {
+            rc = extent_hash_update(&io_context->hashes[current_extent],
+                                    buff_start, extent_to_read);
+            if (rc)
+                return rc;
+        }
+
+        buff_start += extent_to_read;
+        current_extent = (current_extent + 1) % 2;
+    }
+
+    return 0;
+}
+
+int raid4_read_into_buff(struct pho_data_processor *proc)
+{
+    /* XXX check with or without XOR */
+    return raid4_read_into_buff_without_xor(proc);
+}
+

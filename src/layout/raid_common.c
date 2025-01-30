@@ -903,6 +903,7 @@ static int read_split_setup(struct pho_data_processor *decoder,
         return rc;
 
     rc = io_context->ops->get_block_size(decoder, &decoder->io_block_size);
+    io_context->current_split_chunk_size = decoder->io_block_size;
     if (rc)
         return rc;
 

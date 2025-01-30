@@ -121,6 +121,7 @@ struct raid_io_context {
     struct pho_buff *buffers;
     size_t current_split;
     size_t current_split_offset;
+    size_t current_split_chunk_size;
     /** Number of data extents for this layout. This doesn't include parity
      * extents and replication.
      */

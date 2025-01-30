@@ -50,6 +50,7 @@ static struct raid_ops RAID4_OPS = {
     .read_split     = raid4_read_split,
     .delete_split   = raid_delete_split,
     .get_block_size = raid4_get_block_size,
+    .read_into_buff = raid4_read_into_buff,
 };
 
 static const struct pho_proc_ops RAID4_PROCESSOR_OPS = {
