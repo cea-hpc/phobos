@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -29,7 +29,7 @@
 #include "pho_dss.h"
 
 int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
-                   bool overwrite, const char *grouping);
+                   bool overwrite, const char *grouping, const char *copy_name);
 int object_md_del(struct dss_handle *dss, struct pho_xfer_target *xfer);
 int object_md_get(struct dss_handle *dss, struct pho_xfer_target *xfer);
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  All rights reserved (c) 2014-2024 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -170,6 +170,7 @@ class CLIParametersTest(unittest.TestCase):
                                   'oid'])
         self.check_cmdline_valid(['put', '--grouping', 'my_grouping', 'src',
                                   'oid'])
+        self.check_cmdline_valid(['put', '--copy-name', 'copy', 'src', 'oid'])
         self.check_cmdline_valid(['drive', 'lookup', 'drive_serial_or_path'])
         self.check_cmdline_valid(['drive', 'load', 'drive_serial_or_path',
                                   'tape_label'])

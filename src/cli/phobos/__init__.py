@@ -227,6 +227,8 @@ class StorePutHandler(XferOptHandler):
         add_put_arguments(parser)
         parser.add_argument('--grouping',
                             help='Set the grouping of the new objects')
+        parser.add_argument('-c', '--copy-name',
+                            help='Copy name for this object instance')
 
         parser.add_argument('-m', '--metadata',
                             help='Comma-separated list of key=value')
@@ -319,6 +321,7 @@ class StorePutHandler(XferOptHandler):
             self.logger.debug("Loaded layout params set %r", lyt_attrs)
 
         put_params = PutParams(profile=self.params.get('profile'),
+                               copy_name=self.params.get('copy_name'),
                                grouping=self.params.get('grouping'),
                                family=self.params.get('family'),
                                library=self.params.get('library'),

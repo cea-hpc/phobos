@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2024 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -58,9 +58,9 @@ static int build_layout_name(const char *layout_name, char *path, size_t len)
 int layout_encoder(struct pho_data_processor *encoder,
                    struct pho_xfer_desc *xfer)
 {
-    const char *default_copy_name;
     char layout_name[NAME_MAX];
     struct layout_module *mod;
+    const char *copy_name;
     int rc;
     int i;
 
@@ -90,14 +90,18 @@ int layout_encoder(struct pho_data_processor *encoder,
     encoder->layout = xcalloc(encoder->xfer->xd_ntargets,
                               sizeof(*encoder->layout));
 
-    rc = get_cfg_default_copy_name(&default_copy_name);
-    if (rc)
-        return rc;
+    if (xfer->xd_params.put.copy_name) {
+        copy_name = xfer->xd_params.put.copy_name;
+    } else {
+        rc = get_cfg_default_copy_name(&copy_name);
+        if (rc)
+            return rc;
+    }
 
     for (i = 0; i < encoder->xfer->xd_ntargets; i++) {
         encoder->layout[i].oid = xfer->xd_targets[i].xt_objid;
         encoder->layout[i].wr_size = xfer->xd_targets[i].xt_size;
-        encoder->layout[i].copy_name = xstrdup(default_copy_name);
+        encoder->layout[i].copy_name = xstrdup(copy_name);
     }
 
     /* get io_block_size from conf */

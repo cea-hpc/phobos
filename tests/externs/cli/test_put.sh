@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -407,10 +407,20 @@ function test_overwrite_family
     $output_func "$expect"
 }
 
+function test_user_copy_name
+{
+    put_checkout oid_copytest "--copy-name copytest"
+
+    local uuid=$($phobos object list -o uuid oid_copytest)
+
+    output_checkout copy copy_name $uuid copytest
+}
+
 test_overwrite_and_delete
 test_double_overwrite
 test_overwrite_metadata
 test_overwrite_lyt_params
+test_user_copy_name
 
 # Tape tests are available only if /dev/changer exists, which is the entry
 # point for the tape library.

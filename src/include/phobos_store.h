@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2024 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -104,6 +104,7 @@ struct pho_xfer_put_params {
     const char      *profile;     /**< Identifier for family, layout,
                                     *  tag combination
                                     */
+    const char      *copy_name;   /**< Copy reference. */
     bool             overwrite;   /**< true if the put command could be an
                                     *  update.
                                     */

@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -293,7 +293,7 @@ static void oms_attrs_to_json_failure(void **state)
 
     xfer.xd_targets = &target;
     will_return(pho_attrs_to_json, -ENOMEM);
-    rc = object_md_save(NULL, xfer.xd_targets, false, NULL);
+    rc = object_md_save(NULL, xfer.xd_targets, false, NULL, NULL);
     assert_int_equal(rc, -ENOMEM);
 }
 
@@ -317,7 +317,7 @@ static void oms_dss_lock_failure(void **state)
     will_return(pho_attrs_to_json, 0);
     will_return(dss_lock, -EINVAL);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite,
-                        NULL);
+                        NULL, NULL);
     assert_int_equal(rc, -EINVAL);
 }
 
@@ -333,7 +333,7 @@ static void oms_dss_object_insert_failure_without_overwrite(void **state)
     will_return(dss_object_insert, -EINVAL);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite,
-                        NULL);
+                        NULL, NULL);
     assert_int_equal(rc, -EINVAL);
 }
 
@@ -359,7 +359,7 @@ static void oms_dss_filter_build_failure_with_overwrite(void **state)
     will_return(dss_filter_build, -ENOMEM);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite,
-                        NULL);
+                        NULL, NULL);
     assert_int_equal(rc, -ENOMEM);
 }
 
@@ -377,7 +377,7 @@ static void oms_dss_object_insert_failure_with_fake_overwrite(void **state)
     will_return(dss_object_insert, -EINVAL);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite,
-                        NULL);
+                        NULL, NULL);
     assert_int_equal(rc, -EINVAL);
 
     will_return(pho_attrs_to_json, 0);
@@ -387,7 +387,7 @@ static void oms_dss_object_insert_failure_with_fake_overwrite(void **state)
     will_return(dss_object_insert, -EINVAL);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite,
-                        NULL);
+                        NULL, NULL);
     assert_int_equal(rc, -EINVAL);
 }
 
@@ -405,7 +405,7 @@ static void oms_dss_object_move_failure_with_overwrite(void **state)
     will_return(dss_move_object_to_deprecated, -ENOENT);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite,
-                        NULL);
+                        NULL, NULL);
     assert_int_equal(rc, -ENOENT);
 }
 
@@ -424,7 +424,7 @@ static void oms_dss_object_insert_failure_with_overwrite(void **state)
     will_return(dss_object_insert, -EINVAL);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite,
-                        NULL);
+                        NULL, NULL);
     assert_int_equal(rc, -EINVAL);
 }
 
@@ -441,7 +441,7 @@ static void oms_dss_filter_build_failure(void **state)
     will_return(dss_filter_build, -ENOMEM);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite,
-                        NULL);
+                        NULL, NULL);
     assert_int_equal(rc, -ENOMEM);
 }
 
@@ -459,7 +459,7 @@ static void oms_dss_object_get_failure(void **state)
     MOCK_DSS_OBJECT_GET(-EINVAL, 0);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite,
-                        NULL);
+                        NULL, NULL);
     assert_int_equal(rc, -EINVAL);
 }
 
@@ -478,7 +478,7 @@ static void oms_dss_unlock_failure(void **state)
     will_return(dss_copy_insert, 0);
     will_return(dss_unlock, -ENOLCK);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite,
-                        NULL);
+                        NULL, NULL);
     assert_int_equal(rc, -ENOLCK);
 
     free(xfer.xd_targets->xt_objuuid);
@@ -499,7 +499,7 @@ static void oms_success_without_overwrite(void **state)
     will_return(dss_copy_insert, 0);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite,
-                        NULL);
+                        NULL, NULL);
     assert_int_equal(rc, 0);
 
     free(xfer.xd_targets->xt_objuuid);
@@ -522,7 +522,7 @@ static void oms_success_with_fake_overwrite(void **state)
     will_return(dss_copy_insert, 0);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite,
-                        NULL);
+                        NULL, NULL);
     assert_int_equal(rc, 0);
 
     free(xfer.xd_targets->xt_objuuid);
@@ -546,7 +546,7 @@ static void oms_success_with_overwrite(void **state)
     will_return(dss_copy_insert, 0);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, xfer.xd_targets, xfer.xd_params.put.overwrite,
-                        NULL);
+                        NULL, NULL);
     assert_int_equal(rc, 0);
 
     free(xfer.xd_targets->xt_objuuid);

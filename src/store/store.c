@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2024 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -332,7 +332,7 @@ filt_free:
  * Save this xfer oid and metadata (xd_attrs) into the DSS.
  */
 int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
-                   bool overwrite, const char *grouping)
+                   bool overwrite, const char *grouping, const char *copy_name)
 {
     GString *md_repr = g_string_new(NULL);
     struct object_info *obj_res = NULL;
@@ -433,9 +433,14 @@ out_update:
     copy.object_uuid = obj_res->uuid;
     copy.version = obj_res->version;
     copy.copy_status = PHO_COPY_STATUS_INCOMPLETE;
-    rc = get_cfg_default_copy_name(&copy.copy_name);
-    if (rc)
-        LOG_GOTO(out_res, rc, "Cannot get default copy_name from conf");
+
+    if (copy_name) {
+        copy.copy_name = copy_name;
+    } else {
+        rc = get_cfg_default_copy_name(&copy.copy_name);
+        if (rc)
+            LOG_GOTO(out_res, rc, "Cannot get default copy_name from conf");
+    }
 
     rc = dss_copy_insert(dss, &copy, 1);
     if (rc)
@@ -1440,7 +1445,8 @@ static int store_perform_xfers(struct phobos_handle *pho)
         for (j = 0; j < pho->xfers[i].xd_ntargets; j++) {
             rc2 = object_md_save(&pho->dss, &pho->xfers[i].xd_targets[j],
                                  pho->xfers[i].xd_params.put.overwrite,
-                                 pho->xfers[i].xd_params.put.grouping);
+                                 pho->xfers[i].xd_params.put.grouping,
+                                 pho->xfers[i].xd_params.put.copy_name);
             if (rc2) {
                 pho_error(rc2, "Error while saving metadata for objid:'%s'",
                           pho->xfers[i].xd_targets[i].xt_objid);

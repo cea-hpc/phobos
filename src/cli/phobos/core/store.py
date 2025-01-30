@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  All rights reserved (c) 2014-2024 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -78,6 +78,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         ("lyt_params", PhoAttrs),
         ("tags", StringArray),
         ("_profile", c_char_p),
+        ("_copy_name", c_char_p),
         ("overwrite", c_bool),
         ("no_split", c_bool),
     ]
@@ -98,6 +99,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         self.set_lyt_params(put_params.lyt_params)
         self.tags = StringArray(put_params.tags)
         self.profile = put_params.profile
+        self.copy_name = put_params.copy_name
         self.overwrite = put_params.overwrite
         self.no_split = put_params.no_split
 
@@ -150,9 +152,20 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         # pylint: disable=attribute-defined-outside-init
         self._profile = val.encode('utf-8') if val else None
 
+    @property
+    def copy_name(self):
+        """Wrapper to get copy_name"""
+        return self._copy_name.decode('utf-8') if self._copy_name else None
+
+    @copy_name.setter
+    def copy_name(self, val):
+        """Wrapper to set copy_name"""
+        # pylint: disable=attribute-defined-outside-init
+        self._copy_name = val.encode('utf-8') if val else None
+
 class PutParams(namedtuple('PutParams',
-                           'profile family grouping library layout lyt_params '
-                           'no_split overwrite tags')):
+                           'profile copy_name family grouping library layout '
+                           'lyt_params no_split overwrite tags')):
     """
     Transition data structure for put parameters between
     the CLI and the XFer data structure.
