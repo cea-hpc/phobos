@@ -36,3 +36,11 @@ void buffer_xor(struct pho_buff *buff1, struct pho_buff *buff2,
     for (i = 0; i < count; i++)
         xor->buff[i] = buff1->buff[i] ^ buff2->buff[i];
 }
+
+void xor_in_place(const char *data_buff, char *parity_buff, size_t count)
+{
+    size_t i;
+
+    for (i = 0; i < count; i++)
+        parity_buff[i] = parity_buff[i] ^ data_buff[i];
+}

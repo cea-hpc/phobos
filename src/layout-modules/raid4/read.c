@@ -28,6 +28,7 @@
 
 #include "raid4.h"
 
+#include <stdbool.h>
 #include <unistd.h>
 
 static int write_with_xor(struct pho_data_processor *dec,
@@ -254,7 +255,7 @@ int raid4_read_split(struct pho_data_processor *decoder)
     abort();
 }
 
-static int raid4_read_into_buff_without_xor(struct pho_data_processor *proc)
+int raid4_read_into_buff(struct pho_data_processor *proc)
 {
     size_t buffer_offset = proc->reader_offset - proc->writer_offset;
     struct raid_io_context *io_context =
@@ -264,8 +265,17 @@ static int raid4_read_into_buff_without_xor(struct pho_data_processor *proc)
     size_t split_size = io_context->read.extents[0]->size +
                         io_context->read.extents[1]->size;
     char *buff_start = proc->buff.buff + buffer_offset;
-    size_t current_extent = 0;
+    bool with_extent_0;
     size_t to_read;
+    bool with_xor;
+
+   /*
+    * If true extent 0 is present, since the extents are sorted by layout index,
+    * it is necessarily in the first position of the list. The same way,
+    * if the xor is present, it is necessarily in the second position.
+    */
+    with_extent_0 = (io_context->read.extents[0]->layout_idx % 3 == 0);
+    with_xor = (io_context->read.extents[1]->layout_idx % 3 == 2);
 
     /* limit : object -> split -> buffer */
     to_read = min(proc->object_size - proc->reader_offset,
@@ -276,33 +286,70 @@ static int raid4_read_into_buff_without_xor(struct pho_data_processor *proc)
         /* add chunk level to the limit */
         size_t extent_to_read = min(to_read,
                                     io_context->current_split_chunk_size);
+        char *parity_buff = NULL;
+        size_t parity_count = 0;
+        char *data_buff = NULL;
+        size_t extent_index;
         int rc;
+        int i;
 
-        rc = data_processor_read_into_buff(proc,
-                                           &io_context->iods[current_extent],
-                                           extent_to_read);
-        if (rc)
-            return rc;
+        /*
+         * When we have (with_xor && !with_extent_0),
+         * the parity extent must replace the extent 0 and must be read first.
+         */
+        if (with_xor && !with_extent_0)
+            extent_index = 1;
+        else
+            extent_index = 0;
 
-        to_read -= extent_to_read;
+        /* We read extent 0 and extent 1 to be able to compute parity */
+        for (i = 0;
+             i < 2;
+             i++, buff_start += extent_to_read,
+                 extent_index = (extent_index + 1) % 2,
+                 extent_to_read = min(to_read, extent_to_read)) {
+            if (with_xor) {
+                if ((with_extent_0 && i == 1) || (!with_extent_0 && i == 0)) {
+                    parity_buff = buff_start;
+                    parity_count = extent_to_read;
+                } else {
+                    data_buff = buff_start;
+                }
+            }
 
-        if (io_context->read.check_hash) {
-            rc = extent_hash_update(&io_context->hashes[current_extent],
-                                    buff_start, extent_to_read);
+            if (extent_to_read == 0)
+                continue;
+
+            rc = data_processor_read_into_buff(proc,
+                                               &io_context->iods[extent_index],
+                                               extent_to_read);
             if (rc)
                 return rc;
+
+            to_read -= extent_to_read;
+
+            if (io_context->read.check_hash) {
+                rc = extent_hash_update(&io_context->hashes[extent_index],
+                                        buff_start, extent_to_read);
+                if (rc)
+                    return rc;
+            }
         }
 
-        buff_start += extent_to_read;
-        current_extent = (current_extent + 1) % 2;
+        /* compute XOR parity */
+        if (with_xor && parity_count > 0) {
+            /*
+             * zero padding
+             *
+             * Only the last read chunk could be shorter than the first one.
+             */
+            if (parity_count > extent_to_read)
+                memset(data_buff + extent_to_read, 0,
+                       extent_to_read - parity_count);
+
+            xor_in_place(data_buff, parity_buff, parity_count);
+        }
     }
 
     return 0;
 }
-
-int raid4_read_into_buff(struct pho_data_processor *proc)
-{
-    /* XXX check with or without XOR */
-    return raid4_read_into_buff_without_xor(proc);
-}
-
