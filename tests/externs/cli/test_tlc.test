@@ -3,7 +3,7 @@
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
-#  All rights reserved (c) 2014-2024 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -52,41 +52,47 @@ function tlc_daemon_started
 
 function tlc_daemon_bad_port
 {
-    export PHOBOS_TLC_LEGACY_port="65536"
+    sed -i "s/port = 20123/port = 65536/g" $PHOBOS_CFG_FILE
     if invoke_tlc; then
         waive_tlc
-        unset PHOBOS_TLC_LEGACY_port
+        sed -i "s/port = 65536/port = 20123/g" $PHOBOS_CFG_FILE
         error "TLC daemon start must fail with a port greater than 65535"
     fi
 
-    export PHOBOS_TLC_LEGACY_port="-1"
+    sed -i "s/port = 65536/port = -1/g" $PHOBOS_CFG_FILE
     if invoke_tlc; then
         waive_tlc
-        unset PHOBOS_TLC_LEGACY_port
+        sed -i "s/port = -1/port = 20123/g" $PHOBOS_CFG_FILE
         error "TLC daemon start must fail with a port value of -1"
     fi
 
     # Test the port number 22, already used by sshd
-    export PHOBOS_TLC_LEGACY_port="22"
+    sed -i "s/port = -1/port = 22/g" $PHOBOS_CFG_FILE
     if invoke_tlc; then
         waive_tlc
-        unset PHOBOS_TLC_LEGACY_port
+        sed -i "s/port = 22/port = 20123/g" $PHOBOS_CFG_FILE
         error "TLC daemon start must fail with a port 22 already used by sshd"
     fi
 
-    unset PHOBOS_TLC_LEGACY_port
+    sed -i "s/port = 22/port = 20123/g" $PHOBOS_CFG_FILE
 }
 
 function tlc_daemon_bad_lib_dev
 {
-    export PHOBOS_TLC_LEGACY_lib_device="/wrong/device/path"
+    sed -i \
+        "s/lib_device = \/dev\/changer/lib_device = \/wrdev\/path/g" \
+        $PHOBOS_CFG_FILE
     if invoke_tlc; then
         waive_tlc
-        unset PHOBOS_TLC_LEGACY_lib_device
+        sed -i \
+            "s/lib_device = \/wrdev\/path/lib_device = \/dev\/changer/g" \
+            $PHOBOS_CFG_FILE
         error "TLC daemon start must fail with an invalid library device path"
     fi
 
-    unset PHOBOS_TLC_LEGACY_lib_device
+    sed -i \
+        "s/lib_device = \/wrdev\/path/lib_device = \/dev\/changer/g" \
+        $PHOBOS_CFG_FILE
 }
 
 if [[ ! -w /dev/changer ]]; then

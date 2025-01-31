@@ -1,5 +1,9 @@
 # CHANGELOG UPDATES
 
+## next
+ * WARNING: TLC section names in the configuration file are changed from
+   [tlc_libname] to [tlc "libname"]
+
 ## 2.2.0
  * WARNING: the db schema moves from 2.1 to 2.2 and a migration is needed
  * WARNING: XFER structure is modified to old N objects and the API

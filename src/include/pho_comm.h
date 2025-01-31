@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -40,7 +40,7 @@
                            .value = "20123"}
 
 
-#define TLC_SECTION_CFG "tlc_%s"
+#define TLC_SECTION_CFG "tlc \"%s\""
 #define TLC_HOSTNAME_CFG_PARAM "hostname"
 #define DEFAULT_TLC_HOSTNAME "localhost"
 #define TLC_PORT_CFG_PARAM "port"
