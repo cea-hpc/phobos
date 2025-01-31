@@ -1129,16 +1129,17 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
     struct extent *extents = proc->src_layout->extents;
     int ext_count = proc->src_layout->ext_count;
     struct dss_handle *dss = &pho->dss;
-    struct layout_info *layouts;
-    struct copy_info *copy;
+    struct copy_info copy = {
+        .object_uuid = xfer->xd_targets->xt_objuuid,
+        .version = xfer->xd_targets->xt_version,
+        .copy_name = proc->src_layout->copy_name,
+    };
     struct object_info obj = {
         .oid = xfer->xd_targets->xt_objid,
         .uuid = xfer->xd_targets->xt_objuuid,
         .version = xfer->xd_targets->xt_version,
     };
-    struct dss_filter filter;
     bool medium_is_tape;
-    int count;
     int rc;
     int i;
 
@@ -1146,32 +1147,10 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
         extents[0].media.family == PHO_RSC_TAPE :
         false;
 
-    rc = dss_lazy_find_copy(&pho->dss, obj.uuid, obj.version, NULL, &copy);
+    rc = dss_layout_delete(dss, proc->src_layout, 1);
     if (rc)
-        LOG_RETURN(rc, "Cannot find copy for objid:'%s'", obj.oid);
-
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                          "  {\"DSS::LYT::object_uuid\": \"%s\"},"
-                          "  {\"DSS::LYT::version\": %d},"
-                          "  {\"DSS::LYT::copy_name\": \"%s\"}"
-                          "]}", obj.uuid, obj.version, copy->copy_name);
-    if (rc)
-        LOG_GOTO(clean_cpy, rc,
-                 "Unable to build uuid filter in object hard delete");
-
-    rc = dss_layout_get(dss, &filter, &layouts, &count);
-    dss_filter_free(&filter);
-    if (rc)
-        LOG_GOTO(clean_cpy, rc,
-                 "Unable to retrieve layouts from object '%s:%d'",
-                 obj.uuid, obj.version);
-
-    rc = dss_layout_delete(dss, layouts, count);
-    dss_res_free(layouts, count);
-    if (rc)
-        LOG_GOTO(clean_cpy, rc, "Unable to delete layouts for object '%s:%d'",
-                 obj.uuid, obj.version);
+        LOG_RETURN(rc, "Unable to delete layouts for object '%s:%d'",
+                   obj.uuid, obj.version);
 
     if (ext_count > 0) {
         if (medium_is_tape) {
@@ -1182,15 +1161,16 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
             rc = dss_extent_delete(dss, extents, ext_count);
         }
     }
-    if (rc)
-        LOG_GOTO(clean_cpy, rc, "Unable to %s object '%s:%d' extents",
-                 medium_is_tape ? "update" : "delete",
-                 obj.uuid, obj.version);
 
-    rc = dss_copy_delete(dss, copy, 1);
     if (rc)
-        LOG_GOTO(clean_cpy, rc, "Unable to delete copy of object '%s:%d'",
-                 obj.uuid, obj.version);
+        LOG_RETURN(rc, "Unable to %s object '%s:%d' extents",
+                   medium_is_tape ? "update" : "delete",
+                   obj.uuid, obj.version);
+
+    rc = dss_copy_delete(dss, &copy, 1);
+    if (rc)
+        LOG_RETURN(rc, "Unable to delete copy of object '%s:%d'",
+                   obj.uuid, obj.version);
 
     /* The object to delete can be alive or deprecated but there is no way to
      * know. So we move it to deprecated first, then we delete it.
@@ -1198,16 +1178,13 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
     if (xfer->xd_params.delete.scope != DSS_OBJ_DEPRECATED_ONLY) {
         rc = dss_move_object_to_deprecated(dss, &obj, 1);
         if (rc)
-            LOG_GOTO(clean_cpy, rc, "Unable to move object '%s:%d' to "
-                     "deprecated", obj.uuid, obj.version);
+            LOG_RETURN(rc, "Unable to move object '%s:%d' to deprecated",
+                       obj.uuid, obj.version);
     }
 
     rc = dss_deprecated_object_delete(dss, &obj, 1);
     if (rc)
         pho_error(rc, "Unable to delete object '%s:%d'", obj.uuid, obj.version);
-
-clean_cpy:
-    copy_info_free(copy);
 
     return rc;
 }
