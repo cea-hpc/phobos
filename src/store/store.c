@@ -1150,7 +1150,7 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
 
     if (ext_count > 0) {
         if (medium_is_tape) {
-            for (i = 0; i < count; ++i)
+            for (i = 0; i < ext_count; ++i)
                 extents[i].state = PHO_EXT_ST_ORPHAN;
             rc = dss_extent_update(dss, extents, extents, ext_count);
         } else {
