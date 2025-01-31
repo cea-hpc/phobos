@@ -77,11 +77,6 @@ int tlc_hostname_from_cfg(const char *library, const char **tlc_hostname)
         return -ENOMEM;
 
     rc = pho_cfg_get_val(section_name, TLC_HOSTNAME_CFG_PARAM, tlc_hostname);
-    if (rc == -ENODATA) {
-        *tlc_hostname = DEFAULT_TLC_HOSTNAME;
-        rc = 0;
-    }
-
     free(section_name);
     return rc;
 }

@@ -36,11 +36,13 @@ function setup
 {
     setup_tables
     invoke_tlc
+    invoke_tlc_bis
 }
 
 function cleanup
 {
     waive_tlc
+    waive_tlc_bis
     drop_tables
 }
 
@@ -54,11 +56,30 @@ function swap_back_lib_in_cfg
 
 function test_lib_scan
 {
-    dev_changer_scan=$($phobos lib scan /dev/changer)
-    echo "$dev_changer_scan" | grep "arm"
-    echo "$dev_changer_scan" | grep "slot"
-    echo "$dev_changer_scan" | grep "import/export"
-    echo "$dev_changer_scan" | grep "drive"
+    default_lib_scan=$($phobos lib scan)
+    echo "$default_lib_scan" | grep "arm"
+    echo "$default_lib_scan" | grep "slot"
+    echo "$default_lib_scan" | grep "import/export"
+    echo "$default_lib_scan" | grep "drive"
+    default_lib_scan_nb_drive=$(echo "${default_lib_scan}" | grep -c drive)
+    if (( 8 != default_lib_scan_nb_drive )); then
+        error "Lib scan must return 8 drives for default legacy library and" \
+              "not ${default_lib_scan_nb_drive}"
+    fi
+
+    legacy_scan=$($phobos lib scan legacy)
+    legacy_scan_nb_drive=$(echo "${legacy_scan}" | grep -c drive)
+    if (( 8 != legacy_scan_nb_drive )); then
+        error "Lib scan must return 8 drives for legacy and not" \
+              "${legacy_scan_nb_drive}"
+    fi
+
+    library_bis_scan=$($phobos lib scan library_bis)
+    library_bis_scan_nb_drive=$(echo "${library_bis_scan}" | grep -c drive)
+    if (( 1 != library_bis_scan_nb_drive )); then
+        error "Lib scan must return 1 drives for library bis and not" \
+              "${library_bis_scan_nb_drive}"
+    fi
 }
 
 test_lib_scan

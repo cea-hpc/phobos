@@ -2196,7 +2196,7 @@ out_free:
     return rc;
 }
 
-int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
+int phobos_admin_lib_scan(enum lib_type lib_type, const char *library,
                           bool refresh, json_t **lib_data)
 {
     struct lib_handle lib_hdl;
@@ -2209,7 +2209,7 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
 
     ENTRY;
 
-    rc = get_lib_adapter_and_open(lib_type, &lib_hdl, lib_dev);
+    rc = get_lib_adapter_and_open(lib_type, &lib_hdl, library);
     if (rc)
         return rc;
 
@@ -2228,7 +2228,7 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
     rc = ldm_lib_scan(&lib_hdl, refresh, lib_data, log.message);
     emit_log_after_action(&dss, &log, PHO_LIBRARY_SCAN, rc);
     if (rc)
-        LOG_GOTO(out, rc, "Failed to scan library for path '%s'", lib_dev);
+        LOG_GOTO(out, rc, "Failed to scan library '%s'", library);
 
 out:
     rc2 = ldm_lib_close(&lib_hdl);
@@ -2725,7 +2725,7 @@ free_dev_res:
     return rc;
 }
 
-int phobos_admin_lib_refresh(enum lib_type lib_type, const char *lib_dev)
+int phobos_admin_lib_refresh(enum lib_type lib_type, const char *library)
 {
     struct lib_handle lib_hdl;
     int rc2;
@@ -2733,14 +2733,14 @@ int phobos_admin_lib_refresh(enum lib_type lib_type, const char *lib_dev)
 
     ENTRY;
 
-    rc = get_lib_adapter_and_open(lib_type, &lib_hdl, lib_dev);
+    rc = get_lib_adapter_and_open(lib_type, &lib_hdl, library);
     if (rc)
         return rc;
 
     rc = ldm_lib_refresh(&lib_hdl);
     if (rc)
         LOG_GOTO(out, rc,
-                 "Failed to refresh library for path '%s'", lib_dev);
+                 "Failed to refresh library '%s'", library);
 
 out:
     rc2 = ldm_lib_close(&lib_hdl);

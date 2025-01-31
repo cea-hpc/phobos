@@ -49,7 +49,7 @@ function test_scan_refresh
     local drive="$(get_lto_drives 6 1)"
 
     # initial scan
-    lib_data=$($phobos lib scan /dev/changer)
+    lib_data=$($phobos lib scan)
     echo "${lib_data}" | grep "arm"
     echo "${lib_data}" | grep "slot"
     echo "${lib_data}" | grep "drive"
@@ -78,7 +78,7 @@ function test_scan_refresh
     $phobos drive load ${drive} ${tape}
 
     # scan with one loaded tape
-    lib_data=$($phobos lib scan /dev/changer)
+    lib_data=$($phobos lib scan)
     # check the initial tape slot is now empty
     echo "$lib_data" | grep slot | grep ${initial_tape_slot_address} |
         grep -v full
@@ -90,7 +90,7 @@ function test_scan_refresh
     drain_all_drives
 
     # Check with a refresh, TLC library cache is valid with one empty drive
-    lib_data=$($phobos lib scan --refresh /dev/changer)
+    lib_data=$($phobos lib scan --refresh)
     set +e
     nb_full_drive=$(echo "$lib_data" | grep drive | grep full -c)
     set -e
@@ -102,7 +102,7 @@ function test_scan_refresh
     # load a drive one more time
     $phobos drive load ${drive} ${tape}
     # check drive is loaded
-    lib_data=$($phobos lib scan /dev/changer)
+    lib_data=$($phobos lib scan)
     echo "$lib_data" | grep ${drive_serial} | grep full | grep ${tape}
 
     # unload drives without using TLC to test refresh action
@@ -112,7 +112,7 @@ function test_scan_refresh
     $phobos lib refresh
 
     # Check with a prev refresh, TLC library cache is valid with one empty drive
-    lib_data=$($phobos lib scan /dev/changer)
+    lib_data=$($phobos lib scan)
     set +e
     nb_full_drive=$(echo "$lib_data" | grep drive | grep full -c)
     set -e

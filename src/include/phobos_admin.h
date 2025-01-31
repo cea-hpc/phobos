@@ -484,7 +484,7 @@ int phobos_admin_media_library_rename(struct admin_handle *adm,
  * @param[in] lib_type          Type of the library to scan
  * @param[in] refresh           If true, the library module must refresh its
  *                              cache from the library before answering the scan
- * @param[in] lib_dev           Path of the library to scan
+ * @param[in] library           Library to scan
  * @param[in,out] lib_data      json object allocated by ldm_lib_scan,
  *                              json_decref must be called later on to
  *                              deallocate it properly
@@ -494,19 +494,19 @@ int phobos_admin_media_library_rename(struct admin_handle *adm,
  *
  * This must be called with an admin_handle initialized with phobos_admin_init.
  */
-int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
+int phobos_admin_lib_scan(enum lib_type lib_type, const char *library,
                           bool refresh, json_t **lib_data);
 
 /**
  * Refresh the library internal cache
  *
  * @param[in] lib_type          Type of the library to refresh
- * @param[in] lib_dev           Path of the library to refresh
+ * @param[in] library           Library to refresh
  *
  * @return                      0 on success
  *                              -errno on failure
  */
-int phobos_admin_lib_refresh(enum lib_type lib_type, const char *lib_dev);
+int phobos_admin_lib_refresh(enum lib_type lib_type, const char *library);
 
 /**
  * Dump a list of logs to a given file.

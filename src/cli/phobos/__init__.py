@@ -559,9 +559,9 @@ class RadosPoolSetAccessOptHandler(MediaSetAccessOptHandler):
     epilog = setaccess_epilog("rados_pool")
 
 class LibScanOptHandler(BaseOptHandler):
-    """Scan a physical resource and display retrieved information."""
+    """Scan a library and display retrieved information."""
     label = 'scan'
-    descr = 'Display the physical resources status of the library'
+    descr = 'Display the status of the library'
 
     def __enter__(self):
         return self
@@ -574,9 +574,9 @@ class LibScanOptHandler(BaseOptHandler):
         """Add resource-specific options."""
         super(LibScanOptHandler, cls).add_options(parser)
         parser.add_argument('res', nargs='*',
-                            help="Resource(s) or device(s) to scan. If not "
-                                 "given, will fetch 'lib_device' path in "
-                                 "configuration file instead")
+                            help="Library(ies) to scan. If not given, will "
+                                 "fetch instead the default tape library from "
+                                 "configuration")
         parser.add_argument('--refresh', action='store_true',
                             help="The library module refreshes its internal "
                                  "cache before sending the data")
@@ -597,9 +597,9 @@ class LibRefreshOptHandler(BaseOptHandler):
         """Add resource-specific options."""
         super(LibRefreshOptHandler, cls).add_options(parser)
         parser.add_argument('res', nargs='*',
-                            help="Resource(s) or device(s) to refresh. If not "
-                                 "given, will fetch 'lib_device' path in "
-                                 "configuration file instead")
+                            help="Library(ies) to refresh. If not given, will "
+                                 "fetch instead the default tape library from "
+                                 "configuration")
 
 class DriveListOptHandler(ListOptHandler):
     """
@@ -2515,19 +2515,13 @@ class LibOptHandler(BaseResourceOptHandler):
         """Scan this lib and display the result"""
         libs = self.params.get("res")
         if not libs:
-            try:
-                lib_dev_path_from_cfg = cfg.get_val("lrs", "lib_device")
-                libs.append(lib_dev_path_from_cfg)
-            except KeyError as err:
-                self.logger.error("%s, will abort 'lib scan'", err)
-                sys.exit(os.EX_DATAERR)
+            libs = [cfg.get_default_library(ResourceFamily.RSC_TAPE)]
 
         with_refresh = self.params.get('refresh')
-
         try:
             with AdminClient(lrs_required=False) as adm:
-                for lib_dev in libs:
-                    lib_data = adm.lib_scan(PHO_LIB_SCSI, lib_dev, with_refresh)
+                for lib in libs:
+                    lib_data = adm.lib_scan(PHO_LIB_SCSI, lib, with_refresh)
                     # FIXME: can't use dump_object_list yet as it does not play
                     # well with unstructured dict-like data (relies on getattr)
                     self._print_lib_data(lib_data)
@@ -2539,17 +2533,12 @@ class LibOptHandler(BaseResourceOptHandler):
         """Refresh the library internal cache"""
         libs = self.params.get("res")
         if not libs:
-            try:
-                lib_dev_path_from_cfg = cfg.get_val("lrs", "lib_device")
-                libs.append(lib_dev_path_from_cfg)
-            except KeyError as err:
-                self.logger.error("%s, will abort 'lib refresh'", err)
-                sys.exit(os.EX_DATAERR)
+            libs = [cfg.get_default_library(ResourceFamily.RSC_TAPE)]
 
         try:
             with AdminClient(lrs_required=False) as adm:
-                for lib_dev in libs:
-                    adm.lib_refresh(PHO_LIB_SCSI, lib_dev)
+                for lib in libs:
+                    adm.lib_refresh(PHO_LIB_SCSI, lib)
         except EnvironmentError as err:
             self.logger.error("%s, will abort 'lib refresh'", err)
             sys.exit(abs(err.errno))

@@ -47,8 +47,9 @@ function setup
 {
     setup_tables
     if [[ -w /dev/changer ]]; then
-        invoke_daemons
         drain_all_drives
+        invoke_tlc_bis
+        invoke_daemons
     else
         invoke_lrs
     fi
@@ -61,6 +62,7 @@ function cleanup
     rm -rf $dir1 $dir2
     if [[ -w /dev/changer ]]; then
         waive_daemons
+        waive_tlc_bis
         drain_all_drives
     else
         waive_lrs
@@ -152,25 +154,28 @@ function test_extent_list_tapes_lib() {
     touch /tmp/extent3
     touch /tmp/extent4
 
-    drives=($(get_lto_drives 6 2))
-    $phobos drive add --unlock ${drives[0]} --library lib3
-    $phobos drive add --unlock ${drives[1]} --library lib4
+    local tape=$(get_tapes L6 1)
+    local drive="$(get_lto_drives 6 1)"
+    local tape_bis=$(get_tapes_bis L6 1)
+    local drive_bis="$(get_lto_drives_bis 6 1)"
 
-    tapes=($(get_tapes L6 2 | nodeset -e))
-    $phobos tape add --type lto6 ${tapes[0]} --library lib3
-    $phobos tape add --type lto6 ${tapes[1]} --library lib4
+    $phobos drive add --unlock ${drive} --library legacy
+    $phobos drive add --unlock ${drive_bis} --library library_bis
 
-    $phobos tape format --unlock ${tapes[0]} --library lib3
-    $phobos tape format --unlock ${tapes[1]} --library lib4
+    $phobos tape add --type lto6 ${tape} --library legacy
+    $phobos tape add --type lto6 ${tape_bis} --library library_bis
+
+    $phobos tape format --unlock ${tape} --library legacy
+    $phobos tape format --unlock ${tape_bis} --library library_bis
 
     $phobos put -l raid1 --lyt-params repl_count=2 /tmp/extent3 extent3
     $phobos put -l raid1 --lyt-params repl_count=1 /tmp/extent4 extent4 \
-        --library lib4
+        --library library_bis
 
-    output=$($phobos extent list --library lib3)
+    output=$($phobos extent list --library legacy)
     echo "$output" | grep "extent3" && ! echo "$output" | grep "extent4"
 
-    output=$($phobos extent list --library lib4)
+    output=$($phobos extent list --library library_bis)
     echo "$output" | grep -E "extent3|extent4" | wc -l | grep -q "^2$" \
         && ! echo "$output" | grep -vE "extent3|extent4"
 

@@ -196,7 +196,7 @@ static void test_lib_adapter(void)
     struct lib_handle lib_hdl;
 
     ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib_hdl.ld_module));
-    ASSERT_RC(ldm_lib_open(&lib_hdl, "/dev/changer"));
+    ASSERT_RC(ldm_lib_open(&lib_hdl, "legacy"));
 
     if (one_serial) {
         ASSERT_RC(ldm_lib_drive_lookup(&lib_hdl, one_serial, &drv_info));
@@ -217,11 +217,11 @@ static void test_lib_scan(bool use_admin_function)
     size_t index;
 
     if (use_admin_function) {
-        ASSERT_RC(phobos_admin_lib_scan(PHO_LIB_SCSI, "/dev/changer", false,
+        ASSERT_RC(phobos_admin_lib_scan(PHO_LIB_SCSI, "legacy", false,
                                         &lib_data));
     } else {
         ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib_hdl.ld_module));
-        ASSERT_RC(ldm_lib_open(&lib_hdl, "/dev/changer"));
+        ASSERT_RC(ldm_lib_open(&lib_hdl, "legacy"));
         ASSERT_RC(ldm_lib_scan(&lib_hdl, false, &lib_data, NULL));
     }
 

@@ -28,9 +28,6 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_launch_daemon.sh
 . $test_dir/tape_drive.sh
 
-DRIVE_ARRAY=( /dev/st0 /dev/st1 )
-TAPE_ARRAY=( P00000L5 P00001L5 )
-
 function setup_dir
 {
     DIR_ARRAY=($(mktemp -d /tmp/test.pho.XXXX) $(mktemp -d /tmp/test.pho.XXXX))
@@ -50,6 +47,9 @@ function setup_tape
     drain_all_drives
     setup_tables
     invoke_daemons
+
+    DRIVE_ARRAY=($(get_lto_drives 5 2))
+    TAPE_ARRAY=($(get_tapes L5 2 | nodeset -e))
 }
 
 function cleanup_tape

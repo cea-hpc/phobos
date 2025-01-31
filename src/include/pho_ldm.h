@@ -27,6 +27,7 @@
 #ifndef _PHO_LDM_H
 #define _PHO_LDM_H
 
+#include "pho_cfg.h"
 #include "pho_common.h"
 #include "pho_types.h"
 #include <assert.h>
@@ -311,6 +312,13 @@ static inline int get_lib_adapter_and_open(enum lib_type lib_type,
 
     if (!lib_type_name)
         LOG_RETURN(-EINVAL, "Invalid lib type '%d'", lib_type);
+
+    if (!library) {
+        if (lib_type == PHO_LIB_SCSI)
+            pho_cfg_get_val("store", "default_tape_library", &library);
+        else if (lib_type == PHO_LIB_RADOS)
+            pho_cfg_get_val("store", "default_rados_library", &library);
+    }
 
     rc = get_lib_adapter(lib_type, &lib_hdl->ld_module);
     if (rc)

@@ -12,9 +12,9 @@ To launch/stop the daemon:
 
 ## Scanning libraries
 Use the `phobos lib scan` command to scan a given library. For instance, the
-following will give the contents of the /dev/changer library:
+following will give the contents of the default tape library:
 ```
-phobos lib scan /dev/changer
+phobos lib scan
 ```
 
 # Adding drives

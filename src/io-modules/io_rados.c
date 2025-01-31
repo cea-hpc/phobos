@@ -337,7 +337,7 @@ static int pho_rados_open(const char *extent_desc, struct pho_io_descr *iod,
     iod->iod_ctx = rados_io_ctx;
 
     /* Connect to cluster */
-    rc = get_lib_adapter_and_open(PHO_LIB_RADOS, &rados_io_ctx->lib_hdl, "");
+    rc = get_lib_adapter_and_open(PHO_LIB_RADOS, &rados_io_ctx->lib_hdl, NULL);
     if (rc)
         LOG_RETURN(rc, "Could not connect to Ceph cluster");
 
