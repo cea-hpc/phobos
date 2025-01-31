@@ -29,6 +29,7 @@ import shutil
 from subprocess import Popen, PIPE
 import tempfile
 import unittest
+import time
 
 from phobos.db import Migrator, ORDERED_SCHEMAS, CURRENT_SCHEMA_VERSION, \
                       AVAIL_SCHEMAS, FUTURE_SCHEMAS
@@ -138,7 +139,8 @@ class MigratorTest(unittest.TestCase):
 
     def exit_put_get_migration(self, success, msg=None):
         """Function to cleanup"""
-        Popen('pgrep phobosd | xargs kill', shell=True).wait()
+        Popen("pid=$(pgrep phobosd); kill $pid; while kill -0 $pid; \
+               do sleep 1; done", shell=True).wait()
         shutil.rmtree('/run/phobosd')
 
         self.migrator.drop_tables()
@@ -207,10 +209,16 @@ class MigratorTest(unittest.TestCase):
                   shell=True, stdout=PIPE)
 
             # Check that phobosd is running
+            nb_try = 0
             process = Popen('$phobos ping phobosd', shell=True, stdout=PIPE)
             result, _ = process.communicate()
+            while process.returncode and nb_try < 5:
+                time.sleep(0.5)
+                nb_try += 1
+                process = Popen('$phobos ping phobosd', shell=True, stdout=PIPE)
+                result, _ = process.communicate()
+
             if process.returncode:
-                print(result.decode('utf-8'))
                 self.exit_put_get_migration(False, "Failed to ping phobosd")
 
             process = Popen('$phobos get oid oid-file', shell=True, stdout=PIPE)
