@@ -1607,7 +1607,6 @@ static int store_dispatch_loop(struct phobos_handle *pho)
  */
 static int store_perform_xfers(struct phobos_handle *pho)
 {
-    int rc2 = 0;
     size_t i, j;
     int rc = 0;
 
@@ -1623,40 +1622,62 @@ static int store_perform_xfers(struct phobos_handle *pho)
      * have its metadata cleared from the DSS.
      */
     for (i = 0; i < pho->n_xfers; i++) {
-        if (pho->xfers[i].xd_op == PHO_XFER_OP_DEL &&
-            !(pho->xfers[i].xd_flags & PHO_XFER_OBJ_HARD_DEL)) {
-            rc = object_delete(&pho->dss, pho->xfers[i].xd_targets);
-            if (rc)
-                pho_error(rc, "Error while deleting objid: '%s'",
-                              pho->xfers[i].xd_targets->xt_objid);
-            store_end_xfer(pho, i, rc);
-        }
+        struct pho_xfer_desc *xfer = &pho->xfers[i];
+        int rc2 = 0;
 
-        if (pho->xfers[i].xd_op == PHO_XFER_OP_UNDEL) {
-            rc = object_undelete(&pho->dss, pho->xfers[i].xd_targets);
-            if (rc) {
-                pho_error(rc, "Error while undeleting oid: '%s', uuid: '%s'",
-                          pho->xfers[i].xd_targets->xt_objid ?
-                                pho->xfers[i].xd_targets->xt_objid : "NULL",
-                          pho->xfers[i].xd_targets->xt_objuuid ?
-                                pho->xfers[i].xd_targets->xt_objuuid : "NULL");
+        switch (xfer->xd_op) {
+        case PHO_XFER_OP_DEL:
+            if (xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL)
+                continue;
+
+            rc2 = object_delete(&pho->dss, xfer->xd_targets);
+            if (rc2)
+                pho_error(rc2, "Error while deleting objid: '%s'",
+                          xfer->xd_targets->xt_objid);
+
+            store_end_xfer(pho, i, rc2);
+            break;
+        case PHO_XFER_OP_UNDEL:
+            rc2 = object_undelete(&pho->dss, xfer->xd_targets);
+            if (rc2)
+                pho_error(rc2, "Error while undeleting oid: '%s', uuid: '%s'",
+                          xfer->xd_targets->xt_objid ?
+                                xfer->xd_targets->xt_objid : "NULL",
+                          xfer->xd_targets->xt_objuuid ?
+                                xfer->xd_targets->xt_objuuid : "NULL");
+
+            store_end_xfer(pho, i, rc2);
+            break;
+        case PHO_XFER_OP_PUT:
+            for (j = 0; j < xfer->xd_ntargets; j++) {
+                rc2 = object_md_save(&pho->dss, &xfer->xd_targets[j],
+                                     xfer->xd_params.put.overwrite,
+                                     xfer->xd_params.put.grouping,
+                                     xfer->xd_params.put.copy_name);
+                if (rc2) {
+                    pho_error(rc2, "Error while saving metadata for objid:'%s'",
+                              xfer->xd_targets[i].xt_objid);
+                    rc = rc ? : rc2;
+                    break;
+                }
             }
-            store_end_xfer(pho, i, rc);
-        }
 
-        if (pho->xfers[i].xd_op != PHO_XFER_OP_PUT &&
-            pho->xfers[i].xd_op != PHO_XFER_OP_COPY)
-            continue;
+            if (rc && !pho->processors[i].done) {
+                store_end_xfer(pho, i, rc);
+                break;
+            }
 
-        if (pho->xfers[i].xd_op == PHO_XFER_OP_COPY) {
-            for (j = 0; j < pho->xfers[i].xd_ntargets; j++) {
+            pho->md_created[i] = true;
+            break;
+        case PHO_XFER_OP_COPY:
+            for (j = 0; j < xfer->xd_ntargets; j++) {
                 struct copy_info copy = {0};
 
-                copy.object_uuid = pho->xfers[i].xd_targets[j].xt_objuuid;
-                copy.version = pho->xfers[i].xd_targets[j].xt_version;
+                copy.object_uuid = xfer->xd_targets[j].xt_objuuid;
+                copy.version = xfer->xd_targets[j].xt_version;
                 copy.copy_status = PHO_COPY_STATUS_INCOMPLETE;
-                if (pho->xfers[i].xd_params.copy.put.copy_name) {
-                    copy.copy_name = pho->xfers[i].xd_params.copy.put.copy_name;
+                if (xfer->xd_params.copy.put.copy_name) {
+                    copy.copy_name = xfer->xd_params.copy.put.copy_name;
                 } else {
                     rc2 = get_cfg_default_copy_name(&copy.copy_name);
                     if (rc2) {
@@ -1681,28 +1702,12 @@ static int store_perform_xfers(struct phobos_handle *pho)
             }
 
             pho->md_created[i] = true;
+            break;
+        default:
             continue;
         }
 
-        /* PHO_XFER_OP_PUT */
-        for (j = 0; j < pho->xfers[i].xd_ntargets; j++) {
-            rc2 = object_md_save(&pho->dss, &pho->xfers[i].xd_targets[j],
-                                 pho->xfers[i].xd_params.put.overwrite,
-                                 pho->xfers[i].xd_params.put.grouping,
-                                 pho->xfers[i].xd_params.put.copy_name);
-            if (rc2) {
-                pho_error(rc2, "Error while saving metadata for objid:'%s'",
-                          pho->xfers[i].xd_targets[i].xt_objid);
-                rc = rc ? : rc2;
-                break;
-            }
-        }
-
-        if (rc && !pho->processors[i].done) {
-            store_end_xfer(pho, i, rc);
-            continue;
-        }
-        pho->md_created[i] = true;
+        rc = rc ? : rc2;
     }
 
     /* Generate all first requests of processors */
