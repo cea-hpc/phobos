@@ -47,6 +47,8 @@ enum pho_xfer_flags {
     PHO_XFER_OBJ_BEST_HOST  = (1 << 1),
     /* del: hard remove the object */
     PHO_XFER_OBJ_HARD_DEL   = (1 << 2),
+    /* del: hard remove the copy */
+    PHO_XFER_COPY_HARD_DEL  = (1 << 3),
 };
 
 /**

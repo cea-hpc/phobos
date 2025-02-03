@@ -1027,6 +1027,18 @@ static int object_info_copy_into_xfer(struct object_info *obj,
     return 0;
 }
 
+static bool op_is_basic_decoder(struct pho_xfer_desc *xfer)
+{
+    if (xfer->xd_op == PHO_XFER_OP_GETMD || xfer->xd_op == PHO_XFER_OP_UNDEL)
+        return true;
+
+    if (xfer->xd_op == PHO_XFER_OP_DEL &&
+         !(xfer->xd_flags & (PHO_XFER_OBJ_HARD_DEL | PHO_XFER_COPY_HARD_DEL)))
+        return true;
+
+    return false;
+}
+
 /**
  * Initialize a data processor to perform \a xfer, according to xfer->xd_op and
  * xfer->xd_flags.
@@ -1053,10 +1065,7 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
                        xfer->xd_targets->xt_objid);
     }
 
-    if (xfer->xd_op == PHO_XFER_OP_GETMD ||
-        (xfer->xd_op == PHO_XFER_OP_DEL &&
-         !(xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL)) ||
-        xfer->xd_op == PHO_XFER_OP_UNDEL) {
+    if (op_is_basic_decoder(xfer)) {
         /* create dummy decoder if no I/O operations are made */
         proc->xfer = xfer;
         proc->done = true;
@@ -1627,7 +1636,8 @@ static int store_perform_xfers(struct phobos_handle *pho)
 
         switch (xfer->xd_op) {
         case PHO_XFER_OP_DEL:
-            if (xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL)
+            if (xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL ||
+                xfer->xd_flags & PHO_XFER_COPY_HARD_DEL)
                 continue;
 
             rc2 = object_delete(&pho->dss, xfer->xd_targets);
