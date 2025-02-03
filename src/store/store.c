@@ -1189,6 +1189,82 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
     return rc;
 }
 
+static int store_end_encoder_xfer(struct phobos_handle *pho,
+                                  struct pho_xfer_desc *xfer,
+                                  struct pho_data_processor *encoder)
+{
+    int rc2;
+    int rc;
+    int i;
+
+    for (i = 0; i < xfer->xd_ntargets; i++) {
+        pho_debug("Saving layout for objid:'%s'", xfer->xd_targets[i].xt_objid);
+        rc = dss_extent_insert(&pho->dss, encoder->dest_layout[i].extents,
+                               encoder->dest_layout[i].ext_count);
+        if (rc)
+            LOG_RETURN(rc, "Error while saving extents for objid: '%s'",
+                       xfer->xd_targets[i].xt_objid);
+
+        rc = dss_layout_insert(&pho->dss, &encoder->dest_layout[i], 1);
+        if (rc) {
+            pho_error(rc, "Error while saving layout for objid: '%s'",
+                      xfer->xd_targets[i].xt_objid);
+
+            for (int j = 0; j < encoder->dest_layout[i].ext_count; ++j)
+                encoder->dest_layout[i].extents[j].state = PHO_EXT_ST_ORPHAN;
+
+            rc2 = dss_extent_update(&pho->dss, encoder->dest_layout[i].extents,
+                                    encoder->dest_layout[i].extents,
+                                    encoder->dest_layout[i].ext_count);
+            if (rc2)
+                pho_error(rc2, "Error while updating extents to orphan");
+
+            return rc;
+        }
+
+        struct copy_info copy = {
+            .object_uuid = xfer->xd_targets[i].xt_objuuid,
+            .version = xfer->xd_targets[i].xt_version,
+            .copy_name = encoder->dest_layout[i].copy_name,
+            .copy_status = PHO_COPY_STATUS_COMPLETE,
+        };
+
+        rc2 = dss_copy_update(&pho->dss, &copy, &copy, 1,
+                              DSS_COPY_UPDATE_COPY_STATUS);
+        if (rc2)
+            LOG_RETURN(rc2, "Error while updating copy status to complete");
+    }
+
+    return 0;
+}
+
+static int store_end_decoder_xfer(struct phobos_handle *pho,
+                                  struct pho_xfer_desc *xfer)
+{
+    struct copy_info *copy;
+    int rc = 0;
+
+    rc = dss_lazy_find_copy(&pho->dss, xfer->xd_targets->xt_objuuid,
+                            xfer->xd_targets->xt_version, NULL, &copy);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Error while retrieving copy info, will skip access time update");
+
+    rc = gettimeofday(&copy->access_time, NULL);
+    if (rc)
+        LOG_GOTO(end, rc,
+                 "Error while retrieving current time, will skip access time update");
+
+    rc = dss_copy_update(&pho->dss, copy, copy, 1, DSS_COPY_UPDATE_ACCESS_TIME);
+    if (rc)
+        pho_error(rc, "Error while updating copy access time");
+
+end:
+    copy_info_free(copy);
+
+    return rc;
+}
+
 /**
  * Mark the end of a transfer (successful or not) by updating the processor
  * structure, saving the data processor layout to the DSS if necessary, properly
@@ -1206,8 +1282,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
 {
     struct pho_data_processor *proc = &pho->processors[xfer_idx];
     struct pho_xfer_desc *xfer = &pho->xfers[xfer_idx];
-    int rc2 = 0;
-    int i, j;
+    int i;
 
     /* Don't end an encoder twice */
     if (pho->ended_xfers[xfer_idx])
@@ -1218,91 +1293,16 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     pho->n_ended_xfers++;
     proc->done = true;
 
+    if (xfer->xd_rc || rc)
+        goto cont;
+
     /* Once the encoder is done and successful, save the layout and metadata */
-    if ((is_encoder(proc) || is_copier(proc)) && xfer->xd_rc == 0 && rc == 0) {
-        for (i = 0; i < xfer->xd_ntargets; i++) {
-            pho_debug("Saving layout for objid:'%s'",
-                      xfer->xd_targets[i].xt_objid);
-            rc2 = dss_extent_insert(&pho->dss, proc->dest_layout[i].extents,
-                                    proc->dest_layout[i].ext_count);
-            if (rc2) {
-                pho_error(rc2, "Error while saving extents for objid: '%s'",
-                          xfer->xd_targets[i].xt_objid);
-                rc = rc ? : rc2;
-                break;
-            } else {
-                rc2 = dss_layout_insert(&pho->dss, &proc->dest_layout[i], 1);
-                if (rc2) {
-                    pho_error(rc2, "Error while saving layout for objid: '%s'",
-                              xfer->xd_targets[i].xt_objid);
-                    rc = rc ? : rc2;
-
-                    for (j = 0; j < proc->dest_layout[i].ext_count; ++j)
-                        proc->dest_layout[i].extents[j].state =
-                            PHO_EXT_ST_ORPHAN;
-
-                    rc2 = dss_extent_update(&pho->dss,
-                                            proc->dest_layout[i].extents,
-                                            proc->dest_layout[i].extents,
-                                            proc->dest_layout[i].ext_count);
-
-                    if (rc2) {
-                        pho_error(rc2,
-                                  "Error while updating extents to orphan");
-                        rc = rc ? : rc2;
-                        break;
-                    }
-                    break;
-                } else {
-                    struct copy_info copy = {
-                        .object_uuid = xfer->xd_targets[i].xt_objuuid,
-                        .version = xfer->xd_targets[i].xt_version,
-                        .copy_name = proc->dest_layout[i].copy_name,
-                        .copy_status = PHO_COPY_STATUS_COMPLETE,
-                    };
-
-                    rc2 = dss_copy_update(&pho->dss, &copy, &copy, 1,
-                                          DSS_COPY_UPDATE_COPY_STATUS);
-                    if (rc2) {
-                        pho_error(rc2,
-                                  "Error while updating copy status "
-                                  "to complete");
-                        rc = rc ? : rc2;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-
-    if (xfer->xd_rc == 0 && rc == 0 && xfer->xd_op == PHO_XFER_OP_GET) {
-        struct copy_info *copy;
-
-        rc = dss_lazy_find_copy(&pho->dss, xfer->xd_targets->xt_objuuid,
-                                xfer->xd_targets->xt_version, NULL, &copy);
-        if (rc)
-            LOG_GOTO(cont, rc,
-                     "Error while retrieving copy info, "
-                     "will skip access time update");
-
-        rc = gettimeofday(&copy->access_time, NULL);
-        if (rc) {
-            copy_info_free(copy);
-            LOG_GOTO(cont, rc,
-                     "Error while retrieving current time, "
-                     "will skip access time update");
-        }
-
-        rc = dss_copy_update(&pho->dss, copy, copy, 1,
-                             DSS_COPY_UPDATE_ACCESS_TIME);
-        copy_info_free(copy);
-        if (rc)
-            pho_error(rc, "Error while updating copy access time");
-    }
-
-    if (xfer->xd_op == PHO_XFER_OP_DEL &&
-        xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL && xfer->xd_rc == 0 && rc == 0)
+    if (is_encoder(proc) || is_copier(proc))
+        rc = store_end_encoder_xfer(pho, xfer, proc);
+    else if (xfer->xd_op == PHO_XFER_OP_GET)
+        rc = store_end_decoder_xfer(pho, xfer);
+    else if (xfer->xd_op == PHO_XFER_OP_DEL &&
+             xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL)
         rc = store_end_delete_xfer(pho, xfer, proc);
 
 cont:
