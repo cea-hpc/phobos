@@ -72,7 +72,7 @@ from phobos.cli.action.status import StatusOptHandler
 from phobos.cli.action.unlock import UnlockOptHandler
 from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
                                DSSInteractHandler, BaseResourceOptHandler,
-                               env_error_format)
+                               env_error_format, XferOptHandler)
 from phobos.cli.common.args import (add_list_arguments, add_put_arguments)
 from phobos.cli.common.exec import (exec_add_dir_rados, exec_delete_dir_rados,
                                     exec_delete_medium_device)
@@ -87,6 +87,7 @@ from phobos.cli.target.media import (MediaAddOptHandler, MediaListOptHandler,
                                      MediaRenameOptHandler,
                                      MediaSetAccessOptHandler,
                                      MediaUpdateOptHandler)
+from phobos.cli.target.tape import TapeOptHandler
 
 def attr_convert(usr_attr):
     """Convert k/v pairs as expressed by the user into a dictionnary."""
@@ -115,32 +116,6 @@ def mput_file_line_parser(line):
                          + str(len(file_entry)))
 
     return file_entry
-
-
-class XferOptHandler(BaseOptHandler):
-    """Option handler for actions that do data transfers."""
-    def __init__(self, params, **kwargs):
-        """Initialize a store client."""
-        super(XferOptHandler, self).__init__(params, **kwargs)
-        self.client = None
-
-    @classmethod
-    def add_options(cls, parser):
-        """
-        Add options for the given command. We register the class label as the
-        verb for the special case of data xfer commands.
-        """
-        super(XferOptHandler, cls).add_options(parser)
-        parser.set_defaults(verb=cls.label)
-
-    def __enter__(self):
-        """Initialize a client for data movements."""
-        self.client = XferClient()
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        """Release resources associated to a XferClient."""
-        self.client.clear()
 
 
 class StoreGetMDHandler(XferOptHandler):
@@ -398,10 +373,6 @@ class ListOptHandler(DSSInteractHandler):
                             help="output format human/xml/json/csv/yaml " \
                                  "(default: human)")
 
-
-class TapeSetAccessOptHandler(MediaSetAccessOptHandler):
-    """Set media operation flags to tape media."""
-    epilog = setaccess_epilog("tape")
 
 class RadosPoolSetAccessOptHandler(MediaSetAccessOptHandler):
     """Set media operation flags to rados_pool media."""
@@ -720,26 +691,6 @@ class LocateOptHandler(BaseOptHandler):
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
-class RepackOptHandler(BaseOptHandler):
-    """Repack a medium."""
-    label = 'repack'
-    descr = 'Repack a medium, by copying its alive extents to another one'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        super(RepackOptHandler, cls).add_options(parser)
-        parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
-                            help='Only use a medium that contain this set of '
-                                 'tags (comma-separated: foo,bar)')
-        parser.add_argument('res', help='Medium to repack')
-        parser.add_argument('--library',
-                            help="Library containing the medium to repack")
 
 class ExtentListOptHandler(ListOptHandler):
     """
@@ -782,52 +733,6 @@ class ExtentListOptHandler(ListOptHandler):
                             help="filter the output by library name")
 
 
-class TapeAddOptHandler(MediaAddOptHandler):
-    """Specific version of the 'add' command for tapes, with extra-options."""
-    descr = "insert new tape to the system"
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(TapeAddOptHandler, cls).add_options(parser)
-        parser.add_argument('-t', '--type', required=True,
-                            help='tape technology')
-        parser.add_argument('--fs', default="LTFS",
-                            choices=list(map(fs_type2str, FSType)),
-                            type=uncase_fstype(list(map(fs_type2str, FSType))),
-                            help='Filesystem type (default: LTFS)')
-
-class MediumImportOptHandler(XferOptHandler):
-    """Import a medium into the system"""
-    label = 'import'
-    descr = 'import existing media'
-
-    @classmethod
-    def add_options(cls, parser):
-        super(MediumImportOptHandler, cls).add_options(parser)
-        parser.add_argument('media', nargs='+',
-                            help="name of the media to import")
-        parser.add_argument('--check-hash', action='store_true',
-                            help="recalculates hashes and compares them "
-                                 "with the hashes of the extent")
-        parser.add_argument('--unlock', action='store_true',
-                            help="unlocks the tape after the import")
-        parser.add_argument('--library', help="Library containing each medium")
-
-class TapeImportOptHandler(MediumImportOptHandler):
-    """Specific version of the 'import' command for tapes"""
-    descr = "import existing tape"
-
-    @classmethod
-    def add_options(cls, parser):
-        super(TapeImportOptHandler, cls).add_options(parser)
-        parser.add_argument('-t', '--type', required=True,
-                            help='tape technology')
-        parser.add_argument('--fs', default="LTFS",
-                            choices=list(map(fs_type2str, FSType)),
-                            type=uncase_fstype(list(map(fs_type2str, FSType))),
-                            help='Filesystem type (default: LTFS)')
-
 class MediumLocateOptHandler(DSSInteractHandler):
     """Locate a medium into the system."""
     label = 'locate'
@@ -842,20 +747,6 @@ class MediumLocateOptHandler(DSSInteractHandler):
 
 
 
-class TapeFormatOptHandler(FormatOptHandler):
-    """Format a tape."""
-    descr = "format a tape"
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(TapeFormatOptHandler, cls).add_options(parser)
-        parser.add_argument('--fs', default='ltfs',
-                            choices=list(map(fs_type2str, FSType)),
-                            type=uncase_fstype(list(map(fs_type2str, FSType))),
-                            help='Filesystem type')
-        parser.add_argument('--force', action='store_true',
-                            help='Format the medium whatever its status')
 
 class RadosPoolFormatOptHandler(FormatOptHandler):
     """Format a RADOS pool."""
@@ -1301,26 +1192,6 @@ class PingOptHandler(BaseOptHandler):
         self.logger.info("Ping sent to TLC %s successfully", self.library)
 
 
-class TapeOptHandler(MediaOptHandler):
-    """Magnetic tape options and actions."""
-    label = 'tape'
-    descr = 'handle magnetic tape (use tape label to identify resource)'
-    family = ResourceFamily(ResourceFamily.RSC_TAPE)
-    verbs = [
-        TapeAddOptHandler,
-        MediaUpdateOptHandler,
-        TapeFormatOptHandler,
-        MediaListOptHandler,
-        LockOptHandler,
-        UnlockOptHandler,
-        TapeSetAccessOptHandler,
-        MediumLocateOptHandler,
-        TapeImportOptHandler,
-        RepackOptHandler,
-        ResourceDeleteOptHandler,
-        MediaRenameOptHandler,
-    ]
-
 class RadosPoolOptHandler(MediaOptHandler):
     """RADOS pool options and actions."""
     label = 'rados_pool'
@@ -1360,6 +1231,7 @@ class RadosPoolOptHandler(MediaOptHandler):
         and a device (mean to access it).
         """
         exec_delete_dir_rados(self, PHO_RSC_RADOS_POOL)
+
 
 class ExtentOptHandler(BaseResourceOptHandler):
     """Shared interface for extents."""

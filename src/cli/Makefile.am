@@ -25,6 +25,7 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/cli/target/device.py \
 	   phobos/cli/target/dir.py \
 	   phobos/cli/target/drive.py \
+	   phobos/cli/target/tape.py \
 	   phobos/core/__init__.py \
 	   phobos/core/admin.py \
 	   phobos/core/cfg.py \

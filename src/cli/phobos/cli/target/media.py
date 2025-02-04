@@ -33,7 +33,8 @@ from phobos.cli.action.list import ListOptHandler
 from phobos.cli.action.lock import LockOptHandler
 from phobos.cli.action.resource_delete import ResourceDeleteOptHandler
 from phobos.cli.action.unlock import UnlockOptHandler
-from phobos.cli.common import (BaseResourceOptHandler, env_error_format)
+from phobos.cli.common import (BaseResourceOptHandler, env_error_format,
+                               XferOptHandler)
 from phobos.cli.common.args import add_list_arguments
 from phobos.cli.common.exec import exec_delete_medium_device
 from phobos.cli.common.utils import (check_output_attributes,
@@ -59,6 +60,24 @@ class MediaAddOptHandler(AddOptHandler):
         parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
                             help='tags to associate with this media (comma-'
                                  'separated: foo,bar)')
+
+
+class MediaImportOptHandler(XferOptHandler):
+    """Import a media into the system"""
+    label = 'import'
+    descr = 'import existing media'
+
+    @classmethod
+    def add_options(cls, parser):
+        super(MediaImportOptHandler, cls).add_options(parser)
+        parser.add_argument('media', nargs='+',
+                            help="name of the media to import")
+        parser.add_argument('--check-hash', action='store_true',
+                            help="recalculates hashes and compares them "
+                                 "with the hashes of the extent")
+        parser.add_argument('--unlock', action='store_true',
+                            help="unlocks the tape after the import")
+        parser.add_argument('--library', help="Library containing each medium")
 
 
 class MediaListOptHandler(ListOptHandler):

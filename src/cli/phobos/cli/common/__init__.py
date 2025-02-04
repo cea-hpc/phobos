@@ -40,6 +40,7 @@ else:
 from phobos.core import cfg
 from phobos.core.dss import Client as DSSClient
 from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
+from phobos.core.store import XferClient
 
 def env_error_format(exc):
     """Return a human readable representation of an environment exception."""
@@ -174,6 +175,32 @@ class BaseResourceOptHandler(DSSInteractHandler):
     family = None
     library = None
     verbs = []
+
+
+class XferOptHandler(BaseOptHandler):
+    """Option handler for actions that do data transfers."""
+    def __init__(self, params, **kwargs):
+        """Initialize a store client."""
+        super(XferOptHandler, self).__init__(params, **kwargs)
+        self.client = None
+
+    @classmethod
+    def add_options(cls, parser):
+        """
+        Add options for the given command. We register the class label as the
+        verb for the special case of data xfer commands.
+        """
+        super(XferOptHandler, cls).add_options(parser)
+        parser.set_defaults(verb=cls.label)
+
+    def __enter__(self):
+        """Initialize a client for data movements."""
+        self.client = XferClient()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Release resources associated to a XferClient."""
+        self.client.clear()
 
 SYSLOG_LOG_LEVELS = ["critical", "error", "warning", "info", "debug"]
 
