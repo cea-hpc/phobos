@@ -40,45 +40,26 @@ import os.path
 
 from ctypes import (c_int, c_long, byref, pointer, c_bool)
 
-from ClusterShell.NodeSet import NodeSet
-
 from phobos.core.admin import Client as AdminClient
 import phobos.core.cfg as cfg
 from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=no-name-in-module
-                               PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
-                               ADM_STATUS, TAGS, PUT_ACCESS, GET_ACCESS,
-                               DELETE_ACCESS, PHO_RSC_TAPE, PHO_RSC_NONE,
-                               PHO_OPERATION_INVALID, fs_type2str,
-                               str2operation_type, DSS_STATUS_FILTER_ALL,
-                               DSS_STATUS_FILTER_COMPLETE,
-                               DSS_STATUS_FILTER_INCOMPLETE,
-                               DSS_STATUS_FILTER_READABLE, DSS_MEDIA,
                                DSS_OBJ_ALIVE, DSS_OBJ_DEPRECATED,
                                DSS_OBJ_DEPRECATED_ONLY,
-                               PHO_RSC_RADOS_POOL)
-from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, DriveStatus,
-                             LayoutInfo, MediaInfo, ObjectInfo, ResourceFamily,
-                             CLIManagedResourceMixin, FSType, Id, LogFilter,
-                             Timeval)
+                               PHO_RSC_TAPE, PHO_RSC_NONE,
+                               PHO_OPERATION_INVALID,
+                               str2operation_type)
+from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
+                             MediaInfo, ObjectInfo, ResourceFamily,
+                             Id, LogFilter, Timeval)
 from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
 from phobos.output import dump_object_list
 
-
-from phobos.cli.action.add import AddOptHandler
-from phobos.cli.action.format import FormatOptHandler
-from phobos.cli.action.lock import LockOptHandler
-from phobos.cli.action.resource_delete import ResourceDeleteOptHandler
-from phobos.cli.action.status import StatusOptHandler
-from phobos.cli.action.unlock import UnlockOptHandler
 from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
                                DSSInteractHandler, BaseResourceOptHandler,
                                env_error_format, XferOptHandler)
 from phobos.cli.common.args import (add_list_arguments, add_put_arguments)
-from phobos.cli.common.exec import (exec_add_dir_rados, exec_delete_dir_rados,
-                                    exec_delete_medium_device)
-from phobos.cli.common.utils import (check_output_attributes, get_params_status,
-                                     handle_sort_option, setaccess_epilog,
-                                     set_library, uncase_fstype)
+from phobos.cli.common.utils import (check_output_attributes,
+                                     handle_sort_option, set_library)
 from phobos.cli.target.copy import CopyOptHandler
 from phobos.cli.target.dir import DirOptHandler
 from phobos.cli.target.drive import DriveOptHandler
@@ -723,21 +704,6 @@ class ExtentListOptHandler(ListOptHandler):
                                   + "} "))
         parser.add_argument('--library',
                             help="filter the output by library name")
-
-
-class MediumLocateOptHandler(DSSInteractHandler):
-    """Locate a medium into the system."""
-    label = 'locate'
-    descr = 'locate a medium'
-
-    @classmethod
-    def add_options(cls, parser):
-        super(MediumLocateOptHandler, cls).add_options(parser)
-        parser.add_argument('res', help='medium to locate')
-        parser.add_argument('--library',
-                            help="Library containing the medium to locate")
-
-
 
 
 class ObjectOptHandler(BaseResourceOptHandler):
