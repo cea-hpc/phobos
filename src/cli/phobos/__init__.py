@@ -55,13 +55,20 @@ from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=n
                                DSS_STATUS_FILTER_READABLE,
                                DSS_OBJ_ALIVE, DSS_OBJ_DEPRECATED,
                                DSS_OBJ_DEPRECATED_ONLY)
-from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
-                             MediaInfo, ObjectInfo, ResourceFamily,
+from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, DriveStatus,
+                             LayoutInfo, MediaInfo, ObjectInfo, ResourceFamily,
                              CLIManagedResourceMixin, FSType, Id, LogFilter,
                              Timeval)
 from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
 from phobos.output import dump_object_list
 
+
+from phobos.cli.action.add import AddOptHandler
+from phobos.cli.action.format import FormatOptHandler
+from phobos.cli.action.lock import LockOptHandler
+from phobos.cli.action.resource_delete import ResourceDeleteOptHandler
+from phobos.cli.action.status import StatusOptHandler
+from phobos.cli.action.unlock import UnlockOptHandler
 from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
                                DSSInteractHandler, BaseResourceOptHandler,
                                env_error_format)
@@ -364,20 +371,6 @@ class StoreMPutHandler(StorePutHandler):
                           "instead")
         sys.exit(os.EX_USAGE)
 
-class AddOptHandler(DSSInteractHandler):
-    """Insert a new resource into the system."""
-    label = 'add'
-    descr = 'insert new resource(s) to the system'
-
-    @classmethod
-    def add_options(cls, parser):
-        super(AddOptHandler, cls).add_options(parser)
-        parser.add_argument('--unlock', action='store_true',
-                            help='Unlock resource on success')
-        parser.add_argument('--library',
-                            help="Library containing added resources")
-        parser.add_argument('res', nargs='+', help='Resource(s) to add')
-
 
 class MediaAddOptHandler(AddOptHandler):
     """Insert a new media into the system."""
@@ -392,22 +385,6 @@ class MediaAddOptHandler(AddOptHandler):
                             help='tags to associate with this media (comma-'
                                  'separated: foo,bar)')
 
-class ResourceDeleteOptHandler(DSSInteractHandler):
-    """Remove a resource from the system."""
-    label = 'delete'
-    alias = ['del']
-    descr = 'remove resource(s) from the system'
-    epilog = "Resources are only removed from the database, and so will not "\
-             "be available through Phobos anymore. No other operations are "\
-             "executed."
-
-    @classmethod
-    def add_options(cls, parser):
-        super(ResourceDeleteOptHandler, cls).add_options(parser)
-        parser.add_argument('--library',
-                            help="Library containing deleted resources")
-        parser.add_argument('res', nargs='+', help='Resource(s) to remove')
-        parser.set_defaults(verb=cls.label)
 
 class ListOptHandler(DSSInteractHandler):
     """List items of a specific type."""
@@ -423,20 +400,6 @@ class ListOptHandler(DSSInteractHandler):
                             help="output format human/xml/json/csv/yaml " \
                                  "(default: human)")
 
-class LockOptHandler(DSSInteractHandler):
-    """Lock resource."""
-    label = 'lock'
-    descr = 'lock resource(s)'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(LockOptHandler, cls).add_options(parser)
-        parser.add_argument('res', nargs='+',
-                            help='Resource(s) to lock (for a device, could be '
-                                 'the path or the id name)')
-        parser.add_argument('--library',
-                            help="Library containing resources to lock")
 
 class DeviceLockOptHandler(LockOptHandler):
     """Lock device."""
@@ -447,45 +410,6 @@ class DeviceLockOptHandler(LockOptHandler):
         super(DeviceLockOptHandler, cls).add_options(parser)
         parser.add_argument('--wait', action='store_true',
                             help='wait for any deamon releasing the device')
-
-
-class UnlockOptHandler(DSSInteractHandler):
-    """Unlock resource."""
-    label = 'unlock'
-    descr = 'unlock resource(s)'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(UnlockOptHandler, cls).add_options(parser)
-        parser.add_argument('res', nargs='+', help='Resource(s) to unlock')
-        parser.add_argument('--force', action='store_true',
-                            help='Do not check the current lock state')
-        parser.add_argument('--library',
-                            help="Library containing resources to unlock")
-
-class StatusOptHandler(BaseOptHandler):
-    """Display I/O and drive status"""
-    label = 'status'
-    descr = 'display I/O and drive status'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(StatusOptHandler, cls).add_options(parser)
-        attr = list(DriveStatus().get_display_fields().keys())
-        attr.sort()
-        parser.add_argument('-o', '--output', type=lambda t: t.split(','),
-                            default='all',
-                            help=("attributes to output, comma-separated, "
-                                  "choose from {" + " ".join(attr) + "} "
-                                  "(default: %(default)s)"))
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
 
 
 OP_NAME_FROM_LETTER = {'P': 'put', 'G': 'get', 'D': 'delete'}
@@ -1156,24 +1080,6 @@ class DriveScsiReleaseOptHandler(DSSInteractHandler):
         parser.add_argument('--library',
                             help="Library containing the drives to release")
 
-class FormatOptHandler(DSSInteractHandler):
-    """Format a resource."""
-    label = 'format'
-    descr = 'format a media'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(FormatOptHandler, cls).add_options(parser)
-        parser.add_argument('-n', '--nb-streams', metavar='STREAMS', type=int,
-                            default=0,
-                            help='Max number of parallel formatting operations,'
-                                 ' 0 means no limitation (default is 0)')
-        parser.add_argument('--unlock', action='store_true',
-                            help='Unlock media once it is ready to be written')
-        parser.add_argument('--library',
-                            help="Library containing added resources")
-        parser.add_argument('res', nargs='+', help='Resource(s) to format')
 
 class TapeFormatOptHandler(FormatOptHandler):
     """Format a tape."""
@@ -2151,36 +2057,6 @@ class DirOptHandler(MediaOptHandler):
                               nb_dev_to_del - nb_dev_del, nb_dev_to_del)
             sys.exit(abs(rc))
 
-class DriveStatus(CLIManagedResourceMixin): #pylint: disable=too-many-instance-attributes
-    """Wrapper class to use dump_object_list"""
-
-    def __init__(self, values=None):
-        if not values:
-            return
-
-        self.name = values.get("name", "")
-        self.library = values.get("library", "")
-        self.device = values.get("device", "")
-        self.serial = values.get("serial", "")
-        self.address = values.get("address", "")
-        self.mount_path = values.get("mount_path", "")
-        self.media = values.get("media", "")
-        self.ongoing_io = values.get("ongoing_io", "")
-        self.currently_dedicated_to = values.get("currently_dedicated_to", "")
-
-    def get_display_fields(self, max_width=None):
-        """Return a dict of available fields and optional display formatters."""
-        return {
-            'name': None,
-            'library': None,
-            'device': None,
-            'address': None,
-            'serial': None,
-            'mount_path': None,
-            'media': None,
-            'ongoing_io': None,
-            'currently_dedicated_to': None,
-        }
 
 class DriveLookupOptHandler(BaseOptHandler):
     """Drive lookp sub-parser"""

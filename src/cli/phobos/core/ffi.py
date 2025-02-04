@@ -1056,3 +1056,34 @@ class LibDrvInfo(Structure): # pylint: disable=too-few-public-methods
         ('ldi_full', c_bool),
         ('ldi_medium_id', Id)
     ]
+
+class DriveStatus(CLIManagedResourceMixin): #pylint: disable=too-many-instance-attributes
+    """Wrapper class to use dump_object_list"""
+
+    def __init__(self, values=None):
+        if not values:
+            return
+
+        self.name = values.get("name", "")
+        self.library = values.get("library", "")
+        self.device = values.get("device", "")
+        self.serial = values.get("serial", "")
+        self.address = values.get("address", "")
+        self.mount_path = values.get("mount_path", "")
+        self.media = values.get("media", "")
+        self.ongoing_io = values.get("ongoing_io", "")
+        self.currently_dedicated_to = values.get("currently_dedicated_to", "")
+
+    def get_display_fields(self, max_width=None):
+        """Return a dict of available fields and optional display formatters."""
+        return {
+            'name': None,
+            'library': None,
+            'device': None,
+            'address': None,
+            'serial': None,
+            'mount_path': None,
+            'media': None,
+            'ongoing_io': None,
+            'currently_dedicated_to': None,
+        }

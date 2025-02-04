@@ -32,7 +32,7 @@ import os
 
 try:
     import argcomplete
-except Exception as _: # pylint: disable-broad-except
+except ImportError:
     ARGCOMPLETE_AVAILABLE = False
 else:
     ARGCOMPLETE_AVAILABLE = True

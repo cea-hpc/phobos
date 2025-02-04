@@ -40,7 +40,7 @@ DISABLED = CRITICAL + 10
 VERBOSE = (INFO + DEBUG) // 2
 
 
-class LogControl(object):
+class LogControl():
     """Log controlling class. Wraps phobos low-level logging API."""
     # Log handling callback type for use w/ python callables
     LogCBType = CFUNCTYPE(None, POINTER(PhoLogRec))

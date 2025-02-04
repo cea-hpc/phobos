@@ -7,9 +7,15 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/output.py \
 	   phobos/cli/__init__.py \
 	   phobos/cli/action/__init__.py \
+	   phobos/cli/action/add.py \
 	   phobos/cli/action/create.py \
 	   phobos/cli/action/delete.py \
+	   phobos/cli/action/format.py \
 	   phobos/cli/action/list.py \
+	   phobos/cli/action/lock.py \
+	   phobos/cli/action/resource_delete.py \
+	   phobos/cli/action/status.py \
+	   phobos/cli/action/unlock.py \
 	   phobos/cli/common/__init__.py \
 	   phobos/cli/common/args.py \
 	   phobos/cli/target/__init__.py \
