@@ -82,11 +82,7 @@ from phobos.cli.common.utils import (check_output_attributes, get_params_status,
 from phobos.cli.target.copy import CopyOptHandler
 from phobos.cli.target.dir import DirOptHandler
 from phobos.cli.target.drive import DriveOptHandler
-from phobos.cli.target.media import (MediaAddOptHandler, MediaListOptHandler,
-                                     MediaOptHandler,
-                                     MediaRenameOptHandler,
-                                     MediaSetAccessOptHandler,
-                                     MediaUpdateOptHandler)
+from phobos.cli.target.rados import RadosPoolOptHandler
 from phobos.cli.target.tape import TapeOptHandler
 
 def attr_convert(usr_attr):
@@ -373,10 +369,6 @@ class ListOptHandler(DSSInteractHandler):
                             help="output format human/xml/json/csv/yaml " \
                                  "(default: human)")
 
-
-class RadosPoolSetAccessOptHandler(MediaSetAccessOptHandler):
-    """Set media operation flags to rados_pool media."""
-    epilog = setaccess_epilog("rados_pool")
 
 class LibScanOptHandler(BaseOptHandler):
     """Scan a library and display retrieved information."""
@@ -746,21 +738,6 @@ class MediumLocateOptHandler(DSSInteractHandler):
                             help="Library containing the medium to locate")
 
 
-
-
-class RadosPoolFormatOptHandler(FormatOptHandler):
-    """Format a RADOS pool."""
-    descr = "format a RADOS pool"
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(RadosPoolFormatOptHandler, cls).add_options(parser)
-        # invisible fs argument in help because it is not useful
-        parser.add_argument('--fs', default='RADOS',
-                            choices=list(map(fs_type2str, FSType)),
-                            type=uncase_fstype(list(map(fs_type2str, FSType))),
-                            help=argparse.SUPPRESS)
 
 
 class ObjectOptHandler(BaseResourceOptHandler):
@@ -1190,47 +1167,6 @@ class PingOptHandler(BaseOptHandler):
             sys.exit(abs(err.errno))
 
         self.logger.info("Ping sent to TLC %s successfully", self.library)
-
-
-class RadosPoolOptHandler(MediaOptHandler):
-    """RADOS pool options and actions."""
-    label = 'rados_pool'
-    descr = 'handle RADOS pools'
-    family = ResourceFamily(ResourceFamily.RSC_RADOS_POOL)
-    verbs = [
-        MediaAddOptHandler,
-        MediaListOptHandler,
-        MediaUpdateOptHandler,
-        LockOptHandler,
-        UnlockOptHandler,
-        RadosPoolSetAccessOptHandler,
-        RadosPoolFormatOptHandler,
-        MediumLocateOptHandler,
-        ResourceDeleteOptHandler,
-        MediaRenameOptHandler,
-    ]
-
-    def add_medium(self, adm, medium, tags):
-        adm.medium_add(medium, 'RADOS', tags=tags)
-
-    def exec_add(self):
-        """
-        Add a new RADOS pool.
-        Note that this is a special case where we add both a media (storage) and
-        a device (mean to access it).
-        """
-        exec_add_dir_rados(self, PHO_RSC_RADOS_POOL)
-
-    def del_medium(self, adm, family, resources, library):
-        adm.medium_delete(family, resources, library)
-
-    def exec_delete(self):
-        """
-        Delete a RADOS pool.
-        Note that this is a special case where we delete both a media (storage)
-        and a device (mean to access it).
-        """
-        exec_delete_dir_rados(self, PHO_RSC_RADOS_POOL)
 
 
 class ExtentOptHandler(BaseResourceOptHandler):
