@@ -164,7 +164,7 @@ function test_grouping_tape () {
     fi
 
     # unload tape with grouping and check it is used instead of the loaded one
-    $phobos tape add -t LTO6 ${TAPES[1]}
+    $phobos tape add --tags use_this_tape -t LTO6 ${TAPES[1]}
     $phobos tape format --unlock ${TAPES[1]}
     $valg_phobos put -f tape --grouping my_group ${FILES[0]} tape_object_ter ||
         error "Put on tape must success with grouping tape unloaded"
@@ -178,6 +178,28 @@ function test_grouping_tape () {
     if [[ "${obj_grouping}" != "my_group" ]]; then
         error "tape object ter grouping must be 'my_group' instead of" \
               "'${obj_grouping}'"
+    fi
+
+    # target an unloaded tape without the targeted grouping
+    $valg_phobos put -f tape --tags use_this_tape \
+            --grouping my_group_3 ${FILES[0]} tape_object_4 ||
+        error "Put on unloaded tape without grouping must success"
+    tape_object=$($valg_phobos extent list -o media_name tape_object_4)
+    if [[ "${tape_object}" != "['${TAPES[1]}']" ]]; then
+        error "Grouping tape of the object 4 must be ['${TAPES[1]}'] instead" \
+              "of '${tape_object}'"
+    fi
+
+    obj_grouping=$($valg_phobos object list -o grouping tape_object_4)
+    if [[ "${obj_grouping}" != "my_group_3" ]]; then
+        error "tape object 4 grouping must be 'my_group_3' instead of" \
+              "'${obj_grouping}'"
+    fi
+
+    tape_groupings=$($valg_phobos tape list -o groupings ${TAPES[1]})
+    if [[ "${tape_groupings}" != "['my_group_3']" ]]; then
+        error "Tape groupings must be '['my_group_3']' instead" \
+              "of '${tape_groupings}'"
     fi
 }
 
