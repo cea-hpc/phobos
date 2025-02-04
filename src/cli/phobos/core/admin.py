@@ -198,7 +198,7 @@ class Client: # pylint: disable=too-many-public-methods
             raise EnvironmentError(rc, "Failed to delete device(s) '%s'" %
                                    dev_names)
 
-        return count.value
+        return count.value, len(dev_ids)
 
     def sched_conf_get(self, config_items):
         """Query LRS configuration"""

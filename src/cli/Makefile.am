@@ -18,10 +18,12 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/cli/action/unlock.py \
 	   phobos/cli/common/__init__.py \
 	   phobos/cli/common/args.py \
+	   phobos/cli/common/exec.py \
 	   phobos/cli/common/utils.py \
 	   phobos/cli/target/__init__.py \
 	   phobos/cli/target/copy.py \
 	   phobos/cli/target/device.py \
+	   phobos/cli/target/drive.py \
 	   phobos/core/__init__.py \
 	   phobos/core/admin.py \
 	   phobos/core/cfg.py \

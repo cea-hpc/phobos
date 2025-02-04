@@ -29,6 +29,7 @@ from phobos.core.const import (DSS_STATUS_FILTER_ALL, # pylint: disable=no-name-
                                DSS_STATUS_FILTER_COMPLETE,
                                DSS_STATUS_FILTER_INCOMPLETE,
                                DSS_STATUS_FILTER_READABLE)
+from phobos.core.ffi import LayoutInfo
 
 def check_output_attributes(attrs, out_attrs, logger):
     """Check that out_attrs are valid"""
@@ -55,6 +56,33 @@ def get_params_status(status, logger):
         status_number = DSS_STATUS_FILTER_ALL
 
     return status_number
+
+def handle_sort_option(params, resource, logger, **kwargs):
+    """Handle the sort/rsort option"""
+
+    if params.get('sort') and params.get('rsort'):
+        logger.error("The option --sort and --rsort cannot be used together")
+        sys.exit(os.EX_USAGE)
+
+    for key in ['sort', 'rsort']:
+        if params.get(key):
+            if isinstance(resource, LayoutInfo):
+                attrs_sort = list(resource.get_sort_fields().keys())
+            else:
+                attrs_sort = list(resource.get_display_dict().keys())
+
+            sort_attr = params.get(key)
+            if sort_attr not in attrs_sort:
+                if isinstance(resource, LayoutInfo):
+                    attrs = list(resource.get_display_dict().keys())
+                    if sort_attr in attrs:
+                        logger.error("Sorting attributes not supported: %s",
+                                     sort_attr)
+                        sys.exit(os.EX_USAGE)
+                logger.error("Bad sorting attributes: %s", sort_attr)
+                sys.exit(os.EX_USAGE)
+            kwargs[key] = sort_attr
+    return kwargs
 
 def set_library(obj):
     """Set the library of obj first from its 'library' param, then its family"""

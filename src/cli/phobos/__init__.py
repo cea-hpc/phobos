@@ -52,7 +52,7 @@ from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=n
                                str2operation_type, DSS_STATUS_FILTER_ALL,
                                DSS_STATUS_FILTER_COMPLETE,
                                DSS_STATUS_FILTER_INCOMPLETE,
-                               DSS_STATUS_FILTER_READABLE,
+                               DSS_STATUS_FILTER_READABLE, DSS_MEDIA,
                                DSS_OBJ_ALIVE, DSS_OBJ_DEPRECATED,
                                DSS_OBJ_DEPRECATED_ONLY)
 from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, DriveStatus,
@@ -72,11 +72,12 @@ from phobos.cli.action.unlock import UnlockOptHandler
 from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
                                DSSInteractHandler, BaseResourceOptHandler,
                                env_error_format)
-from phobos.cli.common.args import add_put_arguments
+from phobos.cli.common.args import (add_list_arguments, add_put_arguments)
+from phobos.cli.common.exec import exec_delete_medium_device
 from phobos.cli.common.utils import (check_output_attributes, get_params_status,
-                                     set_library)
+                                     handle_sort_option, set_library)
 from phobos.cli.target.copy import CopyOptHandler
-from phobos.cli.target.device import DeviceLockOptHandler, DeviceOptHandler
+from phobos.cli.target.drive import DriveOptHandler
 
 def attr_convert(usr_attr):
     """Convert k/v pairs as expressed by the user into a dictionnary."""
@@ -403,7 +404,6 @@ class ListOptHandler(DSSInteractHandler):
                                  "(default: human)")
 
 
-
 OP_NAME_FROM_LETTER = {'P': 'put', 'G': 'get', 'D': 'delete'}
 def parse_set_access_flags(flags):
     """From [+|-]PGD flags, return a dict with media operations to set
@@ -522,39 +522,6 @@ class LibRefreshOptHandler(BaseOptHandler):
                                  "fetch instead the default tape library from "
                                  "configuration")
 
-class DriveListOptHandler(ListOptHandler):
-    """
-    Specific version of the 'list' command for tape drives, with a couple
-    extra-options.
-    """
-    descr = 'list all drives'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(DriveListOptHandler, cls).add_options(parser)
-        parser.add_argument('-m', '--model', help='filter on model')
-
-        attr = list(DevInfo().get_display_dict().keys())
-        attr.sort()
-        parser.add_argument('-o', '--output', type=lambda t: t.split(','),
-                            default='name',
-                            help=("attributes to output, comma-separated, "
-                                  "choose from {" + " ".join(attr) + "} "
-                                  "(default: %(default)s)"))
-        parser.add_argument('--sort',
-                            help=("attribute to sort the output with, "
-                                  "choose from {" + " ".join(attr) + "} "))
-        parser.add_argument('--rsort',
-                            help=("attribute to sort the output in descending "
-                                  "order, choose from {" + " ".join(attr) + "} "
-                                  ))
-        parser.add_argument('--library',
-                            help="attribute to filter the output by library"
-                                 "name")
-        parser.add_argument('--status',
-                            help="filter the output by status name, "
-                                 " {locked, unlocked, failed} ")
 
 class MediaListOptHandler(ListOptHandler):
     """
@@ -572,23 +539,8 @@ class MediaListOptHandler(ListOptHandler):
 
         attr = list(MediaInfo().get_display_dict().keys())
         attr.sort()
-        parser.add_argument('-o', '--output', type=lambda t: t.split(','),
-                            default='name',
-                            help=("attributes to output, comma-separated, "
-                                  "choose from {" + " ".join(attr) + "} "
-                                  "(default: %(default)s)"))
-        parser.add_argument('--sort',
-                            help=("attribute to sort the output with, "
-                                  "choose from {" + " ".join(attr) + "} "))
-        parser.add_argument('--rsort',
-                            help=("attribute to sort the output in descending "
-                                  "order, choose from {" + " ".join(attr) + "} "
-                                 ))
-        parser.add_argument('--library',
-                            help="filter the output by library name")
-        parser.add_argument('--status',
-                            help="filter the output by status name, choose from"
-                                 " {locked, unlocked, failed} ")
+        add_list_arguments(parser, attr, "name", sort_option=True,
+                           lib_option=True, status_option=True)
         parser.formatter_class = argparse.RawDescriptionHelpFormatter
         parser.epilog = """About file system status `fs.status`:
     blank: medium is not formatted
@@ -621,6 +573,7 @@ class ObjectListOptHandler(ListOptHandler):
         ext_attrs = list(DeprecatedObjectInfo().get_display_dict().keys() -
                          ObjectInfo().get_display_dict().keys())
         ext_attrs.sort()
+        add_list_arguments(parser, base_attrs, "oid", True)
         parser.add_argument('-d', '--deprecated', action='store_true',
                             help="print deprecated objects, allowing those "
                                  "attributes for the 'output' option "
@@ -629,11 +582,6 @@ class ObjectListOptHandler(ListOptHandler):
                             help="filter items containing every given "
                                  "metadata, comma-separated "
                                  "'key=value' parameters")
-        parser.add_argument('-o', '--output', type=lambda t: t.split(','),
-                            default='oid',
-                            help=("attributes to output, comma-separated, "
-                                  "choose from {" + " ".join(base_attrs) + "} "
-                                  "default: %(default)s"))
         parser.add_argument('-p', '--pattern', action='store_true',
                             help="filter using POSIX regexp instead of exact "
                                  "objid")
@@ -645,14 +593,7 @@ class ObjectListOptHandler(ListOptHandler):
                             help="max width of the user_md column keys and "
                                  "values, must be greater or equal to 5"
                                  "(default is 30)")
-        parser.add_argument('--sort',
-                            help=("attribute to sort the output with, "
-                                  "choose from {" + " ".join(base_attrs) + "} "
-                                  ))
-        parser.add_argument('--rsort',
-                            help=("attribute to sort the output in descending "
-                                  "order, choose from "
-                                  "{" + " ".join(base_attrs)+ "} "))
+
 
 class DeleteOptHandler(BaseOptHandler):
     """Delete objects handler."""
@@ -1036,41 +977,6 @@ class MediaRenameOptHandler(DSSInteractHandler):
                             help="New library for these medium(s)")
         parser.add_argument('res', nargs='+', help="Resource(s) to rename")
 
-class DriveMigrateOptHandler(DSSInteractHandler):
-    """Migrate an existing drive"""
-    label = 'migrate'
-    descr = ('migrate existing drive to another host or library '
-             '(only the DSS is modified)')
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(DriveMigrateOptHandler, cls).add_options(parser)
-
-        parser.add_argument('res', nargs='+', help='Drive(s) to update')
-        parser.add_argument('--host', help='New host for these drives')
-        parser.add_argument('--new-library',
-                            help='New library for these drives')
-        parser.add_argument('--library',
-                            help="Library containing migrated drive(s) "
-                                 "(This option is to target the good drive(s) "
-                                 "among the existing libraries, not to set a "
-                                 "new library.)")
-
-class DriveScsiReleaseOptHandler(DSSInteractHandler):
-    """Release the SCSI reservation of an existing drive"""
-    label = 'scsi_release'
-    descr = 'release the SCSI reservation of an existing drive'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(DriveScsiReleaseOptHandler, cls).add_options(parser)
-        parser.add_argument('res', nargs='+',
-                            help="Drive(s) with a SCSI reservation to release"
-                                 "and a mounted tape into.")
-        parser.add_argument('--library',
-                            help="Library containing the drives to release")
 
 
 class TapeFormatOptHandler(FormatOptHandler):
@@ -1114,33 +1020,6 @@ class RadosPoolFormatOptHandler(FormatOptHandler):
                             choices=list(map(fs_type2str, FSType)),
                             type=uncase_fstype(list(map(fs_type2str, FSType))),
                             help=argparse.SUPPRESS)
-
-def handle_sort_option(params, resource, logger, **kwargs):
-    """Handle the sort/rsort option"""
-
-    if params.get('sort') and params.get('rsort'):
-        logger.error("The option --sort and --rsort cannot be used together")
-        sys.exit(os.EX_USAGE)
-
-    for key in ['sort', 'rsort']:
-        if params.get(key):
-            if isinstance(resource, LayoutInfo):
-                attrs_sort = list(resource.get_sort_fields().keys())
-            else:
-                attrs_sort = list(resource.get_display_dict().keys())
-
-            sort_attr = params.get(key)
-            if sort_attr not in attrs_sort:
-                if isinstance(resource, LayoutInfo):
-                    attrs = list(resource.get_display_dict().keys())
-                    if sort_attr in attrs:
-                        logger.error("Sorting attributes not supported: %s",
-                                     sort_attr)
-                        sys.exit(os.EX_USAGE)
-                logger.error("Bad sorting attributes: %s", sort_attr)
-                sys.exit(os.EX_USAGE)
-            kwargs[key] = sort_attr
-    return kwargs
 
 
 class ObjectOptHandler(BaseResourceOptHandler):
@@ -1693,6 +1572,7 @@ class MediaOptHandler(BaseResourceOptHandler):
                                              **kwargs)
                 if not curr:
                     continue
+
                 assert len(curr) == 1
                 objs.append(curr[0])
         else:
@@ -1797,26 +1677,7 @@ class MediaOptHandler(BaseResourceOptHandler):
 
     def exec_delete(self):
         """Delete a medium"""
-        resources = self.params.get('res')
-        set_library(self)
-
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                num_deleted, num2delete = adm.medium_delete(self.family,
-                                                            resources,
-                                                            self.library)
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-        if num_deleted == num2delete:
-            self.logger.info("Deleted %d media(s) successfully", num_deleted)
-        elif num_deleted == 0:
-            self.logger.error("No media deleted: %d/%d", num_deleted,
-                              num2delete)
-        else:
-            self.logger.warning("Failed to delete %d/%d media(s)",
-                                num2delete - num_deleted, num2delete)
+        exec_delete_medium_device(self, DSS_MEDIA)
 
     def exec_rename(self):
         """Rename a medium"""
@@ -1971,252 +1832,6 @@ class DirOptHandler(MediaOptHandler):
                               nb_dev_to_del - nb_dev_del, nb_dev_to_del)
             sys.exit(abs(rc))
 
-
-class DriveLookupOptHandler(BaseOptHandler):
-    """Drive lookp sub-parser"""
-
-    label = 'lookup'
-    descr = 'lookup a drive from library'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(DriveLookupOptHandler, cls).add_options(parser)
-        parser.add_argument('res',
-                            help='Drive to lookup (could be '
-                                 'the path or the serial number)')
-        parser.add_argument('--library',
-                            help="Library containing the drive to lookup")
-
-class DriveLoadOptHandler(BaseOptHandler):
-    """Drive load sub-parser"""
-
-    label = 'load'
-    descr = 'load a tape into a drive'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(DriveLoadOptHandler, cls).add_options(parser)
-        parser.add_argument('res',
-                            help='Target drive (could be the path or the '
-                                 'serial number)')
-        parser.add_argument('tape_label', help='Tape label to load')
-        parser.add_argument('--library',
-                            help="Library containing the target drive and tape")
-
-class DriveUnloadOptHandler(BaseOptHandler):
-    """Drive unload sub-parser"""
-
-    label = 'unload'
-    descr = 'unload a tape from a drive'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(DriveUnloadOptHandler, cls).add_options(parser)
-        parser.add_argument('res',
-                            help='Target drive (could be the path or the '
-                                 'serial number)')
-        parser.add_argument('--tape-label',
-                            help='Tape label to unload (unload is done only if '
-                                 'the drive contains this label, any tape is '
-                                 'unloaded if this option is not set)')
-        parser.add_argument('--library',
-                            help="Library containing the target drive")
-
-class DriveOptHandler(DeviceOptHandler):
-    """Tape Drive options and actions."""
-    label = 'drive'
-    descr = 'handle tape drives (use ID or device path to identify resource)'
-    family = ResourceFamily(ResourceFamily.RSC_TAPE)
-    verbs = [
-        AddOptHandler,
-        DriveMigrateOptHandler,
-        ResourceDeleteOptHandler,
-        DriveListOptHandler,
-        DeviceLockOptHandler,
-        UnlockOptHandler,
-        StatusOptHandler,
-        DriveLookupOptHandler,
-        DriveLoadOptHandler,
-        DriveUnloadOptHandler,
-        DriveScsiReleaseOptHandler,
-    ]
-
-    library = None
-
-    def exec_scsi_release(self):
-        """Release SCSI reservation of given drive(s)"""
-        resources = self.params.get('res')
-        set_library(self)
-
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                count = adm.device_scsi_release(resources, self.library)
-
-        except EnvironmentError as err:
-            self.logger.error("%s", env_error_format(err))
-            sys.exit(abs(err.errno))
-
-        if count > 0:
-            self.logger.info("Release SCSI reservation of %d drive(s)"
-                             " successfully", count)
-
-    def exec_migrate(self):
-        """Migrate devices host"""
-        resources = self.params.get('res')
-        host = self.params.get('host')
-        new_lib = self.params.get('new_library')
-        set_library(self)
-
-        if host is None and new_lib is None:
-            self.logger.info("No migrate to be performed")
-            return
-
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                count = adm.device_migrate(resources, self.library, host,
-                                           new_lib)
-
-        except EnvironmentError as err:
-            self.logger.error("%s", env_error_format(err))
-            sys.exit(abs(err.errno))
-
-        if count > 0:
-            self.logger.info("Migrated %d device(s) successfully", count)
-
-    def exec_list(self):
-        """List devices and display results."""
-        attrs = list(DevInfo().get_display_dict().keys())
-        check_output_attributes(attrs, self.params.get('output'), self.logger)
-
-        kwargs = {}
-        if self.params.get('model'):
-            kwargs['model'] = self.params.get('model')
-
-        if self.params.get('library'):
-            kwargs['library'] = self.params.get('library')
-
-        if self.params.get('status'):
-            kwargs["adm_status"] = self.params.get('status')
-
-        kwargs = handle_sort_option(self.params, DevInfo(), self.logger,
-                                    **kwargs)
-
-        objs = []
-        if self.params.get('res'):
-            for serial in self.params.get('res'):
-                curr = self.filter(serial, **kwargs)
-                if not curr:
-                    continue
-                assert len(curr) == 1
-                objs.append(curr[0])
-        else:
-            objs = list(self.client.devices.get(family=self.family, **kwargs))
-
-        if len(objs) > 0:
-            dump_object_list(objs, attr=self.params.get('output'),
-                             fmt=self.params.get('format'))
-
-    def exec_status(self):
-        """Display I/O and drive status"""
-        try:
-            with AdminClient(lrs_required=True) as adm:
-                status = json.loads(adm.device_status(PHO_RSC_TAPE))
-                # disable pylint's warning as it's suggestion does not work
-                for i in range(len(status)): #pylint: disable=consider-using-enumerate
-                    status[i] = DriveStatus(status[i])
-
-                dump_object_list(sorted(status, key=lambda x: x.address),
-                                 self.params.get('output'))
-
-        except EnvironmentError as err:
-            self.logger.error("Cannot read status of drives: %s",
-                              env_error_format(err))
-            sys.exit(abs(err.errno))
-
-    def exec_delete(self):
-        """Remove a device"""
-        resources = self.params.get('res')
-        set_library(self)
-
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                count = adm.device_delete(self.family, resources, self.library)
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-        self.logger.info("Removed %d device(s) successfully", count)
-
-    def exec_lookup(self):
-        """Lookup drive information from the library."""
-        res = self.params.get('res')
-        set_library(self)
-
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                drive_info = adm.drive_lookup(res, self.library)
-
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-        relativ_address = drive_info.ldi_addr.lia_addr - \
-                          drive_info.ldi_first_addr
-        print("Drive %d: address %s" % (relativ_address,
-                                        hex(drive_info.ldi_addr.lia_addr)))
-        print("State: %s" % ("full" if drive_info.ldi_full else "empty"))
-
-        if drive_info.ldi_full:
-            print("Loaded tape id: %s" % (drive_info.ldi_medium_id.name))
-
-    def exec_load(self):
-        """Load a tape into a drive"""
-        res = self.params.get('res')
-        tape_label = self.params.get('tape_label')
-        set_library(self)
-
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                adm.load(res, tape_label, self.library)
-
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-    def exec_unload(self):
-        """Unload a tape from a drive"""
-        res = self.params.get('res')
-        tape_label = self.params.get('tape_label')
-        set_library(self)
-
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                adm.unload(res, tape_label, self.library)
-
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
 
 class TapeOptHandler(MediaOptHandler):
     """Magnetic tape options and actions."""

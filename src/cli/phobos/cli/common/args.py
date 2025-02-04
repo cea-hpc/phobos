@@ -1,5 +1,5 @@
 #
-#  All rights reserved (c) 2014-2024 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -45,3 +45,28 @@ def add_put_arguments(parser):
     parser.add_argument('-P', '--layout-params', '--lyt-params',
                         help='comma-separated list of key=value for layout '
                              'specific parameters')
+
+def add_list_arguments(parser, attr, default_output, sort_option=False, # pylint: disable=too-many-arguments
+                       lib_option=False, status_option=False):
+    """Default arguments for list-like actions"""
+    parser.add_argument('-o', '--output', type=lambda t: t.split(','),
+                        default=default_output,
+                        help=("attributes to output, comma-separated, "
+                              "choose from {" + " ".join(attr) + "} "
+                              "(default: %(default)s)"))
+    if sort_option:
+        parser.add_argument('--sort',
+                            help=("attribute to sort the output with, "
+                                  "choose from {" + " ".join(attr) + "} "))
+        parser.add_argument('--rsort',
+                            help=("attribute to sort the output in descending "
+                                  "order, choose from {" + " ".join(attr) + "} "
+                                  ))
+    if lib_option:
+        parser.add_argument('--library',
+                            help=("attribute to filter the output by library "
+                                  "name"))
+    if status_option:
+        parser.add_argument('--status',
+                            help=("filter the output by status name, choose "
+                                  "from {locked, unlocked, failed}"))
