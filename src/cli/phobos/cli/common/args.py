@@ -21,13 +21,7 @@
 Phobos CLI arguments utilities
 """
 
-import os
-import sys
-
-from phobos.core.const import (DSS_STATUS_FILTER_ALL, # pylint: disable=no-name-in-module
-                               DSS_STATUS_FILTER_COMPLETE,
-                               DSS_STATUS_FILTER_INCOMPLETE,
-                               DSS_STATUS_FILTER_READABLE, rsc_family2str)
+from phobos.core.const import rsc_family2str # pylint: disable=no-name-in-module
 from phobos.core.ffi import ResourceFamily
 
 def add_put_arguments(parser):
@@ -51,29 +45,3 @@ def add_put_arguments(parser):
     parser.add_argument('-P', '--layout-params', '--lyt-params',
                         help='comma-separated list of key=value for layout '
                              'specific parameters')
-
-def check_output_attributes(attrs, out_attrs, logger):
-    """Check that out_attrs are valid"""
-    attrs.extend(['*', 'all'])
-    bad_attrs = set(out_attrs).difference(set(attrs))
-    if bad_attrs:
-        logger.error("bad output attributes: %s", " ".join(bad_attrs))
-        sys.exit(os.EX_USAGE)
-
-def get_params_status(status, logger):
-    """Get the status filter"""
-    status_number = 0
-    if status:
-        status_possibilities = {'i': DSS_STATUS_FILTER_INCOMPLETE,
-                                'r': DSS_STATUS_FILTER_READABLE,
-                                'c': DSS_STATUS_FILTER_COMPLETE}
-        for letter in status:
-            if letter not in status_possibilities:
-                logger.error("status parameter '%s' must be composed "
-                             "exclusively of i, r or c", status)
-                sys.exit(os.EX_USAGE)
-            status_number += status_possibilities[letter]
-    else:
-        status_number = DSS_STATUS_FILTER_ALL
-
-    return status_number

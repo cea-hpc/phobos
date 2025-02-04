@@ -72,9 +72,11 @@ from phobos.cli.action.unlock import UnlockOptHandler
 from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
                                DSSInteractHandler, BaseResourceOptHandler,
                                env_error_format)
-from phobos.cli.common.args import (add_put_arguments, check_output_attributes,
-                                    get_params_status)
+from phobos.cli.common.args import add_put_arguments
+from phobos.cli.common.utils import (check_output_attributes, get_params_status,
+                                     set_library)
 from phobos.cli.target.copy import CopyOptHandler
+from phobos.cli.target.device import DeviceLockOptHandler, DeviceOptHandler
 
 def attr_convert(usr_attr):
     """Convert k/v pairs as expressed by the user into a dictionnary."""
@@ -400,16 +402,6 @@ class ListOptHandler(DSSInteractHandler):
                             help="output format human/xml/json/csv/yaml " \
                                  "(default: human)")
 
-
-class DeviceLockOptHandler(LockOptHandler):
-    """Lock device."""
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(DeviceLockOptHandler, cls).add_options(parser)
-        parser.add_argument('--wait', action='store_true',
-                            help='wait for any deamon releasing the device')
 
 
 OP_NAME_FROM_LETTER = {'P': 'put', 'G': 'get', 'D': 'delete'}
@@ -1500,84 +1492,6 @@ class LogsOptHandler(BaseOptHandler):
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
-
-def set_library(obj):
-    """Set the library of obj first from its 'library' param, then its family"""
-    obj.library = obj.params.get('library')
-    if not obj.library:
-        obj.library = cfg.get_default_library(obj.family)
-
-class DeviceOptHandler(BaseResourceOptHandler):
-    """Shared interface for devices."""
-    verbs = [
-        ResourceDeleteOptHandler,
-        ListOptHandler,
-        DeviceLockOptHandler,
-        UnlockOptHandler
-    ]
-    library = None
-
-    def filter(self, ident, **kwargs):
-        """
-        Return a list of devices that match the identifier for either serial or
-        path. You may call it a bug but this is a feature intended to let admins
-        transparently address devices using one or the other scheme.
-        """
-        dev = self.client.devices.get(family=self.family, serial=ident,
-                                      **kwargs)
-        if not dev:
-            # 2nd attempt, by path...
-            dev = self.client.devices.get(family=self.family, path=ident,
-                                          **kwargs)
-        return dev
-
-    def exec_add(self):
-        """Add a new device"""
-        resources = self.params.get('res')
-        set_library(self)
-
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                adm.device_add(self.family, resources,
-                               not self.params.get('unlock'), self.library)
-
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-        self.logger.info("Added %d device(s) successfully", len(resources))
-
-    def exec_lock(self):
-        """Device lock"""
-        names = self.params.get('res')
-        set_library(self)
-
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                adm.device_lock(self.family, names, self.library,
-                                self.params.get('wait'))
-
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-        self.logger.info("%d device(s) locked", len(names))
-
-    def exec_unlock(self):
-        """Device unlock"""
-        names = self.params.get('res')
-        set_library(self)
-
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                adm.device_unlock(self.family, names, self.library,
-                                  self.params.get('force'))
-
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-        self.logger.info("%d device(s) unlocked", len(names))
 
 class MediaOptHandler(BaseResourceOptHandler):
     """Shared interface for media."""

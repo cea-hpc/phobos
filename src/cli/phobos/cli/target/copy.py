@@ -27,8 +27,8 @@ from phobos.cli.action.create import CreateOptHandler
 from phobos.cli.action.delete import DeleteOptHandler
 from phobos.cli.action.list import ListOptHandler
 from phobos.cli.common import BaseResourceOptHandler, env_error_format
-from phobos.cli.common.args import (add_put_arguments, check_output_attributes,
-                                    get_params_status)
+from phobos.cli.common.args import add_put_arguments
+from phobos.cli.common.utils import check_output_attributes, get_params_status
 from phobos.core.ffi import CopyInfo
 from phobos.core.store import UtilClient
 from phobos.output import dump_object_list
