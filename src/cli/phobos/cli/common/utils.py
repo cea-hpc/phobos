@@ -119,8 +119,27 @@ def parse_set_access_flags(flags):
 
     return res
 
+def setaccess_epilog(family):
+    """Generic epilog"""
+    return """Examples:
+    phobos %s set-access GD      # allow get and delete, forbid put
+    phobos %s set-access +PG     # allow put, get (other flags are unchanged)
+    phobos %s set-access -- -P   # forbid put (other flags are unchanged)
+    (Warning: use the '--' separator to use the -PGD flags syntax)
+    """ % (family, family, family)
+
 def set_library(obj):
     """Set the library of obj first from its 'library' param, then its family"""
     obj.library = obj.params.get('library')
     if not obj.library:
         obj.library = cfg.get_default_library(obj.family)
+
+def uncase_fstype(choices):
+    """Check if an uncase FS type is a valid choice."""
+    def find_choice(choice):
+        """Return the uppercase choice if valid, the input choice if not."""
+        for key, item in enumerate([elt.upper() for elt in choices]):
+            if choice.upper() == item:
+                return choices[key]
+        return choice
+    return find_choice

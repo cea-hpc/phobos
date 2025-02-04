@@ -26,7 +26,34 @@ import sys
 from phobos.cli.common import env_error_format
 from phobos.cli.common.utils import set_library
 from phobos.core.admin import Client as AdminClient
-from phobos.core.const import DSS_DEVICE, DSS_MEDIA # pylint: disable=no-name-in-module
+from phobos.core.const import (DSS_DEVICE, DSS_MEDIA, # pylint: disable=no-name-in-module
+                               PHO_RSC_DIR)
+
+def exec_add_dir_rados(obj, family):
+    """Add a new directory or rados pool."""
+    rc, nb_dev_to_add, nb_dev_added = obj.add_medium_and_device()
+
+    if nb_dev_added == nb_dev_to_add:
+        obj.logger.info("Added %d %s(s) successfully", nb_dev_added,
+                        "dir" if family == PHO_RSC_DIR else "rados")
+    else:
+        obj.logger.error("Failed to add %d/%d %s(s)",
+                         nb_dev_to_add - nb_dev_added, nb_dev_to_add,
+                         "dir" if family == PHO_RSC_DIR else "rados")
+        sys.exit(abs(rc))
+
+def exec_delete_dir_rados(obj, family):
+    """Delete a directory or rados pool"""
+    rc, nb_dev_to_del, nb_dev_del = obj.delete_medium_and_device()
+
+    if nb_dev_del == nb_dev_to_del:
+        obj.logger.info("Deleted %d %s(s) successfully", nb_dev_del,
+                        "dir" if family == PHO_RSC_DIR else "rados")
+    else:
+        obj.logger.error("Failed to delete %d/%d %s(s)",
+                         nb_dev_to_del - nb_dev_del, nb_dev_to_del,
+                         "dir" if family == PHO_RSC_DIR else "rados")
+        sys.exit(abs(rc))
 
 def exec_delete_medium_device(obj, dss_type):
     """Remove media or devices."""

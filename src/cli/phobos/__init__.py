@@ -54,7 +54,8 @@ from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=n
                                DSS_STATUS_FILTER_INCOMPLETE,
                                DSS_STATUS_FILTER_READABLE, DSS_MEDIA,
                                DSS_OBJ_ALIVE, DSS_OBJ_DEPRECATED,
-                               DSS_OBJ_DEPRECATED_ONLY)
+                               DSS_OBJ_DEPRECATED_ONLY,
+                               PHO_RSC_RADOS_POOL)
 from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, DriveStatus,
                              LayoutInfo, MediaInfo, ObjectInfo, ResourceFamily,
                              CLIManagedResourceMixin, FSType, Id, LogFilter,
@@ -73,10 +74,13 @@ from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
                                DSSInteractHandler, BaseResourceOptHandler,
                                env_error_format)
 from phobos.cli.common.args import (add_list_arguments, add_put_arguments)
-from phobos.cli.common.exec import exec_delete_medium_device
+from phobos.cli.common.exec import (exec_add_dir_rados, exec_delete_dir_rados,
+                                    exec_delete_medium_device)
 from phobos.cli.common.utils import (check_output_attributes, get_params_status,
-                                     handle_sort_option, set_library)
+                                     handle_sort_option, setaccess_epilog,
+                                     set_library, uncase_fstype)
 from phobos.cli.target.copy import CopyOptHandler
+from phobos.cli.target.dir import DirOptHandler
 from phobos.cli.target.drive import DriveOptHandler
 from phobos.cli.target.media import (MediaAddOptHandler, MediaListOptHandler,
                                      MediaOptHandler,
@@ -394,19 +398,6 @@ class ListOptHandler(DSSInteractHandler):
                             help="output format human/xml/json/csv/yaml " \
                                  "(default: human)")
 
-
-def setaccess_epilog(family):
-    """Generic epilog"""
-    return """Examples:
-    phobos %s set-access GD      # allow get and delete, forbid put
-    phobos %s set-access +PG     # allow put, get (other flags are unchanged)
-    phobos %s set-access -- -P   # forbid put (other flags are unchanged)
-    (Warning: use the '--' separator to use the -PGD flags syntax)
-    """ % (family, family, family)
-
-class DirSetAccessOptHandler(MediaSetAccessOptHandler):
-    """Set media operation flags to directory media."""
-    epilog = setaccess_epilog("dir")
 
 class TapeSetAccessOptHandler(MediaSetAccessOptHandler):
     """Set media operation flags to tape media."""
@@ -790,15 +781,6 @@ class ExtentListOptHandler(ListOptHandler):
         parser.add_argument('--library',
                             help="filter the output by library name")
 
-def uncase_fstype(choices):
-    """Check if an uncase FS type is a valid choice."""
-    def find_choice(choice):
-        """Return the uppercase choice if valid, the input choice if not."""
-        for key, item in enumerate([elt.upper() for elt in choices]):
-            if choice.upper() == item:
-                return choices[key]
-        return choice
-    return find_choice
 
 class TapeAddOptHandler(MediaAddOptHandler):
     """Specific version of the 'add' command for tapes, with extra-options."""
@@ -874,19 +856,6 @@ class TapeFormatOptHandler(FormatOptHandler):
                             help='Filesystem type')
         parser.add_argument('--force', action='store_true',
                             help='Format the medium whatever its status')
-
-class DirFormatOptHandler(FormatOptHandler):
-    """Format a directory."""
-    descr = "format a directory"
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(DirFormatOptHandler, cls).add_options(parser)
-        parser.add_argument('--fs', default='POSIX',
-                            choices=list(map(fs_type2str, FSType)),
-                            type=uncase_fstype(list(map(fs_type2str, FSType))),
-                            help='Filesystem type')
 
 class RadosPoolFormatOptHandler(FormatOptHandler):
     """Format a RADOS pool."""
@@ -1331,60 +1300,6 @@ class PingOptHandler(BaseOptHandler):
 
         self.logger.info("Ping sent to TLC %s successfully", self.library)
 
-class DirOptHandler(MediaOptHandler):
-    """Directory-related options and actions."""
-    label = 'dir'
-    descr = 'handle directories'
-    family = ResourceFamily(ResourceFamily.RSC_DIR)
-    verbs = [
-        MediaAddOptHandler,
-        MediaUpdateOptHandler,
-        DirFormatOptHandler,
-        MediaListOptHandler,
-        LockOptHandler,
-        UnlockOptHandler,
-        DirSetAccessOptHandler,
-        MediumLocateOptHandler,
-        ResourceDeleteOptHandler,
-        MediaRenameOptHandler,
-    ]
-
-    def add_medium(self, adm, medium, tags):
-        adm.medium_add(medium, 'POSIX', tags=tags)
-
-    def exec_add(self):
-        """
-        Add a new directory.
-        Note that this is a special case where we add both a media (storage) and
-        a device (mean to access it).
-        """
-        rc, nb_dev_to_add, nb_dev_added = self.add_medium_and_device()
-
-        if nb_dev_added == nb_dev_to_add:
-            self.logger.info("Added %d dir(s) successfully", nb_dev_added)
-        else:
-            self.logger.error("Failed to add %d/%d dir(s)",
-                              nb_dev_to_add - nb_dev_added, nb_dev_to_add)
-            sys.exit(abs(rc))
-
-    def del_medium(self, adm, family, resources, library):
-        adm.medium_delete(family, resources, library)
-
-    def exec_delete(self):
-        """
-        Delete a directory
-        Note that this is a special case where we delete both a media (storage)
-        and a device (mean to access it).
-        """
-        rc, nb_dev_to_del, nb_dev_del = self.delete_medium_and_device()
-
-        if nb_dev_del == nb_dev_to_del:
-            self.logger.info("Deleted %d dir(s) successfully", nb_dev_del)
-        else:
-            self.logger.error("Failed to delete %d/%d dir(s)",
-                              nb_dev_to_del - nb_dev_del, nb_dev_to_del)
-            sys.exit(abs(rc))
-
 
 class TapeOptHandler(MediaOptHandler):
     """Magnetic tape options and actions."""
@@ -1433,14 +1348,7 @@ class RadosPoolOptHandler(MediaOptHandler):
         Note that this is a special case where we add both a media (storage) and
         a device (mean to access it).
         """
-        (rc, nb_dev_to_add, nb_dev_added) = self.add_medium_and_device()
-        if nb_dev_added == nb_dev_to_add:
-            self.logger.info("Added %d RADOS pool(s) successfully",
-                             nb_dev_added)
-        else:
-            self.logger.error("Failed to add %d/%d RADOS pools",
-                              nb_dev_to_add - nb_dev_added, nb_dev_to_add)
-            sys.exit(abs(rc))
+        exec_add_dir_rados(self, PHO_RSC_RADOS_POOL)
 
     def del_medium(self, adm, family, resources, library):
         adm.medium_delete(family, resources, library)
@@ -1451,15 +1359,7 @@ class RadosPoolOptHandler(MediaOptHandler):
         Note that this is a special case where we delete both a media (storage)
         and a device (mean to access it).
         """
-        rc, nb_dev_to_del, nb_dev_del = self.delete_medium_and_device()
-
-        if nb_dev_del == nb_dev_to_del:
-            self.logger.info("Deleted %d RADOS pool(s) successfully",
-                             nb_dev_del)
-        else:
-            self.logger.error("Failed to delete %d/%d RADOS pools",
-                              nb_dev_to_del - nb_dev_del, nb_dev_to_del)
-            sys.exit(abs(rc))
+        exec_delete_dir_rados(self, PHO_RSC_RADOS_POOL)
 
 class ExtentOptHandler(BaseResourceOptHandler):
     """Shared interface for extents."""
