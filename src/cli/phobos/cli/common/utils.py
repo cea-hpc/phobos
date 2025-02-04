@@ -21,6 +21,7 @@
 Phobos CLI utilities
 """
 
+from argparse import ArgumentTypeError
 import os
 import sys
 
@@ -83,6 +84,40 @@ def handle_sort_option(params, resource, logger, **kwargs):
                 sys.exit(os.EX_USAGE)
             kwargs[key] = sort_attr
     return kwargs
+
+OP_NAME_FROM_LETTER = {'P': 'put', 'G': 'get', 'D': 'delete'}
+def parse_set_access_flags(flags):
+    """From [+|-]PGD flags, return a dict with media operations to set
+
+    Unchanged operation are absent from the returned dict.
+    Dict key are among {'put', 'get', 'delete'}.
+    Dict values are among {True, False}.
+    """
+    res = {}
+    if not flags:
+        return {}
+
+    if flags[0] == '+':
+        target = True
+        flags = flags[1:]
+    elif flags[0] == '-':
+        target = False
+        flags = flags[1:]
+    else:
+        # present operations will be enabled
+        target = True
+        # absent operations will be disabled: preset all to False
+        for op_name in OP_NAME_FROM_LETTER.values():
+            res[op_name] = False
+
+    for op_letter in flags:
+        if op_letter not in OP_NAME_FROM_LETTER:
+            raise ArgumentTypeError(f'{op_letter} is not a valid media '
+                                    'operation flags')
+
+        res[OP_NAME_FROM_LETTER[op_letter]] = target
+
+    return res
 
 def set_library(obj):
     """Set the library of obj first from its 'library' param, then its family"""
