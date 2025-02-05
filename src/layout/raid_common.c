@@ -731,6 +731,8 @@ static int write_split_fini(struct pho_data_processor *encoder, int io_rc,
         struct pho_io_descr *iod = raid_proc_iod(encoder, i, target_idx);
         int rc2;
 
+        ext_location.extent->size = iod->iod_size;
+        io_context->write.extents[i].size = iod->iod_size;
         iod->iod_loc = &ext_location;
         rc2 = set_object_md(iod->iod_ioa, iod, &object_md);
         rc = rc ? : rc2;
@@ -743,7 +745,6 @@ static int write_split_fini(struct pho_data_processor *encoder, int io_rc,
         release->media[i]->nb_extents_written += 1;
         release->media[i]->grouping =
             xstrdup_safe(encoder->xfer->xd_params.put.grouping);
-        ext_location.extent->size = iod->iod_size;
         if (i < io_context->n_data_extents)
             /* We need to remove the size written from to_write. But to_write
              * doesn't take the parity blocks into account. This assumes that

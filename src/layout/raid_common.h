@@ -161,6 +161,7 @@ struct raid_ops {
      * XXX BEGIN UNDER CONSTRUCTION SECTION
      */
     int (*read_into_buff)(struct pho_data_processor *proc);
+    int (*write_from_buff)(struct pho_data_processor *proc);
 };
 
 int raid_encoder_init(struct pho_data_processor *encoder,

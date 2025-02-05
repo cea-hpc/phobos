@@ -338,6 +338,39 @@ static int raid1_read_into_buff(struct pho_data_processor *proc)
         return 0;
 }
 
+static int raid1_write_from_buff(struct pho_data_processor *proc)
+{
+    struct raid_io_context *io_context =
+        (struct raid_io_context *)proc->private_writer;
+    size_t inside_split_offset = proc->writer_offset -
+                                 io_context->current_split_offset;
+    size_t repl_count = io_context->n_data_extents +
+                        io_context->n_parity_extents;
+    struct pho_io_descr *iods = io_context->iods;
+    size_t to_write;
+    int rc;
+    int i;
+
+    /* limit write : split -> buffer */
+    to_write = min(io_context->write.extents[0].size - inside_split_offset,
+                   proc->reader_offset - proc->writer_offset);
+
+    for (i = 0; i < repl_count; ++i) {
+        rc = ioa_write(iods[i].iod_ioa, &iods[i], proc->buff.buff, to_write);
+        if (rc)
+            LOG_RETURN(rc,
+                       "RAID1 write: unable to write %zu bytes in replica %d "
+                       "at offset %zu", to_write, i, proc->writer_offset);
+
+        iods[i].iod_size += to_write;
+    }
+
+    proc->writer_offset += to_write;
+
+    return extent_hash_update(&io_context->hashes[0], proc->buff.buff,
+                              to_write);
+}
+
 static int raid1_get_block_size(struct pho_data_processor *enc,
                                 size_t *block_size)
 {
@@ -358,6 +391,7 @@ static const struct raid_ops RAID1_OPS = {
     .delete_split   = raid_delete_split,
     .get_block_size = raid1_get_block_size,
     .read_into_buff = raid1_read_into_buff,
+    .write_from_buff = raid1_write_from_buff,
 };
 
 static int raid1_get_repl_count(struct pho_data_processor *enc,
