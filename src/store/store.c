@@ -165,6 +165,8 @@ static const char *get_xfer_param_reference_copy_name(
         return xfer->xd_params.get.copy_name;
     case PHO_XFER_OP_PUT:
         return xfer->xd_params.put.copy_name;
+    case PHO_XFER_OP_DEL:
+        return xfer->xd_params.delete.copy_name;
     default:
         return NULL;
     }
@@ -1096,15 +1098,16 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
 
     rc = dss_lazy_find_copy(dss, obj->uuid, obj->version,
                             get_xfer_param_reference_copy_name(xfer), &copy);
-    if (rc)
+    if (rc) {
+        object_info_free(obj);
         LOG_RETURN(rc, "Cannot find copy for objid:'%s'", obj->oid);
+    }
 
     if (copy->copy_status == PHO_COPY_STATUS_INCOMPLETE) {
-        pho_error(rc = -ENOENT, "Status of copy '%s' for the object '%s' is "
+        copy_info_free(copy);
+        LOG_RETURN(rc = -ENOENT, "Status of copy '%s' for the object '%s' is "
                   "incomplete, cannot be reconstructed", copy->copy_name,
                   obj->oid);
-        copy_info_free(copy);
-        return rc;
     }
 
     if (copy->copy_status != PHO_COPY_STATUS_COMPLETE)

@@ -48,8 +48,8 @@ from phobos.core.const import (rsc_family2str, # pylint: disable=no-name-in-modu
                                str2operation_type)
 from phobos.core.ffi import (DevInfo, MediaInfo, ResourceFamily,
                              Id, LogFilter, Timeval)
-from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
-
+from phobos.core.store import (attrs_as_dict, DelParams, PutParams,
+                               UtilClient, XferClient)
 from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
                                DSSInteractHandler, BaseResourceOptHandler,
                                env_error_format, XferOptHandler)
@@ -372,7 +372,8 @@ class DeleteOptHandler(BaseOptHandler):
             scope = DSS_OBJ_DEPRECATED_ONLY
 
         try:
-            client.object_delete(oids, uuid, version, scope,
+            client.object_delete(oids, uuid, version,
+                                 DelParams(copy_name=None, scope=scope),
                                  self.params.get('hard'))
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

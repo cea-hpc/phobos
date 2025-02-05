@@ -133,8 +133,11 @@ struct pho_xfer_get_params {
 
 /*
  * DEL parameters.
+ * Copy name corresponds to the name of the copy to delete. Copies can only be
+ * hard deleted.
  */
 struct pho_xfer_del_params {
+    char *copy_name;           /**< Copy name [out] */
     enum dss_obj_scope scope;  /**< Scope of the object to delete
                                  *  (alive, deprecated, ...).
                                  */

@@ -225,18 +225,35 @@ GetParams.__new__.__defaults__ = (None,) * len(GetParams._fields)
 class XferDelParams(Structure): # pylint: disable=too-few-public-methods, too-many-instance-attributes
     """Phobos DEL parameters of the XferDescriptor."""
     _fields_ = [
+        ("_copy_name", c_char_p),
         ("scope", c_int),
     ]
 
-    def __init__(self, scope):
+    def __init__(self, del_params):
         super().__init__()
-        self.scope = scope
+        self.copy_name = del_params.copy_name
+        if del_params.scope is None:
+            self.scope = DSS_OBJ_ALIVE
+        else:
+            self.scope = del_params.scope
 
-class DelParams(namedtuple('DelParams', '')):
+    @property
+    def copy_name(self):
+        """Wrapper to get copy_name"""
+        return self._copy_name.decode('utf-8') if self._copy_name else None
+
+    @copy_name.setter
+    def copy_name(self, val):
+        """Wrapper to set copy_name"""
+        #pylint: disable=attribute-defined-outside-init
+        self._copy_name = val.encode('utf-8') if val else None
+
+class DelParams(namedtuple('DelParams', 'copy_name scope')):
     """
     Transition data structure for del parameters between
     the CLI and the XFer data structure.
     """
+    __slots__ = ()
 DelParams.__new__.__defaults__ = (None,) * len(DelParams._fields)
 
 class XferCopyParams(Structure): # pylint: disable=too-few-public-methods, too-many-instance-attributes
@@ -594,7 +611,7 @@ class UtilClient:
         self.logger = logging.getLogger(__name__)
 
     @staticmethod
-    def object_delete(oids, uuid, version, scope, hard_delete):
+    def object_delete(oids, uuid, version, del_params, hard_delete):
         """Delete objects."""
         n_xfers = c_int(len(oids))
         xfer_array_type = XferDescriptor * len(oids)
@@ -610,7 +627,7 @@ class UtilClient:
             if version is not None:
                 xfers[i].xd_targets[0].xt_version = version
             xfers[i].xd_flags = PHO_XFER_OBJ_HARD_DEL if hard_delete else 0
-            xfers[i].xd_params.delete = XferDelParams(scope)
+            xfers[i].xd_params.delete = XferDelParams(del_params)
 
         rc = LIBPHOBOS.phobos_delete(xfers, n_xfers)
         if rc:
