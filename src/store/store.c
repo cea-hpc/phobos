@@ -176,29 +176,24 @@ static const char *get_xfer_param_reference_copy_name(
  * Build a decoder for this xfer by retrieving the xfer layout and initializing
  * the decoder from it. Only valid for GET / COPY / ERASE xfers.
  *
- * @param[out]  decoder The decoder to be initialized
- * @param[in]   xfer    The xfer to be decoded
  * @param[in]   dss     A DSS handle to retrieve layout information for xfer
+ * @param[in]   xfer    The xfer to be decoded
+ * @param[in]   copy    The copy to be decoded
+ * @param[out]  decoder The decoder to be initialized
  *
  * @return 0 on success, -errno on error.
  */
-static int decoder_build(struct pho_data_processor *decoder,
-                         struct pho_xfer_desc *xfer, struct dss_handle *dss)
+static int decoder_build(struct dss_handle *dss, struct pho_xfer_desc *xfer,
+                         struct copy_info *copy,
+                         struct pho_data_processor *decoder)
 {
-    const char *copy_name = get_xfer_param_reference_copy_name(xfer);
     struct layout_info *layout;
     struct dss_filter filter;
-    struct copy_info *copy;
     int cnt = 0;
     int rc;
 
     assert(xfer->xd_op == PHO_XFER_OP_GET || xfer->xd_op == PHO_XFER_OP_DEL ||
            xfer->xd_op == PHO_XFER_OP_COPY);
-
-    rc = dss_lazy_find_copy(dss, xfer->xd_targets->xt_objuuid,
-                            xfer->xd_targets->xt_version, copy_name, &copy);
-    if (rc)
-        LOG_RETURN(rc, "Cannot get copy");
 
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
@@ -232,7 +227,6 @@ static int decoder_build(struct pho_data_processor *decoder,
         GOTO(err, rc);
 
 err:
-    copy_info_free(copy);
     if (rc)
         dss_res_free(layout, cnt);
 
@@ -1009,7 +1003,7 @@ out:
     return rc;
 }
 
-static int object_info_copy_into_xfer(struct object_info *obj,
+static int copy_object_info_into_xfer(struct object_info *obj,
                                       struct pho_xfer_target *xfer)
 {
     int rc;
@@ -1114,13 +1108,16 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
         pho_warn("Copy '%s' status for the object '%s' is %s.", copy->copy_name,
                  obj->oid, copy_status2str(copy->copy_status));
 
-    copy_info_free(copy);
-    rc = object_info_copy_into_xfer(obj, xfer->xd_targets);
+    rc = copy_object_info_into_xfer(obj, xfer->xd_targets);
     object_info_free(obj);
     if (rc)
-        return rc;
+        goto end;
 
-    return decoder_build(proc, xfer, dss);
+    rc = decoder_build(dss, xfer, copy, proc);
+
+end:
+    copy_info_free(copy);
+    return rc;
 }
 
 static bool is_uuid_arg(struct pho_xfer_target *xfer, enum pho_xfer_op xd_op)
