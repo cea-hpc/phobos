@@ -1191,9 +1191,12 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
                        obj.uuid, obj.version);
     }
 
-    rc = dss_deprecated_object_delete(dss, &obj, 1);
-    if (rc)
-        pho_error(rc, "Unable to delete object '%s:%d'", obj.uuid, obj.version);
+    if (!(xfer->xd_flags & PHO_XFER_COPY_HARD_DEL)) {
+        rc = dss_deprecated_object_delete(dss, &obj, 1);
+        if (rc)
+            pho_error(rc, "Unable to delete object '%s:%d'", obj.uuid,
+                      obj.version);
+    }
 
     return rc;
 }
@@ -1311,7 +1314,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     else if (xfer->xd_op == PHO_XFER_OP_GET)
         rc = store_end_decoder_xfer(pho, xfer);
     else if (xfer->xd_op == PHO_XFER_OP_DEL &&
-             xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL)
+             xfer->xd_flags & (PHO_XFER_OBJ_HARD_DEL | PHO_XFER_COPY_HARD_DEL))
         rc = store_end_delete_xfer(pho, xfer, proc);
 
 cont:
@@ -1636,8 +1639,8 @@ static int store_perform_xfers(struct phobos_handle *pho)
 
         switch (xfer->xd_op) {
         case PHO_XFER_OP_DEL:
-            if (xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL ||
-                xfer->xd_flags & PHO_XFER_COPY_HARD_DEL)
+            if (xfer->xd_flags & (PHO_XFER_OBJ_HARD_DEL |
+                                  PHO_XFER_COPY_HARD_DEL))
                 continue;
 
             rc2 = object_delete(&pho->dss, xfer->xd_targets);
