@@ -314,19 +314,19 @@ static int raid1_read_split(struct pho_data_processor *dec)
 
 static int raid1_read_into_buff(struct pho_data_processor *proc)
 {
-    size_t buffer_offset = proc->reader_offset - proc->writer_offset;
+    size_t buffer_data_size = proc->reader_offset - proc->buffer_offset;
     struct raid_io_context *io_context =
         (struct raid_io_context *)proc->private_reader;
     size_t inside_split_offset = proc->reader_offset -
                                  io_context->current_split_offset;
-    char *buff_start = proc->buff.buff + buffer_offset;
+    char *buff_start = proc->buff.buff + buffer_data_size;
     size_t to_read;
     int rc;
 
     /* limit read : object -> split -> buffer */
     to_read = min(proc->object_size - proc->reader_offset,
                   io_context->read.extents[0]->size - inside_split_offset);
-    to_read = min(to_read, proc->buff.size - buffer_offset);
+    to_read = min(to_read, proc->buff.size - buffer_data_size);
 
     rc = data_processor_read_into_buff(proc, &io_context->iods[0], to_read);
     if (rc)
@@ -347,6 +347,8 @@ static int raid1_write_from_buff(struct pho_data_processor *proc)
     size_t repl_count = io_context->n_data_extents +
                         io_context->n_parity_extents;
     struct pho_io_descr *iods = io_context->iods;
+    char *buff_start = proc->buff.buff +
+                       (proc->writer_offset - proc->buffer_offset);
     size_t to_write;
     int rc;
     int i;
@@ -356,7 +358,7 @@ static int raid1_write_from_buff(struct pho_data_processor *proc)
                    proc->reader_offset - proc->writer_offset);
 
     for (i = 0; i < repl_count; ++i) {
-        rc = ioa_write(iods[i].iod_ioa, &iods[i], proc->buff.buff, to_write);
+        rc = ioa_write(iods[i].iod_ioa, &iods[i], buff_start, to_write);
         if (rc)
             LOG_RETURN(rc,
                        "RAID1 write: unable to write %zu bytes in replica %d "
@@ -366,9 +368,7 @@ static int raid1_write_from_buff(struct pho_data_processor *proc)
     }
 
     proc->writer_offset += to_write;
-
-    return extent_hash_update(&io_context->hashes[0], proc->buff.buff,
-                              to_write);
+    return extent_hash_update(&io_context->hashes[0], buff_start, to_write);
 }
 
 static int raid1_get_block_size(struct pho_data_processor *enc,

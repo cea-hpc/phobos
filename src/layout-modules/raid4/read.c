@@ -257,7 +257,7 @@ int raid4_read_split(struct pho_data_processor *decoder)
 
 int raid4_read_into_buff(struct pho_data_processor *proc)
 {
-    size_t buffer_offset = proc->reader_offset - proc->writer_offset;
+    size_t buffer_offset = proc->reader_offset - proc->buffer_offset;
     struct raid_io_context *io_context =
         (struct raid_io_context *)proc->private_reader;
     size_t inside_split_offset = proc->reader_offset -

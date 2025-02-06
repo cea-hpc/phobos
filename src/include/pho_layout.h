@@ -147,16 +147,19 @@ struct pho_data_processor {
      */
     int current_target;
     size_t object_size;
-    size_t reader_offset;
+    size_t reader_offset; /* offset in the object of the next byte to read */
     size_t reader_stripe_size;
-    size_t writer_offset;
+    size_t writer_offset; /* offset in the object of the next byte to write */
     size_t writer_stripe_size;
     /*
      * buff size is the lowest common multiple of the reader and the writer
      * stripe size.
-     * buff is filled with (reader_offset - writer_offset) bytes.
+     * buff is filled with (reader_offset - buffer_offset) bytes.
+     *
+     * buffer_offset <= writer_offset <= reader_offset
      */
     struct pho_buff buff;
+    size_t buffer_offset; /* offset in the object of the first byte in buff */
     void *private_reader;
     const struct pho_proc_ops *reader_ops;
     void *private_writer;

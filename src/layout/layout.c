@@ -51,7 +51,7 @@ int data_processor_read_into_buff(struct pho_data_processor *proc,
 
     read_size = ioa_read(reader_iod->iod_ioa, reader_iod,
                          proc->buff.buff +
-                             (proc->reader_offset - proc->writer_offset), size);
+                             (proc->reader_offset - proc->buffer_offset), size);
 
     if (read_size < 0)
         LOG_RETURN(read_size,

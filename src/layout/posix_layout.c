@@ -48,7 +48,7 @@ static int posix_reader_step(struct pho_data_processor *proc, pho_resp_t *resp,
     /* limit read : object -> buffer */
     to_read = min(proc->object_size - proc->reader_offset,
                   proc->buff.size -
-                      (proc->reader_offset - proc->writer_offset));
+                      (proc->reader_offset - proc->buffer_offset));
     return data_processor_read_into_buff(proc, posix_reader, to_read);
 }
 
@@ -128,7 +128,9 @@ static int posix_writer_step(struct pho_data_processor *proc, pho_resp_t *resp,
     int rc;
 
     rc = ioa_write(posix_writer->iod_ioa, posix_writer,
-                   proc->buff.buff, to_write);
+                   proc->buff.buff +
+                       (proc->writer_offset - proc->buffer_offset),
+                   to_write);
     if (rc)
         LOG_RETURN(rc,
                    "Error when writting %zu bytes with posix writer at offset "
