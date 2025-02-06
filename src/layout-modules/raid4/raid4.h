@@ -16,6 +16,7 @@ int raid4_get_block_size(struct pho_data_processor *processor,
                          size_t *block_size);
 
 int raid4_read_into_buff(struct pho_data_processor *proc);
+int raid4_write_from_buff(struct pho_data_processor *proc);
 
 void buffer_xor(struct pho_buff *buff1, struct pho_buff *buff2,
                 struct pho_buff *xor, size_t count);
