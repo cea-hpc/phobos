@@ -57,7 +57,7 @@ check_SCRIPTS=acceptance.test \
               test_fair_share.test \
               test_file_after_put.test \
               test_format.test \
-              test_get.sh \
+              test_get.test \
               test_group_sync.sh \
               test_grouping.test \
               test_import.test \

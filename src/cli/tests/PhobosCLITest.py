@@ -163,6 +163,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['get', '--best-host', 'oid1', 'dest'])
         self.check_cmdline_valid(['get', '--version', '1', 'objid', 'file'])
         self.check_cmdline_valid(['get', '--uuid', 'uuid', 'objid', 'file'])
+        self.check_cmdline_valid(['get', '--copy-name', 'copy', 'objid',
+                                  'file'])
         self.check_cmdline_valid(['get', '--version', '1', '--uuid', 'uuid',
                                   'objid', 'file'])
         self.check_cmdline_valid(['put', '--lyt-params', 'a=b', 'src', 'oid'])

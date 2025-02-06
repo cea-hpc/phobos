@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-#  All rights reserved (c) 2014-2024 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -24,36 +24,37 @@
 #
 
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../test_launch_daemon.sh
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
 
-set -xe
 
-function dir_setup
+function dir_setup()
 {
-    dir="$(mktemp -d /tmp/test.pho.XXXX)"
-    echo "adding directory $dir"
-    $phobos dir add $dir
-    $phobos dir format --fs posix --unlock $dir
+    export DIRS=(
+          $(mktemp -d /tmp/test.pho.XXXX)
+          $(mktemp -d /tmp/test.pho.XXXX)
+          )
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --fs posix --unlock ${DIRS[@]}
 }
 
-function setup
+function setup()
 {
     setup_tables
     invoke_lrs
     dir_setup
 }
 
-function cleanup
+function cleanup()
 {
     waive_lrs
     drop_tables
-    rm -rf $dir
+    rm -rf ${DIRS[@]}
     rm -f /tmp/out
 }
 
-function test_get
+function test_get()
 {
     $phobos put --family dir /etc/hosts oid1
 
@@ -83,7 +84,7 @@ function test_get
     rm /tmp/out
 }
 
-function test_creation_and_access_times
+function test_creation_and_access_times()
 {
     $phobos put --family dir /etc/hosts oid-time
     $phobos put --family dir --overwrite /etc/hosts oid-time
@@ -202,7 +203,7 @@ function test_creation_and_access_times
         || error "Access time should not be updated on undelete operation"
 }
 
-function test_errors
+function test_errors()
 {
     $valg_phobos get oid2 /tmp/out \
         && error "Get operation should fail on invalid oid" || true
@@ -227,9 +228,44 @@ EOF
             true
 }
 
-trap cleanup EXIT
-setup
+function test_get_copy_name()
+{
+    $phobos dir update --tags copy_dir1 ${DIRS[0]}
+    $phobos dir update --tags copy_dir2 ${DIRS[1]}
 
-test_get
-test_creation_and_access_times
-test_errors
+    $phobos put -f dir --copy-name blob --tags copy_dir1 /etc/hosts oid-copy
+
+    $valg_phobos get --copy-name source oid-copy /tmp/out &&
+        error "Get operation should have failed"
+
+    $valg_phobos get --copy-name blob oid-copy /tmp/out ||
+        error "Get operation should have succeed"
+
+    rm /tmp/out
+
+    $phobos copy create -f dir --copy-name blob --tags copy_dir2 oid-copy toto
+
+    # Lock the media of the copy blob.
+    $phobos dir lock ${DIRS[0]}
+    $valg_phobos get --copy-name blob oid-copy /tmp/out &&
+        error "Get operation should have failed"
+    $valg_phobos get --copy-name toto oid-copy /tmp/out ||
+        error "Get operation should have succeed"
+    rm /tmp/out
+
+    # Lock the media of the copy toto.
+    $phobos dir unlock ${DIRS[0]}
+    $phobos dir lock ${DIRS[1]}
+    $valg_phobos get --copy-name toto oid-copy /tmp/out &&
+        error "Get operation should have failed"
+    $valg_phobos get --copy-name blob oid-copy /tmp/out ||
+        error "Get operation should have succeed"
+    rm /tmp/out
+}
+
+TESTS=("setup; \
+            test_get; \
+            test_creation_and_access_times; \
+            test_errors; \
+            test_get_copy_name; \
+        cleanup")

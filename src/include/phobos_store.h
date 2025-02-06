@@ -122,6 +122,7 @@ struct pho_xfer_put_params {
  * GET parameters.
  * Node_name corresponds to the name of the node the object can be retrieved
  * from, if a phobos_get call fails.
+ * Copy_name corresponds to the copy to get.
  */
 struct pho_xfer_get_params {
     const char *copy_name;          /**< Copy to retrieve. */

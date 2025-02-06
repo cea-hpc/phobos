@@ -1326,28 +1326,25 @@ static int store_end_encoder_xfer(struct phobos_handle *pho,
 }
 
 static int store_end_decoder_xfer(struct phobos_handle *pho,
-                                  struct pho_xfer_desc *xfer)
+                                  struct pho_xfer_desc *xfer,
+                                  struct pho_data_processor *proc)
 {
-    struct copy_info *copy;
+    struct copy_info copy = {
+        .object_uuid = xfer->xd_targets->xt_objuuid,
+        .version = xfer->xd_targets->xt_version,
+        .copy_name = proc->src_layout->copy_name,
+    };
     int rc = 0;
 
-    rc = dss_lazy_find_copy(&pho->dss, xfer->xd_targets->xt_objuuid,
-                            xfer->xd_targets->xt_version, NULL, &copy);
+    rc = gettimeofday(&copy.access_time, NULL);
     if (rc)
         LOG_RETURN(rc,
-                   "Error while retrieving copy info, will skip access time update");
+                   "Error while retrieving current time, will skip access time update");
 
-    rc = gettimeofday(&copy->access_time, NULL);
-    if (rc)
-        LOG_GOTO(end, rc,
-                 "Error while retrieving current time, will skip access time update");
-
-    rc = dss_copy_update(&pho->dss, copy, copy, 1, DSS_COPY_UPDATE_ACCESS_TIME);
+    rc = dss_copy_update(&pho->dss, &copy, &copy, 1,
+                         DSS_COPY_UPDATE_ACCESS_TIME);
     if (rc)
         pho_error(rc, "Error while updating copy access time");
-
-end:
-    copy_info_free(copy);
 
     return rc;
 }
@@ -1387,7 +1384,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     if (is_encoder(proc) || is_copier(proc))
         rc = store_end_encoder_xfer(pho, xfer, proc);
     else if (xfer->xd_op == PHO_XFER_OP_GET)
-        rc = store_end_decoder_xfer(pho, xfer);
+        rc = store_end_decoder_xfer(pho, xfer, proc);
     else if (xfer->xd_op == PHO_XFER_OP_DEL &&
              xfer->xd_flags & (PHO_XFER_OBJ_HARD_DEL | PHO_XFER_COPY_HARD_DEL))
         rc = store_end_delete_xfer(pho, xfer, proc);

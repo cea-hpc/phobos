@@ -139,6 +139,8 @@ class StoreGetHandler(XferOptHandler):
                                  "most optimal one or if the object can be "
                                  "accessed from any node, else return the best "
                                  "hostname to get this object")
+        parser.add_argument('-c', '--copy-name',
+                            help='Copy of the object to get')
 
     def exec_get(self):
         """Retrieve an object from backend."""
@@ -147,8 +149,10 @@ class StoreGetHandler(XferOptHandler):
         version = self.params.get('version')
         uuid = self.params.get('uuid')
         best_host = self.params.get('best_host')
+        copy_name = self.params.get('copy_name')
         self.logger.debug("Retrieving object 'objid:%s' to '%s'", oid, dst)
-        self.client.get_register(oid, dst, (uuid, version), best_host)
+        self.client.get_register(oid, dst, (uuid, version, copy_name),
+                                 best_host)
         try:
             self.client.run()
         except IOError as err:
@@ -170,6 +174,7 @@ class StoreGetHandler(XferOptHandler):
                                  oid, uuid)
             else:
                 self.logger.info("Object '%s' successfully retrieved", oid)
+
 
 class StorePutHandler(XferOptHandler):
     """Insert objects into backend."""

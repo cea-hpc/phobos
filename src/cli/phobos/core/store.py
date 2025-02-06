@@ -423,7 +423,7 @@ class XferDescriptor(Structure): # pylint: disable=too-many-instance-attributes
             # The CLI can only create a xfer with 1 target with a GET
             self.xd_targets[0].xt_objuuid = desc[2][0]
             self.xd_targets[0].xt_version = desc[2][1]
-            self.xd_params.get = XferGetParams(GetParams())
+            self.xd_params.get = XferGetParams(GetParams(copy_name=desc[2][2]))
         elif self.xd_op == PHO_XFER_OP_COPY:
             self.xd_params.copy = desc[2]
 
