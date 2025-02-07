@@ -312,7 +312,7 @@ function test_copy_user_copy_name()
 {
     $phobos put -f dir --copy-name disk /etc/hosts oid
 
-    $valg_phobos copy create -f dir oid disk-copy &&
+    $valg_phobos copy create -f dir --copy-name source oid disk-copy &&
         error "Phobos copy create should failed"
 
     $valg_phobos copy create -f dir --copy-name disk oid disk-copy ||

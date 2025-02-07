@@ -723,32 +723,21 @@ int dss_update_gc_for_tape(struct dss_handle *handle, const struct pho_id *tape)
     return check_orphan(handle, tape);
 }
 
-int dss_lazy_find_copy(struct dss_handle *handle, const char *uuid,
-                       int version, const char *copy_name,
-                       struct copy_info **copy)
+static int get_copy_from_dss(struct dss_handle *handle, const char *uuid,
+                             int version, const char *copy_name,
+                             struct copy_info **copy)
 {
-    const char *copy_to_retrieve = NULL;
     struct copy_info *copy_list = NULL;
     struct dss_filter filter;
     int copy_cnt = 0;
-    int rc;
-
-    ENTRY;
-
-    if (copy_name == NULL)  {
-        rc = get_cfg_default_copy_name(&copy_to_retrieve);
-        if (rc)
-            LOG_RETURN(rc, "Cannot get default copy name from conf");
-    } else {
-        copy_to_retrieve = copy_name;
-    }
+    int rc = 0;
 
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                           "     {\"DSS::COPY::object_uuid\": \"%s\"},"
                           "     {\"DSS::COPY::version\": \"%d\"},"
                           "     {\"DSS::COPY::copy_name\": \"%s\"}"
-                          "]}", uuid, version, copy_to_retrieve);
+                          "]}", uuid, version, copy_name);
     if (rc)
         LOG_RETURN(rc, "Cannot build filter");
 
@@ -756,7 +745,7 @@ int dss_lazy_find_copy(struct dss_handle *handle, const char *uuid,
     dss_filter_free(&filter);
     if (rc)
         LOG_RETURN(rc, "Cannot fetch copy '%s' for objuuid:'%s'",
-                   copy_to_retrieve, uuid);
+                   copy_name, uuid);
 
     if (copy_cnt == 0) {
         dss_res_free(copy_list, copy_cnt);
@@ -766,5 +755,74 @@ int dss_lazy_find_copy(struct dss_handle *handle, const char *uuid,
     *copy = copy_info_dup(copy_list);
 
     dss_res_free(copy_list, copy_cnt);
+
+    return 0;
+}
+
+int dss_lazy_find_copy(struct dss_handle *handle, const char *uuid,
+                       int version, const char *copy_name,
+                       struct copy_info **copy)
+{
+    struct copy_info *copy_list = NULL;
+    const char *default_copy = NULL;
+    char **preferred_order = NULL;
+    struct dss_filter filter;
+    int copy_cnt = 0;
+    size_t count = 0;
+    int rc = 0;
+    int i;
+
+    ENTRY;
+
+    if (copy_name) {
+        rc = get_copy_from_dss(handle, uuid, version, copy_name, copy);
+        if (rc == 0 && *copy == NULL)
+            pho_error(rc = -ENOENT,
+                      "Cannot fetch copy '%s'", copy_name);
+        return rc;
+    }
+
+    rc = get_cfg_preferred_order(&preferred_order, &count);
+    if (rc)
+        return rc;
+
+    for (i = 0; i < count; ++i) {
+        rc = get_copy_from_dss(handle, uuid, version, preferred_order[i], copy);
+        if (*copy != NULL && rc == 0)
+            goto end;
+    }
+
+    rc = get_cfg_default_copy_name(&default_copy);
+    if (rc)
+        LOG_RETURN(rc, "Cannot get default copy name from conf");
+
+    rc = get_copy_from_dss(handle, uuid, version, default_copy, copy);
+    if (*copy != NULL && rc == 0)
+        goto end;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "     {\"DSS::COPY::object_uuid\": \"%s\"},"
+                          "     {\"DSS::COPY::version\": \"%d\"}"
+                          "]}", uuid, version);
+    if (rc)
+        LOG_RETURN(rc, "Cannot build filter");
+
+    rc = dss_copy_get(handle, &filter, &copy_list, &copy_cnt, NULL);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc, "Cannot fetch copy for objuuid:'%s'", uuid);
+
+    assert(copy_cnt >= 1);
+
+    *copy = copy_info_dup(&copy_list[0]);
+
+    dss_res_free(copy_list, copy_cnt);
+
+end:
+    for (i = 0; i < count; ++i)
+        free(preferred_order[i]);
+    free(preferred_order);
+
     return rc;
 }

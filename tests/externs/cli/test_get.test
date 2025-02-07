@@ -261,6 +261,56 @@ function test_get_copy_name()
     $valg_phobos get --copy-name blob oid-copy /tmp/out ||
         error "Get operation should have succeed"
     rm /tmp/out
+
+    # Copy preferred order at rank 1 among 1
+    PHOBOS_COPY_get_preferred_order="toto" $valg_phobos get oid-copy /tmp/out &&
+        error "Get operation should have failed"
+    PHOBOS_COPY_get_preferred_order="blob" $valg_phobos get oid-copy /tmp/out ||
+        error "Get operation should have succeed"
+    rm /tmp/out
+    $phobos dir unlock ${DIRS[1]}
+    $phobos dir lock ${DIRS[0]}
+    PHOBOS_COPY_get_preferred_order="blob" $valg_phobos get oid-copy /tmp/out &&
+        error "Get operation should have failed"
+    PHOBOS_COPY_get_preferred_order="toto" $valg_phobos get oid-copy /tmp/out ||
+        error "Get operation should have succeed"
+    rm /tmp/out
+
+    # Copy preferred order at rank 1 among 2
+    PHOBOS_COPY_get_preferred_order="blob,toto" \
+        $valg_phobos get oid-copy /tmp/out &&
+        error "Get operation should have failed"
+    PHOBOS_COPY_get_preferred_order="toto,blob" \
+        $valg_phobos get oid-copy /tmp/out ||
+        error "Get operation should have succeed"
+    rm /tmp/out
+    $phobos dir unlock ${DIRS[0]}
+    $phobos dir lock ${DIRS[1]}
+    PHOBOS_COPY_get_preferred_order="toto,blob" \
+        $valg_phobos get oid-copy /tmp/out &&
+        error "Get operation should have failed"
+    PHOBOS_COPY_get_preferred_order="blob,toto" \
+        $valg_phobos get oid-copy /tmp/out ||
+        error "Get operation should have succeed"
+    rm /tmp/out
+
+    # Copy preferred order at rank 2 among 2
+    PHOBOS_COPY_get_preferred_order="toto,astral" \
+        $valg_phobos get oid-copy /tmp/out &&
+        error "Get operation should have failed"
+    PHOBOS_COPY_get_preferred_order="blob,astral" \
+        $valg_phobos get oid-copy /tmp/out ||
+        error "Get operation should have succeed"
+    rm /tmp/out
+    $phobos dir unlock ${DIRS[1]}
+    $phobos dir lock ${DIRS[0]}
+    PHOBOS_COPY_get_preferred_order="blob,astral" \
+        $valg_phobos get oid-copy /tmp/out &&
+        error "Get operation should have failed"
+    PHOBOS_COPY_get_preferred_order="toto,astral" \
+        $valg_phobos get oid-copy /tmp/out ||
+        error "Get operation should have succeed"
+    rm /tmp/out
 }
 
 TESTS=("setup; \

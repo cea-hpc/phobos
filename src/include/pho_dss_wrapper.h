@@ -266,6 +266,10 @@ int dss_update_gc_for_tape(struct dss_handle *handle,
 /**
  * Find a copy's object
  *
+ * The copy will be determined in this order:
+ *  - requested copy (if not found, error out)
+ *  - preferred order (specified in the configuration file) -> default copy ->
+ *    first copy found in the DSS.
  * This function is lazy because there is no lock and the existing copies could
  * change any time.
  *
