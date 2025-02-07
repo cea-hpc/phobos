@@ -400,6 +400,70 @@ out_close:
     return rc;
 }
 
+static int raid_writer_build_allocation_req(struct pho_data_processor *proc,
+                                            pho_req_t *req)
+{
+    struct raid_io_context *io_context = proc->private_writer;
+    int n_data_extents = io_context->n_data_extents;
+    size_t n_extents = n_total_extents(io_context);
+    size_t size_per_extent = 0;
+    size_t fs_block_size = 0;
+    size_t nb_block = 0;
+    size_t size = 0;
+    size_t *n_tags;
+    int rc = 0;
+    int i, j;
+
+    ENTRY;
+
+    n_tags = xcalloc(n_extents, sizeof(*n_tags));
+
+    for (i = 0; i < n_extents; ++i)
+            n_tags[i] = proc->xfer->xd_params.put.tags.count;
+
+    pho_srl_request_write_alloc(req, n_extents, n_tags);
+    free(n_tags);
+
+    rc = get_cfg_fs_block_size(proc->xfer->xd_params.put.family,
+                               &fs_block_size);
+    if (rc)
+        return rc;
+
+    for (i = 0; i < proc->xfer->xd_ntargets; i++) {
+        /* Add an overhead to the total size to write to anticipate the size
+         * taken by the xattrs and directory.
+         *
+         * The phys_spc_used is:
+         * ceil(size / fs_block_size) * fs_block_size + 3 * fs_block_size
+         */
+        if (fs_block_size > 0) {
+            size_per_extent = (proc->xfer->xd_targets[i].xt_size +
+                                   n_data_extents - 1) /
+                              n_data_extents;
+            nb_block = (size_per_extent + (fs_block_size - 1)) / fs_block_size;
+            size += nb_block * fs_block_size + 3 * fs_block_size;
+
+        /* If the block size of the file system is not defined in the conf,
+         * the size to alloc is equal to the size to write.
+         */
+        } else {
+            size += (proc->xfer->xd_targets[i].xt_size + n_data_extents - 1) /
+                     n_data_extents;
+        }
+    }
+
+    for (i = 0; i < n_extents; ++i) {
+        req->walloc->media[i]->size = size;
+
+        for (j = 0; j < proc->xfer->xd_params.put.tags.count; ++j)
+            req->walloc->media[i]->tags[j] =
+                xstrdup(proc->xfer->xd_params.put.tags.strings[j]);
+    }
+
+    req->walloc->no_split = proc->xfer->xd_params.put.no_split;
+    return 0;
+}
+
 static int raid_build_write_allocation_req(struct pho_data_processor *proc,
                                            pho_req_t *req)
 {
@@ -472,6 +536,34 @@ static size_t split_first_extent_index(struct pho_data_processor *proc)
     struct raid_io_context *io_context = proc->private_processor;
 
     return io_context->current_split * n_total_extents(io_context);
+}
+
+/** Generate the next read allocation request for this decoder */
+static void raid_reader_build_allocation_req(struct pho_data_processor *proc,
+                                             pho_req_t *req)
+{
+    struct raid_io_context *io_context = proc->private_reader;
+    size_t n_extents = n_total_extents(io_context);
+    int i;
+
+    ENTRY;
+    pho_srl_request_read_alloc(req, n_extents);
+
+    req->ralloc->n_required = io_context->n_data_extents;
+    req->ralloc->operation = PHO_READ_TARGET_ALLOC_OP_READ;
+
+    for (i = 0; i < n_extents; ++i) {
+        unsigned int ext_idx;
+
+        ext_idx = split_first_extent_index(proc) + i;
+
+        req->ralloc->med_ids[i]->family =
+            proc->layout->extents[ext_idx].media.family;
+        req->ralloc->med_ids[i]->name =
+            xstrdup(proc->layout->extents[ext_idx].media.name);
+        req->ralloc->med_ids[i]->library =
+            xstrdup(proc->layout->extents[ext_idx].media.library);
+    }
 }
 
 /** Generate the next read allocation request for this decoder */
@@ -1452,6 +1544,36 @@ static int raid_proc_handle_resp(struct pho_data_processor *proc,
         LOG_RETURN(rc = -EPROTO, "Invalid response type '%s'",
                    pho_srl_response_kind_str(resp));
     }
+}
+
+int raid_reader_processor_step(struct pho_data_processor *proc,
+                               pho_resp_t *resp, pho_req_t **reqs,
+                               size_t *n_reqs)
+{
+    /* first init step from the data processor: return first allocation */
+    if (!resp && proc->buff.size == 0) {
+        *reqs = xcalloc(1, sizeof(**reqs));
+        *n_reqs = 1;
+        raid_reader_build_allocation_req(proc, *reqs);
+        return 0;
+    }
+
+    return 0;
+}
+
+int raid_writer_processor_step(struct pho_data_processor *proc,
+                               pho_resp_t *resp, pho_req_t **reqs,
+                               size_t *n_reqs)
+{
+    /* first init step from the data processor: return first allocation */
+    if (!resp && proc->buff.size == 0) {
+        *reqs = xcalloc(1, sizeof(**reqs));
+        *n_reqs = 1;
+        raid_writer_build_allocation_req(proc, *reqs);
+        return 0;
+    }
+
+    return 0;
 }
 
 int raid_processor_step(struct pho_data_processor *proc, pho_resp_t *resp,

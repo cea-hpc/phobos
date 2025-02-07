@@ -136,6 +136,7 @@ struct pho_xfer_del_params {
  * Operation parameters.
  */
 union pho_xfer_params {
+    /* TODO XXX copy create will need put and get param at the same time */
     struct pho_xfer_put_params put;     /**< PUT parameters. */
     struct pho_xfer_get_params get;     /**< GET parameters. */
     struct pho_xfer_del_params delete;  /**< DEL parameters. */

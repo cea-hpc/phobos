@@ -179,6 +179,13 @@ int raid_eraser_init(struct pho_data_processor *eraser,
                      const struct pho_proc_ops *enc_ops,
                      const struct raid_ops *raid_ops);
 
+int raid_reader_processor_step(struct pho_data_processor *proc,
+                               pho_resp_t *resp, pho_req_t **reqs,
+                               size_t *n_reqs);
+int raid_writer_processor_step(struct pho_data_processor *proc,
+                               pho_resp_t *resp, pho_req_t **reqs,
+                               size_t *n_reqs);
+
 int raid_processor_step(struct pho_data_processor *proc, pho_resp_t *resp,
                         pho_req_t **reqs, size_t *n_reqs);
 
