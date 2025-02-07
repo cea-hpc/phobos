@@ -438,6 +438,14 @@ void get_preferred_io_block_size(size_t *io_size, enum rsc_family family,
                                  const struct io_adapter_module *ioa,
                                  struct pho_io_descr *iod);
 
+/**
+ * If NULL as input, io_size is updated with the preferred IO size from iod.
+ *
+ * @param[in]       iod     IO decriptor to access the data.
+ * @param[in, out]  io_size The IO size to be used.
+ */
+void update_io_size(struct pho_io_descr *iod, size_t *io_size);
+
 /*
  * Copy an extent from a medium to another.
  *

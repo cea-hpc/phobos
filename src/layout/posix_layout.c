@@ -45,6 +45,15 @@ static int posix_reader_step(struct pho_data_processor *proc, pho_resp_t *resp,
         (struct pho_io_descr *)proc->private_reader;
     size_t to_read;
 
+    /* posix reader never ask any resource */
+    *n_reqs = 0;
+
+    /* first init step from the data processor */
+    if (proc->buff.size == 0) {
+        update_io_size(posix_reader, &proc->reader_stripe_size);
+        return 0;
+    }
+
     /* limit read : object -> buffer */
     to_read = min(proc->object_size - proc->reader_offset,
                   proc->buff.size -
@@ -126,6 +135,15 @@ static int posix_writer_step(struct pho_data_processor *proc, pho_resp_t *resp,
         (struct pho_io_descr *)proc->private_writer;
     size_t to_write = proc->reader_offset - proc->writer_offset;
     int rc;
+
+    /* posix writer never ask any resource */
+    *n_reqs = 0;
+
+    /* first init step from the data processor */
+    if (proc->buff.size == 0) {
+        update_io_size(posix_writer, &proc->writer_stripe_size);
+        return 0;
+    }
 
     rc = ioa_write(posix_writer->iod_ioa, posix_writer,
                    proc->buff.buff +

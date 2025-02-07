@@ -156,6 +156,8 @@ struct pho_data_processor {
      * stripe size.
      * buff is filled with (reader_offset - buffer_offset) bytes.
      *
+     * (buff.size == 0) and (buff.buff == NULL) until it is initialized.
+     *
      * buffer_offset <= writer_offset <= reader_offset
      */
     struct pho_buff buff;

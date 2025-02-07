@@ -530,18 +530,6 @@ static void raid_io_context_set_extent_info(struct raid_io_context *io_context,
     }
 }
 
-static void get_io_size(struct pho_io_descr *iod, size_t *io_size)
-{
-    if (*io_size != 0)
-        /* io_size already specified in the configuration */
-        return;
-
-    *io_size = ioa_preferred_io_size(iod->iod_ioa, iod);
-    if (*io_size <= 0)
-        /* fallback: get the system page size */
-        *io_size = sysconf(_SC_PAGESIZE);
-}
-
 static void raid_io_context_setmd(struct raid_io_context *io_context,
                                   char *xd_objid, const GString *str)
 {
@@ -600,12 +588,12 @@ static size_t best_io_size(struct pho_data_processor *proc, int target_idx)
     else
         nb_extents = n_total_extents(io_context);
 
-    get_io_size(&io_context->posix, &best);
+    update_io_size(&io_context->posix, &best);
 
     for (i = 0; i < nb_extents; i++) {
         size_t io_size = 0;
 
-        get_io_size(raid_proc_iod(proc, i, target_idx), &io_size);
+        update_io_size(raid_proc_iod(proc, i, target_idx), &io_size);
 
         best = lcm(best, io_size);
     }

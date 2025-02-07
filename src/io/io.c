@@ -24,6 +24,8 @@
 #include "config.h"
 #endif
 
+#include <unistd.h>
+
 #include "pho_cfg.h"
 #include "pho_common.h"
 #include "pho_io.h"
@@ -109,6 +111,18 @@ int get_cfg_fs_block_size(enum rsc_family family, size_t *size)
     }
 
     return rc;
+}
+
+void update_io_size(struct pho_io_descr *iod, size_t *io_size)
+{
+    if (*io_size != 0)
+        /* io_size already specified in the configuration */
+        return;
+
+    *io_size = ioa_preferred_io_size(iod->iod_ioa, iod);
+    if (*io_size <= 0)
+        /* fallback: get the system page size */
+        *io_size = sysconf(_SC_PAGESIZE);
 }
 
 void get_preferred_io_block_size(size_t *io_size, enum rsc_family family,
