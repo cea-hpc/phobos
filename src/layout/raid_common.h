@@ -156,7 +156,7 @@ struct raid_ops {
                        int idx);
     int (*read_split)(struct pho_data_processor *proc);
     int (*delete_split)(struct pho_data_processor *proc);
-    int (*get_block_size)(struct pho_data_processor *proc, size_t *block_size);
+    int (*get_chunk_size)(struct pho_data_processor *proc, size_t *chunk_size);
     /*
      * XXX BEGIN UNDER CONSTRUCTION SECTION
      */

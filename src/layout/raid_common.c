@@ -983,7 +983,7 @@ static int read_split_setup(struct pho_data_processor *decoder,
     if (rc)
         return rc;
 
-    rc = io_context->ops->get_block_size(decoder, &decoder->io_block_size);
+    rc = io_context->ops->get_chunk_size(decoder, &decoder->io_block_size);
     io_context->current_split_chunk_size = decoder->io_block_size;
     if (rc)
         return rc;
@@ -1546,16 +1546,143 @@ static int raid_proc_handle_resp(struct pho_data_processor *proc,
     }
 }
 
+static int reader_split_setup(struct pho_data_processor *proc,
+                              pho_resp_t *resp)
+{
+    struct raid_io_context *io_context = proc->private_reader;
+    pho_resp_read_elt_t **medium = resp->ralloc->media;
+    size_t n_extents = n_total_extents(io_context);
+    size_t n_media = resp->ralloc->n_media;
+    size_t i;
+    int rc;
+
+    ENTRY;
+
+    if (n_media != io_context->n_data_extents)
+        LOG_RETURN(-EINVAL, "Invalid number of media return by phobosd. "
+                            "Expected %lu, got %lu",
+                   n_extents, n_media);
+
+    io_context->read.resp = resp->ralloc;
+
+    /* identify extents corresponding to received media */
+    for (i = 0; i < n_media; i++) {
+        ssize_t ext_index;
+
+        rc = get_io_adapter((enum fs_type) medium[i]->fs_type,
+                            &io_context->iods[i].iod_ioa);
+        if (rc)
+            return rc;
+
+        ext_index = extent_index(proc->layout, medium[i]->med_id);
+        if (ext_index == -1)
+            LOG_RETURN(-ENOMEDIUM,
+                       "Did not find medium '%s':'%s' in layout of '%s'",
+                       medium[i]->med_id->library,
+                       medium[i]->med_id->name,
+                       proc->xfer->xd_targets->xt_objid);
+
+        io_context->read.extents[i] = &proc->layout->extents[ext_index];
+    }
+
+    sort_extents_by_layout_index(io_context->read.resp,
+                                 io_context->read.extents, n_media);
+
+    rc = raid_io_context_open(io_context, proc, n_media, 0);
+    if (rc)
+        return rc;
+
+    /* check extent size */
+    for (i = 0; i < n_media; i++) {
+        ssize_t size;
+
+        size = ioa_size(io_context->iods[i].iod_ioa, &io_context->iods[i]);
+        /* If not supported, skip the check */
+        if (size == -ENOTSUP)
+            break;
+        if (size < 0) {
+            rc = size;
+            goto close_iod;
+        }
+
+        if (size != io_context->read.extents[i]->size)
+            LOG_GOTO(close_iod, rc = -EINVAL,
+                     "Extent size mismatch: %zd whereas we expect %zd",
+                     size, io_context->read.extents[i]->size);
+    }
+
+    rc = io_context->ops->get_chunk_size(proc,
+                                         &io_context->current_split_chunk_size);
+    if (rc)
+        goto close_iod;
+
+    /* if not set, take as chunk the lcm of all io size */
+    if (!io_context->current_split_chunk_size) {
+        for (i = 0; i < n_media; i++) {
+            ssize_t size;
+
+            size = ioa_preferred_io_size(io_context->iods->iod_ioa,
+                                         io_context->iods);
+            if (size <= 0)
+                /* fallback: get the system page size */
+                size = sysconf(_SC_PAGESIZE);
+
+            io_context->current_split_chunk_size =
+                lcm(io_context->current_split_chunk_size, size);
+        }
+    }
+
+    if (!proc->reader_stripe_size) {
+        proc->reader_stripe_size = io_context->current_split_chunk_size *
+                                   io_context->n_data_extents;
+    }
+
+    if (io_context->read.check_hash) {
+        for (i = 0; i < io_context->nb_hashes; i++) {
+            rc = extent_hash_reset(&io_context->hashes[i]);
+            if (rc)
+                goto close_iod;
+        }
+    }
+
+    return 0;
+
+close_iod:
+    for (i = 0; i < n_media; i++)
+        ioa_close(io_context->iods[i].iod_ioa, &io_context->iods[i]);
+
+    return rc;
+}
+
 int raid_reader_processor_step(struct pho_data_processor *proc,
                                pho_resp_t *resp, pho_req_t **reqs,
                                size_t *n_reqs)
 {
+    int rc;
+    int i;
+
     /* first init step from the data processor: return first allocation */
-    if (!resp && proc->buff.size == 0) {
+    if (!resp && !proc->buff.size) {
         *reqs = xcalloc(1, sizeof(**reqs));
         *n_reqs = 1;
         raid_reader_build_allocation_req(proc, *reqs);
         return 0;
+    }
+
+    /* managed received allocation */
+    if (resp) {
+        rc = reader_split_setup(proc, resp);
+        if (rc) {
+            pho_srl_request_release_alloc(*reqs + *n_reqs,
+                                          resp->ralloc->n_media);
+            for (i = 0; i < resp->ralloc->n_media; i++) {
+                (*reqs)[*n_reqs].release->media[i]->rc = rc;
+                (*reqs)[*n_reqs].release->media[i]->to_sync = false;
+           }
+
+           (*n_reqs)++;
+           return rc;
+        }
     }
 
     return 0;

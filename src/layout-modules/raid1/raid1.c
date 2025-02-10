@@ -371,7 +371,7 @@ static int raid1_write_from_buff(struct pho_data_processor *proc)
     return extent_hash_update(&io_context->hashes[0], buff_start, to_write);
 }
 
-static int raid1_get_block_size(struct pho_data_processor *enc,
+static int raid1_get_chunk_size(struct pho_data_processor *enc,
                                 size_t *block_size)
 {
     (void) enc;
@@ -389,7 +389,7 @@ static const struct raid_ops RAID1_OPS = {
     .write_split    = raid1_write_split,
     .read_split     = raid1_read_split,
     .delete_split   = raid_delete_split,
-    .get_block_size = raid1_get_block_size,
+    .get_chunk_size = raid1_get_chunk_size,
     .read_into_buff = raid1_read_into_buff,
     .write_from_buff = raid1_write_from_buff,
 };

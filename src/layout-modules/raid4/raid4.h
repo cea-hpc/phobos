@@ -11,10 +11,6 @@ int raid4_write_split(struct pho_data_processor *encoder, size_t split_size,
                       int target_idx);
 
 int raid4_read_split(struct pho_data_processor *decoder);
-
-int raid4_get_block_size(struct pho_data_processor *processor,
-                         size_t *block_size);
-
 int raid4_read_into_buff(struct pho_data_processor *proc);
 int raid4_write_from_buff(struct pho_data_processor *proc);
 
