@@ -1546,6 +1546,26 @@ static int raid_proc_handle_resp(struct pho_data_processor *proc,
     }
 }
 
+static void set_current_split_chunk_size(struct raid_io_context *io_context,
+                                         size_t n_iod)
+{
+    int i;
+
+    io_context->current_split_chunk_size = 0;
+    for (i = 0; i < n_iod; i++) {
+        ssize_t size;
+
+        size = ioa_preferred_io_size(io_context->iods[i].iod_ioa,
+                                     &io_context->iods[i]);
+        if (size <= 0)
+            /* fallback: get the system page size */
+            size = sysconf(_SC_PAGESIZE);
+
+        io_context->current_split_chunk_size =
+            lcm(io_context->current_split_chunk_size, size);
+    }
+}
+
 static int reader_split_setup(struct pho_data_processor *proc,
                               pho_resp_t *resp)
 {
@@ -1616,26 +1636,12 @@ static int reader_split_setup(struct pho_data_processor *proc,
     if (rc)
         goto close_iod;
 
-    /* if not set, take as chunk the lcm of all io size */
-    if (!io_context->current_split_chunk_size) {
-        for (i = 0; i < n_media; i++) {
-            ssize_t size;
+    if (!io_context->current_split_chunk_size)
+        set_current_split_chunk_size(io_context, n_media);
 
-            size = ioa_preferred_io_size(io_context->iods->iod_ioa,
-                                         io_context->iods);
-            if (size <= 0)
-                /* fallback: get the system page size */
-                size = sysconf(_SC_PAGESIZE);
-
-            io_context->current_split_chunk_size =
-                lcm(io_context->current_split_chunk_size, size);
-        }
-    }
-
-    if (!proc->reader_stripe_size) {
+    if (!proc->reader_stripe_size)
         proc->reader_stripe_size = io_context->current_split_chunk_size *
                                    io_context->n_data_extents;
-    }
 
     if (io_context->read.check_hash) {
         for (i = 0; i < io_context->nb_hashes; i++) {
@@ -1688,16 +1694,103 @@ int raid_reader_processor_step(struct pho_data_processor *proc,
     return 0;
 }
 
+static int writer_split_setup(struct pho_data_processor *proc,
+                              pho_resp_write_t *wresp)
+{
+    struct raid_io_context *io_context =
+        (struct raid_io_context *) proc->private_writer;
+    struct pho_io_descr *iods;
+    size_t extent_size = 0;
+    size_t n_extents;
+    int rc;
+    int i;
+
+    n_extents = n_total_extents(io_context);
+    iods = io_context->iods;
+
+    if (wresp->n_media != n_extents)
+        LOG_RETURN(-EINVAL, "Invalid number of media return by phobosd. "
+                            "Expected %lu, got %lu",
+                   n_extents, wresp->n_media);
+
+    for (i = 0; i < n_extents; ++i) {
+        rc = get_io_adapter((enum fs_type)wresp->media[i]->fs_type,
+                            &iods[i].iod_ioa);
+        if (rc)
+            LOG_RETURN(rc, "Unable to get io_adapter in raid encoder");
+
+        iods[i].iod_size = 0;
+        iods[i].iod_flags = PHO_IO_REPLACE | PHO_IO_NO_REUSE;
+    }
+
+    raid_io_context_setmd(io_context,
+                          proc->xfer->xd_targets[proc->current_target].xt_objid,
+                          io_context->write.user_md);
+
+    extent_size = ((proc->object_size - proc->writer_offset) +
+                   (io_context->n_data_extents - 1)) /
+                  io_context->n_data_extents;
+    for (i = 0; i < n_extents; i++) {
+        if (wresp->media[i]->avail_size < extent_size)
+            extent_size = wresp->media[i]->avail_size;
+    }
+
+    raid_io_context_set_extent_info(io_context, wresp->media,
+                                    io_context->current_split * n_extents,
+                                    extent_size,
+                                    proc->writer_offset);
+    rc = raid_io_context_open(io_context, proc, n_extents,
+                              proc->current_target);
+    if (rc)
+        return rc;
+
+    if (!io_context->current_split_chunk_size)
+        set_current_split_chunk_size(io_context, n_extents);
+
+    if (!proc->writer_stripe_size)
+        proc->writer_stripe_size = io_context->current_split_chunk_size *
+                                   io_context->n_data_extents;
+
+    for (i = 0; i < io_context->nb_hashes; i++) {
+        rc = extent_hash_reset(&io_context->hashes[i]);
+        if (rc)
+            return rc;
+    }
+
+    return 0;
+}
+
 int raid_writer_processor_step(struct pho_data_processor *proc,
                                pho_resp_t *resp, pho_req_t **reqs,
                                size_t *n_reqs)
 {
+    struct raid_io_context *io_context = proc->private_writer;
+    int rc;
+    int i;
+
     /* first init step from the data processor: return first allocation */
     if (!resp && proc->buff.size == 0) {
         *reqs = xcalloc(1, sizeof(**reqs));
         *n_reqs = 1;
         raid_writer_build_allocation_req(proc, *reqs);
         return 0;
+    }
+
+    /* managed received allocation */
+    if (resp) {
+        io_context->write.resp = resp->walloc;
+        rc = writer_split_setup(proc, resp->walloc);
+        if (rc) {
+            pho_srl_request_release_alloc(*reqs + *n_reqs,
+                                          resp->walloc->n_media);
+            for (i = 0; i < resp->ralloc->n_media; i++) {
+                (*reqs)[*n_reqs].release->media[i]->rc = rc;
+                (*reqs)[*n_reqs].release->media[i]->to_sync = false;
+           }
+
+           (*n_reqs)++;
+           return rc;
+        }
     }
 
     return 0;
