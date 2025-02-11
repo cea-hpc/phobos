@@ -27,6 +27,7 @@
 #include <glib.h>
 #include <limits.h>
 #include <openssl/evp.h>
+#include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
 #ifdef HAVE_XXH128
@@ -1566,8 +1567,8 @@ static void set_current_split_chunk_size(struct raid_io_context *io_context,
     }
 }
 
-static int reader_split_setup(struct pho_data_processor *proc,
-                              pho_resp_t *resp)
+static int raid_reader_split_setup(struct pho_data_processor *proc,
+                                   pho_resp_t *resp)
 {
     struct raid_io_context *io_context = proc->private_reader;
     pho_resp_read_elt_t **medium = resp->ralloc->media;
@@ -1660,12 +1661,50 @@ close_iod:
     return rc;
 }
 
+static int raid_reader_split_fini(struct pho_data_processor *proc)
+{
+    struct raid_io_context *io_context = proc->private_reader;
+    int rc;
+    int i;
+
+    if (io_context->read.check_hash) {
+        for (i = 0; i < io_context->n_data_extents; i++) {
+            rc = extent_hash_digest(&io_context->hashes[i]);
+            if (rc)
+                return rc;
+
+            rc = extent_hash_compare(&io_context->hashes[i],
+                                     io_context->read.extents[i]);
+            if (rc)
+                return rc;
+        }
+    }
+
+    for (i = 0; i < io_context->n_data_extents; i++) {
+        rc = ioa_close(io_context->iods[i].iod_ioa, &io_context->iods[i]);
+        if (rc)
+            return rc;
+    }
+
+    /* next split */
+    io_context->current_split++;
+    io_context->current_split_offset = proc->reader_offset;
+    io_context->current_split_chunk_size = 0;
+    return 0;
+}
+
 int raid_reader_processor_step(struct pho_data_processor *proc,
                                pho_resp_t *resp, pho_req_t **reqs,
                                size_t *n_reqs)
 {
+    struct raid_io_context *io_context = proc->private_reader;
+    bool need_new_alloc;
+    bool need_release;
+    bool split_ended;
     int rc;
     int i;
+
+    *n_reqs = 0;
 
     /* first init step from the data processor: return first allocation */
     if (!resp && !proc->buff.size) {
@@ -1677,21 +1716,54 @@ int raid_reader_processor_step(struct pho_data_processor *proc,
 
     /* managed received allocation */
     if (resp) {
-        rc = reader_split_setup(proc, resp);
-        if (rc) {
-            pho_srl_request_release_alloc(*reqs + *n_reqs,
-                                          resp->ralloc->n_media);
-            for (i = 0; i < resp->ralloc->n_media; i++) {
-                (*reqs)[*n_reqs].release->media[i]->rc = rc;
-                (*reqs)[*n_reqs].release->media[i]->to_sync = false;
-           }
-
-           (*n_reqs)++;
-           return rc;
-        }
+        rc = raid_reader_split_setup(proc, resp);
+        if (rc)
+            goto release;
     }
 
-    return 0;
+    /* read */
+    if (!proc->buff.size)
+        return 0;
+
+    rc = io_context->ops->read_into_buff(proc);
+    if (rc)
+        goto release;
+
+    split_ended = (proc->reader_offset - io_context->current_split_offset) >=
+                  io_context->read.extents[0]->size;
+    if (split_ended)
+        rc = raid_reader_split_fini(proc);
+
+release:
+    need_release = rc || split_ended;
+    need_new_alloc = !rc && split_ended &&
+                     proc->reader_offset < proc->object_size;
+    if (need_release) {
+        if (need_new_alloc)
+            *reqs = xcalloc(2, sizeof(**reqs));
+        else
+            *reqs = xcalloc(1, sizeof(**reqs));
+    }
+
+    if (rc || split_ended) {
+        pho_srl_request_release_alloc(*reqs, resp->ralloc->n_media);
+        for (i = 0; i < resp->ralloc->n_media; i++) {
+            rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
+                       resp->ralloc->media[i]->med_id);
+            (*reqs)[*n_reqs].release->media[i]->rc = rc;
+            (*reqs)[*n_reqs].release->media[i]->to_sync = false;
+        }
+
+        (*n_reqs)++;
+   }
+
+
+   if (need_new_alloc) {
+        raid_reader_build_allocation_req(proc, *reqs + *n_reqs);
+        (*n_reqs)++;
+   }
+
+   return rc;
 }
 
 static int writer_split_setup(struct pho_data_processor *proc,
@@ -1784,6 +1856,8 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
             pho_srl_request_release_alloc(*reqs + *n_reqs,
                                           resp->walloc->n_media);
             for (i = 0; i < resp->ralloc->n_media; i++) {
+                rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
+                           resp->walloc->media[i]->med_id);
                 (*reqs)[*n_reqs].release->media[i]->rc = rc;
                 (*reqs)[*n_reqs].release->media[i]->to_sync = false;
            }
