@@ -289,9 +289,11 @@ class Client: # pylint: disable=too-many-public-methods
         n_layouts = c_int(0)
         layouts = pointer(LayoutInfo())
         library_name = kwargs.get('library')
+        copy_name = kwargs.get('copy_name')
 
         enc_medium = medium.encode('utf-8') if medium else None
         enc_library = library_name.encode('utf-8') if library_name else None
+        enc_copy_name = copy_name.encode('utf-8') if copy_name else None
 
         enc_res = [elt.encode('utf-8') for elt in res]
         c_res_strlist = c_char_p * len(enc_res)
@@ -305,6 +307,7 @@ class Client: # pylint: disable=too-many-public-methods
                                                       is_pattern,
                                                       enc_medium,
                                                       enc_library,
+                                                      enc_copy_name,
                                                       byref(layouts),
                                                       byref(n_layouts),
                                                       sref)

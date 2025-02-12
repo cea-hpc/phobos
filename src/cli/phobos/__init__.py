@@ -995,6 +995,8 @@ class ExtentListOptHandler(ListOptHandler):
 
         attr = list(LayoutInfo().get_display_dict().keys())
         attr.sort()
+        parser.add_argument('-c', '--copy-name',
+                            help="Copy's name of the extents to list")
         parser.add_argument('-o', '--output', type=lambda t: t.split(','),
                             default='oid',
                             help=("attributes to output, comma-separated, "
@@ -2517,6 +2519,9 @@ class ExtentOptHandler(BaseResourceOptHandler):
         kwargs = {}
         if self.params.get('library'):
             kwargs['library'] = self.params.get('library')
+
+        if self.params.get('copy_name'):
+            kwargs['copy_name'] = self.params.get('copy_name')
 
         kwargs = handle_sort_option(self.params, LayoutInfo(), self.logger,
                                     **kwargs)

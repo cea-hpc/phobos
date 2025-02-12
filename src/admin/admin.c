@@ -1727,13 +1727,22 @@ static void phobos_construct_library_medium(GString *lib_med_str,
  * \param[in]       res             Ressource filter.
  * \param[in]       n_res           Number of requested resources.
  * \param[in]       is_pattern      True if search done using POSIX pattern.
+ * \param[in]       copy_name       Copy name filter.
  */
 static void phobos_construct_extent(GString *extent_str, const char **res,
-                                    int n_res, bool is_pattern)
+                                    int n_res, bool is_pattern,
+                                    const char *copy_name)
 {
     char *res_prefix = (is_pattern ? "{\"$REGEXP\": " : "");
     char *res_suffix = (is_pattern ? "}" : "");
     int i;
+
+    if (copy_name) {
+        g_string_append_printf(extent_str, "{\"$AND\" : [");
+        g_string_append_printf(extent_str,
+                               "{\"DSS::COPY::copy_name\":\"%s\"}%s",
+                               copy_name, n_res ? "," : "");
+    }
 
     if (n_res > 1)
         g_string_append_printf(extent_str, "{\"$OR\" : [");
@@ -1748,11 +1757,15 @@ static void phobos_construct_extent(GString *extent_str, const char **res,
 
     if (n_res > 1)
         g_string_append_printf(extent_str, "]}");
+
+    if (copy_name)
+        g_string_append_printf(extent_str, "]}");
 }
 
 int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
                              int n_res, bool is_pattern, const char *medium,
-                             const char *library, struct layout_info **layouts,
+                             const char *library, const char *copy_name,
+                             struct layout_info **layouts,
                              int *n_layouts, struct dss_sort *sort)
 {
     struct dss_filter *lib_med_filter_ptr = NULL;
@@ -1784,12 +1797,13 @@ int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
 
         lib_med_filter_ptr = &lib_med_filter;
     }
+
     /**
      * If there are at least one resource, we construct a string containing
      * each request.
      */
-    if (n_res) {
-        phobos_construct_extent(extent_str, res, n_res, is_pattern);
+    if (n_res || copy_name) {
+        phobos_construct_extent(extent_str, res, n_res, is_pattern, copy_name);
         rc = dss_filter_build(&ext_filter, "%s", extent_str->str);
         if (rc)
             goto release_extent;
