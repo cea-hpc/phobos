@@ -222,12 +222,9 @@ static int raid1_write_split(struct pho_data_processor *enc, size_t split_size,
         return rc;
 
     if (rc == 0) {
-        for (i = 0; i < repl_count; i++) {
-            rc = extent_hash_copy(&io_context->hashes[0],
-                                  &io_context->write.extents[i]);
-            if (rc)
-                return rc;
-        }
+        for (i = 0; i < repl_count; i++)
+            extent_hash_copy(&io_context->hashes[0],
+                             &io_context->write.extents[i]);
     }
 
     for (i = 0; i < repl_count; ++i) {

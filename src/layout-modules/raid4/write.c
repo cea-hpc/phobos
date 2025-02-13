@@ -171,10 +171,7 @@ int raid4_write_split(struct pho_data_processor *encoder, size_t split_size,
         if (rc)
             return rc;
 
-        rc = extent_hash_copy(&io_context->hashes[i],
-                              &io_context->write.extents[i]);
-        if (rc)
-            return rc;
+        extent_hash_copy(&io_context->hashes[i], &io_context->write.extents[i]);
     }
 
 out:

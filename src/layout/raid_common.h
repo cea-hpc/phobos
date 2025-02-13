@@ -221,7 +221,7 @@ int extent_hash_update(struct extent_hash *hash, char *buffer, size_t size);
 
 int extent_hash_digest(struct extent_hash *hash);
 
-int extent_hash_copy(struct extent_hash *hash, struct extent *extent);
+void extent_hash_copy(struct extent_hash *hash, struct extent *extent);
 
 int extent_hash_compare(struct extent_hash *hash, struct extent *extent);
 

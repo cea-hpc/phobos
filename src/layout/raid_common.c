@@ -1746,7 +1746,7 @@ release:
     }
 
     if (rc || split_ended) {
-        pho_srl_request_release_alloc(*reqs, resp->ralloc->n_media);
+        pho_srl_request_release_alloc(*reqs + *n_reqs, resp->ralloc->n_media);
         for (i = 0; i < resp->ralloc->n_media; i++) {
             rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
                        resp->ralloc->media[i]->med_id);
@@ -1832,13 +1832,84 @@ static int writer_split_setup(struct pho_data_processor *proc,
     return 0;
 }
 
+static int raid_writer_split_fini(struct pho_data_processor *proc)
+{
+    struct raid_io_context *io_context = proc->private_writer;
+    int target = proc->current_target;
+    struct object_metadata object_md = {
+        .object_attrs = proc->xfer->xd_targets[target].xt_attrs,
+        .object_size = proc->xfer->xd_targets[target].xt_size,
+        .object_version = proc->xfer->xd_targets[target].xt_version,
+        .layout_name = io_context->name,
+        .object_uuid = proc->xfer->xd_targets[target].xt_objuuid,
+        .copy_name = proc->layout[target].copy_name,
+    };
+    size_t n_extents = n_total_extents(io_context);
+    int rc;
+    int i;
+
+    /* get extent hashes */
+    for (i = 0; i < n_extents; i++) {
+        rc = extent_hash_digest(&io_context->hashes[i]);
+        if (rc)
+            return rc;
+
+        extent_hash_copy(&io_context->hashes[i], &io_context->write.extents[i]);
+    }
+
+    /* set extent md */
+    for (i = 0; i < n_extents; i++) {
+        struct pho_ext_loc ext_location;
+        struct pho_io_descr *iod = &io_context->iods[i];
+
+        /* resize extent */
+        io_context->write.extents[i].size = iod->iod_size;
+
+        /* set extent location */
+        ext_location.root_path = io_context->write.resp->media[i]->root_path;
+        ext_location.addr_type = io_context->write.resp->media[i]->addr_type;
+        ext_location.extent = &io_context->write.extents[i];
+        iod->iod_loc = &ext_location;
+        rc = set_object_md(iod->iod_ioa, iod, &object_md);
+        pho_attrs_free(&iod->iod_attrs);
+        if (rc)
+            goto iod_close;
+
+        rc = ioa_close(iod->iod_ioa, iod);
+        if (rc) {
+            i++;
+            goto iod_close;
+        }
+
+        raid_io_add_written_extent(io_context,
+                                   &io_context->write.extents[i]);
+    }
+
+    /* next split */
+    io_context->current_split++;
+    io_context->current_split_offset = proc->writer_offset;
+    return 0;
+
+iod_close:
+    for (; i < n_extents; i++)
+        ioa_close(io_context->iods[i].iod_ioa, &io_context->iods[i]);
+
+    return rc;
+}
+
 int raid_writer_processor_step(struct pho_data_processor *proc,
                                pho_resp_t *resp, pho_req_t **reqs,
                                size_t *n_reqs)
 {
     struct raid_io_context *io_context = proc->private_writer;
+    size_t full_split_to_write = 0;
+    bool need_new_alloc;
+    bool need_release;
+    bool split_ended;
     int rc;
     int i;
+
+    *n_reqs = 0;
 
     /* first init step from the data processor: return first allocation */
     if (!resp && proc->buff.size == 0) {
@@ -1853,21 +1924,63 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
         io_context->write.resp = resp->walloc;
         rc = writer_split_setup(proc, resp->walloc);
         if (rc) {
-            pho_srl_request_release_alloc(*reqs + *n_reqs,
-                                          resp->walloc->n_media);
-            for (i = 0; i < resp->ralloc->n_media; i++) {
-                rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
-                           resp->walloc->media[i]->med_id);
-                (*reqs)[*n_reqs].release->media[i]->rc = rc;
-                (*reqs)[*n_reqs].release->media[i]->to_sync = false;
-           }
-
-           (*n_reqs)++;
            return rc;
         }
     }
 
-    return 0;
+    /* write */
+    if (!proc->buff.size)
+        return 0;
+
+    rc = io_context->ops->write_from_buff(proc);
+    if (rc)
+        goto release;
+
+    for (i = 0; i < io_context->n_data_extents; i++)
+        full_split_to_write += io_context->write.extents[i].size;
+
+    split_ended = (proc->writer_offset - io_context->current_split_offset) >=
+                  full_split_to_write;
+    if (split_ended)
+        rc = raid_writer_split_fini(proc);
+
+release:
+    need_release = rc || split_ended;
+    need_new_alloc = !rc && split_ended &&
+                     proc->writer_offset < proc->object_size;
+    if (need_release) {
+        if (need_new_alloc)
+            *reqs = xcalloc(2, sizeof(**reqs));
+        else
+            *reqs = xcalloc(1, sizeof(**reqs));
+    }
+
+    if (rc || split_ended) {
+        for (i = 0; i < resp->walloc->n_media; i++) {
+            rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
+                       resp->walloc->media[i]->med_id);
+            (*reqs)[*n_reqs].release->media[i]->rc = rc;
+            if (rc) {
+                (*reqs)[*n_reqs].release->media[i]->to_sync = false;
+            } else {
+                (*reqs)[*n_reqs].release->media[i]->to_sync = true;
+                (*reqs)[*n_reqs].release->media[i]->size_written =
+                    io_context->write.extents[i].size;
+                (*reqs)[*n_reqs].release->media[i]->nb_extents_written = 1;
+                (*reqs)[*n_reqs].release->media[i]->grouping =
+                    xstrdup_safe(proc->xfer->xd_params.put.grouping);
+            }
+        }
+
+        (*n_reqs)++;
+   }
+
+   if (need_new_alloc) {
+        raid_writer_build_allocation_req(proc, *reqs + *n_reqs);
+        (*n_reqs)++;
+   }
+
+    return rc;
 }
 
 int raid_processor_step(struct pho_data_processor *proc, pho_resp_t *resp,
@@ -2010,7 +2123,7 @@ int extent_hash_digest(struct extent_hash *hash)
     return 0;
 }
 
-int extent_hash_copy(struct extent_hash *hash, struct extent *extent)
+void extent_hash_copy(struct extent_hash *hash, struct extent *extent)
 {
     if (hash->md5context) {
         memcpy(extent->md5, hash->md5, MD5_BYTE_LENGTH);
@@ -2026,8 +2139,6 @@ int extent_hash_copy(struct extent_hash *hash, struct extent *extent)
         extent->with_xxh128 = true;
     }
 #endif
-
-    return 0;
 }
 
 int extent_hash_compare(struct extent_hash *hash, struct extent *extent)
