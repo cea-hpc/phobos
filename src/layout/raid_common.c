@@ -635,25 +635,6 @@ static void raid_io_context_setmd(struct raid_io_context *io_context,
     }
 }
 
-static size_t gcd(size_t a, size_t b)
-{
-    size_t tmp;
-
-    while (b != 0) {
-        tmp = a % b;
-
-        a = b;
-        b = tmp;
-    }
-
-    return a;
-}
-
-static size_t lcm(size_t a, size_t b)
-{
-    return a / gcd(a, b) * b;
-}
-
 /**
  * Make sure the I/O size is optimal for all I/O descriptors by using the LCM
  * of all the I/O descriptor optimal sizes. If the I/O size is already set in

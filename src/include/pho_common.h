@@ -496,6 +496,25 @@ static inline bool is_medium_global_error(int errcode)
     return errcode == -ENOSPC || errcode == -EROFS || errcode == -EDQUOT;
 }
 
+static inline size_t gcd(size_t a, size_t b)
+{
+    size_t tmp;
+
+    while (b != 0) {
+        tmp = a % b;
+
+        a = b;
+        b = tmp;
+    }
+
+    return a;
+}
+
+static inline size_t lcm(size_t a, size_t b)
+{
+    return a / gcd(a, b) * b;
+}
+
 /**
  * Get short host name once (/!\ not thread-safe).
  *

@@ -243,6 +243,12 @@ static int processor_communicate(struct pho_data_processor *proc,
     if (rc)
         pho_error(rc, "Error while communicating with encoder");
 
+    /* allocating buffer if ready to be done */
+    if (!proc->buff.size &&
+        (proc->reader_stripe_size && proc->writer_stripe_size))
+        pho_buff_alloc(&proc->buff, lcm(proc->reader_stripe_size,
+                                        proc->writer_stripe_size));
+
     /* Dispatch generated requests (even on error, if any) */
     for (i = 0; i < n_reqs; i++) {
         pho_req_t *req;
