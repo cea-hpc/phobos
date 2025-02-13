@@ -249,6 +249,19 @@ static int processor_communicate(struct pho_data_processor *proc,
         pho_buff_alloc(&proc->buff, lcm(proc->reader_stripe_size,
                                         proc->writer_stripe_size));
 
+    /* process buffer data */
+    while (proc->buff.size &&
+           !n_reqs &&
+           proc->writer_offset < proc->object_size) {
+        if (proc->reader_offset == proc->writer_offset)
+            rc = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
+        else
+            rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
+
+        if (rc)
+            break;
+    }
+
     /* Dispatch generated requests (even on error, if any) */
     for (i = 0; i < n_reqs; i++) {
         pho_req_t *req;
