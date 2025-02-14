@@ -72,7 +72,7 @@ function tape_setup
 {
     local N_LTO6_TAPES=4
     local N_LTO6_DRIVES=4
-    local self_hostname="$(uname -n)"
+    local self_hostname="$(uname -n | cut -d '.' -f1)"
     local WIN_HOST="winner_hostname" # taken from the .c test
     local WIN_HOST_BIS="winner_hostname_bis" # taken from the .c test
 

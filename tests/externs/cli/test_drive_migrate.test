@@ -50,7 +50,7 @@ function cleanup
 
 function test_drive_migrate
 {
-    local myself=$(hostname)
+    local myself=$(uname -n | cut -d '.' -f1)
     local new_host="new_host"
 
     invoke_tlc
