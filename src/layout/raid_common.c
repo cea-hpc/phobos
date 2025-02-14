@@ -1889,6 +1889,69 @@ iod_close:
     return rc;
 }
 
+static int raid_writer_handle_release_resp(struct pho_data_processor *encoder,
+                                           pho_resp_release_t *rel_resp)
+{
+    struct raid_io_context *io_context;
+    int rc = 0;
+    int i, j;
+
+    for (i = 0; i < rel_resp->n_med_ids; i++) {
+        int rc2;
+
+        pho_debug("Marking medium '%s':'%s' as released",
+                  rel_resp->med_ids[i]->name,
+                  rel_resp->med_ids[i]->library);
+        for (j = 0; j < encoder->xfer->xd_ntargets; j++) {
+            /* If the media_id is unexpected, -EINVAL will be returned */
+            io_context =
+                &((struct raid_io_context *) encoder->private_writer)[j];
+            rc2 = mark_written_medium_released(io_context,
+                                               rel_resp->med_ids[i]);
+            if (rc2 && !rc)
+                rc = rc2;
+        }
+    }
+
+    /*
+     * If we wrote everything and all the releases have been received, mark the
+     * encoder as done.
+     */
+    for (i = 0; i < encoder->xfer->xd_ntargets; i++) {
+        io_context =
+            &((struct raid_io_context *) encoder->private_writer)[i];
+        if (io_context->write.all_is_written && /* no more data to write */
+            /* at least one extent is created, special test for null size put */
+            io_context->write.written_extents->len > 0 &&
+            /* we got releases of all extents */
+            io_context->write.written_extents->len ==
+            io_context->write.n_released_media) {
+
+            /* Fill the layout with the extents */
+            encoder->layout[i].ext_count =
+                io_context->write.written_extents->len;
+            encoder->layout[i].extents = (struct extent *)
+            g_array_free(io_context->write.written_extents, FALSE);
+            io_context->write.written_extents = NULL;
+
+            io_context->write.n_released_media = 0;
+
+            for (j = 0; j < encoder->layout->ext_count; ++j)
+                encoder->layout[i].extents[j].state = PHO_EXT_ST_SYNC;
+        } else {
+            break;
+        }
+    }
+
+    /* Switch to DONE state */
+    if (i == encoder->xfer->xd_ntargets) {
+        encoder->done = true;
+        return 0;
+    }
+
+    return rc;
+}
+
 int raid_writer_processor_step(struct pho_data_processor *proc,
                                pho_resp_t *resp, pho_req_t **reqs,
                                size_t *n_reqs)
@@ -1903,6 +1966,15 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
 
     *n_reqs = 0;
 
+    /* first init step from the data processor: return first allocation */
+    if (!resp && !proc->buff.size) {
+        *reqs = xcalloc(1, sizeof(**reqs));
+        *n_reqs = 1;
+        pho_error(0, "DEBUG init writer allocation.\n");
+        raid_writer_build_allocation_req(proc, *reqs);
+        return 0;
+    }
+
     /* manage error */
     if (resp && pho_response_is_error(resp)) {
         proc->xfer->xd_rc = resp->error->rc;
@@ -1914,13 +1986,9 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
 
     }
 
-    /* first init step from the data processor: return first allocation */
-    if (!resp && proc->buff.size == 0) {
-        *reqs = xcalloc(1, sizeof(**reqs));
-        *n_reqs = 1;
-        raid_writer_build_allocation_req(proc, *reqs);
-        return 0;
-    }
+    /* manage release */
+    if (resp && pho_response_is_release(resp))
+        return raid_writer_handle_release_resp(proc, resp->release);
 
     /* manage received allocation */
     if (resp) {

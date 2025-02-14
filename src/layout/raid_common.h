@@ -19,6 +19,8 @@
 #ifndef RAID_COMMON_H
 #define RAID_COMMON_H
 
+#include <stdbool.h>
+
 #include "pho_layout.h"
 
 #include <openssl/evp.h>
@@ -76,6 +78,7 @@ struct delete_io_context {
 
 struct write_io_context {
     pho_resp_write_t *resp;
+    bool all_is_written;
     size_t to_write;            /*< Whole object remaining size to write */
     GString *user_md;
     struct extent *extents;

@@ -338,7 +338,7 @@ static int raid1_read_into_buff(struct pho_data_processor *proc)
 static int raid1_write_from_buff(struct pho_data_processor *proc)
 {
     struct raid_io_context *io_context =
-        (struct raid_io_context *)proc->private_writer;
+        &((struct raid_io_context *)proc->private_writer)[proc->current_target];
     size_t inside_split_offset = proc->writer_offset -
                                  io_context->current_split_offset;
     size_t repl_count = io_context->n_data_extents +
@@ -365,6 +365,9 @@ static int raid1_write_from_buff(struct pho_data_processor *proc)
     }
 
     proc->writer_offset += to_write;
+    if (proc->writer_offset >= proc->object_size)
+        io_context->write.all_is_written = true;
+
     return extent_hash_update(&io_context->hashes[0], buff_start, to_write);
 }
 
@@ -458,6 +461,9 @@ static int layout_raid1_encode(struct pho_data_processor *encoder)
         io_context->n_data_extents = 1;
         io_context->n_parity_extents = repl_count - 1;
         io_context->write.to_write = encoder->xfer->xd_targets[i].xt_size;
+        if (encoder->xfer->xd_targets[i].xt_size == 0)
+            io_context->write.all_is_written = true;
+
         io_context->nb_hashes = repl_count;
         io_context->hashes = xcalloc(io_context->nb_hashes,
                                      sizeof(*io_context->hashes));

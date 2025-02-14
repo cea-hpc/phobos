@@ -181,7 +181,7 @@ out:
 int raid4_write_from_buff(struct pho_data_processor *proc)
 {
     struct raid_io_context *io_context =
-        (struct raid_io_context *)proc->private_reader;
+        &((struct raid_io_context *)proc->private_reader)[proc->current_target];
     size_t inside_split_offset = proc->writer_offset -
                                  io_context->current_split_offset;
     struct pho_io_descr *iods = io_context->iods;
@@ -214,6 +214,9 @@ int raid4_write_from_buff(struct pho_data_processor *proc)
 
         iods[0].iod_size += to_write_extent_0;
         proc->writer_offset += to_write_extent_0;
+        if (proc->writer_offset >= proc->object_size)
+            io_context->write.all_is_written = true;
+
         rc = extent_hash_update(&io_context->hashes[0], buff_start,
                                 to_write_extent_0);
         if (rc)
@@ -234,6 +237,9 @@ int raid4_write_from_buff(struct pho_data_processor *proc)
 
         iods[1].iod_size += to_write_extent_1;
         proc->writer_offset += to_write_extent_1;
+        if (proc->writer_offset >= proc->object_size)
+            io_context->write.all_is_written = true;
+
         rc = extent_hash_update(&io_context->hashes[1],
                                 buff_start + to_write_extent_0,
                                 to_write_extent_1);

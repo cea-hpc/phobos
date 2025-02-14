@@ -138,6 +138,9 @@ static int layout_raid4_encode(struct pho_data_processor *encoder)
         io_context->n_data_extents = 2;
         io_context->n_parity_extents = 1;
         io_context->write.to_write = encoder->xfer->xd_targets[i].xt_size;
+        if (!encoder->xfer->xd_targets[i].xt_size)
+            io_context->write.all_is_written = true;
+
         io_context->nb_hashes = 3;
         io_context->hashes = xcalloc(io_context->nb_hashes,
                                      sizeof(*io_context->hashes));
