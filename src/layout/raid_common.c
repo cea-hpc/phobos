@@ -1687,6 +1687,17 @@ int raid_reader_processor_step(struct pho_data_processor *proc,
 
     *n_reqs = 0;
 
+    /* manage error */
+    if (resp && pho_response_is_error(resp)) {
+        proc->xfer->xd_rc = resp->error->rc;
+        proc->done = true;
+        LOG_RETURN(proc->xfer->xd_rc,
+                   "%s %d received error %s to last request",
+                   processor_type2str(proc), resp->req_id,
+                   pho_srl_error_kind_str(resp->error));
+
+    }
+
     /* first init step from the data processor: return first allocation */
     if (!resp && !proc->buff.size) {
         *reqs = xcalloc(1, sizeof(**reqs));
@@ -1695,7 +1706,7 @@ int raid_reader_processor_step(struct pho_data_processor *proc,
         return 0;
     }
 
-    /* managed received allocation */
+    /* manage received allocation */
     if (resp) {
         rc = raid_reader_split_setup(proc, resp);
         if (rc)
@@ -1892,6 +1903,17 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
 
     *n_reqs = 0;
 
+    /* manage error */
+    if (resp && pho_response_is_error(resp)) {
+        proc->xfer->xd_rc = resp->error->rc;
+        proc->done = true;
+        LOG_RETURN(proc->xfer->xd_rc,
+                   "%s %d received error %s to last request",
+                   processor_type2str(proc), resp->req_id,
+                   pho_srl_error_kind_str(resp->error));
+
+    }
+
     /* first init step from the data processor: return first allocation */
     if (!resp && proc->buff.size == 0) {
         *reqs = xcalloc(1, sizeof(**reqs));
@@ -1900,7 +1922,7 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
         return 0;
     }
 
-    /* managed received allocation */
+    /* manage received allocation */
     if (resp) {
         io_context->write.resp = resp->walloc;
         rc = writer_split_setup(proc, resp->walloc);
