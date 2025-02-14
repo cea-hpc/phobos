@@ -560,7 +560,15 @@ void pho_buff_alloc(struct pho_buff *buffer, size_t size)
     buffer->size = size;
 }
 
+void pho_buff_realloc(struct pho_buff *buffer, size_t size)
+{
+    buffer->buff = xrealloc(buffer->buff, size);
+    buffer->size = size;
+}
+
 void pho_buff_free(struct pho_buff *buffer)
 {
     free(buffer->buff);
+    buffer->buff = NULL;
+    buffer->size = 0;
 }

@@ -255,6 +255,30 @@ int raid4_read_split(struct pho_data_processor *decoder)
     abort();
 }
 
+static int read_extra_parity_byte(struct raid_io_context *io_context)
+{
+    char one_read_byte;
+    ssize_t read_size;
+    int rc;
+
+    read_size = ioa_read(io_context->iods[1].iod_ioa, &io_context->iods[1],
+                         &one_read_byte, 1);
+
+    if (read_size < 0)
+        LOG_RETURN(read_size, "reading one additional parity byte fails");
+
+    if (read_size == 0)
+        LOG_RETURN(-EIO, "unable to read one additional parity byte");
+
+    io_context->iods[1].iod_size += 1;
+
+    rc = extent_hash_update(&io_context->hashes[1], &one_read_byte, 1);
+    if (rc)
+        return rc;
+
+    return 0;
+}
+
 int raid4_read_into_buff(struct pho_data_processor *proc)
 {
     size_t buffer_offset = proc->reader_offset - proc->buffer_offset;
@@ -262,8 +286,6 @@ int raid4_read_into_buff(struct pho_data_processor *proc)
         (struct raid_io_context *)proc->private_reader;
     size_t inside_split_offset = proc->reader_offset -
                                  io_context->current_split_offset;
-    size_t split_size = io_context->read.extents[0]->size +
-                        io_context->read.extents[1]->size;
     char *buff_start = proc->buff.buff + buffer_offset;
     bool with_extent_0;
     size_t to_read;
@@ -279,16 +301,14 @@ int raid4_read_into_buff(struct pho_data_processor *proc)
 
     /* limit : object -> split -> buffer */
     to_read = min(proc->object_size - proc->reader_offset,
-                  split_size - inside_split_offset);
+                  io_context->current_split_size - inside_split_offset);
     to_read = min(to_read, proc->buff.size - buffer_offset);
 
     while (to_read) {
-        /* add chunk level to the limit */
-        size_t extent_to_read = min(to_read,
-                                    io_context->current_split_chunk_size);
         char *parity_buff = NULL;
         size_t parity_count = 0;
         char *data_buff = NULL;
+        size_t extent_to_read;
         size_t extent_index;
         int rc;
         int i;
@@ -302,14 +322,21 @@ int raid4_read_into_buff(struct pho_data_processor *proc)
         else
             extent_index = 0;
 
+        /* limit : extent -> chunk */
+        extent_to_read = min(to_read,
+                             io_context->read.extents[extent_index]->size -
+                                 io_context->iods[extent_index].iod_size);
+        extent_to_read = min(extent_to_read,
+                             io_context->current_split_chunk_size);
+
         /* We read extent 0 and extent 1 to be able to compute parity */
         for (i = 0;
              i < 2;
              i++, buff_start += extent_to_read,
-                 extent_index = (extent_index + 1) % 2,
-                 extent_to_read = min(to_read, extent_to_read)) {
+                 extent_index = (extent_index + 1) % 2) {
+            extent_to_read = min(extent_to_read, to_read);
             if (with_xor) {
-                if ((with_extent_0 && i == 1) || (!with_extent_0 && i == 0)) {
+                if (extent_index == 1) {
                     parity_buff = buff_start;
                     parity_count = extent_to_read;
                 } else {
@@ -318,7 +345,7 @@ int raid4_read_into_buff(struct pho_data_processor *proc)
             }
 
             if (extent_to_read == 0)
-                continue;
+                goto check_extra_parity_byte;
 
             rc = data_processor_read_into_buff(proc,
                                                &io_context->iods[extent_index],
@@ -334,6 +361,24 @@ int raid4_read_into_buff(struct pho_data_processor *proc)
                 if (rc)
                     return rc;
             }
+
+            /*
+             * If the parity extent is replacing a shorter data extent, we need
+             * to read extra bytes only to fill the hash.
+             */
+check_extra_parity_byte:
+            if (io_context->read.check_hash && with_xor && extent_index == 1 &&
+                to_read == 0 &&
+                proc->reader_offset - io_context->current_split_offset ==
+                    io_context->current_split_size &&
+                io_context->read.extents[extent_index]->size >
+                    io_context->iods[extent_index].iod_size) {
+                assert(io_context->read.extents[extent_index]->size -
+                           io_context->iods[extent_index].iod_size == 1);
+                rc = read_extra_parity_byte(io_context);
+                if (rc)
+                    return rc;
+            }
         }
 
         /* compute XOR parity */
@@ -345,7 +390,7 @@ int raid4_read_into_buff(struct pho_data_processor *proc)
              */
             if (parity_count > extent_to_read)
                 memset(data_buff + extent_to_read, 0,
-                       extent_to_read - parity_count);
+                       parity_count - extent_to_read);
 
             xor_in_place(data_buff, parity_buff, parity_count);
         }

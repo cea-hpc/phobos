@@ -257,6 +257,7 @@ struct pho_buff {
 };
 
 void pho_buff_alloc(struct pho_buff *buffer, size_t size);
+void pho_buff_realloc(struct pho_buff *buffer, size_t size);
 
 void pho_buff_free(struct pho_buff *buffer);
 

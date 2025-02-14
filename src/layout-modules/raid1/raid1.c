@@ -320,6 +320,8 @@ static int raid1_read_into_buff(struct pho_data_processor *proc)
     size_t to_read;
     int rc;
 
+    ENTRY;
+
     /* limit read : object -> split -> buffer */
     to_read = min(proc->object_size - proc->reader_offset,
                   io_context->read.extents[0]->size - inside_split_offset);
@@ -350,6 +352,8 @@ static int raid1_write_from_buff(struct pho_data_processor *proc)
     int rc;
     int i;
 
+    ENTRY;
+
     /* limit write : split -> buffer */
     to_write = min(io_context->write.extents[0].size - inside_split_offset,
                    proc->reader_offset - proc->writer_offset);
@@ -362,13 +366,20 @@ static int raid1_write_from_buff(struct pho_data_processor *proc)
                        "at offset %zu", to_write, i, proc->writer_offset);
 
         iods[i].iod_size += to_write;
+
+        rc = extent_hash_update(&io_context->hashes[i], buff_start, to_write);
+        if (rc)
+            return rc;
     }
 
     proc->writer_offset += to_write;
+    if (proc->writer_offset == proc->reader_offset)
+        proc->buffer_offset = proc->writer_offset;
+
     if (proc->writer_offset >= proc->object_size)
         io_context->write.all_is_written = true;
 
-    return extent_hash_update(&io_context->hashes[0], buff_start, to_write);
+    return 0;
 }
 
 static int raid1_get_chunk_size(struct pho_data_processor *enc,
@@ -380,9 +391,42 @@ static int raid1_get_chunk_size(struct pho_data_processor *enc,
     return 0;
 }
 
-static const struct pho_proc_ops RAID1_PROCESSOR_OPS = {
-    .step       = raid_processor_step,
-    .destroy    = raid_processor_destroy,
+static int raid1_extra_attrs(struct pho_data_processor *proc)
+{
+    struct raid_io_context *io_context =
+        &((struct raid_io_context *)proc->private_writer)[proc->current_target];
+    size_t repl_count = io_context->n_data_extents +
+        io_context->n_parity_extents;
+    struct pho_io_descr *iods = io_context->iods;
+    size_t i;
+
+    for (i = 0; i < repl_count; ++i) {
+        struct extent *extent = &io_context->write.extents[i];
+        int rc;
+
+        rc = set_layout_specific_md(extent->layout_idx, repl_count, &iods[i]);
+        if (rc)
+            LOG_RETURN(rc,
+                       "Failed to set layout specific attributes on extent "
+                       "'%s'", extent->uuid);
+    }
+
+    return 0;
+}
+
+static const struct pho_proc_ops RAID1_WRITER_PROCESSOR_OPS = {
+    .step       = raid_writer_processor_step,
+    .destroy    = raid_writer_processor_destroy,
+};
+
+static const struct pho_proc_ops RAID1_READER_PROCESSOR_OPS = {
+    .step       = raid_reader_processor_step,
+    .destroy    = raid_reader_processor_destroy,
+};
+
+static const struct pho_proc_ops RAID1_ERASER_PROCESSOR_OPS = {
+    .step       = raid_eraser_processor_step,
+    .destroy    = raid_eraser_processor_destroy,
 };
 
 static const struct raid_ops RAID1_OPS = {
@@ -392,6 +436,7 @@ static const struct raid_ops RAID1_OPS = {
     .get_chunk_size = raid1_get_chunk_size,
     .read_into_buff = raid1_read_into_buff,
     .write_from_buff = raid1_write_from_buff,
+    .set_extra_attrs = raid1_extra_attrs,
 };
 
 static int raid1_get_repl_count(struct pho_data_processor *enc,
@@ -454,7 +499,7 @@ static int layout_raid1_encode(struct pho_data_processor *encoder)
         return rc;
 
     io_contexts = xcalloc(encoder->xfer->xd_ntargets, sizeof(*io_contexts));
-    encoder->private_processor = io_contexts;
+    encoder->private_writer = io_contexts;
     for (i = 0; i < encoder->xfer->xd_ntargets; i++) {
         io_context = &io_contexts[i];
         io_context->name = PLUGIN_NAME;
@@ -481,7 +526,8 @@ static int layout_raid1_encode(struct pho_data_processor *encoder)
         }
     }
 
-    return raid_encoder_init(encoder, &RAID1_MODULE_DESC, &RAID1_PROCESSOR_OPS,
+    return raid_encoder_init(encoder, &RAID1_MODULE_DESC,
+                             &RAID1_WRITER_PROCESSOR_OPS,
                              &RAID1_OPS);
 
 out_hash:
@@ -516,7 +562,7 @@ static int layout_raid1_decode(struct pho_data_processor *decoder)
                    decoder->layout->ext_count, repl_count);
 
     io_context = xcalloc(1, sizeof(*io_context));
-    decoder->private_processor = io_context;
+    decoder->private_reader = io_context;
     io_context->name = PLUGIN_NAME;
     io_context->n_data_extents = 1;
     io_context->n_parity_extents = repl_count - 1;
@@ -529,23 +575,25 @@ static int layout_raid1_decode(struct pho_data_processor *decoder)
                                      sizeof(*io_context->hashes));
     }
 
-    rc = raid_decoder_init(decoder, &RAID1_MODULE_DESC, &RAID1_PROCESSOR_OPS,
-                           &RAID1_OPS);
+    rc = raid_decoder_init(decoder, &RAID1_MODULE_DESC,
+                           &RAID1_READER_PROCESSOR_OPS, &RAID1_OPS);
     if (rc) {
-        decoder->private_processor = NULL;
+        decoder->private_reader = NULL;
         free(io_context);
         return rc;
     }
 
     io_context->read.to_read = 0;
+    decoder->object_size = 0;
     for (i = 0; i < decoder->layout->ext_count / repl_count; i++) {
         struct extent *extent = &decoder->layout->extents[i * repl_count];
 
         io_context->read.to_read += extent->size;
+        decoder->object_size += extent->size;
     }
 
     /* Empty GET does not need any IO */
-    if (io_context->read.to_read == 0)
+    if (decoder->object_size == 0)
         decoder->done = true;
 
     return 0;
@@ -563,15 +611,15 @@ static int layout_raid1_erase(struct pho_data_processor *eraser)
                        "eraser");
 
     io_context = xcalloc(1, sizeof(*io_context));
-    eraser->private_processor = io_context;
+    eraser->private_eraser = io_context;
     io_context->name = PLUGIN_NAME;
     io_context->n_data_extents = 1;
     io_context->n_parity_extents = repl_count - 1;
 
-    rc = raid_eraser_init(eraser, &RAID1_MODULE_DESC, &RAID1_PROCESSOR_OPS,
-                          &RAID1_OPS);
+    rc = raid_eraser_init(eraser, &RAID1_MODULE_DESC,
+                          &RAID1_ERASER_PROCESSOR_OPS, &RAID1_OPS);
     if (rc) {
-        eraser->private_processor = NULL;
+        eraser->private_eraser = NULL;
         free(io_context);
     }
 

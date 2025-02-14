@@ -77,8 +77,8 @@ struct delete_io_context {
 };
 
 struct write_io_context {
-    pho_resp_write_t *resp;
     bool all_is_written;
+    bool released;              /*< true when we receive all release ack */
     size_t to_write;            /*< Whole object remaining size to write */
     GString *user_md;
     struct extent *extents;
@@ -123,6 +123,7 @@ struct raid_io_context {
      */
     struct pho_buff *buffers;
     size_t current_split;
+    size_t current_split_size;
     size_t current_split_offset;
     size_t current_split_chunk_size;
     /** Number of data extents for this layout. This doesn't include parity
@@ -165,6 +166,7 @@ struct raid_ops {
      */
     int (*read_into_buff)(struct pho_data_processor *proc);
     int (*write_from_buff)(struct pho_data_processor *proc);
+    int (*set_extra_attrs)(struct pho_data_processor *proc);
 };
 
 int raid_encoder_init(struct pho_data_processor *encoder,
@@ -186,6 +188,9 @@ int raid_reader_processor_step(struct pho_data_processor *proc,
                                pho_resp_t *resp, pho_req_t **reqs,
                                size_t *n_reqs);
 int raid_writer_processor_step(struct pho_data_processor *proc,
+                               pho_resp_t *resp, pho_req_t **reqs,
+                               size_t *n_reqs);
+int raid_eraser_processor_step(struct pho_data_processor *proc,
                                pho_resp_t *resp, pho_req_t **reqs,
                                size_t *n_reqs);
 
@@ -210,6 +215,9 @@ int raid_locate(struct dss_handle *dss, struct layout_info *layout,
                 const char *focus_host, char **hostname,
                 int *nb_new_lock);
 
+void raid_reader_processor_destroy(struct pho_data_processor *proc);
+void raid_writer_processor_destroy(struct pho_data_processor *proc);
+void raid_eraser_processor_destroy(struct pho_data_processor *proc);
 void raid_processor_destroy(struct pho_data_processor *proc);
 
 size_t n_total_extents(struct raid_io_context *io_context);

@@ -85,8 +85,6 @@ struct pho_layout_module_ops {
  * pho_lrs.h) and retrieve corresponding responses, allowing them to eventually
  * perform the required IOs.
  *
- * See layout_next_request, layout_receive_response and layout_destroy for a
- * more complete documentation.
  */
 struct pho_proc_ops {
     /** Give a response and get requests from this encoder / decoder */
@@ -138,7 +136,7 @@ struct pho_data_processor {
                                       */
     size_t io_block_size;           /**< Block size (in bytes) of the I/O buffer
                                       */
-    pho_resp_t *last_resp;          /**< Last response from the LRS (use for
+    pho_resp_t *write_resp;          /**< Last response from the LRS (use for
                                       *  a mput with no-split to keep the write
                                       *  resp)
                                       */
@@ -166,6 +164,17 @@ struct pho_data_processor {
     const struct pho_proc_ops *reader_ops;
     void *private_writer;
     const struct pho_proc_ops *writer_ops;
+    /*
+     * As soon as it receives a resp alloc, the writer prepares its
+     * corresponding release req. This release request will be updated when an
+     * extent is ended.
+     * This release request is also followed by a preallocated but unfilled
+     * alloc request that could be set if needed.
+     */
+    pho_req_t *writer_release_alloc;
+    struct timespec writer_start_req; /* Partial release trigger start time */
+    void *private_eraser;
+    const struct pho_proc_ops *eraser_ops;
 };
 
 /**

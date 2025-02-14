@@ -216,53 +216,13 @@ err:
     return rc;
 }
 
-/**
- * Forward a response from the LRS to its destination processor, collect this
- * processor's next requests and forward them back to the LRS.
- *
- * @param[in/out]   proc    The data processor to give the response to.
- * @param[in]       ci      Communication information.
- * @param[in]       resp    The response to be forwarded to \a proc. Can be NULL
- *                          to generate the first request from \a proc.
- * @param[in]       enc_id  Identifier of this data processor (for request or
- *                          response tracking).
- *
- * @return 0 on success, -errno on error.
- */
-static int processor_communicate(struct pho_data_processor *proc,
-                                 struct pho_comm_info *comm, pho_resp_t *resp,
-                                 int enc_id)
+static int send_generated_requests(struct pho_data_processor *proc,
+                                   struct pho_comm_info *comm, int enc_id,
+                                   pho_req_t *requests, size_t n_reqs, int rc)
 {
-    pho_req_t *requests = NULL;
     struct pho_comm_data data;
-    size_t n_reqs = 0;
-    size_t i = 0;
-    int rc;
+    size_t i;
 
-    rc = layout_step(proc, resp, &requests, &n_reqs);
-    if (rc)
-        pho_error(rc, "Error while communicating with encoder");
-
-    /* allocating buffer if ready to be done */
-    if (!proc->buff.size &&
-        (proc->reader_stripe_size && proc->writer_stripe_size))
-        pho_buff_alloc(&proc->buff, lcm(proc->reader_stripe_size,
-                                        proc->writer_stripe_size));
-
-    /* process buffer data */
-    while (proc->buff.size &&
-           !n_reqs &&
-           proc->writer_offset < proc->object_size) {
-        if (proc->reader_offset == proc->writer_offset)
-            rc = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
-        else
-            rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
-
-        if (rc)
-            break;
-    }
-
-    /* Dispatch generated requests (even on error, if any) */
     for (i = 0; i < n_reqs; i++) {
         pho_req_t *req;
         int rc2 = 0;
@@ -302,6 +262,117 @@ static int processor_communicate(struct pho_data_processor *proc,
     free(requests);
 
     return rc;
+}
+
+static int first_data_processor_call(struct pho_data_processor *proc,
+                                     struct pho_comm_info *comm, int enc_id)
+{
+    pho_req_t *requests = NULL;
+    size_t n_reqs = 0;
+    int rc = 0;
+
+    if (is_encoder(proc)) {
+        /* init reader */
+        rc = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
+        if (rc)
+            return rc;
+
+        assert(n_reqs == 0); /* an encoder reader generates no request */
+        /* init writer */
+        rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
+    } else if (is_decoder(proc)) {
+        /* init writer */
+        rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
+        if (rc)
+            return rc;
+
+        assert(n_reqs == 0); /* an encoder writer generates no request */
+        /* init reader */
+        rc = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
+    } else {
+        /* init eraser */
+        rc = proc->eraser_ops->step(proc, NULL, &requests, &n_reqs);
+    }
+
+    if (rc)
+        return rc;
+
+    assert(n_reqs == 1); /* first allocation must be generated */
+    return send_generated_requests(proc, comm, enc_id, requests, n_reqs, 0);
+}
+
+/**
+ * Forward a response from the LRS to its destination processor, collect this
+ * processor's next requests and forward them back to the LRS.
+ *
+ * @param[in/out]   proc    The data processor to give the response to.
+ * @param[in]       comm    Communication information.
+ * @param[in]       resp    The response to be forwarded to \a proc. Can be NULL
+ *                          to generate the first request from \a proc.
+ * @param[in]       enc_id  Identifier of this data processor (for request or
+ *                          response tracking).
+ *
+ * @return 0 on success, -errno on error.
+ */
+static int processor_communicate(struct pho_data_processor *proc,
+                                 struct pho_comm_info *comm, pho_resp_t *resp,
+                                 int enc_id)
+{
+    pho_req_t *requests = NULL;
+    size_t n_reqs = 0;
+    int rc = 0;
+
+    ENTRY;
+
+    if (is_encoder(proc)) {
+            rc = proc->writer_ops->step(proc, resp, &requests, &n_reqs);
+    } else if (is_decoder(proc)) {
+            rc = proc->reader_ops->step(proc, resp, &requests, &n_reqs);
+    } else {
+        rc = proc->eraser_ops->step(proc, resp, &requests, &n_reqs);
+        goto skip_io; /* an eraser needs no io */
+    }
+
+    if (rc)
+        goto skip_io;
+
+    /* A release generates no new IO. */
+    if (pho_response_is_release(resp) &&
+        !pho_response_is_partial_release(resp)) {
+        goto skip_io;
+    }
+
+    /* allocating buffer if ready to be done */
+    if (!proc->buff.size) {
+        if (proc->reader_stripe_size && proc->writer_stripe_size)
+            pho_buff_alloc(&proc->buff, lcm(proc->reader_stripe_size,
+                                            proc->writer_stripe_size));
+        else
+            goto skip_io;
+    }
+
+    /* if all is already read by decoder, we need only one writing */
+    if (is_decoder(proc) && n_reqs) {
+        rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
+        goto skip_io;
+    }
+
+    /* process buffer data until we face an error or new request */
+    while (!rc && !n_reqs) {
+        /* try read first */
+        if (proc->reader_offset == proc->writer_offset &&
+            !proc->object_size == 0)
+            rc = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
+
+        /* then try following write */
+        if (!rc && (proc->reader_offset > proc->writer_offset ||
+                proc->object_size == 0))
+            rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
+    }
+
+skip_io:
+    /* Dispatch generated requests (even on error, if any) */
+    return send_generated_requests(proc, comm, enc_id, requests, n_reqs, rc);
 }
 
 /**
@@ -1227,6 +1298,7 @@ static void store_fini(struct phobos_handle *pho, int rc)
                 dss_res_free(pho->processors[i].layout, 1);
                 pho->processors[i].layout = NULL;
             }
+
             layout_destroy(&pho->processors[i]);
         }
     }
@@ -1506,7 +1578,7 @@ static int store_perform_xfers(struct phobos_handle *pho)
         if (pho->processors[i].done)
             continue;
 
-        rc = processor_communicate(&pho->processors[i], &pho->comm, NULL, i);
+        rc = first_data_processor_call(&pho->processors[i], &pho->comm, i);
         if (rc)
             store_end_xfer(pho, i, rc);
     }

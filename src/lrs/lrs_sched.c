@@ -1991,11 +1991,7 @@ static int sched_handle_write_alloc(struct lrs_sched *sched,
             break;
     }
 
-    /* If it's a no-split request, the lrs needs to provide to the client the
-     * threshold for the sync in order to know if a sync is needed while writing
-     */
-    if (wreq->no_split)
-        sched_write_alloc_add_threshold(sched, reqc->params.rwalloc.respc);
+    sched_write_alloc_add_threshold(sched, reqc->params.rwalloc.respc);
     return publish_or_cancel(sched, reqc, rc, next_medium_index);
 }
 

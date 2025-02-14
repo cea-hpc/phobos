@@ -81,11 +81,22 @@ static struct raid_ops RAID4_OPS = {
     .get_chunk_size = raid4_get_chunk_size,
     .read_into_buff = raid4_read_into_buff,
     .write_from_buff = raid4_write_from_buff,
+    .set_extra_attrs = raid4_extra_attrs,
 };
 
-static const struct pho_proc_ops RAID4_PROCESSOR_OPS = {
-    .step       = raid_processor_step,
-    .destroy    = raid_processor_destroy,
+static const struct pho_proc_ops RAID4_WRITER_PROCESSOR_OPS = {
+    .step       = raid_writer_processor_step,
+    .destroy    = raid_writer_processor_destroy,
+};
+
+static const struct pho_proc_ops RAID4_READER_PROCESSOR_OPS = {
+    .step       = raid_reader_processor_step,
+    .destroy    = raid_reader_processor_destroy,
+};
+
+static const struct pho_proc_ops RAID4_ERASER_PROCESSOR_OPS = {
+    .step       = raid_eraser_processor_step,
+    .destroy    = raid_eraser_processor_destroy,
 };
 
 /**
@@ -130,7 +141,7 @@ static int layout_raid4_encode(struct pho_data_processor *encoder)
     ENTRY;
 
     io_contexts = xcalloc(encoder->xfer->xd_ntargets, sizeof(*io_contexts));
-    encoder->private_processor = io_contexts;
+    encoder->private_writer = io_contexts;
 
     for (i = 0; i < encoder->xfer->xd_ntargets; i++) {
         io_context = &io_contexts[i];
@@ -138,7 +149,7 @@ static int layout_raid4_encode(struct pho_data_processor *encoder)
         io_context->n_data_extents = 2;
         io_context->n_parity_extents = 1;
         io_context->write.to_write = encoder->xfer->xd_targets[i].xt_size;
-        if (!encoder->xfer->xd_targets[i].xt_size)
+        if (encoder->xfer->xd_targets[i].xt_size == 0)
             io_context->write.all_is_written = true;
 
         io_context->nb_hashes = 3;
@@ -160,8 +171,8 @@ static int layout_raid4_encode(struct pho_data_processor *encoder)
         }
     }
 
-    return raid_encoder_init(encoder, &RAID4_MODULE_DESC, &RAID4_PROCESSOR_OPS,
-                             &RAID4_OPS);
+    return raid_encoder_init(encoder, &RAID4_MODULE_DESC,
+                             &RAID4_WRITER_PROCESSOR_OPS, &RAID4_OPS);
 
 out_hash:
     for (i -= 1; i >= 0; i--) {
@@ -184,7 +195,7 @@ static int layout_raid4_decode(struct pho_data_processor *decoder)
     ENTRY;
 
     io_context = xcalloc(1, sizeof(*io_context));
-    decoder->private_processor = io_context;
+    decoder->private_reader = io_context;
     io_context->name = PLUGIN_NAME;
     io_context->n_data_extents = 2;
     io_context->n_parity_extents = 1;
@@ -199,8 +210,8 @@ static int layout_raid4_decode(struct pho_data_processor *decoder)
                                      sizeof(*io_context->hashes));
     }
 
-    rc = raid_decoder_init(decoder, &RAID4_MODULE_DESC, &RAID4_PROCESSOR_OPS,
-                           &RAID4_OPS);
+    rc = raid_decoder_init(decoder, &RAID4_MODULE_DESC,
+                           &RAID4_READER_PROCESSOR_OPS, &RAID4_OPS);
     if (rc)
         return rc;
 
@@ -212,11 +223,16 @@ static int layout_raid4_decode(struct pho_data_processor *decoder)
                    "raid4 Xor layout extents count (%d) is not a multiple of 3",
                    decoder->layout->ext_count);
 
-    for (i = 0; i < decoder->layout->ext_count; i = i + 3)
+    io_context->read.to_read = 0;
+    decoder->object_size = 0;
+    for (i = 0; i < decoder->layout->ext_count; i = i + 3) {
         io_context->read.to_read += decoder->layout->extents[i].size;
+        decoder->object_size += decoder->layout->extents[i].size;
+        decoder->object_size += decoder->layout->extents[i + 1].size;
+    }
 
     /* Empty GET does not need any IO */
-    if (io_context->read.to_read == 0)
+    if (decoder->object_size == 0)
         decoder->done = true;
 
     return 0;
@@ -228,13 +244,13 @@ static int layout_raid4_erase(struct pho_data_processor *eraser)
     int rc;
 
     io_context = xcalloc(1, sizeof(*io_context));
-    eraser->private_processor = io_context;
+    eraser->private_eraser = io_context;
     io_context->name = PLUGIN_NAME;
     io_context->n_data_extents = 2;
     io_context->n_parity_extents = 1;
 
-    rc = raid_eraser_init(eraser, &RAID4_MODULE_DESC, &RAID4_PROCESSOR_OPS,
-                          &RAID4_OPS);
+    rc = raid_eraser_init(eraser, &RAID4_MODULE_DESC,
+                          &RAID4_ERASER_PROCESSOR_OPS, &RAID4_OPS);
 
     if (rc) {
         eraser->private_processor = NULL;

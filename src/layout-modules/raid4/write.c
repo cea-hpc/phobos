@@ -65,6 +65,14 @@ static int set_raid4_md(struct raid_io_context *io_context, size_t chunk_size)
     return rc;
 }
 
+int raid4_extra_attrs(struct pho_data_processor *proc)
+{
+    struct raid_io_context *io_context =
+        &((struct raid_io_context *)proc->private_writer)[proc->current_target];
+
+    return set_raid4_md(io_context, io_context->current_split_chunk_size);
+}
+
 int raid4_write_split(struct pho_data_processor *encoder, size_t split_size,
                       int target_idx)
 {
@@ -181,28 +189,30 @@ out:
 int raid4_write_from_buff(struct pho_data_processor *proc)
 {
     struct raid_io_context *io_context =
-        &((struct raid_io_context *)proc->private_reader)[proc->current_target];
+        &((struct raid_io_context *)proc->private_writer)[proc->current_target];
     size_t inside_split_offset = proc->writer_offset -
                                  io_context->current_split_offset;
     struct pho_io_descr *iods = io_context->iods;
-    size_t split_size = io_context->write.extents[0].size +
-                        io_context->write.extents[1].size;
-    char *buff_start = proc->buff.buff +
-                       (proc->writer_offset - proc->buffer_offset);
     size_t to_write;
     int rc;
 
     /* limit: split -> buffer */
-    to_write = min(split_size - inside_split_offset,
+    to_write = min(io_context->current_split_size - inside_split_offset,
                    proc->reader_offset - proc->writer_offset);
 
     /* write chunk by chunk */
     while (to_write) {
+        char *buff_start = proc->buff.buff +
+                           (proc->writer_offset - proc->buffer_offset);
         size_t to_write_extent_0;
         size_t to_write_extent_1;
 
-        /* add chunk level to the limit of extent 0*/
-        to_write_extent_0 = min(to_write, io_context->current_split_chunk_size);
+        /* limit: extent -> chunk */
+        to_write_extent_0 = min(to_write,
+                                io_context->write.extents[0].size -
+                                    iods[0].iod_size);
+        to_write_extent_0 = min(to_write_extent_0,
+                                io_context->current_split_chunk_size);
 
         /* write the data extent 0 */
         rc = ioa_write(iods[0].iod_ioa, &iods[0], buff_start,
@@ -214,9 +224,6 @@ int raid4_write_from_buff(struct pho_data_processor *proc)
 
         iods[0].iod_size += to_write_extent_0;
         proc->writer_offset += to_write_extent_0;
-        if (proc->writer_offset >= proc->object_size)
-            io_context->write.all_is_written = true;
-
         rc = extent_hash_update(&io_context->hashes[0], buff_start,
                                 to_write_extent_0);
         if (rc)
@@ -224,8 +231,12 @@ int raid4_write_from_buff(struct pho_data_processor *proc)
 
         to_write -= to_write_extent_0;
 
-        /* add chunk level to the limit of extent 1*/
-        to_write_extent_1 = min(to_write, io_context->current_split_chunk_size);
+        /* limit: extent -> chunk */
+        to_write_extent_1 = min(to_write,
+                                io_context->write.extents[1].size -
+                                    iods[1].iod_size);
+        to_write_extent_1 = min(to_write_extent_1,
+                                io_context->current_split_chunk_size);
 
         /* write the data extent 1 */
         rc = ioa_write(iods[1].iod_ioa, &iods[1],
@@ -270,8 +281,8 @@ int raid4_write_from_buff(struct pho_data_processor *proc)
                        buff_start + to_write_extent_0, to_write_extent_0);
         if (rc)
             LOG_RETURN(rc,
-                       "raid4 unable to write %zu bytes in parity extent at offset "
-                       "%zu", to_write_extent_0, proc->writer_offset);
+                       "raid4 unable to write %zu bytes in parity extent at "
+                       "offset %zu", to_write_extent_0, proc->writer_offset);
 
         iods[2].iod_size += to_write_extent_0;
         rc = extent_hash_update(&io_context->hashes[2],
@@ -281,5 +292,7 @@ int raid4_write_from_buff(struct pho_data_processor *proc)
             return rc;
     }
 
+    if (proc->writer_offset == proc->reader_offset)
+        proc->buffer_offset = proc->writer_offset;
     return 0;
 }

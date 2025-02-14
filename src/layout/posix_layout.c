@@ -42,11 +42,8 @@ static int posix_reader_step(struct pho_data_processor *proc, pho_resp_t *resp,
                              pho_req_t **reqs, size_t *n_reqs)
 {
     struct pho_io_descr *posix_reader =
-        (struct pho_io_descr *)proc->private_reader;
+        &((struct pho_io_descr *)proc->private_reader)[proc->current_target];
     size_t to_read;
-
-    /* posix reader never ask any resource */
-    *n_reqs = 0;
 
     /* first init step from the data processor */
     if (proc->buff.size == 0) {
@@ -63,16 +60,21 @@ static int posix_reader_step(struct pho_data_processor *proc, pho_resp_t *resp,
 
 static void posix_reader_destroy(struct pho_data_processor *proc)
 {
-    struct pho_io_descr *posix_reader =
-        (struct pho_io_descr *)proc->private_reader;
+    int target_idx;
 
-    if (!posix_reader)
+    if (!proc->private_reader)
         return;
 
-    if (posix_reader->iod_ioa)
-        ioa_close(posix_reader->iod_ioa, posix_reader);
+    for (target_idx = 0; target_idx < proc->xfer->xd_ntargets; target_idx++) {
+        struct pho_io_descr *posix_reader =
+            &((struct pho_io_descr *)proc->private_reader)[target_idx];
 
-    free(posix_reader);
+        if (posix_reader->iod_ioa)
+            ioa_close(posix_reader->iod_ioa, posix_reader);
+
+    }
+
+    free(proc->private_reader);
     proc->private_reader = NULL;
 }
 
@@ -81,63 +83,73 @@ static const struct pho_proc_ops POSIX_READER_OPS = {
     .destroy = posix_reader_destroy,
 };
 
-static int set_private_posix_io_descr(void **private, int input_fd)
+static int set_private_posix_io_descr(struct pho_io_descr **private_io_descr,
+                                      struct pho_data_processor *proc)
 {
-    struct pho_io_descr *private_io_descr;
-    int fd;
+    int target_idx;
     int rc;
 
-    /* set private reader */
-    private_io_descr = xcalloc(1, sizeof(*private_io_descr));
-    rc = get_io_adapter(PHO_FS_POSIX, &private_io_descr->iod_ioa);
-    if (rc)
-        goto end;
+    *private_io_descr = xcalloc(proc->xfer->xd_ntargets,
+                                sizeof(struct pho_io_descr));
 
-    /* We duplicate the file descriptor so that ioa_close doesn't close the file
-     * descriptor of the Xfer. This file descriptor is managed by Python in the
-     * CLI for example.
-     */
-    fd = dup(input_fd);
-    if (fd == -1) {
-        rc = -errno;
-        goto end;
+    for (target_idx = 0; target_idx < proc->xfer->xd_ntargets; target_idx++) {
+        struct pho_io_descr *current_io_descr =
+            &(*private_io_descr)[target_idx];
+        int input_fd = proc->xfer->xd_targets[target_idx].xt_fd;
+        int fd;
+
+        rc = get_io_adapter(PHO_FS_POSIX, &current_io_descr->iod_ioa);
+        if (rc)
+            goto end;
+
+        /*
+         * We duplicate the file descriptor so that ioa_close doesn't close the
+         * file descriptor of the Xfer. This file descriptor is managed by
+         * Python in the CLI for example.
+         */
+        fd = dup(input_fd);
+        if (fd == -1) {
+            rc = -errno;
+            goto end;
+        }
+
+        rc = iod_from_fd(current_io_descr->iod_ioa, current_io_descr, fd);
+        if (rc)
+            goto end;
     }
 
-    rc = iod_from_fd(private_io_descr->iod_ioa, private_io_descr, fd);
-    if (rc)
-        goto end;
-
-    *private = (void *)private_io_descr;
+    return 0;
 
 end:
-    if (rc) {
-        if (private_io_descr->iod_ioa)
-            ioa_close(private_io_descr->iod_ioa, private_io_descr);
+    for (; target_idx >= 0; target_idx--) {
+        struct pho_io_descr *current_io_descr =
+            &(*private_io_descr)[target_idx];
 
-        free(private_io_descr);
+        ioa_close(current_io_descr->iod_ioa, current_io_descr);
     }
 
+    free(*private_io_descr);
+    *private_io_descr = NULL;
     return rc;
 }
 
 int set_posix_reader(struct pho_data_processor *encoder)
 {
     encoder->reader_ops = &POSIX_READER_OPS;
+
     return set_private_posix_io_descr(
-               &encoder->private_reader,
-               encoder->xfer->xd_targets[encoder->current_target].xt_fd);
+               (struct pho_io_descr **)&encoder->private_reader, encoder);
 }
 
 static int posix_writer_step(struct pho_data_processor *proc, pho_resp_t *resp,
                              pho_req_t **reqs, size_t *n_reqs)
 {
     struct pho_io_descr *posix_writer =
-        (struct pho_io_descr *)proc->private_writer;
+        &((struct pho_io_descr *)proc->private_writer)[proc->current_target];
     size_t to_write = proc->reader_offset - proc->writer_offset;
     int rc;
 
-    /* posix writer never ask any resource */
-    *n_reqs = 0;
+    ENTRY;
 
     /* first init step from the data processor */
     if (proc->buff.size == 0) {
@@ -155,19 +167,44 @@ static int posix_writer_step(struct pho_data_processor *proc, pho_resp_t *resp,
                    "%zu", to_write, proc->writer_offset);
 
     proc->writer_offset += to_write;
+    if (proc->writer_offset == proc->reader_offset)
+        proc->buffer_offset = proc->writer_offset;
+
+    /* Switch to next target */
+    if (proc->writer_offset == proc->object_size) {
+        proc->current_target++;
+        proc->buffer_offset = 0;
+        proc->reader_offset = 0;
+        proc->writer_offset = 0;
+
+        /*
+         * Currently, there is always only one target per decoder.
+         */
+        assert(proc->current_target == proc->xfer->xd_ntargets);
+        proc->done = true;
+    }
+
     return 0;
 }
 
 static void posix_writer_destroy(struct pho_data_processor *proc)
 {
+    int target_idx;
+
     struct pho_io_descr *posix_writer =
         (struct pho_io_descr *)proc->private_writer;
 
     if (!posix_writer)
         return;
 
-    if (posix_writer->iod_ioa)
-        ioa_close(posix_writer->iod_ioa, posix_writer);
+    for (target_idx = 0; target_idx < proc->xfer->xd_ntargets; target_idx++) {
+        struct pho_io_descr *posix_writer =
+            &((struct pho_io_descr *)proc->private_writer)[target_idx];
+
+        if (posix_writer->iod_ioa)
+            ioa_close(posix_writer->iod_ioa, posix_writer);
+
+    }
 
     free(posix_writer);
     proc->private_writer = NULL;
@@ -182,6 +219,5 @@ int set_posix_writer(struct pho_data_processor *decoder)
 {
     decoder->writer_ops = &POSIX_WRITER_OPS;
     return set_private_posix_io_descr(
-               &decoder->private_writer,
-               decoder->xfer->xd_targets[decoder->current_target].xt_fd);
+               (struct pho_io_descr **)&decoder->private_writer, decoder);
 }

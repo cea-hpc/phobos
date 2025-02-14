@@ -47,7 +47,7 @@
 int data_processor_read_into_buff(struct pho_data_processor *proc,
                                   struct pho_io_descr *reader_iod, size_t size)
 {
-    size_t read_size;
+    ssize_t read_size;
 
     read_size = ioa_read(reader_iod->iod_ioa, reader_iod,
                          proc->buff.buff +
@@ -59,6 +59,7 @@ int data_processor_read_into_buff(struct pho_data_processor *proc,
                    "%zu", size, proc->reader_offset);
 
     proc->reader_offset += read_size;
+    reader_iod->iod_size += read_size;
 
     if (read_size < size)
         LOG_RETURN(-EIO,
@@ -127,6 +128,10 @@ int layout_encoder(struct pho_data_processor *encoder,
             return rc;
         }
     }
+
+    /* set first object size */
+    if (encoder->xfer->xd_ntargets > 0)
+        encoder->object_size = xfer->xd_targets[0].xt_size;
 
     for (i = 0; i < encoder->xfer->xd_ntargets; i++) {
         encoder->layout[i].oid = xfer->xd_targets[i].xt_objid;
@@ -312,6 +317,9 @@ void layout_destroy(struct pho_data_processor *proc)
     if (proc->writer_ops)
         proc->writer_ops->destroy(proc);
 
+    if (proc->eraser_ops)
+        proc->eraser_ops->destroy(proc);
+
     /* Only encoders own their layout */
     if (is_encoder(proc) && proc->layout != NULL) {
         for (i = 0; i < proc->xfer->xd_ntargets; i++) {
@@ -323,17 +331,11 @@ void layout_destroy(struct pho_data_processor *proc)
         proc->layout = NULL;
     }
 
-    if (proc->last_resp != NULL) {
-        pho_srl_response_free(proc->last_resp, false);
-        free(proc->last_resp);
-        proc->last_resp = NULL;
+    if (proc->write_resp != NULL) {
+        pho_srl_response_free(proc->write_resp, false);
+        free(proc->write_resp);
+        proc->write_resp = NULL;
     }
 
-    /* Not fully initialized */
-    if (proc->ops == NULL)
-        return;
-
-    CHECK_ENC_OP(proc, destroy);
-
-    proc->ops->destroy(proc);
+    pho_buff_free(&proc->buff);
 }

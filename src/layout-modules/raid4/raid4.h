@@ -13,6 +13,7 @@ int raid4_write_split(struct pho_data_processor *encoder, size_t split_size,
 int raid4_read_split(struct pho_data_processor *decoder);
 int raid4_read_into_buff(struct pho_data_processor *proc);
 int raid4_write_from_buff(struct pho_data_processor *proc);
+int raid4_extra_attrs(struct pho_data_processor *proc);
 
 void buffer_xor(struct pho_buff *buff1, struct pho_buff *buff2,
                 struct pho_buff *xor, size_t count);
