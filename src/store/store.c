@@ -1142,8 +1142,11 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
     if (op_is_basic_decoder(xfer)) {
         /* create dummy decoder if no I/O operations are made */
         proc->xfer = xfer;
-        proc->done = true;
         proc->type = PHO_PROC_DECODER;
+
+        if (xfer->xd_op == PHO_XFER_OP_GETMD)
+            proc->done = true;
+
         return 0;
     }
 
