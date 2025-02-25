@@ -134,7 +134,7 @@ function test_rename_oid_alive_to_nonexistant
     local c2=$FUNCNAME.bis
 
     $phobos put --family dir /etc/hosts oid${c1}  # Alive
-    $valg_phobos rename --oid oid${c1} oid${c2} || \
+    $valg_phobos rename oid${c1} oid${c2} || \
         error "Rename operation failed"
 
     assert_living_doesnt_exist $c1
@@ -155,7 +155,7 @@ function test_rename_oid_alive_to_deleted
     $phobos put --family dir /etc/hosts oid${c1} # Alive
     $phobos put --family dir /etc/hosts oid${c2} # Deleted
     $phobos delete oid${c2}
-    $valg_phobos rename --oid oid${c1} oid${c2} ||
+    $valg_phobos rename oid${c1} oid${c2} ||
         error "Rename operation failed"
 
     assert_living_doesnt_exist $c1
@@ -175,7 +175,7 @@ function test_rename_oid_alive_to_alive
 
     $phobos put --family dir /etc/hosts oid${c1} # Alive
     $phobos put --family dir /etc/hosts oid${c2} # Alive
-    $valg_phobos rename --oid oid${c1} oid${c2} &&
+    $valg_phobos rename oid${c1} oid${c2} &&
         error "Rename operation should have failed" || true
 
     assert_living_exists $c1
@@ -195,7 +195,7 @@ function test_rename_oid_updated_to_nonexistant
 
     $phobos put --family dir /etc/hosts oid${c1}  # Updated
     $phobos put --family dir --overwrite /etc/hosts oid${c1}
-    $valg_phobos rename --oid oid${c1} oid${c2} || \
+    $valg_phobos rename oid${c1} oid${c2} || \
         error "Rename operation failed"
 
     assert_living_doesnt_exist $c1
@@ -217,7 +217,7 @@ function test_rename_oid_updated_to_deleted
     $phobos put --family dir /etc/hosts oid${c2} # Deleted
     $phobos put --family dir --overwrite /etc/hosts oid${c1}
     $phobos delete oid${c2}
-    $valg_phobos rename --oid oid${c1} oid${c2} || \
+    $valg_phobos rename oid${c1} oid${c2} || \
         error "Rename operation failed"
 
     assert_living_doesnt_exist $c1
@@ -238,7 +238,7 @@ function test_rename_oid_updated_to_alive
     $phobos put --family dir /etc/hosts oid${c1} # Updated
     $phobos put --family dir /etc/hosts oid${c2} # Alive
     $phobos put --family dir --overwrite /etc/hosts oid${c1}
-    $valg_phobos rename --oid oid${c1} oid${c2} &&
+    $valg_phobos rename oid${c1} oid${c2} &&
         error "Rename operation should have failed" || true
 
     assert_living_exists $c1
@@ -259,7 +259,7 @@ function test_rename_oid_deleted_to_nonexistant
     $phobos put --family dir /etc/hosts oid${c1}  # Deleted
     $phobos delete oid${c1}
 
-    $valg_phobos rename --oid oid${c1} oid${c2} &&
+    $valg_phobos rename oid${c1} oid${c2} &&
         error "Rename operation should have failed" || true
 
     assert_living_doesnt_exist $c1
@@ -277,7 +277,7 @@ function test_rename_oid_nonexistant_to_nonexistant
     local c1=$FUNCNAME
     local c2=$FUNCNAME.bis
 
-    $valg_phobos rename --oid oid${c1} oid${c2} &&
+    $valg_phobos rename oid${c1} oid${c2} &&
         error "Rename operation should have failed" || true
 
     assert_extent_doesnt_exist $c1
@@ -296,7 +296,7 @@ function test_rename_uuid_alive_to_nonexistant
 
     $phobos put --family dir /etc/hosts oid${c1}  # Alive
     uuid1=$($phobos object list oid${c1} --output uuid)
-    $valg_phobos rename --uuid ${uuid1} oid${c2} || \
+    $valg_phobos rename oid${c1} --uuid ${uuid1} oid${c2} || \
         error "Rename operation failed"
 
     assert_living_doesnt_exist $c1
@@ -327,7 +327,7 @@ function test_rename_uuid_alive_to_deleted
     $phobos delete oid${c2}
     uuid1=$($phobos object list oid${c1} --output uuid)
     uuid2=$($phobos object list --deprecated-only oid${c2} --output uuid)
-    $valg_phobos rename --uuid ${uuid1} oid${c2} || \
+    $valg_phobos rename oid${c1} --uuid ${uuid1} oid${c2} || \
         error "Rename operation failed"
 
     assert_living_doesnt_exist $c1
@@ -359,7 +359,7 @@ function test_rename_uuid_alive_to_alive
     $phobos put --family dir /etc/hosts oid${c2} # Alive
     uuid1=$($phobos object list oid${c1} --output uuid)
     uuid2=$($phobos object list oid${c2} --output uuid)
-    $valg_phobos rename --uuid ${uuid1} oid${c2} &&
+    $valg_phobos rename oid${c1} --uuid ${uuid1} oid${c2} &&
         error "Rename operation should have failed" || true
 
     assert_living_exists $c1
@@ -387,7 +387,7 @@ function test_rename_uuid_updated_to_nonexistant
     $phobos put --family dir /etc/hosts oid${c1}  # Updated
     $phobos put --family dir --overwrite /etc/hosts oid${c1}
     uuid1=$($phobos object list oid${c1} --output uuid)
-    $valg_phobos rename --uuid ${uuid1} oid${c2} || \
+    $valg_phobos rename oid${c1} --uuid ${uuid1} oid${c2} || \
         error "Rename operation failed"
 
     assert_living_doesnt_exist $c1
@@ -424,7 +424,7 @@ function test_rename_uuid_updated_to_deleted
     $phobos delete oid${c2}
     uuid1=$($phobos object list oid${c1} --output uuid)
     uuid2=$($phobos object list --deprecated-only oid${c2} --output uuid)
-    $valg_phobos rename --uuid ${uuid1} oid${c2} || \
+    $valg_phobos rename oid${c1} --uuid ${uuid1} oid${c2} || \
         error "Rename operation failed"
 
     assert_living_doesnt_exist $c1
@@ -458,7 +458,7 @@ function test_rename_uuid_updated_to_updated
     $phobos put --family dir --overwrite /etc/hosts oid${c2}
     uuid1=$($phobos object list oid${c1} --output uuid)
     uuid2=$($phobos object list oid${c2} --output uuid)
-    $valg_phobos rename --uuid ${uuid1} oid${c2} &&
+    $valg_phobos rename oid${c1} --uuid ${uuid1} oid${c2} &&
         error "Rename operation should have failed" || true
 
     assert_living_exists $c1
@@ -492,7 +492,7 @@ function test_rename_uuid_updated_to_alive
     $phobos put --family dir --overwrite /etc/hosts oid${c1}
     uuid1=$($phobos object list oid${c1} --output uuid)
     uuid2=$($phobos object list oid${c2} --output uuid)
-    $valg_phobos rename --uuid ${uuid1} oid${c2} &&
+    $valg_phobos rename oid${c1} --uuid ${uuid1} oid${c2} &&
         error "Rename operation should have failed" || true
 
     assert_living_exists $c1
@@ -520,7 +520,7 @@ function test_rename_uuid_deleted_to_nonexistant
     $phobos put --family dir /etc/hosts oid${c1}  # Deleted
     $phobos delete oid${c1}
     uuid1="$($phobos object list --deprecated-only oid${c1} --output uuid)"
-    $valg_phobos rename --uuid ${uuid1} oid${c2} ||
+    $valg_phobos rename oid${c1} --uuid ${uuid1} oid${c2} ||
         error "Rename operation failed"
 
     assert_living_doesnt_exist $c1
@@ -548,7 +548,7 @@ function test_rename_uuid_deleted_to_deleted
     $phobos delete oid${c2}
     uuid1=$($phobos object list --deprecated-only oid${c1} --output uuid)
     uuid2=$($phobos object list --deprecated-only oid${c2} --output uuid)
-    $valg_phobos rename --uuid ${uuid1} oid${c2} || \
+    $valg_phobos rename oid${c1} --uuid ${uuid1} oid${c2} || \
         error "Rename operation failed"
 
     assert_living_doesnt_exist $c1
@@ -580,7 +580,7 @@ function test_rename_uuid_deleted_to_updated
     $phobos put --family dir --overwrite /etc/hosts oid${c2}
     uuid1=$($phobos object list --deprecated-only oid${c1} --output uuid)
     uuid2=$($phobos object list --deprecated-only oid${c2} --output uuid)
-    $valg_phobos rename --uuid ${uuid1} oid${c2} || \
+    $valg_phobos rename oid${c1} --uuid ${uuid1} oid${c2} || \
         error "Rename operation failed"
 
     assert_living_doesnt_exist $c1
@@ -612,7 +612,7 @@ function test_rename_uuid_deleted_to_alive
     $phobos delete oid${c1}
     uuid1=$($phobos object list --deprecated-only oid${c1} --output uuid)
     uuid2=$($phobos object list oid${c2} --output uuid)
-    $valg_phobos rename --uuid ${uuid1} oid${c2} || \
+    $valg_phobos rename oid${c1} --uuid ${uuid1} oid${c2} || \
         error "Rename operation failed"
 
     assert_living_doesnt_exist $c1

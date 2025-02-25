@@ -1905,18 +1905,9 @@ int phobos_rename(const char *old_oid, const char *uuid, char *new_oid)
     struct object_info *objects = NULL;
     struct dss_filter filter;
     struct dss_handle dss;
-    int objects_count = 0;
     int deprec_count = 0;
+    int scope;
     int rc;
-
-    if (old_oid == NULL && uuid == NULL)
-        LOG_RETURN(rc = -EINVAL, "Either oid or uuid must be provided");
-    else if (old_oid && uuid)
-        LOG_RETURN(rc = -EINVAL,
-                   "Cannot rename by giving both an oid and a uuid");
-
-    if (!new_oid)
-        LOG_GOTO(clean, rc = -EINVAL, "No new object id provided");
 
     /* Ensure conf is loaded */
     rc = pho_cfg_init_local(NULL);
@@ -1928,49 +1919,22 @@ int phobos_rename(const char *old_oid, const char *uuid, char *new_oid)
     if (rc)
         LOG_GOTO(clean, rc, "Cannot initialize a connection handle");
 
-    /* Only oid is provided for rename, so retrieve the living object with this
-     * oid, is any exists
-     */
-    if (uuid == NULL) {
-        struct dss_filter living_filter;
+    if (uuid == NULL)
+        scope = DSS_OBJ_ALIVE;
+    else
+        scope = DSS_OBJ_ALL;
 
-        rc = dss_filter_build(&living_filter, "{\"DSS::OBJ::oid\": \"%s\"}",
-                              old_oid);
-        if (rc)
-            LOG_GOTO(clean, rc,
-                     "Cannot build filter for object oid '%s'", old_oid);
+    rc = dss_find_object(&dss, old_oid, uuid, 0, scope, &objects);
+    if (rc)
+        LOG_GOTO(clean, rc, "Cannot find '%s'", old_oid);
 
-        rc = dss_object_get(&dss, &living_filter, &objects, &objects_count,
-                            NULL);
-        dss_filter_free(&living_filter);
-        if (rc)
-            LOG_GOTO(clean, rc,
-                     "Error while trying to get objects with oid '%s'",
-                     old_oid);
-
-        if (objects_count == 0)
-            LOG_GOTO(clean, rc = -ENOENT,
-                     "Couldn't find objects with oid '%s' to rename", old_oid);
-
-        uuid = objects[0].uuid;
-    }
+    if (uuid == NULL)
+        uuid = objects->uuid;
 
     rc = dss_filter_build(&filter, "{\"DSS::OBJ::uuid\": \"%s\"}", uuid);
     if (rc)
         LOG_GOTO(clean, rc,
                  "Cannot build filter for object oid '%s'", old_oid);
-
-    /* If old_oid is NULL, we don't know yet if a living object with the given
-     * uuid exists, so attempt to retrieve it.
-     */
-    if (old_oid == NULL) {
-        rc = dss_object_get(&dss, &filter, &objects, &objects_count, NULL);
-        if (rc) {
-            dss_filter_free(&filter);
-            LOG_GOTO(clean, rc,
-                     "Error while trying to get objects with uuid '%s'", uuid);
-        }
-    }
 
     rc = dss_deprecated_object_get(&dss, &filter,
                                    &deprec_objects, &deprec_count, NULL);
@@ -1980,12 +1944,12 @@ int phobos_rename(const char *old_oid, const char *uuid, char *new_oid)
                  "Error while trying to get deprecated objects with uuid '%s'",
                  uuid);
 
-    if (deprec_count == 0 && objects_count == 0)
+    if (deprec_count == 0 && objects == NULL)
         LOG_GOTO(clean, rc = -ENOENT,
                  "Couldn't find objects with uuid '%s' to rename", uuid);
 
     /* Rename object */
-    rc = dss_object_rename(&dss, objects, objects_count,
+    rc = dss_object_rename(&dss, objects, objects == NULL ? 0 : 1,
                            deprec_objects, deprec_count, new_oid);
     if (rc)
         LOG_GOTO(clean, rc,
@@ -1995,8 +1959,9 @@ int phobos_rename(const char *old_oid, const char *uuid, char *new_oid)
 clean:
     if (deprec_objects)
         dss_res_free(deprec_objects, deprec_count);
+
     if (objects)
-        dss_res_free(objects, objects_count);
+        object_info_free(objects);
 
     if (old_oid)
         uuid = NULL;

@@ -413,8 +413,7 @@ class RenameOptHandler(BaseOptHandler):
 
     label = 'rename'
     descr = 'Change the oid of an object generation, '\
-            'among living or deprecated objects tables. At least one of '\
-            '\'--oid\' or \'--uid\' must be specified.'
+            'among living or deprecated objects tables.'
 
     def __enter__(self):
         return self
@@ -427,9 +426,9 @@ class RenameOptHandler(BaseOptHandler):
         """Add command options for object rename."""
         super(RenameOptHandler, cls).add_options(parser)
         parser.set_defaults(verb=cls.label)
-        parser.add_argument('--oid', help='Object ID to be renamed')
-        parser.add_argument('--uuid', help='UUID of the object to rename')
+        parser.add_argument('oid', help='Object ID to be renamed')
         parser.add_argument('new_oid', help='New name for the object')
+        parser.add_argument('--uuid', help='UUID of the object to rename')
 
     def exec_rename(self):
         """Rename object"""
