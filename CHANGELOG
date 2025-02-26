@@ -1,5 +1,11 @@
 # CHANGELOG UPDATES
 
+## Next
+ * limited number of write per grouping: the new "fifo_max_write_per_grouping"
+   configuration parameter allows to limit the number of concurrent writes per
+   grouping on one phobosd instance. The default 0 value reproduces the
+   previous unlimited behaviour.
+
 ## 3.0.0
  * WARNING: the db schema moves from 2.2 to 3.0 and a migration is needed
  * WARNING: TLC section names in the configuration file are changed from

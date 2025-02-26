@@ -233,6 +233,11 @@ static void notify_device_request_is_canceled(struct resp_container *respc)
     for (i = 0; i < respc->devices_len; i++) {
         MUTEX_LOCK(&respc->devices[i]->ld_mutex);
         respc->devices[i]->ld_ongoing_io = false;
+        if (respc->devices[i]->ld_ongoing_grouping.grouping) {
+            free(respc->devices[i]->ld_ongoing_grouping.grouping);
+            respc->devices[i]->ld_ongoing_grouping.grouping = NULL;
+        }
+
         MUTEX_UNLOCK(&respc->devices[i]->ld_mutex);
     }
 }
@@ -523,6 +528,10 @@ static int release_medium(struct lrs_sched *sched,
 
     /* Acknowledgement of the request */
     dev->ld_ongoing_io = false;
+    if (dev->ld_ongoing_grouping.grouping) {
+        free(dev->ld_ongoing_grouping.grouping);
+        dev->ld_ongoing_grouping.grouping = NULL;
+    }
 
     MUTEX_UNLOCK(&dev->ld_mutex);
 

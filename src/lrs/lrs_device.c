@@ -579,8 +579,18 @@ static void clean_tosync_array(struct lrs_dev *dev, int rc)
                 /* If it is a partial request, it means that the client has not
                  * finished writing
                  */
-                if (req->reqc->req->release->partial)
+                if (req->reqc->req->release->partial) {
+                    pho_req_release_elt_t *media =
+                        req->reqc->req->release->media[req->medium_index];
+                    const char *grouping = media->grouping;
+
                     dev->ld_ongoing_io = true;
+                    if (grouping) {
+                        dev->ld_ongoing_grouping.grouping = xstrdup(grouping);
+                        dev->ld_ongoing_grouping.socket_id =
+                            req->reqc->socket_id;
+                    }
+                }
             }
         } else {
             req->reqc = NULL;   /* only the last device free reqc */
@@ -1733,9 +1743,11 @@ static int dev_handle_read_write(struct lrs_dev *dev)
     struct medium_switch_context context = {0};
     struct media_info *medium_to_alloc;
     bool sub_request_requeued = false;
+    char *grouping = NULL;
     bool io_ended = false;
     bool cancel = false;
     bool locked = false;
+    int socket_id = 0;
     int rc = 0;
 
     ENTRY;
@@ -1743,6 +1755,14 @@ static int dev_handle_read_write(struct lrs_dev *dev)
     if (cancel_subrequest_on_error(sub_request)) {
         io_ended = true;
         goto out_free;
+    }
+
+    /* saving grouping id */
+    if (pho_request_is_write(dev->ld_sub_request->reqc->req) &&
+        dev->ld_sub_request->reqc->req->walloc->grouping) {
+            grouping =
+                xstrdup(dev->ld_sub_request->reqc->req->walloc->grouping);
+            socket_id = dev->ld_sub_request->reqc->socket_id;
     }
 
     medium_to_alloc =
@@ -1779,8 +1799,16 @@ out_free:
     if (!locked)
         MUTEX_LOCK(&dev->ld_mutex);
 
-    if (!io_ended && !sub_request_requeued)
+    if (!io_ended && !sub_request_requeued) {
         dev->ld_ongoing_io = true;
+        if (grouping) {
+            dev->ld_ongoing_grouping.grouping = grouping;
+            grouping = NULL;
+            dev->ld_ongoing_grouping.socket_id = socket_id;
+        }
+    }
+
+    free(grouping);
 
     dev->ld_sub_request = NULL;
     if (!sub_request_requeued) {
@@ -2059,6 +2087,12 @@ static void dev_thread_end(struct lrs_dev *device)
         dev_cleanup_on_error(device);
 
     device->ld_ongoing_io = false;
+    if (device->ld_ongoing_grouping.grouping) {
+        free(device->ld_ongoing_grouping.grouping);
+        device->ld_ongoing_grouping.grouping = NULL;
+    }
+
+    MUTEX_UNLOCK(&device->ld_mutex);
 }
 
 static int dev_perform_sync(struct lrs_dev *device, struct thread_info *thread)

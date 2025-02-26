@@ -190,6 +190,11 @@ struct sync_params {
                                      */
 };
 
+struct ongoing_grouping {
+    char *grouping;  /**< NULL if no ongoing grouping */
+    int socket_id;   /**< Socket id of the ongoing grouping */
+};
+
 /**
  * Data specific to the device thread.
  *
@@ -258,6 +263,7 @@ struct lrs_dev {
                                                   *  scheduled
                                                   */
     bool                 ld_ongoing_io;         /**< one I/O is ongoing */
+    struct ongoing_grouping ld_ongoing_grouping; /**< track on going grouping */
     bool                 ld_needs_sync;         /**< medium needs to be sync */
     struct thread_info   ld_device_thread;      /**< thread handling the actions
                                                   * executed on the device

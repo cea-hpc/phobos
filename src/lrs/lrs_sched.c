@@ -2658,6 +2658,11 @@ void rwalloc_cancel_DONE_devices(struct req_container *reqc)
             MUTEX_LOCK(&respc->devices[i]->ld_mutex);
             reqc->params.rwalloc.media[i].status = SUB_REQUEST_CANCEL;
             respc->devices[i]->ld_ongoing_io = false;
+            if (respc->devices[i]->ld_ongoing_grouping.grouping) {
+                free(respc->devices[i]->ld_ongoing_grouping.grouping);
+                respc->devices[i]->ld_ongoing_grouping.grouping = NULL;
+            }
+
             MUTEX_UNLOCK(&respc->devices[i]->ld_mutex);
             respc->devices[i] = NULL;
             if (is_write) {

@@ -1,0 +1,141 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2025 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for put --grouping command
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+. $test_dir/utils.sh
+. $test_dir/utils_generation.sh
+
+function setup()
+{
+    setup_tables
+    if [[ -w /dev/changer ]]; then
+        invoke_daemons
+    else
+        invoke_lrs
+    fi
+
+    setup_test_dirs
+    setup_dummy_files 3 1k 1
+    DIRS=(
+        $(mktemp -d ${DIR_TEST}/dir_XXXX)
+        $(mktemp -d ${DIR_TEST}/dir_XXXX)
+        $(mktemp -d ${DIR_TEST}/dir_XXXX)
+    )
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
+function cleanup() {
+    if [[ -w /dev/changer ]]; then
+        waive_daemons
+        drain_all_drives
+    else
+        waive_lrs
+    fi
+
+    drop_tables
+    cleanup_dummy_files
+    cleanup_test_dirs
+}
+
+function phobos_delayed_dev_release()
+{
+    (
+        tmp_gdb_script=$(mktemp)
+        trap "rm $tmp_gdb_script" EXIT
+        cat <<EOF > "$tmp_gdb_script"
+set breakpoint pending on
+break raid_writer_split_setup
+commands
+shell sleep 1
+continue
+end
+run $phobos $*
+EOF
+
+        DEBUGINFOD_URLS="" gdb -batch -x "$tmp_gdb_script" -q python3
+    )
+}
+
+function put_check_grouping() {
+    local dir_tape=$1
+    local g_limit=$2
+
+    waive_lrs
+    export PHOBOS_LRS_fifo_max_write_per_grouping="${g_limit}"
+    invoke_lrs
+
+    PIDS=()
+    for i in `seq 0 2`; do
+        phobos_delayed_dev_release put -f ${dir_tape} --grouping my_group \
+            ${FILES[$i]} ${FILES[$i]}_${dir_tape}_${g_limit} &
+        PIDS+=( $! )
+    done
+
+    for i in `seq 0 2`; do
+        wait ${PIDS[$i]} ||
+            exit_error "Some put failed on dir with grouping limited to" \
+                       "${g_limit}"
+    done
+
+    nb_g_dir=$($phobos ${dir_tape} list -o groupings | grep my_group | wc -l)
+    if (( nb_g_dir != g_limit )) ; then
+        exit_error "${nb_g_dir} ${dir_tape} instead of ${g_limit} limited"
+    fi
+
+}
+
+function test_max_grouping_dir() {
+    put_check_grouping dir 1
+    put_check_grouping dir 2
+    put_check_grouping dir 3
+}
+
+function test_max_grouping_tape() {
+    TAPES=$(get_tapes L6 3 | nodeset -e)
+    DRIVES=$(get_lto_drives 6 3)
+
+    $phobos tape add -t LTO6 ${TAPES}
+    $phobos drive add --unlock ${DRIVES}
+    $phobos tape format --unlock ${TAPES}
+
+    put_check_grouping tape 1
+    put_check_grouping tape 2
+    put_check_grouping tape 3
+}
+
+TEST_SETUP=setup
+
+TESTS=("test_max_grouping_dir")
+if [[ -w /dev/changer ]]; then
+    TESTS+=("test_max_grouping_tape")
+fi
+
+TEST_CLEANUP=cleanup

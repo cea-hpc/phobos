@@ -79,6 +79,11 @@ const struct pho_config_item cfg_lrs[] = {
         .name    = "max_health",
         .value   = "1",
     },
+    [PHO_CFG_LRS_fifo_max_write_per_grouping] = {
+        .section = "lrs",
+        .name    = "fifo_max_write_per_grouping",
+        .value   = "0",
+    },
 };
 
 static int _get_unsigned_long_from_string(const char *value,
