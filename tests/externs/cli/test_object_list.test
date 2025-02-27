@@ -22,10 +22,9 @@
 #
 
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
 
-set -xe
 
 function setup
 {
@@ -108,8 +107,4 @@ function test_object_list_max_width
     content_matching $contents "-o user_md"
 }
 
-trap cleanup EXIT
-setup
-
-test_object_list_pattern
-test_object_list_max_width
+TESTS=("setup; test_object_list_max_width; test_object_list_pattern; cleanup")

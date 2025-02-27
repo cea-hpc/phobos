@@ -118,17 +118,82 @@ static void phobos_construct_status(GString *status_str, int status_filter)
     g_string_append_printf(status_str, "]}");
 }
 
-int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
-                             const char **metadata, int n_metadata,
-                             bool deprecated, struct object_info **objs,
-                             int *n_objs, struct dss_sort *sort)
+static int phobos_construct_obj_filter(const char **res, int n_res,
+                                       const char *uuid, int version,
+                                       bool is_pattern, const char **metadata,
+                                       int n_metadata,
+                                       char **filter)
 {
-    struct dss_filter *filter_ptr = NULL;
-    struct dss_filter filter;
-    struct dss_handle dss;
+    GString *filter_str = NULL;
     GString *metadata_str;
     GString *res_str;
-    int rc;
+    int count = 0;
+    int rc = 0;
+
+    metadata_str = g_string_new(NULL);
+    res_str = g_string_new(NULL);
+
+    count += n_metadata ? 1 : 0;
+    count += version ? 1 : 0;
+    count += n_res ? 1 : 0;
+    count += uuid ? 1 : 0;
+
+    if (count > 0)
+        filter_str = g_string_new("{\"$AND\" : [");
+    /**
+     * If there are at least one metadata, we construct a string containing
+     * each metadata.
+     */
+    if (n_metadata) {
+        phobos_construct_metadata(metadata_str, metadata, n_metadata);
+        g_string_append_printf(filter_str, "%s %s", metadata_str->str,
+                               --count != 0 ? "," : "");
+    }
+
+    /**
+     * If there are at least one resource, we construct a string containing
+     * each request.
+     */
+    if (n_res) {
+        phobos_construct_res(res_str, res, n_res, is_pattern);
+        g_string_append_printf(filter_str, "%s %s", res_str->str,
+                               --count != 0 ? "," : "");
+    }
+
+    if (version)
+        g_string_append_printf(filter_str,
+                               "{\"DSS::OBJ::version\": \"%d\"} %s",
+                               version, --count != 0 ? "," : "");
+
+    if (uuid)
+        g_string_append_printf(filter_str,
+                               "{\"DSS::OBJ::uuid\": \"%s\"} %s",
+                               uuid, --count != 0 ? "," : "");
+
+    if (filter_str != NULL) {
+        g_string_append(filter_str, "]}");
+        *filter = xstrdup(filter_str->str);
+        g_string_free(filter_str, TRUE);
+    }
+
+    g_string_free(metadata_str, TRUE);
+    g_string_free(res_str, TRUE);
+
+    return rc;
+}
+
+int phobos_store_object_list(const char **res, int n_res, const char *uuid,
+                             int version, bool is_pattern,
+                             const char **metadata, int n_metadata,
+                             enum dss_obj_scope scope,
+                             struct object_info **objs, int *n_objs,
+                             struct dss_sort *sort)
+{
+    struct dss_filter *filter_ptr = NULL;
+    char *json_filter = NULL;
+    struct dss_filter filter;
+    struct dss_handle dss;
+    int rc = 0;
 
     rc = pho_cfg_init_local(NULL);
     if (rc && rc != -EALREADY)
@@ -138,54 +203,31 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
     if (rc != 0)
         return rc;
 
-    metadata_str = g_string_new(NULL);
-    res_str = g_string_new(NULL);
+    rc = phobos_construct_obj_filter(res, n_res, uuid, version, is_pattern,
+                                     metadata, n_metadata, &json_filter);
+    if (rc)
+        LOG_RETURN(rc, "Failed to build the object filter");
 
-    /**
-     * If there are at least one metadata, we construct a string containing
-     * each metadata.
-     */
-    if (n_metadata)
-        phobos_construct_metadata(metadata_str, metadata, n_metadata);
-
-    /**
-     * If there are at least one resource, we construct a string containing
-     * each request.
-     */
-    if (n_res)
-        phobos_construct_res(res_str, res, n_res, is_pattern);
-
-    if (n_res || n_metadata) {
-        /**
-         * Finally, if the request has at least one metadata or one resource, we
-         * build the filter in the following way:
-         * if there is more than one metadata or exactly one metadata and
-         * resource, then using an AND is necessary
-         * (which correspond to the first and last "%s").
-         * After that, we add to the filter the resource metadata
-         * if any is present, which are the second and fourth "%s".
-         * Finally, commas may be necessary depending on the number of fields
-         * (metadata or resource) wanted (third "%s").
-         */
-        rc = dss_filter_build(&filter,
-                              "%s %s %s %s %s",
-                              "{\"$AND\" : [",
-                              res_str->str != NULL ? res_str->str : "",
-                              ((n_res > 0) && (n_metadata > 0))
-                                    ? ", " : "",
-                              metadata_str->str != NULL ?
-                                metadata_str->str : "",
-                              "]}");
+    if (json_filter != NULL) {
+        rc = dss_filter_build(&filter, "%s", json_filter);
         if (rc)
             GOTO(err, rc);
-
         filter_ptr = &filter;
+        free(json_filter);
     }
 
-    if (deprecated)
-        rc = dss_deprecated_object_get(&dss, filter_ptr, objs, n_objs, sort);
-    else
+    switch (scope) {
+    case DSS_OBJ_ALIVE:
         rc = dss_object_get(&dss, filter_ptr, objs, n_objs, sort);
+        break;
+    case DSS_OBJ_DEPRECATED_ONLY:
+        rc = dss_deprecated_object_get(&dss, filter_ptr, objs, n_objs, sort);
+        break;
+    case DSS_OBJ_DEPRECATED:
+        rc = dss_get_living_and_deprecated_objects(&dss, filter_ptr, sort, objs,
+                                                   n_objs);
+        break;
+    }
 
     if (rc)
         pho_error(rc, "Cannot fetch objects");
@@ -193,8 +235,6 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
     dss_filter_free(filter_ptr);
 
 err:
-    g_string_free(metadata_str, TRUE);
-    g_string_free(res_str, TRUE);
     dss_fini(&dss);
 
     return rc;

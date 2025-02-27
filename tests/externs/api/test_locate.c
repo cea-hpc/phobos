@@ -107,9 +107,9 @@ static int local_setup(void **state, char *oid)
     pho_xfer_desc_clean(&xfer);
 
     /* get object info */
-    rc = phobos_store_object_list((const char **)&oid, 1,
-                                  false, NULL, 0, false, &pl_state->objs,
-                                  &pl_state->n_objs, NULL);
+    rc = phobos_store_object_list((const char **)&oid, 1, NULL, 0,
+                                  false, NULL, 0, DSS_OBJ_ALIVE,
+                                  &pl_state->objs, &pl_state->n_objs, NULL);
     assert_return_code(rc, -rc);
     assert_int_equal(pl_state->n_objs, 1);
     assert_string_equal(pl_state->objs[0].oid, oid);

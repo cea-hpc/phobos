@@ -658,11 +658,11 @@ class UtilClient:
                                     oids if oids else uuids))
 
     @staticmethod
-    def object_list(res, is_pattern, metadata, deprecated,
-                    **kwargs): # pylint: disable=too-many-arguments,too-many-locals
+    def object_list(res, is_pattern, metadata, scope, **kwargs): # pylint: disable=too-many-arguments,too-many-locals
         """List objects."""
         n_objs = c_int(0)
-        obj_type = ObjectInfo if not deprecated else DeprecatedObjectInfo
+        obj_type = ObjectInfo if scope == DSS_OBJ_ALIVE \
+                        else DeprecatedObjectInfo
         objs = POINTER(obj_type)()
 
         enc_res = [elt.encode('utf-8') for elt in res]
@@ -676,10 +676,11 @@ class UtilClient:
 
         rc = LIBPHOBOS.phobos_store_object_list(c_res_strlist(*enc_res),
                                                 len(enc_res),
+                                                None, 0,
                                                 is_pattern,
                                                 c_md_strlist(*enc_metadata),
                                                 len(metadata),
-                                                deprecated,
+                                                scope,
                                                 byref(objs),
                                                 byref(n_objs),
                                                 sref)

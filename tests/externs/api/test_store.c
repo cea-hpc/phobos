@@ -225,8 +225,9 @@ out_free_mput:
         int n_objs;
 
         for (i = 3; i < argc; ++i) {
-            rc = phobos_store_object_list((const char **) &argv[i], 1, true,
-                                          NULL, 0, false, &objs, &n_objs, NULL);
+            rc = phobos_store_object_list((const char **) &argv[i], 1, NULL, 0,
+                                          true, NULL, 0, DSS_OBJ_ALIVE, &objs,
+                                          &n_objs, NULL);
             if (rc) {
                 pho_error(rc, "LIST '%s' failed", argv[i]);
                 exit(EXIT_FAILURE);

@@ -155,11 +155,14 @@ static int deprecated_from_pg_row(struct dss_handle *handle, void *void_object,
                                   PGresult *res, int row_num)
 {
     struct object_info *object = void_object;
+    char *deprec_time;
     int rc;
 
     rc = create_resource(DSS_OBJECT, handle, void_object, res, row_num);
-    rc = rc ? : str2timeval(get_str_value(res, row_num, 6),
-                            &object->deprec_time);
+    deprec_time = get_str_value(res, row_num, 6);
+
+    if (deprec_time)
+        rc = rc ? : str2timeval(deprec_time, &object->deprec_time);
 
     return rc;
 }

@@ -485,10 +485,12 @@ void pho_xfer_clean(struct pho_xfer_target *xfer);
  * \param[in]       res             Objids or patterns, depending on
  *                                  \a is_pattern.
  * \param[in]       n_res           Number of requested objids or patterns.
+ * \param[in]       uuid            UUID of the object.
+ * \param[in]       version         Version of the object.
  * \param[in]       is_pattern      True if search using POSIX pattern.
  * \param[in]       metadata        Metadata filter.
  * \param[in]       n_metadata      Number of requested metadata.
- * \param[in]       deprecated      true if search from deprecated objects.
+ * \param[in]       scope           List only/also the deprecated objects.
  * \param[out]      objs            Retrieved objects.
  * \param[out]      n_objs          Number of retrieved items.
  *
@@ -497,10 +499,12 @@ void pho_xfer_clean(struct pho_xfer_target *xfer);
  *
  * This must be called after phobos_init.
  */
-int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
+int phobos_store_object_list(const char **res, int n_res, const char *uuid,
+                             int version, bool is_pattern,
                              const char **metadata, int n_metadata,
-                             bool deprecated, struct object_info **objs,
-                             int *n_objs, struct dss_sort *sort);
+                             enum dss_obj_scope scope,
+                             struct object_info **objs, int *n_objs,
+                             struct dss_sort *sort);
 
 /**
  * Release the list retrieved using phobos_store_object_list().

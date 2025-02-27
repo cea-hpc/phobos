@@ -30,6 +30,7 @@ from phobos.cli.common.args import add_list_arguments
 from phobos.cli.common.utils import (check_max_width_is_valid,
                                      check_output_attributes,
                                      handle_sort_option)
+from phobos.core.const import DSS_OBJ_ALIVE, DSS_OBJ_DEPRECATED_ONLY # pylint: disable=no-name-in-module
 from phobos.core.ffi import DeprecatedObjectInfo, ObjectInfo
 from phobos.core.store import UtilClient
 from phobos.output import dump_object_list
@@ -109,11 +110,13 @@ class ObjectOptHandler(BaseResourceOptHandler):
 
         client = UtilClient()
 
+        scope = DSS_OBJ_DEPRECATED_ONLY if self.params.get('deprecated') \
+                else DSS_OBJ_ALIVE
+
         try:
             objs = client.object_list(self.params.get('res'),
                                       self.params.get('pattern'),
-                                      metadata,
-                                      self.params.get('deprecated'),
+                                      metadata, scope,
                                       **kwargs)
 
             if objs:
