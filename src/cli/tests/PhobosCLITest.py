@@ -118,6 +118,9 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['object', 'list', '-o', 'all', '"obj.*"'])
         self.check_cmdline_valid(['object', 'list', '-m', 'user=foo,test=abd'])
         self.check_cmdline_valid(['object', 'list', '--deprecated'])
+        self.check_cmdline_valid(['object', 'list', '--deprecated-only'])
+        self.check_cmdline_valid(['object', 'list', '--version', '1'])
+        self.check_cmdline_valid(['object', 'list', '--uuid', 'uuid1', 'oid'])
         self.check_cmdline_valid(['object', 'list', '--pattern', 'oid',
                                   'blob'])
         self.check_cmdline_valid(['extent', 'list'])

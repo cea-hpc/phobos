@@ -58,7 +58,7 @@ function test_undelete
     $phobos put --family dir /etc/hosts oid1 || error "Object should be put"
     $phobos delete oid1 || error "Object should be deleted"
 
-    uuid=$($phobos object list --deprecated --output uuid oid1)
+    uuid=$($phobos object list --deprecated-only --output uuid oid1)
     $valg_phobos undelete uuid $uuid ||
         error "Object should be undeleted without any error"
     $phobos get oid1 test_tmp || error "Object should be got after undeletion"

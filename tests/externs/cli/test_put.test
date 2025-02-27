@@ -285,14 +285,14 @@ function test_overwrite_and_delete
     $put_func
     $put_func "--overwrite"
 
-    $output_func "1" "--deprecated"
+    $output_func "1" "--deprecated-only"
     $output_func "2"
 
     echo "**** DELETING OBJECT OID3 ****"
     $phobos delete oid3 || error "Object oid3 should be deleted"
 
     local expect=$(printf "1\n2")
-    $output_func "$expect" "--deprecated"
+    $output_func "$expect" "--deprecated-only"
 }
 
 function test_double_overwrite
@@ -307,13 +307,13 @@ function test_double_overwrite
 
     $put_func "--overwrite"
 
-    $output_func "1" "--deprecated"
+    $output_func "1" "--deprecated-only"
     $output_func "2"
 
     $put_func "--overwrite"
 
     local expect=$(printf "1\n2")
-    $output_func "$expect" "--deprecated"
+    $output_func "$expect" "--deprecated-only"
     $output_func "3"
 }
 
@@ -329,13 +329,13 @@ function test_overwrite_metadata
 
     $put_func "--overwrite"
 
-    $output_func '{"a": "b"}' "--deprecated"
+    $output_func '{"a": "b"}' "--deprecated-only"
     $output_func '{"a": "b"}'
 
     $put_func "--metadata c=d --overwrite"
 
     local expect=$(printf '{"a": "b"}\n{"a": "b"}')
-    $output_func "$expect" "--deprecated"
+    $output_func "$expect" "--deprecated-only"
     $output_func '{"c": "d"}'
 }
 

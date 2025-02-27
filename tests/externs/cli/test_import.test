@@ -118,7 +118,7 @@ function generation_compare
 {
     local i=$1
     local ob=$($phobos object list -o version)
-    local depr_ob=$($phobos object list -d -o version | sort -n)
+    local depr_ob=$($phobos object list -D -o version | sort -n)
     case $i in
         0 | 1)
             if [[ "$ob" == "2" && "$depr_ob" == "1" ]]; then

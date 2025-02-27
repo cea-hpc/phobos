@@ -94,10 +94,10 @@ function test_creation_and_access_times()
 
     local ctm3=$($phobos object list --output creation_time oid-time)
     ctm3=$(date -d "$ctm3" +"%s")
-    local ctm2=$($phobos object list --format csv --deprecated --output \
+    local ctm2=$($phobos object list --format csv --deprecated-only --output \
                  version,creation_time oid-time | grep "2," | cut -d',' -f2)
     ctm2=$(date -d "$ctm2" +"%s")
-    local ctm1=$($phobos object list --format csv --deprecated --output \
+    local ctm1=$($phobos object list --format csv --deprecated-only --output \
                  version,creation_time oid-time | grep "1," | cut -d',' -f2)
     ctm1=$(date -d "$ctm1" +"%s")
 

@@ -87,7 +87,7 @@ function test_list_uuid
     $valg_phobos copy list oid1 oid2 --uuid aaaa-bbbb &&
         error "phobos copy list should have failed"
 
-    local uuid_deprecated=$($phobos object list oid2 -d -o uuid)
+    local uuid_deprecated=$($phobos object list oid2 -D -o uuid)
     local count=$($valg_phobos copy list oid3 --uuid $uuid_deprecated | wc -l)
     if [[ $count -ne 0 ]]; then
         error "There should be no copy, got $count"

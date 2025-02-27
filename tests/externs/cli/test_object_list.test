@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -24,11 +24,29 @@
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
 . $test_dir/setup_db.sh
-
+. $test_dir/test_launch_daemon.sh
 
 function setup
 {
-    # start with a clean and empty DB
+    setup_tables
+    invoke_lrs
+
+    DIR=$(mktemp -d /tmp/test_pho.XXXX)
+
+    $phobos dir add $DIR
+    $phobos dir format --unlock $DIR
+}
+
+function cleanup
+{
+    waive_lrs
+    drop_tables
+
+    rm -rf $DIR
+}
+
+function setup_object_md
+{
     setup_tables
 
     $PSQL << EOF
@@ -44,7 +62,7 @@ insert into object (oid, user_md)
 EOF
 }
 
-function cleanup
+function cleanup_object_md
 {
     drop_tables
 }
@@ -107,4 +125,96 @@ function test_object_list_max_width
     content_matching $contents "-o user_md"
 }
 
-TESTS=("setup; test_object_list_max_width; test_object_list_pattern; cleanup")
+function test_object_list_version
+{
+    $phobos put -f dir /etc/hosts oid1
+    $phobos put -f dir --overwrite /etc/hosts oid1
+    $phobos put -f dir /etc/hosts oid2
+
+    [ -z $($valg_phobos object list --version 3) ] ||
+        error "Object list with --version 3 should be empty"
+
+    local res=$($valg_phobos object list --version 2)
+    local count=$(echo "$res" | wc -l)
+
+    if [[ $count -ne 1 ]]; then
+        error "There should be only one object, got $count"
+    fi
+
+    if [[ "$res" != "oid1" ]]; then
+        error "The object should be oid1, got $res"
+    fi
+
+    res=$($valg_phobos object list --version 1 --deprecated | sort)
+    count=$(echo "$res" | wc -l)
+
+    if [[ $count -ne 2 ]]; then
+        error "There should be only two object, got $count"
+    fi
+
+    if [[ "$res" != "$(echo -e "oid1\noid2")" ]]; then
+        error "The objects should be oid1 and oid2, got $res"
+    fi
+}
+
+function test_object_list_uuid
+{
+    $phobos put -f dir /etc/hosts oid1
+    $phobos put -f dir --overwrite /etc/hosts oid1
+    local uuid=$($valg_phobos object list --output uuid oid1)
+    $phobos delete oid1
+    $phobos put -f dir /etc/hosts oid1
+    $phobos put -f dir /etc/hosts oid2
+
+    $valg_phobos object list --uuid $uuid &&
+        error "object list with an UUID without oid should failed"
+    $valg_phobos object list --uuid $uuid oid1 oid2 &&
+        error "object list with an UUID with two oids should failed"
+
+    [ -z $($valg_phobos object list --uuid $uuid oid1)] ||
+        error "Object list with $uuid for oid1 should be empty"
+
+    local res=$($valg_phobos object list --uuid $uuid --deprecated oid1 | wc -l)
+
+    if [[ $res -ne 2 ]]; then
+        error "There should be two objects, got $count"
+    fi
+}
+
+function test_object_list_deprecated
+{
+    $phobos put -f dir /etc/hosts oid1
+    $phobos put -f dir --overwrite /etc/hosts oid1
+
+    local res=$($valg_phobos object list --deprecated | wc -l)
+
+    if [[ $res -ne 2 ]]; then
+        error "There should be only two objects, got $count"
+    fi
+}
+
+function test_object_list_deprecated_only
+{
+    $phobos put -f dir /etc/hosts oid1
+    $phobos put -f dir --overwrite /etc/hosts oid1
+
+    local res=$($valg_phobos object list --deprecated-only --output version)
+    local count=$(echo "$res" | wc -l)
+
+    if [[ $count -ne 1 ]]; then
+        error "There should be only one object, got $count"
+    fi
+
+    if [[ $res -ne 1 ]]; then
+        error "The version should be one, got $res"
+    fi
+}
+
+TESTS=("setup_object_md; \
+            test_object_list_pattern; \
+            test_object_list_max_width; \
+        cleanup_object_md"
+       "setup; test_object_list_version; cleanup"
+       "setup; test_object_list_uuid; cleanup"
+       "setup; test_object_list_deprecated; cleanup"
+       "setup; test_object_list_deprecated_only; cleanup")

@@ -162,7 +162,7 @@ function test_simple_repack
         error "tape stats should have said 3 extents were copied"
     fi
 
-    nb=$($phobos object list --deprecated | wc -l)
+    nb=$($phobos object list --deprecated-only | wc -l)
     if [ $nb -ne 0 ]; then
         error "repack should have deleted deprecated objects"
     fi
@@ -186,7 +186,7 @@ function test_deprec_repack
 
     $phobos $family repack $medium_origin
 
-    nb=$($phobos object list --deprecated | wc -l)
+    nb=$($phobos object list --deprecated-only | wc -l)
     if [ $nb -ne 1 ]; then
         error "repack should not have deleted deprecated object on 'alt' medium"
     fi
@@ -220,7 +220,7 @@ function test_raid1_repack
 
     $phobos $family repack $medium_origin1
 
-    nb=$($phobos object list --deprecated | wc -l)
+    nb=$($phobos object list --deprecated-only | wc -l)
     if [ $nb -ne 0 ]; then
         error "repack should have deleted deprecated objects"
     fi
@@ -247,7 +247,7 @@ function test_orphan_repack
         error "repack should have removed the 'orphan' extent"
     fi
 
-    nb=$($phobos object list --deprecated | wc -l)
+    nb=$($phobos object list --deprecated-only | wc -l)
     if [ $nb -ne 0 ]; then
         error "repack should have deleted deprecated objects"
     fi
@@ -309,7 +309,7 @@ function test_dedup_repack
         error "repack should have copied 1 extent to the tagged medium"
     fi
 
-    nb=$($phobos object list --deprecated | wc -l)
+    nb=$($phobos object list --deprecated-only | wc -l)
     if [ $nb -ne 0 ]; then
         error "repack should have deleted deprecated objects"
     fi
@@ -332,7 +332,7 @@ function test_tagged_repack
         error "repack should have copied 3 extents to the tagged medium"
     fi
 
-    nb=$($phobos object list --deprecated | wc -l)
+    nb=$($phobos object list --deprecated-only | wc -l)
     if [ $nb -ne 0 ]; then
         error "repack should have deleted deprecated objects"
     fi
@@ -368,7 +368,7 @@ function test_simple_repack_library_bis
         error "tape stats should have said 1 extent were copied"
     fi
 
-    nb=$($phobos object list --deprecated | wc -l)
+    nb=$($phobos object list --deprecated-only | wc -l)
     if [ $nb -ne 0 ]; then
         error "repack should have deleted deprecated objects"
     fi

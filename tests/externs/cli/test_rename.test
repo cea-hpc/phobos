@@ -80,7 +80,8 @@ function assert_living_doesnt_exist
 
 function assert_deprecs_exist
 {
-    local nb_deps=$($phobos object list --deprecated oid$1 | grep oid$1 | wc -l)
+    local nb_deps=$($phobos object list --deprecated-only oid$1 | grep oid$1 |
+                    wc -l)
     if [[ "$nb_deps" != "$2" ]]; then
         error "Incorrect number of deprecated object 'oid$1', $2 expected"
     fi
@@ -88,7 +89,7 @@ function assert_deprecs_exist
 
 function assert_deprec_doesnt_exist
 {
-    if [[ ! -z "$($phobos object list --deprecated oid$1)" ]]; then
+    if [[ ! -z "$($phobos object list --deprecated-only oid$1)" ]]; then
         error "Deprecated object 'oid$1' shouldn't exist"
     fi
 }
@@ -117,7 +118,7 @@ function assert_object_didnt_change_uuid
 
 function assert_deprecated_didnt_change_uuid
 {
-    if [[ "$($phobos object list --deprecated oid$1 --output uuid)" != \
+    if [[ "$($phobos object list --deprecated-only oid$1 --output uuid)" != \
         "$2" ]]; then
         error "UUID of 'oid$1' changed during rename"
     fi
@@ -325,7 +326,7 @@ function test_rename_uuid_alive_to_deleted
     $phobos put --family dir /etc/hosts oid${c2} # Deleted
     $phobos delete oid${c2}
     uuid1=$($phobos object list oid${c1} --output uuid)
-    uuid2=$($phobos object list --deprecated oid${c2} --output uuid)
+    uuid2=$($phobos object list --deprecated-only oid${c2} --output uuid)
     $valg_phobos rename --uuid ${uuid1} oid${c2} || \
         error "Rename operation failed"
 
@@ -422,7 +423,7 @@ function test_rename_uuid_updated_to_deleted
     $phobos put --family dir --overwrite /etc/hosts oid${c1}
     $phobos delete oid${c2}
     uuid1=$($phobos object list oid${c1} --output uuid)
-    uuid2=$($phobos object list --deprecated oid${c2} --output uuid)
+    uuid2=$($phobos object list --deprecated-only oid${c2} --output uuid)
     $valg_phobos rename --uuid ${uuid1} oid${c2} || \
         error "Rename operation failed"
 
@@ -435,7 +436,7 @@ function test_rename_uuid_updated_to_deleted
     assert_extent_doesnt_exist $c1
     assert_extents_exist $c2 3
 
-    output=$($phobos object list --deprecated oid${c2} --output uuid)
+    output=$($phobos object list --deprecated-only oid${c2} --output uuid)
     c_uuid1=$(echo "${output}" | grep -c "^${uuid1}$")
     c_uuid2=$(echo "${output}" | grep -c "^${uuid2}$")
     o_lines=$(echo "${output}" | wc -l)
@@ -518,7 +519,7 @@ function test_rename_uuid_deleted_to_nonexistant
 
     $phobos put --family dir /etc/hosts oid${c1}  # Deleted
     $phobos delete oid${c1}
-    uuid1="$($phobos object list --deprecated oid${c1} --output uuid)"
+    uuid1="$($phobos object list --deprecated-only oid${c1} --output uuid)"
     $valg_phobos rename --uuid ${uuid1} oid${c2} ||
         error "Rename operation failed"
 
@@ -545,8 +546,8 @@ function test_rename_uuid_deleted_to_deleted
     $phobos put --family dir /etc/hosts oid${c2} # Deleted
     $phobos delete oid${c1}
     $phobos delete oid${c2}
-    uuid1=$($phobos object list --deprecated oid${c1} --output uuid)
-    uuid2=$($phobos object list --deprecated oid${c2} --output uuid)
+    uuid1=$($phobos object list --deprecated-only oid${c1} --output uuid)
+    uuid2=$($phobos object list --deprecated-only oid${c2} --output uuid)
     $valg_phobos rename --uuid ${uuid1} oid${c2} || \
         error "Rename operation failed"
 
@@ -559,7 +560,7 @@ function test_rename_uuid_deleted_to_deleted
     assert_extent_doesnt_exist $c1
     assert_extents_exist $c2 2
 
-    output=$($phobos object list --deprecated oid${c2} --output uuid)
+    output=$($phobos object list --deprecated-only oid${c2} --output uuid)
     if [[ "${output}" != "${uuid1}"$'\n'"${uuid2}" && \
         "${output}" != "${uuid2}"$'\n'"${uuid1}" ]]; then
         error "UUID of some deprecated objects has been modified"
@@ -577,8 +578,8 @@ function test_rename_uuid_deleted_to_updated
     $phobos put --family dir /etc/hosts oid${c2} # Updated
     $phobos delete oid${c1}
     $phobos put --family dir --overwrite /etc/hosts oid${c2}
-    uuid1=$($phobos object list --deprecated oid${c1} --output uuid)
-    uuid2=$($phobos object list --deprecated oid${c2} --output uuid)
+    uuid1=$($phobos object list --deprecated-only oid${c1} --output uuid)
+    uuid2=$($phobos object list --deprecated-only oid${c2} --output uuid)
     $valg_phobos rename --uuid ${uuid1} oid${c2} || \
         error "Rename operation failed"
 
@@ -592,7 +593,7 @@ function test_rename_uuid_deleted_to_updated
     assert_extents_exist $c2 3
 
     assert_object_didnt_change_uuid $c2 $uuid2
-    output=$($phobos object list --deprecated oid${c2} --output uuid)
+    output=$($phobos object list --deprecated-only oid${c2} --output uuid)
     if [[ "${output}" != "${uuid1}"$'\n'"${uuid2}" && \
         "${output}" != "${uuid2}"$'\n'"${uuid1}" ]]; then
         error "UUID of some deprecated objects has been modified"
@@ -609,7 +610,7 @@ function test_rename_uuid_deleted_to_alive
     $phobos put --family dir /etc/hosts oid${c1} # Deleted
     $phobos put --family dir /etc/hosts oid${c2} # Alive
     $phobos delete oid${c1}
-    uuid1=$($phobos object list --deprecated oid${c1} --output uuid)
+    uuid1=$($phobos object list --deprecated-only oid${c1} --output uuid)
     uuid2=$($phobos object list oid${c2} --output uuid)
     $valg_phobos rename --uuid ${uuid1} oid${c2} || \
         error "Rename operation failed"

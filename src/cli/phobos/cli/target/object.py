@@ -26,11 +26,11 @@ import sys
 
 from phobos.cli.action.list import ListOptHandler
 from phobos.cli.common import BaseResourceOptHandler, env_error_format
-from phobos.cli.common.args import add_list_arguments
+from phobos.cli.common.args import add_list_arguments, add_object_arguments
 from phobos.cli.common.utils import (check_max_width_is_valid,
                                      check_output_attributes,
-                                     handle_sort_option)
-from phobos.core.const import DSS_OBJ_ALIVE, DSS_OBJ_DEPRECATED_ONLY # pylint: disable=no-name-in-module
+                                     handle_sort_option, get_scope)
+from phobos.core.const import DSS_OBJ_ALIVE # pylint: disable=no-name-in-module
 from phobos.core.ffi import DeprecatedObjectInfo, ObjectInfo
 from phobos.core.store import UtilClient
 from phobos.output import dump_object_list
@@ -55,10 +55,7 @@ class ObjectListOptHandler(ListOptHandler):
         ext_attrs.sort()
         add_list_arguments(parser, base_attrs, "oid", sort_option=True,
                            lib_option=False, status_option=False)
-        parser.add_argument('-d', '--deprecated', action='store_true',
-                            help="print deprecated objects, allowing those "
-                                 "attributes for the 'output' option "
-                                 "{" + " ".join(ext_attrs) + "}")
+        add_object_arguments(parser)
         parser.add_argument('-m', '--metadata', type=lambda t: t.split(','),
                             help="filter items containing every given "
                                  "metadata, comma-separated "
@@ -86,9 +83,23 @@ class ObjectOptHandler(BaseResourceOptHandler):
 
     def exec_list(self):
         """List objects."""
-        attrs = list(DeprecatedObjectInfo().get_display_dict().keys()
-                     if self.params.get('deprecated')
-                     else ObjectInfo().get_display_dict().keys())
+        deprecated = self.params.get('deprecated')
+        deprecated_only = self.params.get('deprecated_only')
+        oids = self.params.get('res')
+        uuid = self.params.get('uuid')
+        version = self.params.get('version')
+
+        if len(oids) != 1 and uuid is not None:
+            self.logger.error("only one oid can be provided with the --uuid "
+                              "option")
+            sys.exit(os.EX_USAGE)
+
+        scope = get_scope(deprecated, deprecated_only)
+
+        attrs = list(ObjectInfo().get_display_dict().keys()
+                     if scope == DSS_OBJ_ALIVE
+                     else DeprecatedObjectInfo().get_display_dict().keys())
+
         check_output_attributes(attrs, self.params.get('output'), self.logger)
 
         metadata = []
@@ -101,22 +112,19 @@ class ObjectOptHandler(BaseResourceOptHandler):
                     sys.exit(os.EX_USAGE)
 
         kwargs = {}
-        if self.params.get('deprecated'):
-            kwargs = handle_sort_option(self.params, DeprecatedObjectInfo(),
-                                        self.logger, **kwargs)
-        else:
+        if scope == DSS_OBJ_ALIVE:
             kwargs = handle_sort_option(self.params, ObjectInfo(), self.logger,
                                         **kwargs)
+        else:
+            kwargs = handle_sort_option(self.params, DeprecatedObjectInfo(),
+                                        self.logger, **kwargs)
 
         client = UtilClient()
-
-        scope = DSS_OBJ_DEPRECATED_ONLY if self.params.get('deprecated') \
-                else DSS_OBJ_ALIVE
 
         try:
             objs = client.object_list(self.params.get('res'),
                                       self.params.get('pattern'),
-                                      metadata, scope,
+                                      metadata, uuid, version, scope,
                                       **kwargs)
 
             if objs:
