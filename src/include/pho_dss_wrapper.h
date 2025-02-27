@@ -301,4 +301,21 @@ int dss_get_copy_from_object(struct dss_handle *handle,
                              const struct dss_filter *filter,
                              enum dss_obj_scope scope);
 
+/**
+ * Retrieve objects and deprecated objects from DSS.
+ *
+ * @param[in]   handle  DSS handle
+ * @param[in]   filter  Assembled DSS filtering criteria
+ * @param[in]   sort    Sort the output
+ * @param[out]  objs    List of retrieved objects
+ * @param[out]  n_objs  Numver of objects in the list
+ *
+ * @return 0 or negative error code
+ */
+int dss_get_living_and_deprecated_objects(struct dss_handle *handle,
+                                          const struct dss_filter *filter,
+                                          struct dss_sort *sort,
+                                          struct object_info **objs,
+                                          int *n_objs);
+
 #endif

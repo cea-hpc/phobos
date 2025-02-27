@@ -866,3 +866,39 @@ out:
 
     return rc;
 }
+
+int dss_get_living_and_deprecated_objects(struct dss_handle *handle,
+                                          const struct dss_filter *filter,
+                                          struct dss_sort *sort,
+                                          struct object_info **objs,
+                                          int *n_objs)
+{
+    GString *request = g_string_new("BEGIN;");
+    GString *clause = g_string_new(NULL);
+    int rc = 0;
+
+    if (filter) {
+        rc = clause_filter_convert(handle, clause, filter);
+        if (rc)
+            goto out;
+    }
+
+    g_string_append_printf(request,
+        "SELECT oid, object_uuid, version, user_md, creation_time, _grouping, "
+        "deprec_time FROM deprecated_object UNION "
+        "SELECT oid, object_uuid, version, user_md, creation_time, _grouping, "
+        "Null FROM object %s",
+        clause->str != NULL ? clause->str : "");
+
+    dss_sort2sql(request, sort);
+    g_string_append(request, ";");
+
+    rc = dss_execute_generic_get(handle, DSS_DEPREC, request, (void **) objs,
+                                 n_objs);
+
+out:
+    g_string_free(request, true);
+    g_string_free(clause, true);
+
+    return rc;
+}
