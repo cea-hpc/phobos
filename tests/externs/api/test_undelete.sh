@@ -42,7 +42,7 @@ function setup
         ('test-oid1', '00112233445566778899aabbccddeef1', 2, '{}'),
         ('test-oid2', '00112233445566778899aabbccddeef2', 1, '{}');
 
-    INSERT INTO copy (object_uuid, version copy_name, lyt_info, copy_status)
+    INSERT INTO copy (object_uuid, version, copy_name, lyt_info, copy_status)
         VALUES ('00112233445566778899aabbccddeef1', 1, 'source', '{}',
                 'complete'),
                ('00112233445566778899aabbccddeef1', 2, 'source', '{}',

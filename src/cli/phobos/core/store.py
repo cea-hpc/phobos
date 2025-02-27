@@ -706,10 +706,10 @@ class UtilClient:
             raise EnvironmentError(rc, "Failed to delete objects '%s'" % oids)
 
     @staticmethod
-    def object_undelete(oids, uuids):
+    def object_undelete(oids, uuid):
         """Undelete objects."""
-        n_xfers = c_int(len(oids) + len(uuids))
-        xfer_array_type = XferDescriptor * (len(oids) + len(uuids))
+        n_xfers = c_int(len(oids))
+        xfer_array_type = XferDescriptor * (len(oids))
         xfers = xfer_array_type()
 
         for i, oid in enumerate(oids):
@@ -717,17 +717,13 @@ class UtilClient:
             target = XferTarget * 1
             xfers[i].xd_targets = target()
             xfers[i].xd_targets[0].xt_objid = oid
-
-        for i, uuid in enumerate(uuids):
-            target = XferTarget * 1
-            xfers[i + len(oids)].xd_targets = target()
-            xfers[i + len(oids)].xd_targets[0].xt_objuuid = uuid
+            if uuid is not None:
+                xfers[i].xd_targets[0].xt_objuuid = uuid
 
         rc = LIBPHOBOS.phobos_undelete(xfers, n_xfers)
         if rc:
-            raise EnvironmentError(rc, "Failed to undelete objects by %s '%s'" %
-                                   ("oids" if oids else "uuids",
-                                    oids if oids else uuids))
+            raise EnvironmentError(rc, "Failed to undelete objects '%s'" %
+                                   oids)
 
     @staticmethod
     def object_list(res, is_pattern, metadata, uuid, version, scope, **kwargs): # pylint: disable=too-many-arguments,too-many-locals

@@ -368,45 +368,6 @@ class DeleteOptHandler(BaseOptHandler):
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
-class UuidOptHandler(BaseOptHandler):
-    """Handler to select objects with a list of uuids"""
-
-    label = 'uuid'
-    descr = 'select uuids'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add command options."""
-        super(UuidOptHandler, cls).add_options(parser)
-
-        parser.add_argument('uuids', nargs='+',
-                            help='Object UUIDs to undelete')
-
-class OidOptHandler(BaseOptHandler):
-    """Handler to select objects with a list of oids"""
-
-    label = 'oid'
-    descr = 'select oids'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add command options."""
-        super(OidOptHandler, cls).add_options(parser)
-
-        parser.add_argument('oids', nargs='+',
-                            help='Object OIDs to undelete')
 
 class UndeleteOptHandler(BaseOptHandler):
     """Undelete objects handler."""
@@ -414,10 +375,6 @@ class UndeleteOptHandler(BaseOptHandler):
     label = 'undelete'
     alias = ['undel']
     descr = 'Move back deprecated objects into phobos namespace'
-    verbs = [
-        UuidOptHandler,
-        OidOptHandler,
-    ]
 
     def __enter__(self):
         return self
@@ -425,23 +382,31 @@ class UndeleteOptHandler(BaseOptHandler):
     def __exit__(self, exc_type, exc_value, traceback):
         pass
 
-    def exec_uuid(self):
-        """Undelete by uuids"""
+    @classmethod
+    def add_options(cls, parser):
+        """Add command options for undelete object."""
+        super(UndeleteOptHandler, cls).add_options(parser)
+        parser.set_defaults(verb=cls.label)
+        parser.add_argument('oids', nargs='+', help='Object OIDs to undelete')
+        parser.add_argument('--uuid', help='UUID of the object')
+
+    def exec_undelete(self):
+        """Undelete objetc"""
         client = UtilClient()
+        oids = self.params.get('oids')
+        uuid = self.params.get('uuid')
+
+        if len(oids) > 1 and uuid is not None:
+            self.logger.error("Only one oid can be provided with the --uuid "
+                              "option")
+            sys.exit(os.EX_USAGE)
+
         try:
-            client.object_undelete((), self.params.get('uuids'))
+            client.object_undelete(oids, uuid)
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
-    def exec_oid(self):
-        """Undelete by oids"""
-        client = UtilClient()
-        try:
-            client.object_undelete(self.params.get('oids'), ())
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
 
 class RenameOptHandler(BaseOptHandler):
     """Rename object handler"""

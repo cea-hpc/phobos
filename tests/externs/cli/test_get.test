@@ -193,7 +193,7 @@ function test_creation_and_access_times()
     [ $atm3 -eq $atm ] \
         || error "Access time should not be updated on delete operation"
 
-    $phobos undel oid oid-time
+    $phobos undel --uuid $uuid oid-time
     atm=$($phobos copy list oid-time --output access_time)
     atm=$(date -d "$atm" +"%s")
     [ $atm3 -eq $atm ] \

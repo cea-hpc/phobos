@@ -55,7 +55,7 @@ static bool test_undelete(void)
 
     /* test-oid1 */
     targets[0].xt_objuuid = "00112233445566778899aabbccddeef1";
-    targets[0].xt_objid = NULL;
+    targets[0].xt_objid = "test-oid1";
     xfers[0].xd_ntargets = 1;
     xfers[0].xd_targets = &targets[0];
     xfers[0].xd_op = PHO_XFER_OP_UNDEL;
@@ -63,7 +63,7 @@ static bool test_undelete(void)
 
     /* test-oid2 */
     targets[1].xt_objuuid = "00112233445566778899aabbccddeef2";
-    targets[1].xt_objid = NULL;
+    targets[1].xt_objid = "test-oid2";
     xfers[1].xd_ntargets = 1;
     xfers[1].xd_targets = &targets[1];
     xfers[1].xd_op = PHO_XFER_OP_UNDEL;

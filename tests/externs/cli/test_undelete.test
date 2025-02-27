@@ -1,0 +1,124 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2025 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for undeletion feature
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+
+
+function dir_setup
+{
+    DIR="$(mktemp -d /tmp/test.pho.XXXX)"
+    $phobos dir add $DIR
+    $phobos dir format --fs posix --unlock $DIR
+}
+
+function setup
+{
+    setup_tables
+    invoke_lrs
+    dir_setup
+}
+
+function cleanup
+{
+    waive_lrs
+    rm -rf $DIR
+    drop_tables
+}
+
+function test_undelete
+{
+    $phobos put --family dir /etc/hosts oid1 || error "Object should be put"
+    $phobos delete oid1 || error "Object should be deleted"
+
+    $valg_phobos undelete oid1 ||
+        error "Object should be undeleted without any error"
+    $phobos get oid1 test_tmp || error "Object should be got after undeletion"
+    rm test_tmp
+
+    [ -z $($phobos object list oid1) ] &&
+        error "Object should be listed, because it is undeleted"
+
+    # With a wrong OID
+    $valg_phobos undelete "unexisting-fantasy-oid" &&
+        error "Undeleting an unexisting oid should failed"
+
+    # With an OID already in alive table
+    $phobos put --family dir /etc/hosts oid2 || error "Object should be put"
+    $phobos put --family dir --overwrite /etc/hosts oid2 ||
+        error "Object should be put"
+    local uuid2=$($phobos object list --output uuid oid2)
+
+    $valg_phobos undelete oid2 &&
+        error "Undeleting an oid already alive should failed"
+
+    # With an OID with multiple version, should get the latest version
+    $phobos delete oid2 || error "Object should be deleted"
+    $valg_phobos undelete oid2 --uuid $uuid2 ||
+        error "Object should be undeleted without any error"
+    $phobos get oid2 test_tmp || error "Object should be got after undeletion"
+    rm test_tmp
+
+    [ -z $($phobos object list oid2) ] &&
+        error "Object should be listed, because it is undeleted"
+
+    local version=$($phobos object list --output version oid2)
+    if [[ $version -ne 2 ]]; then
+        error "Object version should be 2, got $version"
+    fi
+
+    # With OID with two generations, should failed
+    $phobos put --family dir /etc/hosts oid3 ||
+        error "Object should be put"
+    local uuid3=$($phobos object list --output uuid oid3)
+    $phobos delete oid3 ||
+        error "Object should be deleted"
+    $phobos put --family dir /etc/hosts oid3 ||
+        error "Object should be put"
+    $phobos delete oid3 ||
+        error "Object should be deleted"
+    $valg_phobos undelete oid3 &&
+        error "Undeleting an oid with two deprecated uuid should failed"
+
+    # With an OID and UUID_LEN
+    $valg_phobos undelete oid3 --uuid $uuid3 ||
+        error "Object should be undeleted without any error"
+
+    $phobos get oid3 test_tmp ||
+        error "Object get should have succeeded after undelete"
+    rm test_tmp
+
+    [ -z $($phobos object list oid3) ] &&
+        error "Object should be listed, because it is undeleted"
+
+    local uuid=$($phobos object list --output uuid oid3)
+    if [[ $uuid != $uuid3 ]]; then
+        error "Object UUID should be $uuid3, got $uuid"
+    fi
+}
+
+TESTS=("setup; test_undelete; cleanup")
