@@ -1281,6 +1281,7 @@ static int dev_handle_format(struct lrs_dev *dev)
     struct media_info *medium_to_format;
     struct req_container *reqc;
     bool req_requeued = false;
+    bool lost_tlc = false;
     int rc;
 
     reqc = dev->ld_sub_request->reqc;
@@ -1311,8 +1312,11 @@ static int dev_handle_format(struct lrs_dev *dev)
 
     rc = dev_medium_switch(dev, medium_to_format, &context);
 
+    if (rc == -ECONNREFUSED || rc == -EPIPE)
+        lost_tlc = true;
+
 check_health:
-    if (rc) {
+    if (rc && !lost_tlc) {
         if (context.failure_on_device)
             decrease_device_health(dev);
 
@@ -1339,7 +1343,8 @@ check_health:
         }
     }
 
-    if (rc && medium_to_format->health > 0) {
+    /* Don't requeued the request if we can't contact the TLC */
+    if (rc && !lost_tlc && medium_to_format->health > 0) {
         /* Push format request back if the error is not caused by the medium */
         /* TODO: use sched retry queue */
         tsqueue_push(dev->sched_req_queue, reqc);
@@ -1358,8 +1363,13 @@ out_response:
         increase_device_health(dev);
         queue_format_response(dev->ld_response_queue, reqc);
     } else {
-        decrease_device_health(dev);
-        decrease_medium_health(dev, medium_to_format);
+        /* We don't want to set to failed the device and medium when we can't
+         * reach the TLC as it's not a device/medium error.
+         */
+        if (!lost_tlc) {
+            decrease_device_health(dev);
+            decrease_medium_health(dev, medium_to_format);
+        }
         queue_error_response(dev->ld_response_queue, rc, reqc);
     }
 
@@ -1558,7 +1568,8 @@ static void handle_rwalloc_sub_request_result(struct lrs_dev *dev,
     }
 
     /* sub_request_rc is not null */
-    if (rwalloc_can_be_requeued(sub_request)) {
+    if (sub_request_rc != -ECONNREFUSED && sub_request_rc != -EPIPE &&
+        rwalloc_can_be_requeued(sub_request)) {
         /* requeue failed request in the scheduler */
         *sub_request_requeued = true;
 
@@ -2338,8 +2349,13 @@ static int dev_medium_switch(struct lrs_dev *dev,
     rc = dev_empty(dev);
     if (rc) {
         dev_id = lrs_dev_id(dev);
-        context->failure_on_device = true;
-        dev->ld_sub_request->failure_on_medium = true;
+        /* Don't set device and medium to failed, if we can't contact the TLC or
+         * we lost contact with the TLC during the operation.
+         */
+        if (rc != -ECONNREFUSED && rc != -EPIPE) {
+            context->failure_on_device = true;
+            dev->ld_sub_request->failure_on_medium = true;
+        }
         LOG_RETURN(rc,
                    "failed to empty device (family '%s', name '%s', library "
                    "'%s') to load medium (family '%s', name '%s', library "
@@ -2362,7 +2378,11 @@ static int dev_medium_switch(struct lrs_dev *dev,
     if (rc) {
         dev_id = lrs_dev_id(dev);
         // FIXME what to do about this?
-        context->failure_on_device = true;
+        /* Don't set the device to failed, if we can't contact the TLC or we
+         * lost contact with the TLC during the operation.
+         */
+        if (rc != -ECONNREFUSED && rc != -EPIPE)
+            context->failure_on_device = true;
         LOG_RETURN(rc,
                    "failed to load medium (family '%s', name '%s', library "
                    "'%s') in device (family '%s', name '%s', library '%s') for "

@@ -852,6 +852,92 @@ function test_health_device_failure()
     unset PHOBOS_LTFS_cmd_mount
 }
 
+function test_health_format_without_tlc()
+{
+    local drive=$(get_lto_drives 5 1)
+    local tape=($(get_tapes L5 2 | nodeset -e))
+
+    export PHOBOS_LRS_max_health=1
+
+    setup_tables
+    invoke_daemons
+
+    $phobos drive add --unlock $drive
+    $phobos tape add --unlock --type LTO5 ${tape[@]}
+
+    # Check that the load operation during the format fails without setting the
+    # medium/device to failed.
+    waive_tlc
+    $phobos tape format ${tape[0]} && error "Format should have failed"
+
+    $phobos tape list -o adm_status ${tape[0]} | grep "unlocked" ||
+        error "Tape should be unlocked"
+    $phobos drive list -o adm_status | grep "unlocked" ||
+        error "Drive should be unlocked"
+
+    invoke_tlc
+    $phobos tape format ${tape[0]}
+    # Check that the unload operation during the format fails without setting
+    # the medium/device to failed.
+    waive_tlc
+    $phobos tape format ${tape[1]} && error "Format should have failed"
+
+    $phobos tape list -o adm_status ${tape[1]} | grep "unlocked" ||
+        error "Tape should be unlocked"
+    $phobos drive list -o adm_status | grep "unlocked" ||
+        error "Drive should be unlocked"
+
+    waive_lrs
+    cleanup
+    unset PHOBOS_LRS_max_health
+}
+
+function test_health_put_without_tlc()
+{
+    local drive=$(get_lto_drives 5 1)
+    local tape=($(get_tapes L5 2 | nodeset -e))
+
+    export PHOBOS_LRS_max_health=1
+
+    setup_tables
+    invoke_daemons
+
+    $phobos drive add --unlock $drive
+    $phobos tape add --type LTO5 -T load ${tape[0]}
+    $phobos tape add --type LTO5 -T unload ${tape[1]}
+    $phobos tape format --unlock ${tape[@]}
+    $phobos drive unload $drive
+
+    # Check that the load operation during the put fails without setting the
+    # medium/device to failed.
+    waive_tlc
+    $phobos put -T load /etc/hosts oid && error "Put should have failed"
+
+    $phobos tape list -o adm_status ${tape[0]} | grep "unlocked" ||
+        error "Tape should be unlocked"
+    $phobos drive list -o adm_status | grep "unlocked" ||
+        error "Drive should be unlocked"
+
+    invoke_tlc
+    # Remove the lock on tape[0]
+    $phobos lock clean --force -t media
+    $phobos drive load $drive ${tape[0]}
+
+    # Check that the unload operation during the put fails without setting
+    # the medium/device to failed.
+    waive_tlc
+    $phobos put -T unload /etc/hosts oid && error "Put should have failed"
+
+    $phobos tape list -o adm_status ${tape[1]} | grep "unlocked" ||
+        error "Tape should be unlocked"
+    $phobos drive list -o adm_status | grep "unlocked" ||
+        error "Drive should be unlocked"
+
+    waive_lrs
+    cleanup
+    unset PHOBOS_LRS_max_health
+}
+
 function test_ralloc_2_of_3_dir()
 {
     local dir1=$(mktemp -d)
@@ -952,6 +1038,8 @@ if [[ -w /dev/changer ]]; then
         test_health
         test_health_medium_failure
         test_health_device_failure
+        test_health_format_without_tlc
+        test_health_put_without_tlc
         test_ralloc_2_of_3_tape
     )
 fi
