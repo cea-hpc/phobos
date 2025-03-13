@@ -32,6 +32,13 @@ from phobos.core.const import (DSS_STATUS_FILTER_ALL, # pylint: disable=no-name-
                                DSS_STATUS_FILTER_READABLE)
 from phobos.core.ffi import LayoutInfo
 
+def check_max_width_is_valid(value):
+    """Check that the width 'value' is greater than the one of '...}'"""
+    ivalue = int(value)
+    if ivalue <= len("...}"):
+        raise ArgumentTypeError("%s is an invalid positive int value" % value)
+    return ivalue
+
 def check_output_attributes(attrs, out_attrs, logger):
     """Check that out_attrs are valid"""
     attrs.extend(['*', 'all'])
