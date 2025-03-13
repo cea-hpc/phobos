@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# pylint: disable=too-many-lines
 
 #
 #  All rights reserved (c) 2014-2025 CEA/DAM.
@@ -61,6 +60,7 @@ from phobos.cli.target.dir import DirOptHandler
 from phobos.cli.target.drive import DriveOptHandler
 from phobos.cli.target.extent import ExtentOptHandler
 from phobos.cli.target.lib import LibOptHandler
+from phobos.cli.target.lock import LocksOptHandler
 from phobos.cli.target.object import ObjectOptHandler
 from phobos.cli.target.rados import RadosPoolOptHandler
 from phobos.cli.target.tape import TapeOptHandler
@@ -930,68 +930,6 @@ class PingOptHandler(BaseOptHandler):
             sys.exit(abs(err.errno))
 
         self.logger.info("Ping sent to TLC %s successfully", self.library)
-
-
-class CleanOptHandler(BaseOptHandler):
-    """Clean locks"""
-    label = 'clean'
-    descr = 'clean locks options'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific clean options."""
-        super(CleanOptHandler, cls).add_options(parser)
-        parser.add_argument('--global', action='store_true',
-                            help='target all locks (can only be used '
-                                 'with --force). If not set, '
-                                 'only target localhost locks')
-        parser.add_argument('--force', action='store_true',
-                            help='clean locks even if phobosd is on')
-        parser.add_argument('-t', '--type',
-                            help='lock type to clean, between [device, media, '
-                                 'object, media_update]',
-                            choices=["device", "media",
-                                     "object", "media_update"])
-        parser.add_argument('-f', '--family',
-                            help='Family of locked ressources to clean, '
-                                 'between [dir, tape]; object type '
-                                 'is not supported with this option',
-                            choices=["dir", "tape"])
-        parser.add_argument('-i', '--ids', nargs='+', help='lock id(s)')
-
-class LocksOptHandler(BaseOptHandler):
-    """Locks table actions and options"""
-    label = 'lock'
-    descr = 'handle lock table'
-    verbs = [CleanOptHandler]
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    def exec_clean(self):
-        """Release locks with given arguments"""
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                adm.clean_locks(self.params.get('global'),
-                                self.params.get('force'),
-                                self.params.get('type'),
-                                self.params.get('family'),
-                                self.params.get('ids'))
-
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-        self.logger.info("Clean command executed successfully")
 
 
 HANDLERS = [
