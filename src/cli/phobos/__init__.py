@@ -47,22 +47,19 @@ from phobos.core.const import (rsc_family2str, # pylint: disable=no-name-in-modu
                                PHO_RSC_TAPE, PHO_RSC_NONE,
                                PHO_OPERATION_INVALID,
                                str2operation_type)
-from phobos.core.ffi import (DevInfo, LayoutInfo,
-                             MediaInfo, ResourceFamily,
+from phobos.core.ffi import (DevInfo, MediaInfo, ResourceFamily,
                              Id, LogFilter, Timeval)
 from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
-from phobos.output import dump_object_list
 
-from phobos.cli.action.list import ListOptHandler
 from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
                                DSSInteractHandler, BaseResourceOptHandler,
                                env_error_format, XferOptHandler)
-from phobos.cli.common.args import (add_list_arguments, add_put_arguments)
-from phobos.cli.common.utils import (check_output_attributes,
-                                     handle_sort_option, set_library)
+from phobos.cli.common.args import add_put_arguments
+from phobos.cli.common.utils import set_library
 from phobos.cli.target.copy import CopyOptHandler
 from phobos.cli.target.dir import DirOptHandler
 from phobos.cli.target.drive import DriveOptHandler
+from phobos.cli.target.extent import ExtentOptHandler
 from phobos.cli.target.lib import LibOptHandler
 from phobos.cli.target.object import ObjectOptHandler
 from phobos.cli.target.rados import RadosPoolOptHandler
@@ -561,47 +558,6 @@ class LocateOptHandler(BaseOptHandler):
             sys.exit(abs(err.errno))
 
 
-class ExtentListOptHandler(ListOptHandler):
-    """
-    Specific version of the 'list' command for extent, with a couple
-    extra-options.
-    """
-    descr = "list all extents"
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add extent-specific options."""
-        super(ExtentListOptHandler, cls).add_options(parser)
-
-        attr = list(LayoutInfo().get_display_dict().keys())
-        attr.sort()
-        parser.add_argument('-c', '--copy-name',
-                            help="Copy's name of the extents to list")
-        parser.add_argument('-o', '--output', type=lambda t: t.split(','),
-                            default='oid',
-                            help=("attributes to output, comma-separated, "
-                                  "choose from {" + " ".join(attr) + "} "
-                                  "default: %(default)s)"))
-        parser.add_argument('-n', '--name',
-                            help="filter on one medium name")
-        parser.add_argument('--degroup', action='store_true',
-                            help="used to list by extent, not by object")
-        parser.add_argument('-p', '--pattern', action='store_true',
-                            help="filter using POSIX regexp instead of "
-                                 "exact extent")
-        attr_sort = list(LayoutInfo().get_sort_fields().keys())
-        attr_sort.sort()
-        parser.add_argument('--sort',
-                            help=("sort the output with, choose from {"
-                                  + " ".join(attr_sort) + "} "))
-        parser.add_argument('--rsort',
-                            help=("sort the output in descending "
-                                  "order, choose from {" + " ".join(attr_sort)
-                                  + "} "))
-        parser.add_argument('--library',
-                            help="filter the output by library name")
-
-
 class FairShareOptHandler(BaseOptHandler):
     """Handler for fair_share configuration parameters"""
     label = "fair_share"
@@ -974,49 +930,6 @@ class PingOptHandler(BaseOptHandler):
             sys.exit(abs(err.errno))
 
         self.logger.info("Ping sent to TLC %s successfully", self.library)
-
-
-class ExtentOptHandler(BaseResourceOptHandler):
-    """Shared interface for extents."""
-    label = 'extent'
-    descr = 'handle extents'
-    verbs = [
-        ExtentListOptHandler
-    ]
-
-    def exec_list(self):
-        """List extents."""
-        attrs = list(LayoutInfo().get_display_dict().keys())
-        check_output_attributes(attrs, self.params.get('output'), self.logger)
-
-        kwargs = {}
-        if self.params.get('library'):
-            kwargs['library'] = self.params.get('library')
-
-        if self.params.get('copy_name'):
-            kwargs['copy_name'] = self.params.get('copy_name')
-
-        kwargs = handle_sort_option(self.params, LayoutInfo(), self.logger,
-                                    **kwargs)
-
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                obj_list, p_objs, n_objs = adm.layout_list(
-                    self.params.get('res'),
-                    self.params.get('pattern'),
-                    self.params.get('name'),
-                    self.params.get('degroup'),
-                    **kwargs)
-
-                if len(obj_list) > 0:
-                    dump_object_list(obj_list, attr=self.params.get('output'),
-                                     fmt=self.params.get('format'))
-
-                adm.layout_list_free(p_objs, n_objs)
-
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
 
 
 class CleanOptHandler(BaseOptHandler):
