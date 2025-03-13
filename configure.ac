@@ -148,6 +148,7 @@ AC_CONFIG_FILES([Makefile
          tests/externs/api/Makefile
          tests/externs/cli/Makefile
          tests/prod/Makefile
+         doc/man/Makefile
          tape_library_certification/Makefile
          phobos.spec
 ])

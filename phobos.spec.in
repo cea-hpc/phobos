@@ -167,6 +167,7 @@ register-python-argcomplete phobos > %{buildroot}/%{_sysconfdir}/bash_completion
 %{_sbindir}/phobos_tape_library_mtx_test.bash
 %{_sbindir}/phobos_tlc
 %{_unitdir}/phobos_tlc.service
+%{_mandir}/man1/*
 
 %config(noreplace) %{_sysconfdir}/phobos.conf
 %config(noreplace) %{_sysconfdir}/bash_completion.d/phobos-argcomplete.sh

@@ -50,3 +50,5 @@ gen-proto.stamp
 /src/lrs/phobosd
 /src/tlc/tlc
 /tape_library_certification/phobos_tape_library_test
+doc/man/build/doctrees/
+gen-man.stamp
