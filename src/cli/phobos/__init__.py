@@ -41,8 +41,7 @@ import os.path
 from ctypes import (c_int, c_long, byref, pointer, c_bool)
 
 from phobos.core.admin import Client as AdminClient
-import phobos.core.cfg as cfg
-from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=no-name-in-module
+from phobos.core.const import (rsc_family2str, # pylint: disable=no-name-in-module
                                DSS_OBJ_ALIVE, DSS_OBJ_DEPRECATED,
                                DSS_OBJ_DEPRECATED_ONLY,
                                PHO_RSC_TAPE, PHO_RSC_NONE,
@@ -64,6 +63,7 @@ from phobos.cli.common.utils import (check_output_attributes,
 from phobos.cli.target.copy import CopyOptHandler
 from phobos.cli.target.dir import DirOptHandler
 from phobos.cli.target.drive import DriveOptHandler
+from phobos.cli.target.lib import LibOptHandler
 from phobos.cli.target.rados import RadosPoolOptHandler
 from phobos.cli.target.tape import TapeOptHandler
 
@@ -335,50 +335,6 @@ class StoreMPutHandler(StorePutHandler):
         self.logger.error("'mput' is a deprecated command, use 'put --file' "
                           "instead")
         sys.exit(os.EX_USAGE)
-
-
-class LibScanOptHandler(BaseOptHandler):
-    """Scan a library and display retrieved information."""
-    label = 'scan'
-    descr = 'Display the status of the library'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(LibScanOptHandler, cls).add_options(parser)
-        parser.add_argument('res', nargs='*',
-                            help="Library(ies) to scan. If not given, will "
-                                 "fetch instead the default tape library from "
-                                 "configuration")
-        parser.add_argument('--refresh', action='store_true',
-                            help="The library module refreshes its internal "
-                                 "cache before sending the data")
-
-class LibRefreshOptHandler(BaseOptHandler):
-    """Refresh the library internal cache"""
-    label = 'refresh'
-    descr = 'Refresh the library internal cache'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(LibRefreshOptHandler, cls).add_options(parser)
-        parser.add_argument('res', nargs='*',
-                            help="Library(ies) to refresh. If not given, will "
-                                 "fetch instead the default tape library from "
-                                 "configuration")
 
 
 def check_max_width_is_valid(value):
@@ -1163,75 +1119,6 @@ class ExtentOptHandler(BaseResourceOptHandler):
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
-class LibOptHandler(BaseResourceOptHandler):
-    """Tape library options and actions."""
-    label = 'lib'
-    descr = 'handle tape libraries'
-    # for now, this class in only used for tape library actions, but in case
-    # it is used for other families, set family as None
-    family = ResourceFamily(ResourceFamily.RSC_TAPE)
-    verbs = [
-        LibScanOptHandler,
-        LibRefreshOptHandler,
-    ]
-
-    def exec_scan(self):
-        """Scan this lib and display the result"""
-        libs = self.params.get("res")
-        if not libs:
-            libs = [cfg.get_default_library(ResourceFamily.RSC_TAPE)]
-
-        with_refresh = self.params.get('refresh')
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                for lib in libs:
-                    lib_data = adm.lib_scan(PHO_LIB_SCSI, lib, with_refresh)
-                    # FIXME: can't use dump_object_list yet as it does not play
-                    # well with unstructured dict-like data (relies on getattr)
-                    self._print_lib_data(lib_data)
-        except EnvironmentError as err:
-            self.logger.error("%s, will abort 'lib scan'", err)
-            sys.exit(abs(err.errno))
-
-    def exec_refresh(self):
-        """Refresh the library internal cache"""
-        libs = self.params.get("res")
-        if not libs:
-            libs = [cfg.get_default_library(ResourceFamily.RSC_TAPE)]
-
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                for lib in libs:
-                    adm.lib_refresh(PHO_LIB_SCSI, lib)
-        except EnvironmentError as err:
-            self.logger.error("%s, will abort 'lib refresh'", err)
-            sys.exit(abs(err.errno))
-
-    @staticmethod
-    def _print_lib_data(lib_data):
-        """Print library data in a human readable format"""
-        for elt in lib_data:
-            done = set(["type"])
-            line = []
-            flags = []
-            line.append("%s:" % (elt.get("type", "element"),))
-            for key in "address", "source_address":
-                if key in elt:
-                    line.append("%s=%#x" % (key, elt[key]))
-                    done.add(key)
-
-            for key in sorted(elt):
-                value = elt[key]
-                if key in done:
-                    continue
-                if isinstance(value, bool):
-                    if value:
-                        # Flags are printed after the other properties
-                        flags.append(key)
-                else:
-                    line.append("%s=%r" % (key, str(value)))
-            line.extend(flags)
-            print(" ".join(line))
 
 class CleanOptHandler(BaseOptHandler):
     """Clean locks"""
