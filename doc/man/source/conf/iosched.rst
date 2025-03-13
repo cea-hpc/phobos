@@ -1,5 +1,5 @@
-Configuring the I/O scheduling
-==============================
+[iosched] - Configuring the I/O scheduling
+==========================================
 
 This section explains how to configure the I/O scheduling in Phobos. Currently,
 I/O scheduling algorithms are supported for the **dir** and **tape** family.

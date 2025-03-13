@@ -1,5 +1,5 @@
-Configuring the store
-=====================
+[store] - Configuring the store
+===============================
 
 This section explain how to configure the store operations in Phobos. All
 store-related parameters should be listed under the **[store]** section.

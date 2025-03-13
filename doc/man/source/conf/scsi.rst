@@ -1,5 +1,5 @@
-Configuring the SCSI protocol
-=============================
+[scsi] - Configuring the SCSI protocol
+======================================
 
 This section explains how to configure the SCSI protocol in Phobos. All
 SCSI-related parameters should be listed under the **[scsi]** section.
@@ -129,8 +129,8 @@ Example:
     retry_short = 1
 
 
-Configuring the SCSI library
-============================
+[lib_scsi] - Configuring the SCSI library
+=========================================
 
 This section explains how to configure the SCSI library in Phobos. All SCSI
 library-related parameters should be listed under the **[lib_scsi]** section.

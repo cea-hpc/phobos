@@ -1,5 +1,5 @@
-Configuring how to connect to the database
-==========================================
+[dss] - Configuring how to connect to the database
+==================================================
 
 This section explains how Phobos' connect to the database. All database-related
 parameters should be listed under the **[dss]** section.

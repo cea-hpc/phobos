@@ -1,5 +1,5 @@
-Configuring LTFS (Linear Tape File System)
-==========================================
+[ltfs] - Configuring LTFS (Linear Tape File System)
+===================================================
 
 This section explains how to use LTFS
 (https://github.com/LinearTapeFileSystem/ltfs) within Phobos. All LTFS-related

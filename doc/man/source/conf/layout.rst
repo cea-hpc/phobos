@@ -1,5 +1,5 @@
-Configuring the layouts
-=======================
+[layout_raid1|raid4] - Configuring the layouts
+==============================================
 
 This section explains how to configure the available layouts in Phobos.
 Currently, Phobos supports two layouts: **raid1** and **raid4**. All

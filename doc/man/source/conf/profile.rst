@@ -1,5 +1,5 @@
-Creating profiles in Phobos
-===========================
+[profile] - Creating profiles in Phobos
+=======================================
 
 This section explains how to create a profile in Phobos. Within a profile, you
 can define a preset of parameters for the "phobos put" command. Multiple

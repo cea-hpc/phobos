@@ -1,5 +1,5 @@
-Configuring the I/O
-===================
+[io] - Configuring the I/O
+==========================
 
 This section explains how to configure the I/O operations in Phobos. All I/O
 related parameters should be listed under the **[io]** section. The available

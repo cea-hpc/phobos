@@ -1,5 +1,5 @@
-Configuring the LRS (Local Resource Scheduler)
-==============================================
+[lrs] - Configuring the LRS (Local Resource Scheduler)
+======================================================
 
 This section explains how to configure the Local Resource Scheduler (LRS) in
 Phobos. All LRS-related parameters should be listed under the **[lrs]** section.

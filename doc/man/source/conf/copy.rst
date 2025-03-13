@@ -1,5 +1,5 @@
-Configuring the object copies
-=============================
+[copy] - Configuring the object copies
+======================================
 
 This section explains how to configure the copies in Phobos. All the
 copy-related parameters should be listed under the **[copy]** section.

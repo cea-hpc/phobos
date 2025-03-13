@@ -1,5 +1,5 @@
-Configuring the storage family
-==============================
+[dir|tape|rados_pool] - Configuring the storage family
+======================================================
 
 This section explains how to configure the families supported by Phobos.
 Currently, Phobos supports three families: **dir**, **tape** and **rados_pool**.

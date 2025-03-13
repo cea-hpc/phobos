@@ -1,5 +1,5 @@
-Configuring the TLC (Tape Library Controler)
-============================================
+[tlc] - Configuring the TLC (Tape Library Controler)
+====================================================
 
 This section explains how to configure the TLC for a specific library. As Phobos
 can handle multiple library, there should be a TLC instance for each library.
