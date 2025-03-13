@@ -54,6 +54,7 @@ from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
 from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
 from phobos.output import dump_object_list
 
+from phobos.cli.action.list import ListOptHandler
 from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
                                DSSInteractHandler, BaseResourceOptHandler,
                                env_error_format, XferOptHandler)
@@ -334,21 +335,6 @@ class StoreMPutHandler(StorePutHandler):
         self.logger.error("'mput' is a deprecated command, use 'put --file' "
                           "instead")
         sys.exit(os.EX_USAGE)
-
-
-class ListOptHandler(DSSInteractHandler):
-    """List items of a specific type."""
-    label = 'list'
-    descr = 'list all entries of the kind'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(ListOptHandler, cls).add_options(parser)
-        parser.add_argument('res', nargs='*', help='resource(s) to list')
-        parser.add_argument('-f', '--format', default='human',
-                            help="output format human/xml/json/csv/yaml " \
-                                 "(default: human)")
 
 
 class LibScanOptHandler(BaseOptHandler):
