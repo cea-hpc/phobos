@@ -7,7 +7,7 @@
 #include <sys/ioctl.h>
 #include <sys/statfs.h>
 
-struct phobos_global_context *PHO_CONTEXT;
+static struct phobos_global_context *PHO_CONTEXT;
 
 static int do_ioctl(int fd, unsigned long request, void *data)
 {
