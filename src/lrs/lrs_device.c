@@ -1280,6 +1280,7 @@ static int dev_handle_format(struct lrs_dev *dev)
     struct medium_switch_context context = {0};
     struct media_info *medium_to_format;
     struct req_container *reqc;
+    bool req_requeued = false;
     int rc;
 
     reqc = dev->ld_sub_request->reqc;
@@ -1342,6 +1343,7 @@ check_health:
         /* Push format request back if the error is not caused by the medium */
         /* TODO: use sched retry queue */
         tsqueue_push(dev->sched_req_queue, reqc);
+        req_requeued = true;
         goto out;
     } else if (rc) {
         goto out_response;
@@ -1365,7 +1367,8 @@ out:
     MUTEX_LOCK(&dev->ld_mutex);
     dev->ld_sub_request = NULL;
     format_medium_remove(dev->ld_ongoing_format, medium_to_format);
-    sub_request_free(subreq);
+    if (!req_requeued)
+        sub_request_free(subreq);
     MUTEX_UNLOCK(&dev->ld_mutex);
 
     return dev_is_failed(dev) ? rc : 0;
