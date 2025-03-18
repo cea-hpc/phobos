@@ -26,11 +26,14 @@ import sys
 from phobos.cli.action.create import CreateOptHandler
 from phobos.cli.action.delete import DeleteOptHandler
 from phobos.cli.action.list import ListOptHandler
-from phobos.cli.common import BaseResourceOptHandler, env_error_format
+from phobos.cli.common import env_error_format, XferOptHandler
 from phobos.cli.common.args import add_put_arguments
-from phobos.cli.common.utils import check_output_attributes, get_params_status
+from phobos.cli.common.utils import (check_output_attributes, create_put_params,
+                                     get_params_status)
+from phobos.core.const import DSS_OBJ_ALIVE # pylint: disable=no-name-in-module
 from phobos.core.ffi import CopyInfo
-from phobos.core.store import UtilClient
+from phobos.core.store import (GetParams, UtilClient, XferPutParams,
+                               XferGetParams, XferCopyParams)
 from phobos.output import dump_object_list
 
 
@@ -43,6 +46,8 @@ class CopyCreateOptHandler(CreateOptHandler):
         super(CopyCreateOptHandler, cls).add_options(parser)
         parser.add_argument('oid', help='targeted object')
         parser.add_argument('copy', help='copy name')
+        parser.add_argument('-c', '--copy-name',
+                            help='Copy name of the object to copy')
         add_put_arguments(parser)
 
 
@@ -86,7 +91,7 @@ class CopyListOptHandler(ListOptHandler):
         complete:   the copy is complete."""
 
 
-class CopyOptHandler(BaseResourceOptHandler):
+class CopyOptHandler(XferOptHandler):
     """Option handler for copy target"""
     label = 'copy'
     descr = 'manage copies of objects'
@@ -98,9 +103,24 @@ class CopyOptHandler(BaseResourceOptHandler):
 
     def exec_create(self):
         """Copy creation"""
-        raise NotImplementedError(
-            "This command will be implemented in a future version"
-        )
+        copy_to_get = self.params.get('copy_name')
+        copy_to_put = self.params.get('copy')
+        oid = self.params.get('oid')
+
+        put_params = XferPutParams(create_put_params(self, copy_to_put))
+        get_params = XferGetParams(GetParams(copy_to_get, None, DSS_OBJ_ALIVE))
+        copy_params = XferCopyParams(get_params, put_params)
+
+        self.client.copy_register(oid, copy_params)
+        try:
+            self.client.run()
+
+        except IOError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
+        self.logger.info("Object '%s' successfully copied as '%s'", oid,
+                         copy_to_put)
 
     def exec_delete(self):
         """Copy deletion"""

@@ -155,6 +155,21 @@ static int pho_xfer_desc_flag_check(const struct pho_xfer_desc *xfer)
     return 0;
 }
 
+static const char *get_xfer_param_reference_copy_name(
+                                               const struct pho_xfer_desc *xfer)
+{
+    switch (xfer->xd_op) {
+    case PHO_XFER_OP_COPY:
+        return xfer->xd_params.copy.get.copy_name;
+    case PHO_XFER_OP_GET:
+        return xfer->xd_params.get.copy_name;
+    case PHO_XFER_OP_PUT:
+        return xfer->xd_params.put.copy_name;
+    default:
+        return NULL;
+    }
+}
+
 /**
  * Build a decoder for this xfer by retrieving the xfer layout and initializing
  * the decoder from it. Only valid for GET / COPY / ERASE xfers.
@@ -168,6 +183,7 @@ static int pho_xfer_desc_flag_check(const struct pho_xfer_desc *xfer)
 static int decoder_build(struct pho_data_processor *decoder,
                          struct pho_xfer_desc *xfer, struct dss_handle *dss)
 {
+    const char *copy_name = get_xfer_param_reference_copy_name(xfer);
     struct layout_info *layout;
     struct dss_filter filter;
     struct copy_info *copy;
@@ -178,7 +194,7 @@ static int decoder_build(struct pho_data_processor *decoder,
            xfer->xd_op == PHO_XFER_OP_COPY);
 
     rc = dss_lazy_find_copy(dss, xfer->xd_targets->xt_objuuid,
-                            xfer->xd_targets->xt_version, NULL, &copy);
+                            xfer->xd_targets->xt_version, copy_name, &copy);
     if (rc)
         LOG_RETURN(rc, "Cannot get copy");
 
@@ -1052,7 +1068,7 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
     if (!xfer->xd_targets->xt_objid && !xfer->xd_targets->xt_objuuid)
         LOG_RETURN(rc = -EINVAL, "uuid or oid must be provided");
 
-    if (xfer->xd_op == PHO_XFER_OP_GET || xfer->xd_op == PHO_XFER_OP_COPY)
+    if (xfer->xd_op == PHO_XFER_OP_GET)
         /* Keep dss_lazy_find with the get to keep the same behavior */
         rc = dss_lazy_find_object(dss, xfer->xd_targets->xt_objid,
                                   xfer->xd_targets->xt_objuuid,
@@ -1061,13 +1077,16 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
         rc = dss_find_object(dss, xfer->xd_targets->xt_objid,
                              xfer->xd_targets->xt_objuuid,
                              xfer->xd_targets->xt_version,
-                             xfer->xd_params.delete.scope,
+                             xfer->xd_op == PHO_XFER_OP_DEL ?
+                                xfer->xd_params.delete.scope :
+                                xfer->xd_params.copy.get.scope,
                              &obj);
     if (rc)
         LOG_RETURN(rc, "Cannot find object for objid:'%s'",
                    xfer->xd_targets->xt_objid);
 
-    rc = dss_lazy_find_copy(dss, obj->uuid, obj->version, NULL, &copy);
+    rc = dss_lazy_find_copy(dss, obj->uuid, obj->version,
+                            get_xfer_param_reference_copy_name(xfer), &copy);
     if (rc)
         LOG_RETURN(rc, "Cannot find copy for objid:'%s'", obj->oid);
 

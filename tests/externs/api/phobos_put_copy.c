@@ -57,6 +57,7 @@ int main(int argc, char **argv)
     pho_xfer_clean(&target);
 
     xfer_copy.xd_op = PHO_XFER_OP_COPY;
+    xfer_copy.xd_params.copy.get.scope = DSS_OBJ_ALIVE;
     xfer_copy.xd_params.copy.put.family = PHO_RSC_DIR;
     xfer_copy.xd_params.copy.put.copy_name = argv[3];
     target_copy.xt_objid = argv[2];

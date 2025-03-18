@@ -364,6 +364,7 @@ PyMODINIT_FUNC PyInit_const(void)
     PyModule_AddIntMacro(mod, PHO_XFER_OBJ_HARD_DEL);
 
     /* enum pho_xfer_op */
+    PyModule_AddIntMacro(mod, PHO_XFER_OP_COPY);
     PyModule_AddIntMacro(mod, PHO_XFER_OP_GET);
     PyModule_AddIntMacro(mod, PHO_XFER_OP_GETMD);
     PyModule_AddIntMacro(mod, PHO_XFER_OP_PUT);

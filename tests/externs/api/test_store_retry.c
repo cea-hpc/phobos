@@ -73,6 +73,8 @@ static void reinit_xfer(struct pho_xfer_desc *xfer, const char *path,
     xfer->xd_targets->xt_objid = realpath(objpath, NULL);
     if (op == PHO_XFER_OP_PUT)
         xfer->xd_params.put.family = PHO_RSC_INVAL;
+    else if (op == PHO_XFER_OP_GET)
+        xfer->xd_params.get.copy_name = NULL;
 }
 
 static void add_dir_or_drive(struct admin_handle *adm, struct dss_handle *dss,

@@ -22,6 +22,7 @@ Phobos CLI utilities
 """
 
 from argparse import ArgumentTypeError
+from shlex import shlex
 import os
 import sys
 
@@ -31,6 +32,7 @@ from phobos.core.const import (DSS_STATUS_FILTER_ALL, # pylint: disable=no-name-
                                DSS_STATUS_FILTER_INCOMPLETE,
                                DSS_STATUS_FILTER_READABLE)
 from phobos.core.ffi import LayoutInfo
+from phobos.core.store import PutParams
 
 def check_max_width_is_valid(value):
     """Check that the width 'value' is greater than the one of '...}'"""
@@ -150,3 +152,37 @@ def uncase_fstype(choices):
                 return choices[key]
         return choice
     return find_choice
+
+def attr_convert(usr_attr):
+    """Convert k/v pairs as expressed by the user into a dictionnary."""
+    tkn_iter = shlex(usr_attr, posix=True)
+    tkn_iter.whitespace = '=,'
+    tkn_iter.whitespace_split = True
+
+    kv_pairs = list(tkn_iter) # [k0, v0, k1, v1...]
+
+    if len(kv_pairs) % 2 != 0:
+        print(kv_pairs)
+        raise ValueError("Invalid attribute string")
+
+    return dict(zip(kv_pairs[0::2], kv_pairs[1::2]))
+
+def create_put_params(obj, copy):
+    """Create the put params from the arguments"""
+    lyt_attrs = obj.params.get('layout_params')
+    if lyt_attrs is not None:
+        lyt_attrs = attr_convert(lyt_attrs)
+        obj.logger.debug("Loaded layout params set %r", lyt_attrs)
+
+    put_params = PutParams(profile=obj.params.get('profile'),
+                           copy_name=copy,
+                           grouping=obj.params.get('grouping'),
+                           family=obj.params.get('family'),
+                           library=obj.params.get('library'),
+                           layout=obj.params.get('layout'),
+                           lyt_params=lyt_attrs,
+                           no_split=obj.params.get('no_split'),
+                           overwrite=obj.params.get('overwrite'),
+                           tags=obj.params.get('tags', []))
+
+    return put_params

@@ -54,7 +54,7 @@ from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
                                DSSInteractHandler, BaseResourceOptHandler,
                                env_error_format, XferOptHandler)
 from phobos.cli.common.args import add_put_arguments
-from phobos.cli.common.utils import set_library
+from phobos.cli.common.utils import set_library, create_put_params, attr_convert
 from phobos.cli.target.copy import CopyOptHandler
 from phobos.cli.target.dir import DirOptHandler
 from phobos.cli.target.drive import DriveOptHandler
@@ -65,19 +65,6 @@ from phobos.cli.target.object import ObjectOptHandler
 from phobos.cli.target.rados import RadosPoolOptHandler
 from phobos.cli.target.tape import TapeOptHandler
 
-def attr_convert(usr_attr):
-    """Convert k/v pairs as expressed by the user into a dictionnary."""
-    tkn_iter = shlex(usr_attr, posix=True)
-    tkn_iter.whitespace = '=,'
-    tkn_iter.whitespace_split = True
-
-    kv_pairs = list(tkn_iter) # [k0, v0, k1, v1...]
-
-    if len(kv_pairs) % 2 != 0:
-        print(kv_pairs)
-        raise ValueError("Invalid attribute string")
-
-    return dict(zip(kv_pairs[0::2], kv_pairs[1::2]))
 
 def mput_file_line_parser(line):
     """Convert a mput file line into the 3 values needed for each put."""
@@ -267,7 +254,6 @@ class StorePutHandler(XferOptHandler):
         src = self.params.get('src_file')
         oid = self.params.get('object_id')
         mput_file = self.params.get('file')
-        no_split = self.params.get('no_split')
 
         if not mput_file and (not src and not oid):
             self.logger.error("either '--file' or 'src_file'/'oid' must be "
@@ -287,21 +273,7 @@ class StorePutHandler(XferOptHandler):
             attrs = attr_convert(attrs)
             self.logger.debug("Loaded attributes set %r", attrs)
 
-        lyt_attrs = self.params.get('layout_params')
-        if lyt_attrs is not None:
-            lyt_attrs = attr_convert(lyt_attrs)
-            self.logger.debug("Loaded layout params set %r", lyt_attrs)
-
-        put_params = PutParams(profile=self.params.get('profile'),
-                               copy_name=self.params.get('copy_name'),
-                               grouping=self.params.get('grouping'),
-                               family=self.params.get('family'),
-                               library=self.params.get('library'),
-                               layout=self.params.get('layout'),
-                               lyt_params=lyt_attrs,
-                               no_split=no_split,
-                               overwrite=self.params.get('overwrite'),
-                               tags=self.params.get('tags', []))
+        put_params = create_put_params(self, self.params.get('copy_name'))
 
         if mput_file:
             self.register_multi_puts(mput_file, put_params)

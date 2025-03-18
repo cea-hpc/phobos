@@ -34,7 +34,7 @@ from ctypes import (byref, c_bool, c_char_p, c_int, c_ssize_t, c_void_p, cast,
 from phobos.core.ffi import (LIBPHOBOS, DeprecatedObjectInfo, ObjectInfo,
                              StringArray, CopyInfo)
 from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OBJ_BEST_HOST, # pylint: disable=no-name-in-module
-                               PHO_XFER_OBJ_HARD_DEL,
+                               PHO_XFER_OBJ_HARD_DEL, PHO_XFER_OP_COPY,
                                PHO_XFER_OP_GET, PHO_XFER_OP_GETMD,
                                PHO_XFER_OP_PUT, PHO_RSC_INVAL, str2rsc_family,
                                DSS_OBJ_ALIVE)
@@ -348,7 +348,8 @@ class XferTarget(Structure): # pylint: disable=too-many-instance-attributes
                                        str(k).encode('utf8'),
                                        str(v).encode('utf8'))
 
-        self.open_file(desc[1], xfer_desc)
+        if desc[1] is not None:
+            self.open_file(desc[1], xfer_desc)
 
 class XferDescriptor(Structure): # pylint: disable=too-many-instance-attributes
     """phobos struct xfer_descriptor."""
@@ -406,6 +407,8 @@ class XferDescriptor(Structure): # pylint: disable=too-many-instance-attributes
             self.xd_targets[0].xt_objuuid = desc[2][0]
             self.xd_targets[0].xt_version = desc[2][1]
             self.xd_params.get = XferGetParams(GetParams())
+        elif self.xd_op == PHO_XFER_OP_COPY:
+            self.xd_params.copy = desc[2]
 
 XFER_COMPLETION_CB_TYPE = CFUNCTYPE(None, c_void_p, POINTER(XferDescriptor),
                                     c_int)
@@ -486,9 +489,11 @@ class XferClient: # pylint: disable=too-many-instance-attributes
         self.getmd_session = []
         self.get_session = []
         self.put_session = []
+        self.copy_session = []
         self._getmd_cb = None
         self._get_cb = None
         self._put_cb = None
+        self._copy_cb = None
 
     def noop_compl_cb(self, *args, **kwargs):
         """Default, empty transfer completion handler."""
@@ -514,6 +519,11 @@ class XferClient: # pylint: disable=too-many-instance-attributes
         """Enqueue a MPUT transfert."""
         self.put_session.append((mput_list, 0, put_params, PHO_XFER_OP_PUT))
 
+    def copy_register(self, oid, copy_params, attrs=None):
+        """Enqueue a COPY transfert."""
+        self.copy_session.append(([(oid, None, attrs)], 0, copy_params,
+                                  PHO_XFER_OP_COPY))
+
     def clear(self):
         """Release resources associated to the current queues."""
         self.getmd_session = []
@@ -522,6 +532,8 @@ class XferClient: # pylint: disable=too-many-instance-attributes
         self._get_cb = None
         self.put_session = []
         self._put_cb = None
+        self.copy_session = []
+        self._copy_cb = None
 
     def run(self, compl_cb=None):
         """Execute all registered transfer orders."""
@@ -564,6 +576,13 @@ class XferClient: # pylint: disable=too-many-instance-attributes
                 full_paths = ", ".join(xfer_targets2str(self.put_session, 1))
                 raise IOError(rc, "Cannot PUT '%s' to objid(s) '%s'" %
                               (full_paths, full_oids))
+
+        if self.copy_session:
+            rc, _ = self._store.phobos_xfer(LIBPHOBOS.phobos_copy,
+                                            self.copy_session, compl_cb)
+            if rc:
+                full_oids = ", ".join(xfer_targets2str(self.copy_session, 0))
+                raise IOError(rc, "Cannot COPY '%s'" % full_oids)
 
         self.clear()
 
