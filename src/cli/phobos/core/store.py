@@ -36,7 +36,8 @@ from phobos.core.ffi import (LIBPHOBOS, DeprecatedObjectInfo, ObjectInfo,
 from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OBJ_BEST_HOST, # pylint: disable=no-name-in-module
                                PHO_XFER_OBJ_HARD_DEL,
                                PHO_XFER_OP_GET, PHO_XFER_OP_GETMD,
-                               PHO_XFER_OP_PUT, PHO_RSC_INVAL, str2rsc_family)
+                               PHO_XFER_OP_PUT, PHO_RSC_INVAL, str2rsc_family,
+                               DSS_OBJ_ALIVE)
 from phobos.core.dss import dss_sort
 
 ATTRS_FOREACH_CB_TYPE = CFUNCTYPE(c_int, c_char_p, c_char_p, c_void_p)
@@ -176,23 +177,49 @@ PutParams.__new__.__defaults__ = (None,) * len(PutParams._fields)
 class XferGetParams(Structure): # pylint: disable=too-few-public-methods, too-many-instance-attributes
     """Phobos GET parameters of the XferDescriptor."""
     _fields_ = [
+        ("_copy_name", c_char_p),
+        ("scope", c_int),
         ("_node_name", c_char_p),
     ]
 
-    def __init__(self):
+    def __init__(self, get_params):
         super().__init__()
-        self._node_name = None
+        self.copy_name = get_params.copy_name
+        self.node_name = get_params.node_name
+        if get_params.scope is None:
+            self.scope = DSS_OBJ_ALIVE
+        else:
+            self.scope = get_params.scope
+
+    @property
+    def copy_name(self):
+        """Wrapper to get copy_name"""
+        return self._copy_name.decode('utf-8') if self._copy_name else None
+
+    @copy_name.setter
+    def copy_name(self, val):
+        """Wrapper to set copy_name"""
+        #pylint: disable=attribute-defined-outside-init
+        self._copy_name = val.encode('utf-8') if val else None
 
     @property
     def node_name(self):
         """Wrapper to get node_name"""
         return self._node_name.decode('utf-8') if self._node_name else None
 
-class GetParams(namedtuple('GetParams', '')):
+    @node_name.setter
+    def node_name(self, val):
+        """Wrapper to set node_name"""
+        #pylint: disable=attribute-defined-outside-init
+        self._node_name = val.encode('utf-8') if val else None
+
+
+class GetParams(namedtuple('GetParams', 'copy_name node_name scope')):
     """
     Transition data structure for get parameters between
     the CLI and the XFer data structure.
     """
+    __slots__ = ()
 GetParams.__new__.__defaults__ = (None,) * len(GetParams._fields)
 
 class XferDelParams(Structure): # pylint: disable=too-few-public-methods, too-many-instance-attributes
@@ -212,12 +239,32 @@ class DelParams(namedtuple('DelParams', '')):
     """
 DelParams.__new__.__defaults__ = (None,) * len(DelParams._fields)
 
+class XferCopyParams(Structure): # pylint: disable=too-few-public-methods, too-many-instance-attributes
+    """Phobos COPY parameters of the XferDescriptor."""
+    _fields_ = [
+        ("get", XferGetParams),
+        ("put", XferPutParams),
+    ]
+
+    def __init__(self, get, put):
+        super().__init__()
+        self.get = get
+        self.put = put
+
+class CopyParams(namedtuple('CopyParams', '')):
+    """
+    Transition data structure for copy parameters between
+    the CLI and the XFer data structure.
+    """
+CopyParams.__new__.__defaults__ = (None,) * len(CopyParams._fields)
+
 class XferOpParams(Union): # pylint: disable=too-few-public-methods
     """Phobos operation parameters of the XferDescriptor."""
     _fields_ = [
         ("put", XferPutParams),
         ("get", XferGetParams),
         ("delete", XferDelParams),
+        ("copy", XferCopyParams),
     ]
 
 class XferTarget(Structure): # pylint: disable=too-many-instance-attributes
@@ -358,7 +405,7 @@ class XferDescriptor(Structure): # pylint: disable=too-many-instance-attributes
             # The CLI can only create a xfer with 1 target with a GET
             self.xd_targets[0].xt_objuuid = desc[2][0]
             self.xd_targets[0].xt_version = desc[2][1]
-            self.xd_params.get = XferGetParams()
+            self.xd_params.get = XferGetParams(GetParams())
 
 XFER_COMPLETION_CB_TYPE = CFUNCTYPE(None, c_void_p, POINTER(XferDescriptor),
                                     c_int)

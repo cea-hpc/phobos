@@ -129,7 +129,11 @@ struct pho_xfer_put_params {
  * both manage put AND get param for a copy.
  */
 struct pho_xfer_get_params {
-    char *node_name;                    /**< Node name [out] */
+    const char *copy_name;          /**< Copy to retrieve. */
+    enum dss_obj_scope scope;       /**< Scope of the object to get
+                                      *  (alive, deprecated, ...).
+                                      */
+    char *node_name;                /**< Node name [out] */
 };
 
 /*
@@ -141,6 +145,14 @@ struct pho_xfer_del_params {
                                  */
 };
 
+/*
+ * COPY parameters.
+ */
+struct pho_xfer_copy_params {
+    struct pho_xfer_get_params get; /**< Get parameters to use to copy */
+    struct pho_xfer_put_params put; /**< Put parameters to use to copy */
+};
+
 /**
  * Operation parameters.
  */
@@ -149,6 +161,7 @@ union pho_xfer_params {
     struct pho_xfer_put_params put;     /**< PUT parameters. */
     struct pho_xfer_get_params get;     /**< GET parameters. */
     struct pho_xfer_del_params delete;  /**< DEL parameters. */
+    struct pho_xfer_copy_params copy;   /**< COPY parameters. */
 };
 
 /**
