@@ -8,6 +8,7 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/cli/__init__.py \
 	   phobos/cli/action/__init__.py \
 	   phobos/cli/action/add.py \
+	   phobos/cli/action/clean.py \
 	   phobos/cli/action/create.py \
 	   phobos/cli/action/delete.py \
 	   phobos/cli/action/format.py \
@@ -25,6 +26,11 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/cli/target/device.py \
 	   phobos/cli/target/dir.py \
 	   phobos/cli/target/drive.py \
+	   phobos/cli/target/extent.py \
+	   phobos/cli/target/lib.py \
+	   phobos/cli/target/lock.py \
+	   phobos/cli/target/media.py \
+	   phobos/cli/target/object.py \
 	   phobos/cli/target/rados.py \
 	   phobos/cli/target/tape.py \
 	   phobos/core/__init__.py \
