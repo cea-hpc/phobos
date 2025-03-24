@@ -518,20 +518,14 @@ function test_put_get_corrupted()
     local addresses=($(get_extent_info "$oid" address))
     local media=($(get_extent_mount_point "$oid"))
 
-    # We test here only for the two halves of the object
-    for (( i = 0; i < ${#addresses[@]} - 1; i++ )); do
-        local copy=$(mktemp)
+    # corrupt all extents
+    for (( i = 0; i < ${#addresses[@]}; i++ )); do
         local extent="${media[i]}/${addresses[i]}"
-
-        cp "$extent" "$copy"
-
         corrupt_the_extent $extent
-        $valg_phobos get $oid /tmp/out.$$ &&
-            error "phobos get $oid should have failed"
-
-        cp "$copy" "$extent"
-        rm "$copy"
     done
+
+    $valg_phobos get $oid /tmp/out.$$ &&
+        error "phobos get $oid should have failed"
 
     rm "$file"
 }
