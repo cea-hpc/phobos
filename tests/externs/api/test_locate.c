@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -217,7 +217,8 @@ static void lock_medium(struct phobos_locate_state *pl_state,
     dss_unlock(pl_state->dss, DSS_MEDIA, *medium, *cnt, true);
 
     /* simulate lock on medium */
-    rc = _dss_lock(pl_state->dss, DSS_MEDIA, *medium, *cnt, hostname, 1337);
+    rc = _dss_lock(pl_state->dss, DSS_MEDIA, *medium, *cnt, hostname, 1337,
+                   true);
     assert_return_code(rc, -rc);
 }
 

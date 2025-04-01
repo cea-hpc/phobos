@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -317,7 +317,7 @@ static void rsl_loss(void **state)
 
         /* get lock */
         rc = _dss_lock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
-                       my_hostname, pid);
+                       my_hostname, pid, false);
         assert_return_code(rc, -rc);
     }
 
@@ -449,7 +449,7 @@ static void rsl_one_lock(void **state)
 
         /* get lock */
         rc = _dss_lock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
-                       WIN_HOST, pid);
+                       WIN_HOST, pid, false);
         assert_return_code(rc, -rc);
 
         /* check locate */
@@ -465,7 +465,7 @@ static void rsl_one_lock(void **state)
         rc = rsl_clean_all_media(state);
         assert_return_code(rc, -rc);
         rc = _dss_lock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
-                       WIN_HOST, pid);
+                       WIN_HOST, pid, false);
         assert_return_code(rc, -rc);
 
         /* check focus host if my_hostname and WIN_HOST both have one lock */
@@ -479,7 +479,7 @@ static void rsl_one_lock(void **state)
                 /* lock my_hostname */
                 rc = _dss_lock(rsl_state->dss, DSS_MEDIA,
                                rsl_state->media[medium_index], 1, my_hostname,
-                               pid);
+                               pid, false);
                 assert_return_code(rc, -rc);
 
                 /* check WIN_HOST as focus_host */
@@ -495,11 +495,11 @@ static void rsl_one_lock(void **state)
                 rc = rsl_clean_all_media(state);
                 assert_return_code(rc, -rc);
                 rc = _dss_lock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i],
-                               1, WIN_HOST, pid);
+                               1, WIN_HOST, pid, false);
                 assert_return_code(rc, -rc);
                 rc = _dss_lock(rsl_state->dss, DSS_MEDIA,
                                rsl_state->media[medium_index], 1, my_hostname,
-                               pid);
+                               pid, false);
                 assert_return_code(rc, -rc);
 
                 /* check my_hostname as focus_host */
@@ -515,7 +515,7 @@ static void rsl_one_lock(void **state)
                 rc = rsl_clean_all_media(state);
                 assert_return_code(rc, -rc);
                 rc = _dss_lock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i],
-                               1, WIN_HOST, pid);
+                               1, WIN_HOST, pid, false);
                 assert_return_code(rc, -rc);
         }
 
@@ -544,7 +544,7 @@ static void rsl_one_lock(void **state)
         rc = rsl_clean_all_media(state);
         assert_return_code(rc, -rc);
         rc = _dss_lock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
-                       WIN_HOST, pid);
+                       WIN_HOST, pid, false);
         assert_return_code(rc, -rc);
 
         /* set operation get flag to false and check NULL hostname */
@@ -602,7 +602,7 @@ static void rsl_one_lock_one_not_avail(void **state)
 
         /* set lock on first split medium */
         rc = _dss_lock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
-                       WIN_HOST, getpid());
+                       WIN_HOST, getpid(), false);
         assert_return_code(rc, -rc);
 
         /* operation get flag to false on second split medium */
@@ -632,7 +632,7 @@ static void rsl_one_lock_one_not_avail(void **state)
             rc = rsl_clean_all_media(state);
             assert_return_code(rc, -rc);
             rc = _dss_lock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
-                           WIN_HOST, getpid());
+                           WIN_HOST, getpid(), false);
             assert_return_code(rc, -rc);
             rsl_state->media[i + rsl_state->repl_count]->flags.get = false;
             rc = dss_media_update(rsl_state->dss,
@@ -646,7 +646,7 @@ static void rsl_one_lock_one_not_avail(void **state)
                 if (j != i) {
                     rc = _dss_lock(rsl_state->dss, DSS_MEDIA,
                                    rsl_state->media[j + rsl_state->repl_count],
-                                   1, WIN_HOST_BIS, getpid());
+                                   1, WIN_HOST_BIS, getpid(), false);
                     assert_return_code(rc, -rc);
                 }
             }

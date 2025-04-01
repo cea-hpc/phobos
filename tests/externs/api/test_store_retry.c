@@ -186,8 +186,10 @@ static void test_put_retry(struct pho_xfer_desc *xfer, struct dev_info *dev,
     dss_init(&wait_unlock_args.dss);
 
     /* First lock the only available device and media */
-    _dss_lock(&wait_unlock_args.dss, DSS_DEVICE, dev, 1, LOCK_OWNER, getpid());
-    _dss_lock(&wait_unlock_args.dss, DSS_MEDIA, media, 1, LOCK_OWNER, getpid());
+    _dss_lock(&wait_unlock_args.dss, DSS_DEVICE, dev, 1, LOCK_OWNER, getpid(),
+              false);
+    _dss_lock(&wait_unlock_args.dss, DSS_MEDIA, media, 1, LOCK_OWNER, getpid(),
+              false);
 
     /* In another thread, sleep for some time and unlock the device */
     assert(pthread_create(&wait_unlock_thread, NULL, wait_unlock_device,

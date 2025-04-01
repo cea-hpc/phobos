@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -463,7 +463,7 @@ int main(int argc, char **argv)
         }
 
         rc = _dss_lock(dss_handle, type, item_list, item_cnt, lock_hostname,
-                       lock_owner);
+                       lock_owner, false);
         if (rc) {
             pho_error(rc, "_dss_lock failed");
             exit(EXIT_FAILURE);

@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -266,7 +266,7 @@ static int dml_ok_lock_setup(void **state)
         return -1;
 
     /* lock medium */
-    if (_dss_lock(dss, DSS_MEDIA, &medium_info, 1, HOSTNAME, 12345))
+    if (_dss_lock(dss, DSS_MEDIA, &medium_info, 1, HOSTNAME, 12345, false))
         return -1;
 
     return 0;

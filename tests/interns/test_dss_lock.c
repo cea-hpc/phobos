@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -83,7 +83,7 @@ static void dss_lock_exists(void **state)
     assert_int_equal(rc, -EEXIST);
 
     rc = _dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, OTHER_LOCK_OWNER,
-                   1337);
+                   1337, false);
     assert_int_equal(rc, -EEXIST);
 
     assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true) == 0);

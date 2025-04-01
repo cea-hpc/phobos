@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -114,7 +114,7 @@ int main(int argc, char **argv)
                  "Conversion error occurred: %d\n", errno);
 
     if (!strcmp(argv[1], "lock"))
-        rc = _dss_lock(dss, DSS_MEDIA, medium, cnt, argv[4], pid);
+        rc = _dss_lock(dss, DSS_MEDIA, medium, cnt, argv[4], pid, false);
     else
         rc = _dss_unlock(dss, DSS_MEDIA, medium, cnt, argv[4], pid);
 

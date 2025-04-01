@@ -54,6 +54,13 @@ do {                                                  \
     free((_ids));                                     \
 } while (0)
 
+/* dgc stands for dss_general_call, used to determine the function prototype */
+enum dgc_type {
+    DGC_SIMPLE_PARAM,
+    DGC_DUAL_PARAM,
+    DGC_TRI_PARAM,
+};
+
 struct simple_param {
     struct pho_lock *locks;
     int (*basic_func)(struct dss_handle *handle, enum dss_type lock_type,
@@ -68,13 +75,23 @@ struct dual_param {
                       const char *lock_hostname);
 };
 
+struct tri_param {
+    const char *lock_hostname;
+    int lock_owner;
+    bool is_early;
+    int (*basic_func)(struct dss_handle *handle, enum dss_type lock_type,
+                      const char *lock_id, int lock_owner,
+                      const char *lock_hostname, bool is_early);
+};
+
 /** This structure serves as an abstraction for the basic_* calls */
 struct dss_generic_call {
     union {
         struct simple_param simple;
         struct dual_param dual;
+        struct tri_param tri;
     } params;
-    bool is_simple;
+    enum dgc_type func_type;
     int (*rollback_func)(struct dss_handle *handle, enum dss_type type,
                          GString **ids, int rollback_cnt);
     bool all_or_nothing;
@@ -118,8 +135,9 @@ enum lock_query_idx {
                         "       hostname = lock_hostname;"
 
 static const char * const lock_query[] = {
-    [DSS_LOCK_QUERY]         = "INSERT INTO lock (type, id, owner, hostname)"
-                               " VALUES ('%s'::lock_type, '%s', %d, '%s');",
+    [DSS_LOCK_QUERY]         = "INSERT INTO lock"
+                               " (type, id, owner, hostname, is_early)"
+                               " VALUES ('%s'::lock_type, '%s', %d, '%s', %s);",
     [DSS_REFRESH_QUERY]      = "DO $$"
                                  DECLARE_BLOCK
                                " BEGIN"
@@ -270,7 +288,7 @@ static int dss_build_lock_id_list(PGconn *conn, const void *item_list,
 
 static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
                       const char *lock_id, int lock_owner,
-                      const char *lock_hostname)
+                      const char *lock_hostname, bool is_early)
 {
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
@@ -282,7 +300,7 @@ static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
 
     g_string_printf(request, lock_query[DSS_LOCK_QUERY],
                     dss_type_names[lock_type], lock_id, lock_owner,
-                    lock_hostname);
+                    lock_hostname, is_early ? "TRUE" : "FALSE");
 
     rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
 
@@ -400,17 +418,23 @@ static int dss_generic(struct dss_handle *handle, enum dss_type type,
     for (i = 0; i < item_cnt; ++i) {
         int rc2;
 
-        if (callee->is_simple) {
+        if (callee->func_type == DGC_SIMPLE_PARAM) {
             struct simple_param *param = &callee->params.simple;
 
             rc2 = param->basic_func(handle, type, ids[i]->str,
                                     param->locks ? param->locks + i : NULL);
 
-        } else {
+        } else if (callee->func_type == DGC_DUAL_PARAM) {
             struct dual_param *param = &callee->params.dual;
 
             rc2 = param->basic_func(handle, type, ids[i]->str,
                                     param->lock_owner, param->lock_hostname);
+        } else {
+            struct tri_param *param = &callee->params.tri;
+
+            rc2 = param->basic_func(handle, type, ids[i]->str,
+                                    param->lock_owner, param->lock_hostname,
+                                    param->is_early);
         }
 
         if (rc2) {
@@ -453,17 +477,18 @@ static int dss_lock_rollback(struct dss_handle *handle, enum dss_type type,
 
 int _dss_lock(struct dss_handle *handle, enum dss_type type,
               const void *item_list, int item_cnt, const char *lock_hostname,
-              int lock_pid)
+              int lock_pid, bool is_early)
 {
     struct dss_generic_call callee = {
         .params = {
-            .dual = {
+            .tri = {
                 .lock_hostname = lock_hostname,
                 .lock_owner = lock_pid,
+                .is_early = is_early,
                 .basic_func = basic_lock
             }
         },
-        .is_simple = false,
+        .func_type = DGC_TRI_PARAM,
         .all_or_nothing = true,
         .rollback_func = dss_lock_rollback,
         .action = "lock"
@@ -483,7 +508,7 @@ int dss_lock(struct dss_handle *handle, enum dss_type type,
     if (rc)
         LOG_RETURN(rc, "Couldn't retrieve hostname");
 
-    return _dss_lock(handle, type, item_list, item_cnt, hostname, pid);
+    return _dss_lock(handle, type, item_list, item_cnt, hostname, pid, false);
 }
 
 int dss_lock_hostname(struct dss_handle *handle, enum dss_type type,
@@ -493,7 +518,7 @@ int dss_lock_hostname(struct dss_handle *handle, enum dss_type type,
     int pid;
 
     pid = getpid();
-    return _dss_lock(handle, type, item_list, item_cnt, hostname, pid);
+    return _dss_lock(handle, type, item_list, item_cnt, hostname, pid, true);
 }
 
 int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
@@ -508,7 +533,7 @@ int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
                 .basic_func = basic_refresh
             }
         },
-        .is_simple = false,
+        .func_type = DGC_DUAL_PARAM,
         .all_or_nothing = false,
         .action = "refresh"
     };
@@ -540,7 +565,7 @@ int _dss_unlock(struct dss_handle *handle, enum dss_type type,
                 .basic_func = basic_unlock
             }
         },
-        .is_simple = false,
+        .func_type = DGC_DUAL_PARAM,
         .all_or_nothing = false,
         .action = "unlock"
     };
@@ -571,7 +596,7 @@ int dss_lock_status(struct dss_handle *handle, enum dss_type type,
                 .basic_func = basic_status
             }
         },
-        .is_simple = true,
+        .func_type = DGC_SIMPLE_PARAM,
         .all_or_nothing = false,
         .action = "status"
     };

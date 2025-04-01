@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2024 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -805,7 +805,7 @@ int dss_lock(struct dss_handle *handle, enum dss_type type,
              const void *item_list, int item_cnt);
 
 /**
- * Take locks on a specific hostname.
+ * Take locks on a specific hostname, only used with locate operations.
  *
  * If any lock cannot be taken, then the ones that already are will be
  * forcefully unlocked, and the function will not try to lock any other

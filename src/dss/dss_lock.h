@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -38,7 +38,7 @@
 /** Specific intern functions used for testing. */
 int _dss_lock(struct dss_handle *handle, enum dss_type type,
               const void *item_list, int item_cnt, const char *lock_hostname,
-              int lock_pid);
+              int lock_pid, bool is_early);
 
 int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
                       const void *item_list, int item_cnt,
