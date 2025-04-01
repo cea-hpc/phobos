@@ -119,19 +119,26 @@ enum lock_query_idx {
                       "             (SELECT owner FROM lock"            \
                       "              WHERE type = lock_type AND "       \
                       "                    id = lock_id);"              \
+                      "         lock_is_early BOOLEAN:="                \
+                      "             (SELECT is_early FROM lock"         \
+                      "              WHERE type = lock_type AND "       \
+                      "                    id = lock_id);"
 
-#define CHECK_VALID_OWNER_HOSTNAME " IF lock_owner IS NULL OR "         \
+#define CHECK_VALID_OWNER_HOSTNAME " IF (lock_is_early = FALSE AND "    \
+                                   "     lock_owner IS NULL) OR "       \
                                    "    lock_hostname IS NULL THEN"     \
                                    "  RAISE USING errcode = 'PHLK1';"   \
                                    " END IF;"
 
-#define CHECK_OWNER_HOSTNAME_EXISTS " IF lock_owner <> '%d' OR "        \
+#define CHECK_OWNER_HOSTNAME_EXISTS " IF (lock_is_early = FALSE AND "   \
+                                    "     lock_owner <> '%d') OR "      \
                                     "    lock_hostname <> '%s' THEN"    \
                                     "  RAISE USING errcode = 'PHLK2';"  \
                                     " END IF;"
 
 #define WHERE_CONDITION " WHERE type = lock_type AND id = lock_id AND " \
-                        "       owner = lock_owner AND "                \
+                        "       (lock_is_early = TRUE "                 \
+                        "        OR owner = lock_owner) AND "           \
                         "       hostname = lock_hostname;"
 
 static const char * const lock_query[] = {
