@@ -144,3 +144,4 @@ hostnames to 64 characters.
 | hostname          | hostname of the lock owner                      |
 | owner             | name of the lock owner on the host (e.g. a pid) |
 | timestamp         | date when the lock is taken                     |
+| is_early          | true if taken during a locate operation         |

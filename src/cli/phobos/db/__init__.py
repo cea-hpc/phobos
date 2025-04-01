@@ -1,5 +1,5 @@
 #
-#  All rights reserved (c) 2014-2024 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -710,6 +710,10 @@ class Migrator: # pylint: disable=too-many-public-methods
             ALTER TABLE deprecated_object DROP access_time;
 
             DROP TYPE obj_status;
+
+            -- update lock table
+            ALTER TABLE lock ADD is_early boolean DEFAULT FALSE;
+            UPDATE lock SET is_early = FALSE;
 
             -- update current schema version
             UPDATE schema_info SET version = '3.0';
