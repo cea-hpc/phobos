@@ -2,7 +2,7 @@
 # pylint: disable=too-many-lines
 
 #
-#  All rights reserved (c) 2014-2024 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -93,6 +93,7 @@ class DSSLock(Structure): # pylint: disable=too-few-public-methods
         ('_lock_hostname', c_char_p),
         ('lock_owner', c_int),
         ('lock_ts', Timeval),
+        ('lock_is_early', c_bool),
     ]
 
     @property

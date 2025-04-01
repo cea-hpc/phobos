@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -49,7 +49,7 @@ gboolean g_pho_id_equal(gconstpointer p_pho_id_1, gconstpointer p_pho_id_2);
 
 /** initialize a pho_lock structure */
 void init_pho_lock(struct pho_lock *lock, char *hostname, int owner,
-                   struct timeval *lock_timestamp);
+                   struct timeval *lock_timestamp, bool is_early);
 
 /** copy a pho_lock structure */
 void pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src);
