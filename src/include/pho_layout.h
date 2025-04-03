@@ -138,9 +138,6 @@ struct pho_data_processor {
                                       *  a mput with no-split to keep the write
                                       *  resp)
                                       */
-    /*
-     * XXX BEGIN UNDER CONSTRUCTION SECTION
-     */
     int current_target;
     size_t object_size;
     size_t reader_offset; /* offset in the object of the next byte to read */
@@ -156,11 +153,11 @@ struct pho_data_processor {
      *
      * buffer_offset <= writer_offset <= reader_offset
      */
-    struct pho_buff buff;
+    struct pho_buff buff; /* buffer to transfer between reader and writer */
     size_t buffer_offset; /* offset in the object of the first byte in buff */
-    void *private_reader;
+    void *private_reader; /* one reader per target (posix ones for encoder) */
     const struct pho_proc_ops *reader_ops;
-    void *private_writer;
+    void *private_writer; /* one writer per target (posix ones for decoder) */
     const struct pho_proc_ops *writer_ops;
     /*
      * As soon as it receives a resp alloc, the writer prepares its
@@ -171,7 +168,7 @@ struct pho_data_processor {
      */
     pho_req_t *writer_release_alloc;
     struct timespec writer_start_req; /* Partial release trigger start time */
-    void *private_eraser;
+    void *private_eraser; /* only used by eraser */
     const struct pho_proc_ops *eraser_ops;
 };
 
