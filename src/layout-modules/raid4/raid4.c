@@ -75,9 +75,6 @@ static int raid4_get_chunk_size(struct pho_data_processor *proc,
 }
 
 static struct raid_ops RAID4_OPS = {
-    .write_split    = raid4_write_split,
-    .read_split     = raid4_read_split,
-    .delete_split   = raid_delete_split,
     .get_chunk_size = raid4_get_chunk_size,
     .read_into_buff = raid4_read_into_buff,
     .write_from_buff = raid4_write_from_buff,
@@ -253,7 +250,7 @@ static int layout_raid4_erase(struct pho_data_processor *eraser)
                           &RAID4_ERASER_PROCESSOR_OPS, &RAID4_OPS);
 
     if (rc) {
-        eraser->private_processor = NULL;
+        eraser->private_eraser = NULL;
         free(io_context);
     }
 

@@ -120,57 +120,6 @@ int raid1_repl_count(struct layout_info *layout, unsigned int *repl_count)
     return 0;
 }
 
-static int write_all_chunks(struct raid_io_context *io_context,
-                            size_t split_size)
-{
-    struct pho_io_descr *posix = &io_context->posix;
-    size_t to_write = split_size;
-    struct pho_io_descr *iods;
-    size_t buffer_size;
-    size_t repl_count;
-    char *buffer;
-    int rc = 0;
-
-    buffer = io_context->buffers[0].buff;
-    buffer_size = io_context->buffers[0].size;
-    repl_count = io_context->n_data_extents + io_context->n_parity_extents;
-    iods = io_context->iods;
-
-    while (to_write > 0) {
-        ssize_t read_size;
-        int i;
-
-        read_size = ioa_read(posix->iod_ioa, posix, buffer,
-                             to_write > buffer_size ? buffer_size : to_write);
-        if (read_size < 0)
-            LOG_RETURN(rc,
-                       "Error when read buffer in raid1 write, "
-                       "%zu remaning bytes",
-                       to_write);
-
-        /* TODO manage as async/parallel IO */
-        for (i = 0; i < repl_count; ++i) {
-            rc = ioa_write(iods[i].iod_ioa, &iods[i], buffer, read_size);
-            if (rc)
-                LOG_RETURN(rc,
-                           "RAID1 write: unable to write %zu bytes in replica "
-                           "%d, %zu remaining bytes",
-                           read_size, i, to_write);
-
-            /* update written iod size */
-            iods[i].iod_size += read_size;
-        }
-
-        rc = extent_hash_update(&io_context->hashes[0], buffer, read_size);
-        if (rc)
-            return rc;
-
-        to_write -= read_size;
-    }
-
-    return rc;
-}
-
 static int set_layout_specific_md(int layout_index, int replica_count,
                                   struct pho_io_descr *iod)
 {
@@ -197,116 +146,6 @@ attrs_free:
     pho_attrs_free(&iod->iod_attrs);
 
     return rc;
-}
-
-static int raid1_write_split(struct pho_data_processor *enc, size_t split_size,
-                             int target_idx)
-{
-    struct raid_io_context *io_context =
-        &((struct raid_io_context *) enc->private_processor)[target_idx];
-    size_t repl_count = io_context->n_data_extents +
-        io_context->n_parity_extents;
-    struct pho_io_descr *iods;
-    int rc = 0;
-    int i;
-
-    iods = io_context->iods;
-
-    /* write all extents by chunk of buffer size*/
-    rc = write_all_chunks(io_context, split_size);
-    if (rc)
-        LOG_RETURN(rc, "Unable to write in raid1 encoder write");
-
-    rc = extent_hash_digest(&io_context->hashes[0]);
-    if (rc)
-        return rc;
-
-    if (rc == 0) {
-        for (i = 0; i < repl_count; i++)
-            extent_hash_copy(&io_context->hashes[0],
-                             &io_context->write.extents[i]);
-    }
-
-    for (i = 0; i < repl_count; ++i) {
-        struct extent *extent = &io_context->write.extents[i];
-
-        rc = set_layout_specific_md(extent->layout_idx, repl_count, &iods[i]);
-        if (rc)
-            LOG_RETURN(rc,
-                       "Failed to set layout specific attributes on extent "
-                       "'%s'", extent[i].uuid);
-    }
-
-    return rc;
-}
-
-static int checked_read(struct pho_data_processor *dec)
-{
-    struct raid_io_context *io_context = dec->private_processor;
-    struct pho_io_descr *iod;
-    size_t written = 0;
-    size_t read_size;
-    size_t to_write;
-    int rc;
-
-    iod = &io_context->iods[0];
-    read_size = io_context->buffers[0].size;
-    to_write = io_context->read.extents[0]->size;
-
-    while (written < to_write) {
-        ssize_t data_written;
-        ssize_t data_read;
-
-        data_read = ioa_read(iod->iod_ioa, iod, io_context->buffers[0].buff,
-                             read_size);
-        if (data_read < 0)
-            return data_read;
-
-        data_written = ioa_write(io_context->posix.iod_ioa,
-                                 &io_context->posix,
-                                 io_context->buffers[0].buff,
-                                 data_read);
-        if (data_written < 0)
-            return data_written;
-
-        written += data_read;
-
-        rc = extent_hash_update(&io_context->hashes[0],
-                                io_context->buffers[0].buff,
-                                data_read);
-        if (rc)
-            return rc;
-    }
-
-    rc = extent_hash_digest(&io_context->hashes[0]);
-    if (rc)
-        return rc;
-
-    return extent_hash_compare(&io_context->hashes[0],
-                               io_context->read.extents[0]);
-}
-
-/**
- * Read the data specified by \a extent from \a medium into the output fd of
- * dec->xfer.
- */
-static int raid1_read_split(struct pho_data_processor *dec)
-{
-    struct raid_io_context *io_context = dec->private_processor;
-    struct pho_io_descr *iod;
-    struct pho_ext_loc loc;
-
-    if (io_context->read.check_hash)
-        return checked_read(dec);
-
-    iod = &io_context->iods[0];
-    loc = make_ext_location(dec, 0, 0);
-
-    iod->iod_fd = dec->xfer->xd_targets->xt_fd;
-    iod->iod_size = loc.extent->size;
-    iod->iod_loc = &loc;
-
-    return ioa_get(iod->iod_ioa, dec->xfer->xd_targets->xt_objid, iod);
 }
 
 static int raid1_read_into_buff(struct pho_data_processor *proc)
@@ -430,9 +269,6 @@ static const struct pho_proc_ops RAID1_ERASER_PROCESSOR_OPS = {
 };
 
 static const struct raid_ops RAID1_OPS = {
-    .write_split    = raid1_write_split,
-    .read_split     = raid1_read_split,
-    .delete_split   = raid_delete_split,
     .get_chunk_size = raid1_get_chunk_size,
     .read_into_buff = raid1_read_into_buff,
     .write_from_buff = raid1_write_from_buff,

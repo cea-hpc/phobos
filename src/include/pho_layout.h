@@ -122,8 +122,6 @@ enum processor_type {
  */
 struct pho_data_processor {
     enum processor_type type;       /**< Type of the data processor */
-    void *private_processor;        /**< Layouts specific data */
-    const struct pho_proc_ops *ops; /**< Layouts specific operations */
     bool done;                      /**< True if this data processor has no more
                                       *  work to do (check rc to know if an
                                       *  error happened)
@@ -247,12 +245,6 @@ int pho_layout_mod_register(struct layout_module *self);
 
 /** @} end of pho_layout_mod group */
 
-#define CHECK_ENC_OP(_enc, _func) do { \
-    assert(_enc); \
-    assert(_enc->ops); \
-    assert(_enc->ops->_func); \
-} while (0)
-
 /**
  * Initialize a new data processor \a enc to put an object described by \a xfer
  * in phobos.
@@ -325,32 +317,6 @@ int layout_eraser(struct pho_data_processor *eraser,
  */
 int layout_locate(struct dss_handle *dss, struct layout_info *layout,
                   const char *focus_host, char **hostname, int *nb_new_lock);
-
-/**
- * Advance the layout operation of one step by providing a response from the LRS
- * (or NULL for the first call to this function) and collecting newly emitted
- * requests.
- *
- * @param[in]   proc    The data processor to advance.
- * @param[in]   resp    The response to pass to the data processor (or NULL for
- *                      the first call to this function).
- * @param[out]  reqs    Caller allocated array of newly emitted requests (to be
- *                      freed by the caller).
- * @param[out]  n_reqs  Number of emitted requests.
- *
- * @return 0 on success, -errno on error. -EINVAL is returned when the data
- * data processor has already finished its work (the call to this function was
- * unexpected).
- */
-static inline int layout_step(struct pho_data_processor *proc, pho_resp_t *resp,
-                              pho_req_t **reqs, size_t *n_reqs)
-{
-    if (proc->done)
-        return -EINVAL;
-
-    CHECK_ENC_OP(proc, step);
-    return proc->ops->step(proc, resp, reqs, n_reqs);
-}
 
 /**
  * Update extent and layout metadata without attributes retrieved from the

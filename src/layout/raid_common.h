@@ -156,14 +156,7 @@ struct raid_io_context {
 };
 
 struct raid_ops {
-    int (*write_split)(struct pho_data_processor *proc, size_t split_size,
-                       int idx);
-    int (*read_split)(struct pho_data_processor *proc);
-    int (*delete_split)(struct pho_data_processor *proc);
     int (*get_chunk_size)(struct pho_data_processor *proc, size_t *chunk_size);
-    /*
-     * XXX BEGIN UNDER CONSTRUCTION SECTION
-     */
     int (*read_into_buff)(struct pho_data_processor *proc);
     int (*write_from_buff)(struct pho_data_processor *proc);
     int (*set_extra_attrs)(struct pho_data_processor *proc);
@@ -218,7 +211,6 @@ int raid_locate(struct dss_handle *dss, struct layout_info *layout,
 void raid_reader_processor_destroy(struct pho_data_processor *proc);
 void raid_writer_processor_destroy(struct pho_data_processor *proc);
 void raid_eraser_processor_destroy(struct pho_data_processor *proc);
-void raid_processor_destroy(struct pho_data_processor *proc);
 
 size_t n_total_extents(struct raid_io_context *io_context);
 
