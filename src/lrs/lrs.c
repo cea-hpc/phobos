@@ -40,6 +40,7 @@
 #include "pho_comm.h"
 #include "pho_common.h"
 #include "pho_daemon.h"
+#include "pho_srl_lrs.h"
 #include "pho_type_utils.h"
 
 #include "lrs_cfg.h"
@@ -248,6 +249,10 @@ static int request_kind_from_response(pho_resp_t *resp)
         return PHO_REQUEST_KIND__RQ_FORMAT;
     else if (pho_response_is_notify(resp))
         return PHO_REQUEST_KIND__RQ_NOTIFY;
+    else if (pho_response_is_monitor(resp))
+        return PHO_REQUEST_KIND__RQ_MONITOR;
+    else if (pho_response_is_configure(resp))
+        return PHO_REQUEST_KIND__RQ_CONFIGURE;
     else if (pho_response_is_error(resp))
         return resp->error->req_kind;
     else

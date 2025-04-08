@@ -773,6 +773,10 @@ void prepare_error(struct resp_container *resp_cont, int req_rc,
         resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_FORMAT;
     else if (pho_request_is_notify(req_cont->req))
         resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_NOTIFY;
+    else if (pho_request_is_monitor(req_cont->req))
+        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_MONITOR;
+    else if (pho_request_is_configure(req_cont->req))
+        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_CONFIGURE;
 }
 
 void queue_error_response(struct tsqueue *response_queue, int req_rc,

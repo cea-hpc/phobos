@@ -106,7 +106,7 @@ const char *pho_srl_response_kind_str(pho_resp_t *resp)
 
 const char *pho_srl_error_kind_str(pho_resp_error_t *err)
 {
-    if (err->req_kind > PHO_REQUEST_KIND__RQ_RELEASE)
+    if (err->req_kind > PHO_REQUEST_KIND__RQ_CONFIGURE)
         return "<invalid>";
 
     return SRL_REQ_KIND_STRS[err->req_kind];
