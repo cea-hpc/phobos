@@ -54,50 +54,6 @@ do {                                                  \
     free((_ids));                                     \
 } while (0)
 
-/* dgc stands for dss_general_call, used to determine the function prototype */
-enum dgc_type {
-    DGC_SIMPLE_PARAM,
-    DGC_DUAL_PARAM,
-    DGC_TRI_PARAM,
-};
-
-struct simple_param {
-    struct pho_lock *locks;
-    int (*basic_func)(struct dss_handle *handle, enum dss_type lock_type,
-                      const char *lock_id, struct pho_lock *locks);
-};
-
-struct dual_param {
-    const char *lock_hostname;
-    int lock_owner;
-    int (*basic_func)(struct dss_handle *handle, enum dss_type lock_type,
-                      const char *lock_id, int lock_owner,
-                      const char *lock_hostname);
-};
-
-struct tri_param {
-    const char *lock_hostname;
-    int lock_owner;
-    bool is_early;
-    int (*basic_func)(struct dss_handle *handle, enum dss_type lock_type,
-                      const char *lock_id, int lock_owner,
-                      const char *lock_hostname, bool is_early);
-};
-
-/** This structure serves as an abstraction for the basic_* calls */
-struct dss_generic_call {
-    union {
-        struct simple_param simple;
-        struct dual_param dual;
-        struct tri_param tri;
-    } params;
-    enum dgc_type func_type;
-    int (*rollback_func)(struct dss_handle *handle, enum dss_type type,
-                         GString **ids, int rollback_cnt);
-    bool all_or_nothing;
-    const char *action;
-};
-
 enum lock_query_idx {
     DSS_LOCK_QUERY,
     DSS_REFRESH_QUERY,
@@ -405,63 +361,6 @@ out_cleanup:
     return rc;
 }
 
-static int dss_generic(struct dss_handle *handle, enum dss_type type,
-                       const void *item_list, int item_cnt,
-                       struct dss_generic_call *callee)
-{
-    PGconn *conn = handle->dh_conn;
-    GString **ids;
-    int rc = 0;
-    int i;
-
-    ENTRY;
-
-    LOCK_ID_LIST_ALLOCATE(ids, item_cnt);
-
-    rc = dss_build_lock_id_list(conn, item_list, item_cnt, type, ids);
-    if (rc)
-        LOG_GOTO(cleanup, rc, "Ids list build failed");
-
-    for (i = 0; i < item_cnt; ++i) {
-        int rc2;
-
-        if (callee->func_type == DGC_SIMPLE_PARAM) {
-            struct simple_param *param = &callee->params.simple;
-
-            rc2 = param->basic_func(handle, type, ids[i]->str,
-                                    param->locks ? param->locks + i : NULL);
-
-        } else if (callee->func_type == DGC_DUAL_PARAM) {
-            struct dual_param *param = &callee->params.dual;
-
-            rc2 = param->basic_func(handle, type, ids[i]->str,
-                                    param->lock_owner, param->lock_hostname);
-        } else {
-            struct tri_param *param = &callee->params.tri;
-
-            rc2 = param->basic_func(handle, type, ids[i]->str,
-                                    param->lock_owner, param->lock_hostname,
-                                    param->is_early);
-        }
-
-        if (rc2) {
-            rc = rc ? : rc2;
-            pho_debug("Failed to %s %s (%s)", callee->action, ids[i]->str,
-                                              strerror(-rc2));
-            if (callee->all_or_nothing)
-                break;
-        }
-    }
-
-    if (callee->all_or_nothing && rc)
-        callee->rollback_func(handle, type, ids, i - 1);
-
-cleanup:
-    LOCK_ID_LIST_FREE(ids, item_cnt);
-
-    return rc;
-}
-
 static int dss_lock_rollback(struct dss_handle *handle, enum dss_type type,
                              GString **ids, int rollback_cnt)
 {
@@ -486,22 +385,39 @@ int _dss_lock(struct dss_handle *handle, enum dss_type type,
               const void *item_list, int item_cnt, const char *lock_hostname,
               int lock_pid, bool is_early)
 {
-    struct dss_generic_call callee = {
-        .params = {
-            .tri = {
-                .lock_hostname = lock_hostname,
-                .lock_owner = lock_pid,
-                .is_early = is_early,
-                .basic_func = basic_lock
-            }
-        },
-        .func_type = DGC_TRI_PARAM,
-        .all_or_nothing = true,
-        .rollback_func = dss_lock_rollback,
-        .action = "lock"
-    };
+    PGconn *conn = handle->dh_conn;
+    GString **ids;
+    int rc = 0;
+    int i;
 
-    return dss_generic(handle, type, item_list, item_cnt, &callee);
+    ENTRY;
+
+    LOCK_ID_LIST_ALLOCATE(ids, item_cnt);
+
+    rc = dss_build_lock_id_list(conn, item_list, item_cnt, type, ids);
+    if (rc)
+        LOG_GOTO(cleanup, rc, "Ids list build failed");
+
+    for (i = 0; i < item_cnt; ++i) {
+        int rc2;
+
+        rc2 = basic_lock(handle, type, ids[i]->str, lock_pid,
+                         lock_hostname, is_early);
+
+        if (rc2) {
+            rc = rc ? : rc2;
+            pho_debug("Failed to lock %s (%s)", ids[i]->str, strerror(-rc2));
+            break;
+        }
+    }
+
+    if (rc)
+        dss_lock_rollback(handle, type, ids, i - 1);
+
+cleanup:
+    LOCK_ID_LIST_FREE(ids, item_cnt);
+
+    return rc;
 }
 
 int dss_lock(struct dss_handle *handle, enum dss_type type,
@@ -532,20 +448,35 @@ int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
                       const void *item_list, int item_cnt,
                       const char *lock_hostname, int lock_owner)
 {
-    struct dss_generic_call callee = {
-        .params = {
-            .dual = {
-                .lock_hostname = lock_hostname,
-                .lock_owner = lock_owner,
-                .basic_func = basic_refresh
-            }
-        },
-        .func_type = DGC_DUAL_PARAM,
-        .all_or_nothing = false,
-        .action = "refresh"
-    };
+    PGconn *conn = handle->dh_conn;
+    GString **ids;
+    int rc = 0;
+    int i;
 
-    return dss_generic(handle, type, item_list, item_cnt, &callee);
+    ENTRY;
+
+    LOCK_ID_LIST_ALLOCATE(ids, item_cnt);
+
+    rc = dss_build_lock_id_list(conn, item_list, item_cnt, type, ids);
+    if (rc)
+        LOG_GOTO(cleanup, rc, "Ids list build failed");
+
+    for (i = 0; i < item_cnt; ++i) {
+        int rc2;
+
+        rc2 = basic_refresh(handle, type, ids[i]->str,
+                            lock_owner, lock_hostname);
+
+        if (rc2) {
+            rc = rc ? : rc2;
+            pho_debug("Failed to refresh %s (%s)", ids[i]->str, strerror(-rc2));
+        }
+    }
+
+cleanup:
+    LOCK_ID_LIST_FREE(ids, item_cnt);
+
+    return rc;
 }
 
 int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
@@ -564,20 +495,35 @@ int _dss_unlock(struct dss_handle *handle, enum dss_type type,
                 const void *item_list, int item_cnt, const char *lock_hostname,
                 int lock_owner)
 {
-    struct dss_generic_call callee = {
-        .params = {
-            .dual = {
-                .lock_hostname = lock_hostname,
-                .lock_owner = lock_owner,
-                .basic_func = basic_unlock
-            }
-        },
-        .func_type = DGC_DUAL_PARAM,
-        .all_or_nothing = false,
-        .action = "unlock"
-    };
+    PGconn *conn = handle->dh_conn;
+    GString **ids;
+    int rc = 0;
+    int i;
 
-    return dss_generic(handle, type, item_list, item_cnt, &callee);
+    ENTRY;
+
+    LOCK_ID_LIST_ALLOCATE(ids, item_cnt);
+
+    rc = dss_build_lock_id_list(conn, item_list, item_cnt, type, ids);
+    if (rc)
+        LOG_GOTO(cleanup, rc, "Ids list build failed");
+
+    for (i = 0; i < item_cnt; ++i) {
+        int rc2;
+
+            rc2 = basic_unlock(handle, type, ids[i]->str, lock_owner,
+                               lock_hostname);
+
+        if (rc2) {
+            rc = rc ? : rc2;
+            pho_debug("Failed to unlock %s (%s)", ids[i]->str, strerror(-rc2));
+        }
+    }
+
+cleanup:
+    LOCK_ID_LIST_FREE(ids, item_cnt);
+
+    return rc;
 }
 
 int dss_unlock(struct dss_handle *handle, enum dss_type type,
@@ -596,19 +542,34 @@ int dss_lock_status(struct dss_handle *handle, enum dss_type type,
                     const void *item_list, int item_cnt,
                     struct pho_lock *locks)
 {
-    struct dss_generic_call callee = {
-        .params = {
-            .simple = {
-                .locks = locks,
-                .basic_func = basic_status
-            }
-        },
-        .func_type = DGC_SIMPLE_PARAM,
-        .all_or_nothing = false,
-        .action = "status"
-    };
+    PGconn *conn = handle->dh_conn;
+    GString **ids;
+    int rc = 0;
+    int i;
 
-    return dss_generic(handle, type, item_list, item_cnt, &callee);
+    ENTRY;
+
+    LOCK_ID_LIST_ALLOCATE(ids, item_cnt);
+
+    rc = dss_build_lock_id_list(conn, item_list, item_cnt, type, ids);
+    if (rc)
+        LOG_GOTO(cleanup, rc, "Ids list build failed");
+
+    for (i = 0; i < item_cnt; ++i) {
+        int rc2;
+
+        rc2 = basic_status(handle, type, ids[i]->str, locks ? locks + i : NULL);
+
+        if (rc2) {
+            rc = rc ? : rc2;
+            pho_debug("Failed to status %s (%s)", ids[i]->str, strerror(-rc2));
+        }
+    }
+
+cleanup:
+    LOCK_ID_LIST_FREE(ids, item_cnt);
+
+    return rc;
 }
 
 int dss_lock_device_clean(struct dss_handle *handle, const char *lock_family,
