@@ -289,15 +289,29 @@ static int first_data_processor_call(struct pho_data_processor *proc,
         assert(n_reqs == 0); /* an encoder writer generates no request */
         /* init reader */
         rc = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
-    } else {
+    } else if (is_eraser(proc)) {
         /* init eraser */
         rc = proc->eraser_ops->step(proc, NULL, &requests, &n_reqs);
+    } else {
+        /* copier */
+        /* init reader */
+        rc = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
+        if (rc)
+            return rc;
+
+        assert(n_reqs == 1);
+        rc = send_generated_requests(proc, comm, enc_id, requests, n_reqs, 0);
+        if (rc)
+            return rc;
+
+        /* init writer */
+        rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
     }
 
     if (rc)
         return rc;
 
-    assert(n_reqs == 1); /* first allocation must be generated */
+    assert(n_reqs == 1);
     return send_generated_requests(proc, comm, enc_id, requests, n_reqs, 0);
 }
 
