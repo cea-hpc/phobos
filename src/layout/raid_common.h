@@ -73,7 +73,6 @@ struct read_io_context {
 struct delete_io_context {
     pho_resp_read_t *resp;          /*< Response for the I/O operation */
     size_t to_delete;               /*< Number of extents to delete */
-    struct extent **extents;        /*< Extents to delete */
 };
 
 struct write_io_context {

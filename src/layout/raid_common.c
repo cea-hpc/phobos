@@ -164,9 +164,6 @@ int raid_eraser_init(struct pho_data_processor *eraser,
     io_context->ops = raid_ops;
 
     io_context->iods = xcalloc(n_extents, sizeof(*io_context->iods));
-    io_context->delete.extents = xcalloc(n_extents,
-                                         sizeof(*io_context->delete.extents));
-
     return 0;
 }
 
@@ -223,7 +220,6 @@ void raid_eraser_processor_destroy(struct pho_data_processor *proc)
         if (!io_context)
             return;
 
-        free(io_context->delete.extents);
         free(io_context->iods);
     }
 
