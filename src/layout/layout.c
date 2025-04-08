@@ -188,7 +188,7 @@ int layout_decoder(struct pho_data_processor *decoder,
 
     /* get io_block_size from conf */
     rc = get_cfg_io_block_size(&decoder->io_block_size,
-                               xfer->xd_params.put.family);
+                               layout->extents[0].media.family);
     if (rc) {
         layout_destroy(decoder);
         LOG_RETURN(rc, "Unable to get io_block_size");
