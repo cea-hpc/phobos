@@ -33,7 +33,8 @@
 enum _RESP_KIND {
     _RESP_WRITE,
     _RESP_READ,
-    _RESP_RELEASE,
+    _RESP_RELEASE_READ,
+    _RESP_RELEASE_WRITE,
     _RESP_FORMAT,
     _RESP_NOTIFY,
     _RESP_MONITOR,
@@ -44,7 +45,8 @@ enum _RESP_KIND {
 static const char *const SRL_REQ_KIND_STRS[] = {
     [PHO_REQUEST_KIND__RQ_WRITE]     = "write alloc",
     [PHO_REQUEST_KIND__RQ_READ]      = "read alloc",
-    [PHO_REQUEST_KIND__RQ_RELEASE]   = "release",
+    [PHO_REQUEST_KIND__RQ_RELEASE_READ]   = "read release",
+    [PHO_REQUEST_KIND__RQ_RELEASE_WRITE]   = "write release",
     [PHO_REQUEST_KIND__RQ_FORMAT]    = "format",
     [PHO_REQUEST_KIND__RQ_NOTIFY]    = "notify",
     [PHO_REQUEST_KIND__RQ_MONITOR]   = "monitor",
@@ -54,7 +56,8 @@ static const char *const SRL_REQ_KIND_STRS[] = {
 static const char *const SRL_RESP_KIND_STRS[] = {
     [_RESP_WRITE]     = "write alloc",
     [_RESP_READ]      = "read alloc",
-    [_RESP_RELEASE]   = "release",
+    [_RESP_RELEASE_READ]   = "read release",
+    [_RESP_RELEASE_WRITE]   = "write release",
     [_RESP_FORMAT]    = "format",
     [_RESP_NOTIFY]    = "notify",
     [_RESP_MONITOR]   = "monitor",
@@ -68,8 +71,10 @@ const char *pho_srl_request_kind_str(pho_req_t *req)
         return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_WRITE];
     if (pho_request_is_read(req))
         return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_READ];
-    if (pho_request_is_release(req))
-        return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_RELEASE];
+    if (pho_request_is_release_read(req))
+        return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_RELEASE_READ];
+    if (pho_request_is_release_write(req))
+        return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_RELEASE_WRITE];
     if (pho_request_is_format(req))
         return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_FORMAT];
     if (pho_request_is_notify(req))
@@ -88,8 +93,10 @@ const char *pho_srl_response_kind_str(pho_resp_t *resp)
         return SRL_RESP_KIND_STRS[_RESP_WRITE];
     if (pho_response_is_read(resp))
         return SRL_RESP_KIND_STRS[_RESP_READ];
-    if (pho_response_is_release(resp))
-        return SRL_RESP_KIND_STRS[_RESP_RELEASE];
+    if (pho_response_is_release_read(resp))
+        return SRL_RESP_KIND_STRS[_RESP_RELEASE_READ];
+    if (pho_response_is_release_write(resp))
+        return SRL_RESP_KIND_STRS[_RESP_RELEASE_WRITE];
     if (pho_response_is_format(resp))
         return SRL_RESP_KIND_STRS[_RESP_FORMAT];
     if (pho_response_is_notify(resp))
@@ -102,6 +109,30 @@ const char *pho_srl_response_kind_str(pho_resp_t *resp)
         return SRL_RESP_KIND_STRS[_RESP_CONFIGURE];
 
     return "<invalid>";
+}
+
+int request_kind_from_response(pho_resp_t *resp)
+{
+    if (pho_response_is_write(resp))
+        return PHO_REQUEST_KIND__RQ_WRITE;
+    else if (pho_response_is_read(resp))
+        return PHO_REQUEST_KIND__RQ_READ;
+    else if (pho_response_is_release_read(resp))
+        return PHO_REQUEST_KIND__RQ_RELEASE_READ;
+    else if (pho_response_is_release_write(resp))
+        return PHO_REQUEST_KIND__RQ_RELEASE_WRITE;
+    else if (pho_response_is_format(resp))
+        return PHO_REQUEST_KIND__RQ_FORMAT;
+    else if (pho_response_is_notify(resp))
+        return PHO_REQUEST_KIND__RQ_NOTIFY;
+    else if (pho_response_is_monitor(resp))
+        return PHO_REQUEST_KIND__RQ_MONITOR;
+    else if (pho_response_is_configure(resp))
+        return PHO_REQUEST_KIND__RQ_CONFIGURE;
+    else if (pho_response_is_error(resp))
+        return resp->error->req_kind;
+    else
+        return -1;
 }
 
 const char *pho_srl_error_kind_str(pho_resp_error_t *err)
@@ -161,7 +192,7 @@ void pho_srl_request_read_alloc(pho_req_t *req, size_t n_media)
     }
 }
 
-void pho_srl_request_release_alloc(pho_req_t *req, size_t n_media)
+void pho_srl_request_release_alloc(pho_req_t *req, size_t n_media, bool is_read)
 {
     int i;
 
@@ -184,6 +215,10 @@ void pho_srl_request_release_alloc(pho_req_t *req, size_t n_media)
         req->release->media[i]->grouping = NULL;
     }
     req->release->partial = false;
+    if (is_read)
+        req->release->kind = PHO_REQUEST_KIND__RQ_RELEASE_READ;
+    else
+        req->release->kind = PHO_REQUEST_KIND__RQ_RELEASE_WRITE;
 }
 
 void pho_srl_request_format_alloc(pho_req_t *req)

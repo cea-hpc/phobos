@@ -789,7 +789,7 @@ int import_medium(struct admin_handle *adm, struct media_info *medium,
                            nb_new_obj);
 
     // Release of the medium
-    pho_srl_request_release_alloc(reqs + 1, 1);
+    pho_srl_request_release_alloc(reqs + 1, 1, true);
 
     reqs[1].id = 1;
     reqs[1].release->media[0]->med_id->family = id.family;

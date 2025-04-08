@@ -551,7 +551,7 @@ function test_overhead()
         error "phobos put --file should have failed"
     fi
     set -e
-    echo "$output" | grep "received error release to last request"
+    echo "$output" | grep "received error write release to last request"
 
     # Remove the overhead added at the alloc
     local nb_blocks=$(((($size + ($block_size - 1)) / $block_size) - 3 * 2))

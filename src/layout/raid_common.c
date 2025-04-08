@@ -950,7 +950,7 @@ release:
 
     if (rc || split_ended) {
         pho_srl_request_release_alloc(*reqs + *n_reqs,
-                                      io_context->read.resp->n_media);
+                                      io_context->read.resp->n_media, true);
         for (i = 0; i < io_context->read.resp->n_media; i++) {
             rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
                        io_context->read.resp->media[i]->med_id);
@@ -1002,7 +1002,7 @@ static int raid_writer_split_setup(struct pho_data_processor *proc,
         proc->writer_release_alloc =
             xcalloc(2, sizeof(*proc->writer_release_alloc));
         pho_srl_request_release_alloc(proc->writer_release_alloc,
-                                      proc->write_resp->walloc->n_media);
+                                      proc->write_resp->walloc->n_media, false);
         for (i = 0; i < proc->write_resp->walloc->n_media; i++) {
             rsc_id_cpy(proc->writer_release_alloc->release->media[i]->med_id,
                        proc->write_resp->walloc->media[i]->med_id);
@@ -1484,7 +1484,7 @@ int raid_eraser_processor_step(struct pho_data_processor *proc,
 
     /* prepare release req with potential next alloc */
     *reqs = xcalloc(1, sizeof(**reqs));
-    pho_srl_request_release_alloc(*reqs + *n_reqs, resp->ralloc->n_media);
+    pho_srl_request_release_alloc(*reqs + *n_reqs, resp->ralloc->n_media, true);
     for (i = 0; i < resp->ralloc->n_media; ++i)
         rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
                    resp->ralloc->media[i]->med_id);

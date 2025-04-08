@@ -521,6 +521,7 @@ void queue_release_response(struct tsqueue *response_queue,
     }
 
     resp_release->partial = reqc->req->release->partial;
+    resp_release->kind = reqc->req->release->kind;
 
     tsqueue_push(response_queue, respc);
 }

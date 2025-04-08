@@ -336,20 +336,28 @@ static int processor_communicate(struct pho_data_processor *proc,
     bool reader_done = false;
     pho_req_t *requests = NULL;
     size_t n_reqs = 0;
+    int response_kind;
     int rc = 0;
 
     ENTRY;
+
+    response_kind = request_kind_from_response(resp);
+    if (response_kind < 0)
+        LOG_RETURN(-EPROTO, "Unable to get response kind to chose processor");
 
     if (is_eraser(proc)) {
         rc = proc->eraser_ops->step(proc, resp, &requests, &n_reqs);
         /* an eraser needs no io */
         return send_generated_requests(proc, comm, enc_id, requests, n_reqs,
                                        rc);
-    } else if (is_encoder(proc)) /* XXX more detailed switch for copier */ {
+    } else if (response_kind == PHO_REQUEST_KIND__RQ_WRITE ||
+               response_kind == PHO_REQUEST_KIND__RQ_RELEASE_WRITE) {
         rc = proc->writer_ops->step(proc, resp, &requests, &n_reqs);
         if (n_reqs)
             writer_done = true;
-    } else if (is_decoder(proc)) /* XXX more detailed switch for copier */ {
+    } else {
+        assert(response_kind == PHO_REQUEST_KIND__RQ_READ ||
+               response_kind == PHO_REQUEST_KIND__RQ_RELEASE_READ);
         rc = proc->reader_ops->step(proc, resp, &requests, &n_reqs);
         if (n_reqs)
             reader_done = true;

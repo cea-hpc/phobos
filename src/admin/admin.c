@@ -1360,9 +1360,9 @@ static int _send_and_recv_release(struct admin_handle *adm,
     int rc;
 
     if (target != NULL)
-        pho_srl_request_release_alloc(&req, 2);
+        pho_srl_request_release_alloc(&req, 2, false);
     else
-        pho_srl_request_release_alloc(&req, 1);
+        pho_srl_request_release_alloc(&req, 1, true);
     req.id = req_id;
     req.release->media[0]->med_id->family = source->family;
     req.release->media[0]->med_id->name = xstrdup(source->name);

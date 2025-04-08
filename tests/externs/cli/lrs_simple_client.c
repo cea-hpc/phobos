@@ -229,7 +229,7 @@ static void send_release(struct pho_comm_info *comm,
     pho_req_t req;
     int i;
 
-    pho_srl_request_release_alloc(&req, n_media);
+    pho_srl_request_release_alloc(&req, n_media, false);
 
     for (i = 0; i < n_media; i++) {
         req.release->media[i]->med_id->family = family;

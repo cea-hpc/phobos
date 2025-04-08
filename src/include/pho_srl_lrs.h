@@ -64,7 +64,7 @@ typedef PhoResponse__Error          pho_resp_error_t;
  * If the protocol version is greater than 127, need to increase its size
  * to an integer size (4 bytes).
  */
-#define PHO_PROTOCOL_VERSION      12
+#define PHO_PROTOCOL_VERSION      13
 /**
  * Protocol version size in bytes.
  */
@@ -111,6 +111,34 @@ static inline bool pho_request_is_read(const pho_req_t *req)
 static inline bool pho_request_is_release(const pho_req_t *req)
 {
     return req->release != NULL;
+}
+
+/**
+ * Request release read checker.
+ *
+ * \param[in]       req         Request.
+ *
+ * \return                      true if the request is a release read one,
+ *                              false else.
+ */
+static inline bool pho_request_is_release_read(const pho_req_t *req)
+{
+    return (req->release != NULL &&
+            req->release->kind == PHO_REQUEST_KIND__RQ_RELEASE_READ);
+}
+
+/**
+ * Request release write checker.
+ *
+ * \param[in]       req         Request.
+ *
+ * \return                      true if the request is a release write one,
+ *                              false else.
+ */
+static inline bool pho_request_is_release_write(const pho_req_t *req)
+{
+    return (req->release != NULL &&
+            req->release->kind == PHO_REQUEST_KIND__RQ_RELEASE_WRITE);
 }
 
 /**
@@ -214,6 +242,34 @@ static inline bool pho_response_is_read(const pho_resp_t *resp)
 static inline bool pho_response_is_release(const pho_resp_t *resp)
 {
     return resp->release != NULL;
+}
+
+/**
+ * Response release read checker.
+ *
+ * \param[in]       resp        Response.
+ *
+ * \return                      true if the response is a release read one,
+ *                              false else.
+ */
+static inline bool pho_response_is_release_read(const pho_resp_t *resp)
+{
+    return (resp->release != NULL &&
+            resp->release->kind == PHO_REQUEST_KIND__RQ_RELEASE_READ);
+}
+
+/**
+ * Response release write checker.
+ *
+ * \param[in]       resp        Response.
+ *
+ * \return                      true if the response is a release write one,
+ *                              false else.
+ */
+static inline bool pho_response_is_release_write(const pho_resp_t *resp)
+{
+    return (resp->release != NULL &&
+            resp->release->kind == PHO_REQUEST_KIND__RQ_RELEASE_WRITE);
 }
 
 /**
@@ -329,6 +385,15 @@ const char *pho_srl_request_kind_str(pho_req_t *req);
 const char *pho_srl_response_kind_str(pho_resp_t *resp);
 
 /**
+ * Return kind of response
+ *
+ * \param[in]       resp        Response
+ *
+ * \return                      The kind of the response or -1 on error
+ */
+int request_kind_from_response(pho_resp_t *resp);
+
+/**
  * Human readable string converter for request kind of an error response.
  *
  * \param[in]       err         Error response.
@@ -365,8 +430,10 @@ void pho_srl_request_read_alloc(pho_req_t *req, size_t n_media);
  *
  * \param[out]      req         Pointer to the request data structure.
  * \param[in]       n_media     Number of media targeted by the request.
+ * \param[in]       is_read     True only if the release fits a read alloc.
  */
-void pho_srl_request_release_alloc(pho_req_t *req, size_t n_media);
+void pho_srl_request_release_alloc(pho_req_t *req, size_t n_media,
+                                   bool is_read);
 
 /**
  * Allocation of format request contents.

@@ -91,6 +91,8 @@ message PhoRequest {
         required bool partial = 2;  // Whether the client requires the LRS to
                                     // perform only a sync without releasing the
                                     // medium.
+        required PhoRequestKind kind = 3;   // Kind of release:
+                                            // read or write
     }
 
     /** Body of the format request. */
@@ -186,6 +188,8 @@ message PhoResponse {
     message Release {
         repeated PhoResourceId med_ids = 1;     // IDs of released media.
         required bool partial          = 2;     // Is a partial release ?
+        required PhoRequestKind kind   = 3;     // Kind of release:
+                                                // read or write
     }
 
     /** Body of the format response. */

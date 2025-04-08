@@ -768,7 +768,7 @@ void prepare_error(struct resp_container *resp_cont, int req_rc,
     else if (pho_request_is_read(req_cont->req))
         resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_READ;
     else if (pho_request_is_release(req_cont->req))
-        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_RELEASE;
+        resp_cont->resp->error->req_kind = req_cont->req->release->kind;
     else if (pho_request_is_format(req_cont->req))
         resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_FORMAT;
     else if (pho_request_is_notify(req_cont->req))

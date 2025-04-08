@@ -77,14 +77,18 @@ enum PhoAddressType {
 
 /** LRS request kind (used in PhoResponse). */
 enum PhoRequestKind {
-    RQ_WRITE     = 0; // Media allocation with write ability.
-    RQ_READ      = 1; // Media allocation with read ability.
-    RQ_RELEASE   = 2; // Media release and flush. The IO is considered
-                      // complete once the release and flush are done.
-    RQ_FORMAT    = 3; // Medium format.
-    RQ_NOTIFY    = 4; // LRS notification to refresh device/medium information.
-    RQ_MONITOR   = 5; // Query information about the current status of the LRS.
-    RQ_CONFIGURE = 6; // Get/Set configuration information from the LRS
+    RQ_WRITE         = 0; // Media allocation with write ability.
+    RQ_READ          = 1; // Media allocation with read ability.
+    RQ_RELEASE_READ  = 2; // Read Media release and flush. The IO is considered
+                          // complete once the release and flush are done.
+    RQ_RELEASE_WRITE = 3; // Write Media release and flush. The IO is considered
+                          // complete once the release and flush are done.
+    RQ_FORMAT        = 4; // Medium format.
+    RQ_NOTIFY        = 5; // LRS notification to refresh device/medium
+                          // information.
+    RQ_MONITOR       = 6; // Query information about the current status of the
+                          // LRS.
+    RQ_CONFIGURE     = 7; // Get/Set configuration information from the LRS
 }
 
 /** LRS sync threshold */

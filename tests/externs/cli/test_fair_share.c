@@ -87,7 +87,7 @@ static void handle_read_response(struct context *context,
     context->stats.responses++;
     pho_debug("read: %s", resp->ralloc->media[0]->med_id->name);
 
-    pho_srl_request_release_alloc(&request.req, 1);
+    pho_srl_request_release_alloc(&request.req, 1, true);
 
     request.req.id = resp->req_id;
     request.req.release->media[0]->med_id->family = PHO_RSC_TAPE;
@@ -114,7 +114,7 @@ static void handle_write_response(struct context *context,
 
     context->stats.responses++;
     pho_debug("write: %s", resp->walloc->media[0]->med_id->name);
-    pho_srl_request_release_alloc(&request.req, 1);
+    pho_srl_request_release_alloc(&request.req, 1, false);
 
     request.req.id = resp->req_id;
     request.req.release->media[0]->med_id->family = PHO_RSC_TAPE;

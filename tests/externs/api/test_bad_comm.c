@@ -211,7 +211,7 @@ static int send_write_and_release_with_rc(struct pho_comm_info *ci,
         goto out;
 
     pho_srl_request_free(&req, false);
-    pho_srl_request_release_alloc(&req, 1);
+    pho_srl_request_release_alloc(&req, 1, false);
     req.release->media[0]->med_id->family = PHO_RSC_DIR;
     req.release->media[0]->med_id->name =
         xstrdup(resp->walloc->media[0]->med_id->name);
@@ -308,7 +308,7 @@ static int test_bad_mput(void *arg)
 
     pho_srl_request_free(&reqs[0], false);
 
-    pho_srl_request_release_alloc(&reqs[0], 1);
+    pho_srl_request_release_alloc(&reqs[0], 1, false);
     reqs[0].id = 0;
     reqs[0].release->media[0]->med_id->family = PHO_RSC_DIR;
     reqs[0].release->media[0]->med_id->name =
@@ -398,7 +398,7 @@ static int test_bad_mget(void *arg)
 
     pho_srl_request_free(&reqs[0], false);
 
-    pho_srl_request_release_alloc(&reqs[0], 1);
+    pho_srl_request_release_alloc(&reqs[0], 1, true);
     reqs[0].id = 0;
     reqs[0].release->media[0]->med_id->family = PHO_RSC_DIR;
     reqs[0].release->media[0]->med_id->name =
@@ -426,7 +426,7 @@ static int test_bad_release(void *arg)
     int rc = 0;
 
     // Bad resource name
-    pho_srl_request_release_alloc(&req, 1);
+    pho_srl_request_release_alloc(&req, 1, false);
     req.id = 0;
     req.release->media[0]->med_id->family = PHO_RSC_DIR;
     req.release->media[0]->med_id->name = xstrdup("/tmp/not/a/med");

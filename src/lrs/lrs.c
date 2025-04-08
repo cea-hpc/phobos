@@ -237,28 +237,6 @@ static void notify_device_request_is_canceled(struct resp_container *respc)
     }
 }
 
-static int request_kind_from_response(pho_resp_t *resp)
-{
-    if (pho_response_is_write(resp))
-        return PHO_REQUEST_KIND__RQ_WRITE;
-    else if (pho_response_is_read(resp))
-        return PHO_REQUEST_KIND__RQ_READ;
-    else if (pho_response_is_release(resp))
-        return PHO_REQUEST_KIND__RQ_RELEASE;
-    else if (pho_response_is_format(resp))
-        return PHO_REQUEST_KIND__RQ_FORMAT;
-    else if (pho_response_is_notify(resp))
-        return PHO_REQUEST_KIND__RQ_NOTIFY;
-    else if (pho_response_is_monitor(resp))
-        return PHO_REQUEST_KIND__RQ_MONITOR;
-    else if (pho_response_is_configure(resp))
-        return PHO_REQUEST_KIND__RQ_CONFIGURE;
-    else if (pho_response_is_error(resp))
-        return resp->error->req_kind;
-    else
-        return -1;
-}
-
 static void convert_response_to_error(struct resp_container *respc)
 {
     int response_kind = request_kind_from_response(respc->resp);
