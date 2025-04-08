@@ -325,8 +325,6 @@ static int raid_io_context_open(struct raid_io_context *io_context,
                          ext_location.extent->media.library,
                          ext_location.extent->media.name);
         }
-
-        pho_debug("I/O size for replicate %lu: %zu", i, proc->io_block_size);
     }
 
     return 0;

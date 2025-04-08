@@ -139,14 +139,6 @@ int layout_encoder(struct pho_data_processor *encoder,
         encoder->dest_layout[i].copy_name = xstrdup(copy_name);
     }
 
-    /* get io_block_size from conf */
-    rc = get_cfg_io_block_size(&encoder->io_block_size,
-                               xfer->xd_params.put.family);
-    if (rc) {
-        layout_destroy(encoder);
-        return rc;
-    }
-
     rc = mod->ops->encode(encoder);
     if (rc) {
         layout_destroy(encoder);
@@ -185,14 +177,6 @@ int layout_decoder(struct pho_data_processor *decoder,
     decoder->done = false;
     decoder->xfer = xfer;
     decoder->src_layout = layout;
-
-    /* get io_block_size from conf */
-    rc = get_cfg_io_block_size(&decoder->io_block_size,
-                               layout->extents[0].media.family);
-    if (rc) {
-        layout_destroy(decoder);
-        LOG_RETURN(rc, "Unable to get io_block_size");
-    }
 
     rc = mod->ops->decode(decoder);
     if (rc) {
