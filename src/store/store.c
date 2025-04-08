@@ -332,28 +332,40 @@ static int processor_communicate(struct pho_data_processor *proc,
                                  struct pho_comm_info *comm, pho_resp_t *resp,
                                  int enc_id)
 {
+    bool writer_done = false;
+    bool reader_done = false;
     pho_req_t *requests = NULL;
     size_t n_reqs = 0;
     int rc = 0;
 
     ENTRY;
 
-    if (is_encoder(proc)) {
-            rc = proc->writer_ops->step(proc, resp, &requests, &n_reqs);
-    } else if (is_decoder(proc)) {
-            rc = proc->reader_ops->step(proc, resp, &requests, &n_reqs);
-    } else {
+    if (is_eraser(proc)) {
         rc = proc->eraser_ops->step(proc, resp, &requests, &n_reqs);
-        goto skip_io; /* an eraser needs no io */
+        /* an eraser needs no io */
+        return send_generated_requests(proc, comm, enc_id, requests, n_reqs,
+                                       rc);
+    } else if (is_encoder(proc)) /* XXX more detailed switch for copier */ {
+        rc = proc->writer_ops->step(proc, resp, &requests, &n_reqs);
+        if (n_reqs)
+            writer_done = true;
+    } else if (is_decoder(proc)) /* XXX more detailed switch for copier */ {
+        rc = proc->reader_ops->step(proc, resp, &requests, &n_reqs);
+        if (n_reqs)
+            reader_done = true;
     }
 
+    rc = send_generated_requests(proc, comm, enc_id, requests, n_reqs, rc);
+    requests = NULL;
+    n_reqs = 0;
     if (rc)
-        goto skip_io;
+        return rc;
+
 
     /* A release generates no new IO. */
     if (pho_response_is_release(resp) &&
         !pho_response_is_partial_release(resp)) {
-        goto skip_io;
+        return rc;
     }
 
     /* allocating buffer if ready to be done */
@@ -362,31 +374,45 @@ static int processor_communicate(struct pho_data_processor *proc,
             pho_buff_alloc(&proc->buff, lcm(proc->reader_stripe_size,
                                             proc->writer_stripe_size));
         else
-            goto skip_io;
+            return rc;
     }
 
-    /* if all is already read by decoder, we need only one writing */
-    if (is_decoder(proc) && n_reqs) {
-        rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
-        goto skip_io;
-    }
-
-    /* process buffer data until we face an error or new request */
-    while (!rc && !n_reqs) {
+    /* process buffer data until we face an error */
+    /* no more io needed after a completed write step */
+    while (!rc && !writer_done) {
         /* try read first */
-        if (proc->reader_offset == proc->writer_offset &&
-            !proc->object_size == 0)
+        if (!reader_done && proc->reader_offset == proc->writer_offset &&
+            !proc->object_size == 0) {
             rc = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
+            if (n_reqs) {
+                rc = send_generated_requests(proc, comm, enc_id, requests,
+                                             n_reqs, rc);
+                requests = NULL;
+                n_reqs = 0;
+                reader_done = true;
+            }
+        }
+
+        /* only one posix writing is enough for decoder after a read step */
+        if (!rc && reader_done && is_decoder(proc)) {
+            rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
+            assert(n_reqs == 0);
+            return rc;
+        }
 
         /* then try following write */
         if (!rc && (proc->reader_offset > proc->writer_offset ||
-                proc->object_size == 0))
+                proc->object_size == 0)) {
             rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
+            if (n_reqs) {
+                /* no more io needed after a completed write step */
+                return send_generated_requests(proc, comm, enc_id, requests,
+                                               n_reqs, rc);
+            }
+        }
     }
 
-skip_io:
-    /* Dispatch generated requests (even on error, if any) */
-    return send_generated_requests(proc, comm, enc_id, requests, n_reqs, rc);
+    return rc;
 }
 
 /**
