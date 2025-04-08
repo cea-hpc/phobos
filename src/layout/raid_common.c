@@ -262,33 +262,35 @@ void raid_writer_processor_destroy(struct pho_data_processor *proc)
 }
 
 static struct raid_io_context *io_context_from_proc(
-    struct pho_data_processor *proc, int target_idx)
+    struct pho_data_processor *proc, int target_idx, enum processor_type type)
 {
-    if (is_encoder(proc))
+    if (type == PHO_PROC_ENCODER)
         return &((struct raid_io_context *)proc->private_writer)[target_idx];
 
-    if (is_decoder(proc))
+    if (type == PHO_PROC_DECODER)
         return &((struct raid_io_context *)proc->private_reader)[target_idx];
 
+    /* PHO_PROC_ERASER */
     return &((struct raid_io_context *)proc->private_eraser)[target_idx];
 }
 
 struct pho_ext_loc make_ext_location(struct pho_data_processor *proc, size_t i,
-                                     int target_idx)
+                                     int target_idx, enum processor_type type)
 {
-    struct raid_io_context *io_context = io_context_from_proc(proc, target_idx);
+    struct raid_io_context *io_context = io_context_from_proc(proc, target_idx,
+                                                              type);
     struct pho_ext_loc loc;
 
-    if (is_encoder(proc)) {
+    if (type == PHO_PROC_ENCODER) {
         loc.root_path = proc->write_resp->walloc->media[i]->root_path;
         loc.addr_type = proc->write_resp->walloc->media[i]->addr_type;
         loc.extent = &io_context->write.extents[i];
-    } else if (is_decoder(proc)) {
+    } else if (type == PHO_PROC_DECODER) {
         loc.root_path = io_context->read.resp->media[i]->root_path;
         loc.addr_type = io_context->read.resp->media[i]->addr_type;
         loc.extent = io_context->read.extents[i];
     } else {
-        /* eraser */
+        /* PHO_PROC_ERASER */
         loc.root_path = io_context->delete.resp->media[i]->root_path;
         loc.addr_type = io_context->delete.resp->media[i]->addr_type;
         loc.extent = &proc->src_layout->extents[i];
@@ -299,14 +301,15 @@ struct pho_ext_loc make_ext_location(struct pho_data_processor *proc, size_t i,
 
 static int raid_io_context_open(struct raid_io_context *io_context,
                                 struct pho_data_processor *proc,
-                                size_t count, int target_idx)
+                                size_t count, int target_idx,
+                                enum processor_type type)
 {
     size_t i;
     int rc;
 
     for (i = 0; i < count; ++i) {
         struct pho_ext_loc ext_location = make_ext_location(proc, i,
-                                                            target_idx);
+                                                            target_idx, type);
         struct pho_io_descr *iod = &io_context->iods[i];
 
         iod->iod_size = 0;
@@ -314,7 +317,7 @@ static int raid_io_context_open(struct raid_io_context *io_context,
         if (!is_eraser(proc)) {
             rc = ioa_open(iod->iod_ioa,
                           proc->xfer->xd_targets[target_idx].xt_objid, iod,
-                          is_encoder(proc));
+                          type == PHO_PROC_ENCODER);
             if (rc)
                 LOG_GOTO(out_close, rc,
                          "raid: unable to open extent for '%s' on '%s':'%s'",
@@ -425,10 +428,10 @@ static void raid_writer_build_allocation_req(struct pho_data_processor *proc,
 
 /** Generate the next read or delete allocation request for this eraser */
 static void raid_reader_eraser_build_allocation_req(
-    struct pho_data_processor *proc, pho_req_t *req)
+    struct pho_data_processor *proc, pho_req_t *req, enum processor_type type)
 {
     struct raid_io_context *io_context =
-        io_context_from_proc(proc, proc->current_target);
+        io_context_from_proc(proc, proc->current_target, type);
     size_t n_extents = n_total_extents(io_context);
     int i;
 
@@ -779,7 +782,7 @@ static int raid_reader_split_setup(struct pho_data_processor *proc,
     sort_extents_by_layout_index(io_context->read.resp,
                                  io_context->read.extents, n_media);
 
-    rc = raid_io_context_open(io_context, proc, n_media, 0);
+    rc = raid_io_context_open(io_context, proc, n_media, 0, PHO_PROC_DECODER);
     if (rc)
         return rc;
 
@@ -911,7 +914,7 @@ int raid_reader_processor_step(struct pho_data_processor *proc,
     if (!resp && !proc->buff.size) {
         *reqs = xcalloc(1, sizeof(**reqs));
         *n_reqs = 1;
-        raid_reader_eraser_build_allocation_req(proc, *reqs);
+        raid_reader_eraser_build_allocation_req(proc, *reqs, PHO_PROC_DECODER);
         return 0;
     }
 
@@ -962,7 +965,8 @@ release:
 
 
    if (need_new_alloc) {
-        raid_reader_eraser_build_allocation_req(proc, *reqs + *n_reqs);
+        raid_reader_eraser_build_allocation_req(proc, *reqs + *n_reqs,
+                                                PHO_PROC_DECODER);
         (*n_reqs)++;
    }
 
@@ -1046,7 +1050,7 @@ static int raid_writer_split_setup(struct pho_data_processor *proc,
                                     extent_size, extent_size_remainder,
                                     proc->writer_offset);
     rc = raid_io_context_open(io_context, proc, n_extents,
-                              proc->current_target);
+                              proc->current_target, PHO_PROC_ENCODER);
     if (rc)
         return rc;
 
@@ -1428,7 +1432,8 @@ static int raid_eraser_handle_release_resp(struct pho_data_processor *proc,
             proc->done = true;
     } else {
         *reqs = xcalloc(1, sizeof(**reqs));
-        raid_reader_eraser_build_allocation_req(proc, *reqs + *n_reqs);
+        raid_reader_eraser_build_allocation_req(proc, *reqs + *n_reqs,
+                                                PHO_PROC_ERASER);
         (*n_reqs)++;
     }
 
@@ -1448,7 +1453,7 @@ int raid_eraser_processor_step(struct pho_data_processor *proc,
     if (!resp) {
         *reqs = xcalloc(1, sizeof(**reqs));
         *n_reqs = 1;
-        raid_reader_eraser_build_allocation_req(proc, *reqs);
+        raid_reader_eraser_build_allocation_req(proc, *reqs, PHO_PROC_ERASER);
         return 0;
     }
 
@@ -1512,7 +1517,8 @@ int raid_eraser_processor_step(struct pho_data_processor *proc,
             break;
         }
 
-        loc = make_ext_location(proc, ext_index, proc->current_target);
+        loc = make_ext_location(proc, ext_index, proc->current_target,
+                                PHO_PROC_ERASER);
         iod.iod_loc = &loc;
         rc = ioa_del(iod.iod_ioa, &iod);
         if (rc)
