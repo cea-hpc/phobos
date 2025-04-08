@@ -300,6 +300,23 @@ int layout_eraser(struct pho_data_processor *eraser,
                   struct pho_xfer_desc *xfer, struct layout_info *layout);
 
 /**
+ * Initialize a new data processor to copy an object described by \a xfer from
+ * phobos.
+ *
+ * @param[out]  copier  Copier to be initialized
+ * @param[in]   xfer    Transfer to make this copier work on. A reference on it
+ *                      will be kept as long as \a enc is in use and some of its
+ *                      fields may be modified (notably xd_rc).
+ * @param[in]   layout  Layout of the object to copy. It is used in-place by
+ *                      the copier and must be freed separately by the caller
+ *                      after the copier is destroyed.
+ *
+ * @return 0 on success, -errno on error.
+ */
+int layout_copier(struct pho_data_processor *copier, struct pho_xfer_desc *xfer,
+                  struct layout_info *layout);
+
+/**
  * Retrieve one node name from which an object can be accessed.
  *
  * @param[in]   dss         DSS handle

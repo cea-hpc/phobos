@@ -83,8 +83,8 @@ static int build_layout_name(const char *layout_name, char *path, size_t len)
     return 0;
 }
 
-int layout_encoder(struct pho_data_processor *encoder,
-                   struct pho_xfer_desc *xfer)
+static int build_layout_writer(struct pho_data_processor *encoder,
+                               struct pho_xfer_desc *xfer)
 {
     char layout_name[NAME_MAX];
     struct layout_module *mod;
@@ -112,22 +112,17 @@ int layout_encoder(struct pho_data_processor *encoder,
      * this type have been destroyed, since they all hold a reference to the
      * module's code. In this implementation, the module is never unloaded.
      */
-    encoder->type = PHO_PROC_ENCODER;
-    encoder->done = false;
-    encoder->xfer = xfer;
-    encoder->dest_layout = xcalloc(encoder->xfer->xd_ntargets,
-                                   sizeof(*encoder->dest_layout));
 
     if (xfer->xd_params.put.copy_name) {
         copy_name = xfer->xd_params.put.copy_name;
     } else {
         rc = get_cfg_default_copy_name(&copy_name);
-        if (rc) {
-            free(encoder->dest_layout);
-            encoder->dest_layout = NULL;
+        if (rc)
             return rc;
-        }
     }
+
+    encoder->dest_layout = xcalloc(encoder->xfer->xd_ntargets,
+                                   sizeof(*encoder->dest_layout));
 
     /* set first object size */
     if (encoder->xfer->xd_ntargets > 0)
@@ -139,22 +134,32 @@ int layout_encoder(struct pho_data_processor *encoder,
         encoder->dest_layout[i].copy_name = xstrdup(copy_name);
     }
 
-    rc = mod->ops->encode(encoder);
+    return mod->ops->encode(encoder);
+}
+
+int layout_encoder(struct pho_data_processor *encoder,
+                   struct pho_xfer_desc *xfer)
+{
+    int rc;
+
+    encoder->type = PHO_PROC_ENCODER;
+    encoder->done = false;
+    encoder->xfer = xfer;
+
+    rc = build_layout_writer(encoder, xfer);
     if (rc) {
         layout_destroy(encoder);
-        LOG_RETURN(rc, "Unable to create encoder");
+        LOG_RETURN(rc, "unable to create writer part of an encoder");
     }
 
     rc = set_posix_reader(encoder);
-    if (rc) {
+    if (rc)
         layout_destroy(encoder);
-        return rc;
-    }
 
     return rc;
-}
+};
 
-int layout_decoder(struct pho_data_processor *decoder,
+static int build_layout_reader(struct pho_data_processor *decoder,
                    struct pho_xfer_desc *xfer, struct layout_info *layout)
 {
     char layout_name[NAME_MAX];
@@ -172,23 +177,29 @@ int layout_decoder(struct pho_data_processor *decoder,
     if (rc)
         return rc;
 
-    /* See notes in layout_encode */
+    decoder->src_layout = layout;
+
+    return mod->ops->decode(decoder);
+}
+
+int layout_decoder(struct pho_data_processor *decoder,
+                   struct pho_xfer_desc *xfer, struct layout_info *layout)
+{
+    int rc;
+
     decoder->type = PHO_PROC_DECODER;
     decoder->done = false;
     decoder->xfer = xfer;
-    decoder->src_layout = layout;
 
-    rc = mod->ops->decode(decoder);
+    rc = build_layout_reader(decoder, xfer, layout);
     if (rc) {
         layout_destroy(decoder);
-        LOG_RETURN(rc, "Unable to create decoder");
+        LOG_RETURN(rc, "unable to create reader part of a decoder");
     }
 
     rc = set_posix_writer(decoder);
-    if (rc) {
+    if (rc)
         layout_destroy(decoder);
-        return rc;
-    }
 
     return rc;
 }
@@ -221,6 +232,30 @@ int layout_eraser(struct pho_data_processor *eraser, struct pho_xfer_desc *xfer,
     if (rc) {
         layout_destroy(eraser);
         LOG_RETURN(rc, "Unable to create eraser");
+    }
+
+    return rc;
+}
+
+int layout_copier(struct pho_data_processor *copier, struct pho_xfer_desc *xfer,
+                  struct layout_info *layout)
+{
+    int rc;
+
+    copier->type = PHO_PROC_COPIER;
+    copier->done = false;
+    copier->xfer = xfer;
+
+    rc = build_layout_writer(copier, xfer);
+    if (rc) {
+        layout_destroy(copier);
+        LOG_RETURN(rc, "unable to create writer part of a copier");
+    }
+
+    rc = build_layout_reader(copier, xfer, layout);
+    if (rc) {
+        layout_destroy(copier);
+        LOG_RETURN(rc, "unable to create reader part of a copier");
     }
 
     return rc;
