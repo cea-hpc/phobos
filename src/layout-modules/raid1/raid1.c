@@ -275,8 +275,8 @@ static const struct raid_ops RAID1_OPS = {
     .set_extra_attrs = raid1_extra_attrs,
 };
 
-static int raid1_get_repl_count(struct pho_data_processor *enc,
-                                unsigned int *repl_count)
+static int raid1_encoder_get_repl_count(struct pho_data_processor *enc,
+                                        unsigned int *repl_count)
 {
     const char *string_repl_count;
     int rc;
@@ -297,11 +297,11 @@ static int raid1_get_repl_count(struct pho_data_processor *enc,
 
     for (i = 0; i < enc->xfer->xd_ntargets; i++) {
         /* set repl_count as char * in layout */
-        pho_attr_set(&enc->layout[i].layout_desc.mod_attrs,
+        pho_attr_set(&enc->dest_layout[i].layout_desc.mod_attrs,
                      PHO_EA_RAID1_REPL_COUNT_NAME, string_repl_count);
 
         /* set repl_count in encoder */
-        rc = raid1_repl_count(&enc->layout[i], repl_count);
+        rc = raid1_repl_count(&enc->dest_layout[i], repl_count);
         if (rc)
             LOG_RETURN(rc, "Invalid replica count from layout to build raid1 "
                            "encoder");
@@ -318,7 +318,7 @@ static int raid1_get_repl_count(struct pho_data_processor *enc,
  * Create an encoder.
  *
  * This function initializes the internal raid1_encoder based on encoder->xfer
- * and encoder->layout.
+ * and encoder->dest_layout.
  *
  * Implements the layout_encode layout module methods.
  */
@@ -330,7 +330,7 @@ static int layout_raid1_encode(struct pho_data_processor *encoder)
     size_t i, j;
     int rc;
 
-    rc = raid1_get_repl_count(encoder, &repl_count);
+    rc = raid1_encoder_get_repl_count(encoder, &repl_count);
     if (rc)
         return rc;
 
@@ -387,15 +387,15 @@ static int layout_raid1_decode(struct pho_data_processor *decoder)
 
     ENTRY;
 
-    rc = raid1_repl_count(decoder->layout, &repl_count);
+    rc = raid1_repl_count(decoder->src_layout, &repl_count);
     if (rc)
         LOG_RETURN(rc,
                    "Invalid replica count from layout to build raid1 decoder");
 
-    if (decoder->layout->ext_count % repl_count != 0)
+    if (decoder->src_layout->ext_count % repl_count != 0)
         LOG_RETURN(-EINVAL, "layout extents count (%d) is not a multiple "
                    "of replica count (%u)",
-                   decoder->layout->ext_count, repl_count);
+                   decoder->src_layout->ext_count, repl_count);
 
     io_context = xcalloc(1, sizeof(*io_context));
     decoder->private_reader = io_context;
@@ -421,8 +421,8 @@ static int layout_raid1_decode(struct pho_data_processor *decoder)
 
     io_context->read.to_read = 0;
     decoder->object_size = 0;
-    for (i = 0; i < decoder->layout->ext_count / repl_count; i++) {
-        struct extent *extent = &decoder->layout->extents[i * repl_count];
+    for (i = 0; i < decoder->src_layout->ext_count / repl_count; i++) {
+        struct extent *extent = &decoder->src_layout->extents[i * repl_count];
 
         io_context->read.to_read += extent->size;
         decoder->object_size += extent->size;
@@ -441,7 +441,7 @@ static int layout_raid1_erase(struct pho_data_processor *eraser)
     unsigned int repl_count;
     int rc;
 
-    rc = raid1_repl_count(eraser->layout, &repl_count);
+    rc = raid1_repl_count(eraser->src_layout, &repl_count);
     if (rc)
         LOG_RETURN(rc, "Invalid replica count from layout to build raid1 "
                        "eraser");
@@ -461,9 +461,9 @@ static int layout_raid1_erase(struct pho_data_processor *eraser)
 
     io_context->delete.to_delete = 0;
     /* No hard removal on tapes */
-    if (eraser->layout->ext_count != 0 &&
-        eraser->layout->extents[0].media.family != PHO_RSC_TAPE)
-        io_context->delete.to_delete = eraser->layout->ext_count;
+    if (eraser->src_layout->ext_count != 0 &&
+        eraser->src_layout->extents[0].media.family != PHO_RSC_TAPE)
+        io_context->delete.to_delete = eraser->src_layout->ext_count;
 
     if (io_context->delete.to_delete == 0)
         eraser->done = true;

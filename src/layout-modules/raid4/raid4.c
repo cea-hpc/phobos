@@ -52,7 +52,11 @@ static int raid4_get_chunk_size(struct pho_data_processor *proc,
     const char *attr;
     int64_t value;
 
-    extent = &proc->layout->extents[0];
+    if (is_encoder(proc))
+        extent = &proc->dest_layout->extents[0];
+    else
+        extent = &proc->src_layout->extents[0];
+
     attr = pho_attr_get(&extent->info, "raid4.chunk_size");
     if (!attr)
         LOG_RETURN(-EINVAL,
@@ -212,20 +216,20 @@ static int layout_raid4_decode(struct pho_data_processor *decoder)
     if (rc)
         return rc;
 
-    /* Size is the sum of the extent sizes, decoder->layout->wr_size is not
+    /* Size is the sum of the extent sizes, decoder->src_layout->wr_size is not
      * positioned properly by the dss
      */
-    if (decoder->layout->ext_count % 3 != 0)
+    if (decoder->src_layout->ext_count % 3 != 0)
         LOG_RETURN(-EINVAL,
                    "raid4 Xor layout extents count (%d) is not a multiple of 3",
-                   decoder->layout->ext_count);
+                   decoder->src_layout->ext_count);
 
     io_context->read.to_read = 0;
     decoder->object_size = 0;
-    for (i = 0; i < decoder->layout->ext_count; i = i + 3) {
-        io_context->read.to_read += decoder->layout->extents[i].size;
-        decoder->object_size += decoder->layout->extents[i].size;
-        decoder->object_size += decoder->layout->extents[i + 1].size;
+    for (i = 0; i < decoder->src_layout->ext_count; i = i + 3) {
+        io_context->read.to_read += decoder->src_layout->extents[i].size;
+        decoder->object_size += decoder->src_layout->extents[i].size;
+        decoder->object_size += decoder->src_layout->extents[i + 1].size;
     }
 
     /* Empty GET does not need any IO */
@@ -256,9 +260,9 @@ static int layout_raid4_erase(struct pho_data_processor *eraser)
 
     io_context->delete.to_delete = 0;
     /* No hard removal on tapes */
-    if (eraser->layout->ext_count != 0 &&
-        eraser->layout->extents[0].media.family != PHO_RSC_TAPE)
-        io_context->delete.to_delete = eraser->layout->ext_count;
+    if (eraser->src_layout->ext_count != 0 &&
+        eraser->src_layout->extents[0].media.family != PHO_RSC_TAPE)
+        io_context->delete.to_delete = eraser->src_layout->ext_count;
 
     if (io_context->delete.to_delete == 0)
         eraser->done = true;

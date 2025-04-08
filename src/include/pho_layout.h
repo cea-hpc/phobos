@@ -129,9 +129,10 @@ struct pho_data_processor {
     struct pho_xfer_desc *xfer;     /**< Transfer descriptor (managed
                                       *  externally)
                                       */
-    struct layout_info *layout;     /**< Layouts of the current transfer filled
-                                      *  out when decoding
+    struct layout_info *src_layout; /**< Given by layout caller and filled
+                                      *  by decoding data processors
                                       */
+    struct layout_info *dest_layout;/**< own by encoding data processors */
     size_t io_block_size;           /**< Block size (in bytes) of the I/O buffer
                                       */
     pho_resp_t *write_resp;          /**< Last response from the LRS (use for

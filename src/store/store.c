@@ -1048,8 +1048,8 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
                                  struct pho_xfer_desc *xfer,
                                  struct pho_data_processor *proc)
 {
-    struct extent *extents = proc->layout->extents;
-    int ext_count = proc->layout->ext_count;
+    struct extent *extents = proc->src_layout->extents;
+    int ext_count = proc->src_layout->ext_count;
     struct dss_handle *dss = &pho->dss;
     struct layout_info *layouts;
     struct copy_info *copy;
@@ -1168,26 +1168,28 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
         for (i = 0; i < xfer->xd_ntargets; i++) {
             pho_debug("Saving layout for objid:'%s'",
                       xfer->xd_targets[i].xt_objid);
-            rc2 = dss_extent_insert(&pho->dss, proc->layout[i].extents,
-                                    proc->layout[i].ext_count);
+            rc2 = dss_extent_insert(&pho->dss, proc->dest_layout[i].extents,
+                                    proc->dest_layout[i].ext_count);
             if (rc2) {
                 pho_error(rc2, "Error while saving extents for objid: '%s'",
                           xfer->xd_targets[i].xt_objid);
                 rc = rc ? : rc2;
                 break;
             } else {
-                rc2 = dss_layout_insert(&pho->dss, &proc->layout[i], 1);
+                rc2 = dss_layout_insert(&pho->dss, &proc->dest_layout[i], 1);
                 if (rc2) {
                     pho_error(rc2, "Error while saving layout for objid: '%s'",
                               xfer->xd_targets[i].xt_objid);
                     rc = rc ? : rc2;
 
-                    for (j = 0; j < proc->layout[i].ext_count; ++j)
-                        proc->layout[i].extents[j].state = PHO_EXT_ST_ORPHAN;
+                    for (j = 0; j < proc->dest_layout[i].ext_count; ++j)
+                        proc->dest_layout[i].extents[j].state =
+                            PHO_EXT_ST_ORPHAN;
 
-                    rc2 = dss_extent_update(&pho->dss, proc->layout[i].extents,
-                                            proc->layout[i].extents,
-                                            proc->layout[i].ext_count);
+                    rc2 = dss_extent_update(&pho->dss,
+                                            proc->dest_layout[i].extents,
+                                            proc->dest_layout[i].extents,
+                                            proc->dest_layout[i].ext_count);
 
                     if (rc2) {
                         pho_error(rc2,
@@ -1200,7 +1202,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
                     struct copy_info copy = {
                         .object_uuid = xfer->xd_targets[i].xt_objuuid,
                         .version = xfer->xd_targets[i].xt_version,
-                        .copy_name = proc->layout[i].copy_name,
+                        .copy_name = proc->dest_layout[i].copy_name,
                         .copy_status = PHO_COPY_STATUS_COMPLETE,
                     };
 
@@ -1295,8 +1297,8 @@ static void store_fini(struct phobos_handle *pho, int rc)
          */
         if (pho->processors) {
             if (is_decoder(&pho->processors[i])) {
-                dss_res_free(pho->processors[i].layout, 1);
-                pho->processors[i].layout = NULL;
+                dss_res_free(pho->processors[i].src_layout, 1);
+                pho->processors[i].src_layout = NULL;
             }
 
             layout_destroy(&pho->processors[i]);

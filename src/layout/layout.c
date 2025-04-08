@@ -115,16 +115,16 @@ int layout_encoder(struct pho_data_processor *encoder,
     encoder->type = PHO_PROC_ENCODER;
     encoder->done = false;
     encoder->xfer = xfer;
-    encoder->layout = xcalloc(encoder->xfer->xd_ntargets,
-                              sizeof(*encoder->layout));
+    encoder->dest_layout = xcalloc(encoder->xfer->xd_ntargets,
+                                   sizeof(*encoder->dest_layout));
 
     if (xfer->xd_params.put.copy_name) {
         copy_name = xfer->xd_params.put.copy_name;
     } else {
         rc = get_cfg_default_copy_name(&copy_name);
         if (rc) {
-            free(encoder->layout);
-            encoder->layout = NULL;
+            free(encoder->dest_layout);
+            encoder->dest_layout = NULL;
             return rc;
         }
     }
@@ -134,9 +134,9 @@ int layout_encoder(struct pho_data_processor *encoder,
         encoder->object_size = xfer->xd_targets[0].xt_size;
 
     for (i = 0; i < encoder->xfer->xd_ntargets; i++) {
-        encoder->layout[i].oid = xfer->xd_targets[i].xt_objid;
-        encoder->layout[i].wr_size = xfer->xd_targets[i].xt_size;
-        encoder->layout[i].copy_name = xstrdup(copy_name);
+        encoder->dest_layout[i].oid = xfer->xd_targets[i].xt_objid;
+        encoder->dest_layout[i].wr_size = xfer->xd_targets[i].xt_size;
+        encoder->dest_layout[i].copy_name = xstrdup(copy_name);
     }
 
     /* get io_block_size from conf */
@@ -184,7 +184,7 @@ int layout_decoder(struct pho_data_processor *decoder,
     decoder->type = PHO_PROC_DECODER;
     decoder->done = false;
     decoder->xfer = xfer;
-    decoder->layout = layout;
+    decoder->src_layout = layout;
 
     /* get io_block_size from conf */
     rc = get_cfg_io_block_size(&decoder->io_block_size,
@@ -231,7 +231,7 @@ int layout_eraser(struct pho_data_processor *eraser, struct pho_xfer_desc *xfer,
     eraser->type = PHO_PROC_ERASER;
     eraser->done = false;
     eraser->xfer = xfer;
-    eraser->layout = layout;
+    eraser->src_layout = layout;
 
     rc = mod->ops->erase(eraser);
     if (rc) {
@@ -321,14 +321,14 @@ void layout_destroy(struct pho_data_processor *proc)
         proc->eraser_ops->destroy(proc);
 
     /* Only encoders own their layout */
-    if (is_encoder(proc) && proc->layout != NULL) {
+    if (is_encoder(proc) && proc->dest_layout != NULL) {
         for (i = 0; i < proc->xfer->xd_ntargets; i++) {
-            pho_attrs_free(&proc->layout[i].layout_desc.mod_attrs);
-            layout_info_free_extents(&proc->layout[i]);
-            free(proc->layout[i].copy_name);
+            pho_attrs_free(&proc->dest_layout[i].layout_desc.mod_attrs);
+            layout_info_free_extents(&proc->dest_layout[i]);
+            free(proc->dest_layout[i].copy_name);
         }
-        free(proc->layout);
-        proc->layout = NULL;
+        free(proc->dest_layout);
+        proc->dest_layout = NULL;
     }
 
     if (proc->write_resp != NULL) {

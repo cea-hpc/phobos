@@ -93,9 +93,9 @@ int raid_encoder_init(struct pho_data_processor *encoder,
         /* Do not copy mod_attrs as it may have been modified by the caller
          * before this function is called.
          */
-        encoder->layout[i].layout_desc.mod_name = module->mod_name;
-        encoder->layout[i].layout_desc.mod_minor = module->mod_minor;
-        encoder->layout[i].layout_desc.mod_major = module->mod_major;
+        encoder->dest_layout[i].layout_desc.mod_name = module->mod_name;
+        encoder->dest_layout[i].layout_desc.mod_minor = module->mod_minor;
+        encoder->dest_layout[i].layout_desc.mod_major = module->mod_major;
         io_context->ops = raid_ops;
 
         /* Build the extent attributes from the object ID and the user provided
@@ -298,9 +298,10 @@ struct pho_ext_loc make_ext_location(struct pho_data_processor *proc, size_t i,
         loc.addr_type = io_context->read.resp->media[i]->addr_type;
         loc.extent = io_context->read.extents[i];
     } else {
+        /* eraser */
         loc.root_path = io_context->delete.resp->media[i]->root_path;
         loc.addr_type = io_context->delete.resp->media[i]->addr_type;
-        loc.extent = &proc->layout->extents[i];
+        loc.extent = &proc->src_layout->extents[i];
     }
 
     return loc;
@@ -456,11 +457,11 @@ static void raid_reader_eraser_build_allocation_req(
         ext_idx = io_context->current_split * n_extents + i;
 
         req->ralloc->med_ids[i]->family =
-            proc->layout->extents[ext_idx].media.family;
+            proc->src_layout->extents[ext_idx].media.family;
         req->ralloc->med_ids[i]->name =
-            xstrdup(proc->layout->extents[ext_idx].media.name);
+            xstrdup(proc->src_layout->extents[ext_idx].media.name);
         req->ralloc->med_ids[i]->library =
-            xstrdup(proc->layout->extents[ext_idx].media.library);
+            xstrdup(proc->src_layout->extents[ext_idx].media.library);
     }
 }
 
@@ -773,16 +774,16 @@ static int raid_reader_split_setup(struct pho_data_processor *proc,
         if (rc)
             return rc;
 
-        ext_index = extent_index(proc->layout, medium[i]->med_id, 0,
-                                 proc->layout->ext_count);
+        ext_index = extent_index(proc->src_layout, medium[i]->med_id, 0,
+                                 proc->src_layout->ext_count);
         if (ext_index == -1)
             LOG_RETURN(-ENOMEDIUM,
-                       "Did not find medium '%s':'%s' in layout of '%s'",
+                       "Did not find medium '%s':'%s' in reader layout of '%s'",
                        medium[i]->med_id->library,
                        medium[i]->med_id->name,
                        proc->xfer->xd_targets->xt_objid);
 
-        io_context->read.extents[i] = &proc->layout->extents[ext_index];
+        io_context->read.extents[i] = &proc->src_layout->extents[ext_index];
     }
 
     sort_extents_by_layout_index(io_context->read.resp,
@@ -1095,7 +1096,7 @@ static void raid_writer_split_close(struct pho_data_processor *proc, int *rc)
         .object_version = proc->xfer->xd_targets[target].xt_version,
         .layout_name = io_context->name,
         .object_uuid = proc->xfer->xd_targets[target].xt_objuuid,
-        .copy_name = proc->layout[target].copy_name,
+        .copy_name = proc->dest_layout[target].copy_name,
     };
     size_t n_extents = n_total_extents(io_context);
     int i = 0;
@@ -1211,16 +1212,16 @@ static int raid_writer_handle_release_resp(struct pho_data_processor *encoder,
             io_context->write.n_released_media) {
 
             /* Fill the layout with the extents */
-            encoder->layout[i].ext_count =
+            encoder->dest_layout[i].ext_count =
                 io_context->write.written_extents->len;
-            encoder->layout[i].extents = (struct extent *)
+            encoder->dest_layout[i].extents = (struct extent *)
             g_array_free(io_context->write.written_extents, FALSE);
             io_context->write.written_extents = NULL;
 
             io_context->write.n_released_media = 0;
 
-            for (j = 0; j < encoder->layout->ext_count; ++j)
-                encoder->layout[i].extents[j].state = PHO_EXT_ST_SYNC;
+            for (j = 0; j < encoder->dest_layout->ext_count; ++j)
+                encoder->dest_layout[i].extents[j].state = PHO_EXT_ST_SYNC;
 
             io_context->write.released = true;
             target_released++;
@@ -1412,7 +1413,7 @@ static int raid_eraser_handle_release_resp(struct pho_data_processor *proc,
     for (int i = 0; i < resp->release->n_med_ids; ++i) {
         ssize_t ext_index;
 
-        ext_index = extent_index(proc->layout,
+        ext_index = extent_index(proc->src_layout,
                                  resp->release->med_ids[i],
                                  n_extents * io_context->current_split,
                                  n_extents *
@@ -1420,7 +1421,7 @@ static int raid_eraser_handle_release_resp(struct pho_data_processor *proc,
         if (ext_index == -1)
             LOG_RETURN(-ENOMEDIUM,
                        "Did not find in hard delete release resp medium "
-                       "'%s':'%s' in layout of '%s'",
+                       "'%s':'%s' in eraser layout of '%s'",
                        resp->release->med_ids[i]->library,
                        resp->release->med_ids[i]->name,
                        proc->xfer->xd_targets[proc->current_target].xt_objid);
@@ -1507,13 +1508,14 @@ int raid_eraser_processor_step(struct pho_data_processor *proc,
         if (rc)
             break;
 
-        ext_index = extent_index(proc->layout, resp->ralloc->media[i]->med_id,
+        ext_index = extent_index(proc->src_layout,
+                                 resp->ralloc->media[i]->med_id,
                                  n_extents * io_context->current_split,
                                  n_extents * (io_context->current_split + 1));
         if (ext_index == -1) {
             pho_error(rc = -ENOMEDIUM,
                       "Did not find in hard delete alloc resp medium '%s':'%s' "
-                      "in layout of '%s'",
+                      "in eraser layout of '%s'",
                       resp->ralloc->media[i]->med_id->library,
                       resp->ralloc->media[i]->med_id->name,
                       proc->xfer->xd_targets[proc->current_target].xt_objid);
@@ -1528,7 +1530,7 @@ int raid_eraser_processor_step(struct pho_data_processor *proc,
 
         ioa_close(iod.iod_ioa, &iod);
         (*reqs)[*n_reqs].release->media[i]->size_written =
-            -proc->layout->extents[ext_index].size;
+            -proc->src_layout->extents[ext_index].size;
         (*reqs)[*n_reqs].release->media[i]->nb_extents_written = -1;
         (*reqs)[*n_reqs].release->media[i]->to_sync = true;
     }
