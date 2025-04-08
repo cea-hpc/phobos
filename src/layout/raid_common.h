@@ -155,7 +155,8 @@ struct raid_io_context {
 };
 
 struct raid_ops {
-    int (*get_chunk_size)(struct pho_data_processor *proc, size_t *chunk_size);
+    int (*get_reader_chunk_size)(struct pho_data_processor *proc,
+                                 size_t *chunk_size);
     int (*read_into_buff)(struct pho_data_processor *proc);
     int (*write_from_buff)(struct pho_data_processor *proc);
     int (*set_extra_attrs)(struct pho_data_processor *proc);

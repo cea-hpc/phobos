@@ -221,8 +221,8 @@ static int raid1_write_from_buff(struct pho_data_processor *proc)
     return 0;
 }
 
-static int raid1_get_chunk_size(struct pho_data_processor *enc,
-                                size_t *block_size)
+static int raid1_get_reader_chunk_size(struct pho_data_processor *enc,
+                                       size_t *block_size)
 {
     (void) enc;
     (void) block_size;
@@ -269,7 +269,7 @@ static const struct pho_proc_ops RAID1_ERASER_PROCESSOR_OPS = {
 };
 
 static const struct raid_ops RAID1_OPS = {
-    .get_chunk_size = raid1_get_chunk_size,
+    .get_reader_chunk_size = raid1_get_reader_chunk_size,
     .read_into_buff = raid1_read_into_buff,
     .write_from_buff = raid1_write_from_buff,
     .set_extra_attrs = raid1_extra_attrs,

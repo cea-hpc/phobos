@@ -812,8 +812,8 @@ static int raid_reader_split_setup(struct pho_data_processor *proc,
                      size, io_context->read.extents[i]->size);
     }
 
-    rc = io_context->ops->get_chunk_size(proc,
-                                         &io_context->current_split_chunk_size);
+    rc = io_context->ops->get_reader_chunk_size(
+             proc, &io_context->current_split_chunk_size);
     if (rc)
         goto close_iod;
 

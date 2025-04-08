@@ -45,18 +45,14 @@ static struct module_desc RAID4_MODULE_DESC = {
     .mod_minor = PLUGIN_MINOR,
 };
 
-static int raid4_get_chunk_size(struct pho_data_processor *proc,
+static int raid4_get_reader_chunk_size(struct pho_data_processor *proc,
                                 size_t *chunk_size)
 {
     struct extent *extent;
     const char *attr;
     int64_t value;
 
-    if (is_encoder(proc))
-        extent = &proc->dest_layout->extents[0];
-    else
-        extent = &proc->src_layout->extents[0];
-
+    extent = &proc->src_layout->extents[0];
     attr = pho_attr_get(&extent->info, "raid4.chunk_size");
     if (!attr)
         LOG_RETURN(-EINVAL,
@@ -79,7 +75,7 @@ static int raid4_get_chunk_size(struct pho_data_processor *proc,
 }
 
 static struct raid_ops RAID4_OPS = {
-    .get_chunk_size = raid4_get_chunk_size,
+    .get_reader_chunk_size = raid4_get_reader_chunk_size,
     .read_into_buff = raid4_read_into_buff,
     .write_from_buff = raid4_write_from_buff,
     .set_extra_attrs = raid4_extra_attrs,
