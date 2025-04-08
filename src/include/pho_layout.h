@@ -114,6 +114,7 @@ enum processor_type {
     PHO_PROC_ENCODER,
     PHO_PROC_DECODER,
     PHO_PROC_ERASER,
+    PHO_PROC_COPIER,
 };
 
 
@@ -211,6 +212,14 @@ static inline bool is_eraser(struct pho_data_processor *processor)
     return processor->type == PHO_PROC_ERASER;
 }
 
+/**
+ * Check if the data processor is of type copier.
+ */
+static inline bool is_copier(struct pho_data_processor *processor)
+{
+    return processor->type == PHO_PROC_COPIER;
+}
+
 static inline const char *processor_type2str(struct pho_data_processor *proc)
 {
     switch (proc->type) {
@@ -220,6 +229,8 @@ static inline const char *processor_type2str(struct pho_data_processor *proc)
         return "decoder";
     case PHO_PROC_ERASER:
         return "eraser";
+    case PHO_PROC_COPIER:
+        return "copier";
     default:
         return "unknow";
     }

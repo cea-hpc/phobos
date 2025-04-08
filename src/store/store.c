@@ -1164,7 +1164,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     proc->done = true;
 
     /* Once the encoder is done and successful, save the layout and metadata */
-    if (is_encoder(proc) && xfer->xd_rc == 0 && rc == 0) {
+    if ((is_encoder(proc) || is_copier(proc)) && xfer->xd_rc == 0 && rc == 0) {
         for (i = 0; i < xfer->xd_ntargets; i++) {
             pho_debug("Saving layout for objid:'%s'",
                       xfer->xd_targets[i].xt_objid);
