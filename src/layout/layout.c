@@ -320,8 +320,8 @@ void layout_destroy(struct pho_data_processor *proc)
     if (proc->eraser_ops)
         proc->eraser_ops->destroy(proc);
 
-    /* Only encoders own their layout */
-    if (is_encoder(proc) && proc->dest_layout != NULL) {
+    /* Only encoders own their layout, no need to free src_layout */
+    if (proc->dest_layout != NULL) {
         for (i = 0; i < proc->xfer->xd_ntargets; i++) {
             pho_attrs_free(&proc->dest_layout[i].layout_desc.mod_attrs);
             layout_info_free_extents(&proc->dest_layout[i]);
