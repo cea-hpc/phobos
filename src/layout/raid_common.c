@@ -436,10 +436,10 @@ static void raid_reader_eraser_build_allocation_req(
 
     pho_srl_request_read_alloc(req, n_extents);
     req->ralloc->n_required =
-        is_decoder(proc) ? io_context->n_data_extents : n_extents;
+        is_eraser(proc) ? n_extents : io_context->n_data_extents;
     req->ralloc->operation =
-        is_decoder(proc) ? PHO_READ_TARGET_ALLOC_OP_READ :
-                           PHO_READ_TARGET_ALLOC_OP_DELETE;
+        is_eraser(proc) ? PHO_READ_TARGET_ALLOC_OP_DELETE :
+                          PHO_READ_TARGET_ALLOC_OP_READ;
 
     for (i = 0; i < n_extents; ++i) {
         unsigned int ext_idx;
