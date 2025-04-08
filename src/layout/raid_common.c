@@ -73,8 +73,6 @@ int raid_encoder_init(struct pho_data_processor *encoder,
     int rc;
     int i;
 
-    assert(is_encoder(encoder));
-
     /* The ops field is set early to allow the caller to call the destroy
      * function on error.
      */
@@ -275,14 +273,6 @@ static struct raid_io_context *io_context_from_proc(
     return &((struct raid_io_context *)proc->private_eraser)[target_idx];
 }
 
-static struct pho_io_descr *raid_proc_iod(struct pho_data_processor *proc,
-                                          size_t i, int target_idx)
-{
-    struct raid_io_context *io_context = io_context_from_proc(proc, target_idx);
-
-    return &io_context->iods[i];
-}
-
 struct pho_ext_loc make_ext_location(struct pho_data_processor *proc, size_t i,
                                      int target_idx)
 {
@@ -317,7 +307,7 @@ static int raid_io_context_open(struct raid_io_context *io_context,
     for (i = 0; i < count; ++i) {
         struct pho_ext_loc ext_location = make_ext_location(proc, i,
                                                             target_idx);
-        struct pho_io_descr *iod = raid_proc_iod(proc, i, target_idx);
+        struct pho_io_descr *iod = &io_context->iods[i];
 
         iod->iod_size = 0;
         iod->iod_loc = &ext_location;
@@ -343,7 +333,7 @@ out_close:
         struct pho_io_descr *iod;
 
         i--;
-        iod = raid_proc_iod(proc, i, target_idx);
+        iod = &io_context->iods[i];
 
         ioa_close(iod->iod_ioa, iod);
     }
