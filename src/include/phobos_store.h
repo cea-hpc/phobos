@@ -44,6 +44,10 @@ enum pho_xfer_flags {
      */
     PHO_XFER_OBJ_REPLACE    = (1 << 0),
     /* get: check the object's location before getting it */
+    /*
+     * This flag is ignored for the "get" part of the phobos_copy until we can
+     * both manage xfer put AND get param for a copy.
+     */
     PHO_XFER_OBJ_BEST_HOST  = (1 << 1),
     /* del: hard remove the object */
     PHO_XFER_OBJ_HARD_DEL   = (1 << 2),
@@ -120,6 +124,9 @@ struct pho_xfer_put_params {
  * GET parameters.
  * Node_name corresponds to the name of the node the object can be retrieved
  * from, if a phobos_get call fails.
+ *
+ * GET paramaters are ignored for the "get" part of a copy xfer until we can
+ * both manage put AND get param for a copy.
  */
 struct pho_xfer_get_params {
     char *node_name;                    /**< Node name [out] */
@@ -374,6 +381,54 @@ int phobos_locate(const char *obj_id, const char *uuid, int version,
  * This must be called after phobos_init.
  */
 int phobos_rename(const char *old_oid, const char *uuid, char *new_oid);
+
+/**
+ * Copy N objects
+ * desc contains:
+ * - objid:   identifier of the object to copy, this is mandatory.
+ *
+ * - objuuid: uuid of the object to retrieve
+ *            if not NULL, this field is duplicated internally and freed by
+ *            pho_xfer_desc_clean(). The caller have to make sure to keep
+ *            a copy of this pointer if it needs to be freed.
+ *            if NULL and there is an object alive, get the current generation
+ *            if NULL and there is no object alive, check the deprecated
+ *            objects:
+ *                if they all share the same uuid, the object matching
+ *                the version criteria is retrieved
+ *
+ * - version: version of the object to retrieve
+ *            if 0, get the most recent object. Otherwise, the object with the
+ *            matching version is returned if it exists
+ *            if there is an object in the object table and its version does
+ *            not match, phobos_get() will target the current generation and
+ *            query the deprecated_object table
+ *
+ * - layout_name: (optional) name of the layout module to use
+ * - size: unused
+ * - fd: unused
+ * - attrs: unused (can be NULL)
+ * - flags: behavior flags (PHO_XFER_OBJ_BEST_HOST is ignored until we can both
+ *          manage put AND get params)
+ * - xd_params.get are ignored until we can both manage put AND get params. We
+ *   use xd_params.put .
+ * - tags: tags defining constraints on which media can be selected to put the
+ *   data
+ *
+ * If objuuid and version are NULL and 0, phobos_get() will only query the
+ * object table. Otherwise, the object table is queried first and then the
+ * deprecated_object table.
+ *
+ * Other fields are not used.
+ *
+ * Individual completion notifications are issued via xd_callback.
+ * This function returns the first encountered error or 0 if all
+ * sub-operations have succeeded.
+ *
+ * This must be called after phobos_init.
+ */
+int phobos_copy(struct pho_xfer_desc *xfers, size_t n,
+                pho_completion_cb_t cb, void *udata);
 
 /**
  * Clean a pho_xfer_desc structure by freeing the uuid and attributes, and

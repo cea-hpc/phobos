@@ -1651,8 +1651,8 @@ static int store_perform_xfers(struct phobos_handle *pho)
 }
 
 /**
- * Common function to handle PHO_XFER_OP_PUT, PHO_XFER_OP_GET and
- * PHO_XFER_OP_GETMD transfers.
+ * Common function to handle PHO_XFER_OP_PUT, PHO_XFER_OP_GET,
+ * PHO_XFER_OP_GETMD and PHO_XFER_OP_COPY transfers.
  *
  * @param[in/out]   xfers   Transfers to be performed, they will be updated with
  *                          an appropriate xd_rc upon successful completion of
@@ -2047,4 +2047,40 @@ clean:
     object_info_free(obj);
     dss_fini(&dss);
     return rc;
+}
+
+int phobos_copy(struct pho_xfer_desc *xfers, size_t n,
+                pho_completion_cb_t cb, void *udata)
+{
+    size_t i;
+    int rc;
+
+    /* Ensure conf is loaded, to retrieve default values */
+    rc = pho_cfg_init_local(NULL);
+    if (rc && rc != -EALREADY)
+        return rc;
+
+    for (i = 0; i < n; i++) {
+        xfers[i].xd_op = PHO_XFER_OP_COPY;
+        xfers[i].xd_rc = 0;
+        /* If the uuid is given by the user, we don't own that memory.
+         * The simplest solution is to duplicate it here so that it can
+         * be freed at the end by pho_xfer_desc_clean().
+         *
+         * The user of this function must free any allocated string passed to
+         * the xfer.
+         *
+         * For the Python CLI, the garbage collector will take care of
+         * this pointer.
+         */
+        if (xfers[i].xd_targets->xt_objuuid)
+            xfers[i].xd_targets->xt_objuuid =
+                xstrdup(xfers[i].xd_targets->xt_objuuid);
+
+        rc = fill_put_params(&xfers[i]);
+        if (rc)
+            return rc;
+    }
+
+    return phobos_xfer(xfers, n, cb, udata);
 }
