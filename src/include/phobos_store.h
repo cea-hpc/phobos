@@ -67,6 +67,7 @@ enum pho_xfer_op {
     PHO_XFER_OP_GETMD, /**< GET metadata operation. */
     PHO_XFER_OP_DEL,   /**< DEL operation. */
     PHO_XFER_OP_UNDEL, /**< UNDEL operation. */
+    PHO_XFER_OP_COPY,  /**< COPY operation. */
     PHO_XFER_OP_LAST
 };
 
@@ -76,6 +77,7 @@ static const char * const xfer_op_names[] = {
     [PHO_XFER_OP_GETMD] = "GETMD",
     [PHO_XFER_OP_DEL]   = "DELETE",
     [PHO_XFER_OP_UNDEL] = "UNDELETE",
+    [PHO_XFER_OP_COPY] = "COPY",
 };
 
 static inline const char *xfer_op2str(enum pho_xfer_op op)

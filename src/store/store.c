@@ -157,7 +157,7 @@ static int pho_xfer_desc_flag_check(const struct pho_xfer_desc *xfer)
 
 /**
  * Build a decoder for this xfer by retrieving the xfer layout and initializing
- * the decoder from it. Only valid for GET xfers.
+ * the decoder from it. Only valid for GET / COPY / ERASE xfers.
  *
  * @param[out]  decoder The decoder to be initialized
  * @param[in]   xfer    The xfer to be decoded
@@ -174,7 +174,8 @@ static int decoder_build(struct pho_data_processor *decoder,
     int cnt = 0;
     int rc;
 
-    assert(xfer->xd_op == PHO_XFER_OP_GET || xfer->xd_op == PHO_XFER_OP_DEL);
+    assert(xfer->xd_op == PHO_XFER_OP_GET || xfer->xd_op == PHO_XFER_OP_DEL ||
+           xfer->xd_op == PHO_XFER_OP_COPY);
 
     rc = dss_lazy_find_default_copy(dss, xfer->xd_targets->xt_objuuid,
                                     xfer->xd_targets->xt_version, &copy);
@@ -202,9 +203,13 @@ static int decoder_build(struct pho_data_processor *decoder,
         GOTO(err, rc = -ENOENT);
 
     /* @FIXME: duplicate layout to avoid calling dss functions to free this? */
-    rc = xfer->xd_op == PHO_XFER_OP_GET ?
-        layout_decoder(decoder, xfer, layout) :
-        layout_eraser(decoder, xfer, layout);
+    if (xfer->xd_op == PHO_XFER_OP_GET)
+        rc = layout_decoder(decoder, xfer, layout);
+    else if (xfer->xd_op == PHO_XFER_OP_COPY)
+        rc = layout_copier(decoder, xfer, layout);
+    else
+        rc = layout_eraser(decoder, xfer, layout);
+
     if (rc)
         GOTO(err, rc);
 
@@ -1037,11 +1042,11 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
         return 0;
     }
 
-    /* Handle decoder creation for GET & HARD DELETE */
+    /* Handle decoder creation for COPY & GET & HARD DELETE */
     if (!xfer->xd_targets->xt_objid && !xfer->xd_targets->xt_objuuid)
         LOG_RETURN(rc = -EINVAL, "uuid or oid must be provided");
 
-    if (xfer->xd_op == PHO_XFER_OP_GET)
+    if (xfer->xd_op == PHO_XFER_OP_GET || xfer->xd_op == PHO_XFER_OP_COPY)
         /* Keep dss_lazy_find with the get to keep the same behavior */
         rc = dss_lazy_find_object(dss, xfer->xd_targets->xt_objid,
                                   xfer->xd_targets->xt_objuuid,
