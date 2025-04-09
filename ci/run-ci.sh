@@ -34,7 +34,7 @@ cd "$cur_dir"/..
 # export PKG_CONFIG_PATH=/usr/pgsql-9.4/lib/pkgconfig;
 ./autogen.sh
 
-if [ "$1" != "check-valgrind" ]; then
+if [ "$1" != "check-valgrind" -a "$1" != "no-tests" ]; then
     ./configure $1
     make rpm
     check_c_api
@@ -57,7 +57,9 @@ test_db="$(grep "dbname" "$phobos_conf" | awk -F 'dbname=' '{print $2}' | \
 sudo -u postgres ./scripts/phobos_db_local drop_db -d "$test_db" || true
 sudo -u postgres ./scripts/phobos_db_local setup_db -d "$test_db" -p phobos
 export VERBOSE=1
-if [ "$1" = "check-valgrind" ]; then
+if [ "$1" = "no-tests" ]; then
+    make -j4
+elif [ "$1" = "check-valgrind" ]; then
     sudo -E make check-valgrind
 else
     sudo -E make check
