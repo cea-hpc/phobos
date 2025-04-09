@@ -72,6 +72,9 @@ AS_IF( [test "x$enable_cli" != "xno"], [
     # Enable python bindings
     AX_PYTHON_DEVEL([>='3.6'])
 ])
+AM_PATH_PYTHON
+
+AM_CONDITIONAL([NO_RPM_BUILD], [test "x$RPM_BUILD_ROOT" = "x"])
 
 AC_ARG_ENABLE( [rados], AS_HELP_STRING([--enable-rados],
                [Compile with rados modules @<:@check@:>@]),

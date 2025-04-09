@@ -70,10 +70,18 @@ EXTRA_DIST=phobos/__init__.py \
 	   scripts/phobos \
 	   setup.py
 
+bin_SCRIPTS=scripts/phobos
+
 if RADOS_ENABLED
 RUN_TESTS=./run_tests.sh rados
 else
 RUN_TESTS=./run_tests.sh
+endif
+
+if NO_RPM_BUILD
+ROOT_BUILD_OPT=
+else
+ROOT_BUILD_OPT=--root $(RPM_BUILD_ROOT)
 endif
 
 all-local:
@@ -84,5 +92,8 @@ clean-local:
 
 check-local: all-local
 	(cd tests; $(RUN_TESTS))
+
+install-exec-local:
+	$(PYTHON) setup.py install --skip-build $(ROOT_BUILD_OPT)
 
 .PHONY: all-local
