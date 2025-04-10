@@ -136,7 +136,7 @@ int raid_decoder_init(struct pho_data_processor *decoder,
     if (decoder->xfer->xd_targets->xt_fd < 0)
         LOG_RETURN(rc = -EBADF, "Invalid decoder xfer file descriptor");
 
-    assert(is_decoder(decoder));
+    assert(is_decoder(decoder) || is_copier(decoder));
 
     decoder->reader_ops = enc_ops;
     io_context->ops = raid_ops;
