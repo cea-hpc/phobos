@@ -1608,8 +1608,47 @@ static int store_perform_xfers(struct phobos_handle *pho)
             store_end_xfer(pho, i, rc);
         }
 
-        if (pho->xfers[i].xd_op != PHO_XFER_OP_PUT)
+        if (pho->xfers[i].xd_op != PHO_XFER_OP_PUT &&
+            pho->xfers[i].xd_op != PHO_XFER_OP_COPY)
             continue;
+
+        if (pho->xfers[i].xd_op == PHO_XFER_OP_COPY) {
+            for (j = 0; j < pho->xfers[i].xd_ntargets; j++) {
+                struct copy_info copy = {0};
+
+                copy.object_uuid = pho->xfers[i].xd_targets[j].xt_objuuid;
+                copy.version = pho->xfers[i].xd_targets[j].xt_version;
+                copy.copy_status = PHO_COPY_STATUS_INCOMPLETE;
+                if (pho->xfers[i].xd_params.put.copy_name) {
+                    copy.copy_name = pho->xfers[i].xd_params.put.copy_name;
+                } else {
+                    rc2 = get_cfg_default_copy_name(&copy.copy_name);
+                    if (rc2) {
+                        pho_error(rc2,
+                                  "Cannot get default copy_name from conf");
+                        rc = rc ? : rc2;
+                        break;
+                    }
+                }
+
+                rc2 = dss_copy_insert(&pho->dss, &copy, 1);
+                if (rc2) {
+                    pho_error(rc2, "Cannot insert copy");
+                    rc = rc ? : rc2;
+                    break;
+                }
+            }
+
+            if (rc && !pho->processors[i].done) {
+                store_end_xfer(pho, i, rc);
+                break;
+            }
+
+            pho->md_created[i] = true;
+            continue;
+        }
+
+        /* PHO_XFER_OP_PUT */
         for (j = 0; j < pho->xfers[i].xd_ntargets; j++) {
             rc2 = object_md_save(&pho->dss, &pho->xfers[i].xd_targets[j],
                                  pho->xfers[i].xd_params.put.overwrite,
@@ -1625,7 +1664,7 @@ static int store_perform_xfers(struct phobos_handle *pho)
 
         if (rc && !pho->processors[i].done) {
             store_end_xfer(pho, i, rc);
-            break;
+            continue;
         }
         pho->md_created[i] = true;
     }
