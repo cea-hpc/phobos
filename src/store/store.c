@@ -1349,7 +1349,9 @@ static void store_fini(struct phobos_handle *pho, int rc)
          * hence we also free them.
          */
         if (pho->processors) {
-            if (is_decoder(&pho->processors[i])) {
+            if (is_decoder(&pho->processors[i]) ||
+                is_eraser(&pho->processors[i]) ||
+                is_copier(&pho->processors[i])) {
                 dss_res_free(pho->processors[i].src_layout, 1);
                 pho->processors[i].src_layout = NULL;
             }
