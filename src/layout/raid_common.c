@@ -165,6 +165,15 @@ int raid_eraser_init(struct pho_data_processor *eraser,
     return 0;
 }
 
+static void read_resp_destroy(struct read_io_context *read_context)
+{
+    if (read_context->resp) {
+        pho_srl_response_free(read_context->resp, false);
+        free(read_context->resp);
+        read_context->resp = NULL;
+    }
+}
+
 static void write_resp_destroy(struct pho_data_processor *proc)
 {
     if (proc->write_resp) {
@@ -194,6 +203,7 @@ void raid_reader_processor_destroy(struct pho_data_processor *proc)
         if (!io_context)
             return;
 
+        read_resp_destroy(&io_context->read);
         free(io_context->read.extents);
         free(io_context->iods);
 
@@ -286,8 +296,8 @@ struct pho_ext_loc make_ext_location(struct pho_data_processor *proc, size_t i,
         loc.addr_type = proc->write_resp->walloc->media[i]->addr_type;
         loc.extent = &io_context->write.extents[i];
     } else if (type == PHO_PROC_DECODER) {
-        loc.root_path = io_context->read.resp->media[i]->root_path;
-        loc.addr_type = io_context->read.resp->media[i]->addr_type;
+        loc.root_path = io_context->read.resp->ralloc->media[i]->root_path;
+        loc.addr_type = io_context->read.resp->ralloc->media[i]->addr_type;
         loc.extent = io_context->read.extents[i];
     } else {
         /* PHO_PROC_ERASER */
@@ -680,6 +690,26 @@ static bool need_to_sync(pho_req_release_t *release, struct timespec start,
     return false;
 }
 
+static pho_resp_t *copy_response_read_alloc(pho_resp_t *resp)
+{
+    pho_resp_read_t *rresp;
+    pho_resp_t *resp_cpy;
+    int i;
+
+    resp_cpy = xcalloc(1, sizeof(*resp));
+    pho_srl_response_read_alloc(resp_cpy, resp->ralloc->n_media);
+    rresp = resp_cpy->ralloc;
+
+    for (i = 0; i < resp->ralloc->n_media; i++) {
+        rsc_id_cpy(rresp->media[i]->med_id, resp->ralloc->media[i]->med_id);
+        rresp->media[i]->root_path = xstrdup(resp->ralloc->media[i]->root_path);
+        rresp->media[i]->fs_type = resp->ralloc->media[i]->fs_type;
+        rresp->media[i]->addr_type = resp->ralloc->media[i]->addr_type;
+    }
+
+    return resp_cpy;
+}
+
 static pho_resp_t *copy_response_write_alloc(pho_resp_t *resp)
 {
     pho_resp_write_t *wresp;
@@ -754,7 +784,7 @@ static int raid_reader_split_setup(struct pho_data_processor *proc,
                             "Expected %lu, got %lu",
                    n_extents, n_media);
 
-    io_context->read.resp = resp->ralloc;
+    io_context->read.resp = copy_response_read_alloc(resp);
 
     /* identify extents corresponding to received media */
     for (i = 0; i < n_media; i++) {
@@ -777,7 +807,7 @@ static int raid_reader_split_setup(struct pho_data_processor *proc,
         io_context->read.extents[i] = &proc->src_layout->extents[ext_index];
     }
 
-    sort_extents_by_layout_index(io_context->read.resp,
+    sort_extents_by_layout_index(io_context->read.resp->ralloc,
                                  io_context->read.extents, n_media);
 
     rc = raid_io_context_open(io_context, proc, n_media, 0, PHO_PROC_DECODER);
@@ -918,7 +948,6 @@ int raid_reader_processor_step(struct pho_data_processor *proc,
 
     /* manage received allocation */
     if (resp) {
-        io_context->read.resp = resp->ralloc;
         rc = raid_reader_split_setup(proc, resp);
         if (rc)
             goto release;
@@ -950,10 +979,11 @@ release:
 
     if (rc || split_ended) {
         pho_srl_request_release_alloc(*reqs + *n_reqs,
-                                      io_context->read.resp->n_media, true);
-        for (i = 0; i < io_context->read.resp->n_media; i++) {
+                                      io_context->read.resp->ralloc->n_media,
+                                      true);
+        for (i = 0; i < io_context->read.resp->ralloc->n_media; i++) {
             rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
-                       io_context->read.resp->media[i]->med_id);
+                       io_context->read.resp->ralloc->media[i]->med_id);
             (*reqs)[*n_reqs].release->media[i]->rc = rc;
             (*reqs)[*n_reqs].release->media[i]->to_sync = false;
         }

@@ -47,7 +47,7 @@ struct extent_hash {
 };
 
 struct read_io_context {
-    pho_resp_read_t *resp;
+    pho_resp_t *resp;           /* copied read alloc resp */
     size_t to_read;             /*< Remaining size to read per extent
                                  *  aggregated on all splits
                                  */
