@@ -1323,6 +1323,36 @@ cont:
             object_md_del(&pho->dss, &xfer->xd_targets[i]);
     }
 
+    /* Cleanup metadata for failed COPY */
+    if (pho->md_created && pho->md_created[xfer_idx] &&
+            xfer->xd_op == PHO_XFER_OP_COPY && xfer->xd_rc) {
+        for (i = 0; i < xfer->xd_ntargets; i++) {
+            struct copy_info copy = {0};
+            int rc2;
+
+            copy.object_uuid = xfer->xd_targets[i].xt_objuuid;
+            copy.version = xfer->xd_targets[i].xt_version;
+            if (xfer->xd_params.put.copy_name) {
+                copy.copy_name = xfer->xd_params.put.copy_name;
+            } else {
+                rc2 = get_cfg_default_copy_name(&copy.copy_name);
+                if (rc2) {
+                    pho_error(rc2,
+                              "Cannot get default copy_name from conf");
+                    rc = rc ? : rc2;
+                    continue;
+                }
+            }
+
+            rc2 = dss_copy_delete(&pho->dss, &copy, 1);
+            if (rc2) {
+                pho_error(rc2, "dss_copy_delete failed for objuuid:'%s'",
+                          xfer->xd_targets[i].xt_objuuid);
+                rc = rc ? : rc2;
+            }
+        }
+    }
+
     if (pho->cb)
         pho->cb(pho->udata, xfer, rc);
 }
