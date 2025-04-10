@@ -37,7 +37,8 @@ TEST_EXTENSIONS=.sh
 TEST_EXTENSIONS+=.test
 TEST_LOG_DRIVER=$(TO_TEST)/test-driver.sh
 
-check_PROGRAMS=test_bad_comm \
+check_PROGRAMS=phobos_put_copy \
+               test_bad_comm \
                test_concurrency \
                test_delete \
                test_dss \
@@ -56,6 +57,7 @@ check_SCRIPTS=test_bad_comm.sh \
               test_store.test \
               test_locate.test \
               test_lock_clean.sh \
+              test_put_copy.test \
               test_raid1_split_locate.sh \
               test_scsi.test \
               test_store_retry.sh \
@@ -67,6 +69,10 @@ check_SCRIPTS+=test_lib_dev_rados.sh test_io_rados.sh test_fs_rados.sh
 endif
 
 TESTS=$(check_SCRIPTS)
+
+phobos_put_copy_SOURCES=phobos_put_copy.c
+phobos_put_copy_LDADD=$(STORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
+phobos_put_copy_CFLAGS=$(TESTS_INCLUDE)
 
 test_bad_comm_SOURCES=test_bad_comm.c
 test_bad_comm_LDADD=$(COMMUNICATION_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)

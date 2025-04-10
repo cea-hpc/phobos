@@ -1,0 +1,87 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2024 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# API copy after put test
+#
+
+test_bin_dir=$PWD
+test_bin="$test_bin_dir/phobos_put_copy"
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
+
+set -xe
+
+function setup_dir
+{
+    setup_tables
+
+    export PHOBOS_LRS_families="dir"
+    export PHOBOS_STORE_default_family="dir"
+
+    invoke_lrs
+
+    setup_test_dirs
+    setup_dummy_files 1 1k 1
+
+    dir1="$DIR_TEST_IN/dir1"
+    dir2="$DIR_TEST_IN/dir2"
+    mkdir ${dir1}
+    $phobos dir add ${dir1}
+    $phobos dir format --fs posix --unlock ${dir1}
+    mkdir ${dir2}
+    $phobos dir add ${dir2}
+    $phobos dir format --fs posix --unlock ${dir2}
+}
+
+function cleanup_dir
+{
+    waive_lrs
+
+    cleanup_dummy_files
+    cleanup_test_dirs
+
+    drop_tables
+}
+
+function test_put_copy
+{
+    $LOG_COMPILER $test_bin ${FILES[0]} put_copy_obj copy ||
+        error "Put and copy should success"
+
+    copy_list=$($phobos copy list)
+    copy_occurence=$(echo ${copy_list} | grep -c copy)
+    source_occurence=$(echo ${copy_list} | grep -c source)
+    if (( copy_occurence != 1 )); then
+        error "We must have one copy."
+    fi
+
+    if (( source_occurence != 1 )); then
+        error "We must have one source."
+    fi
+}
+
+TESTS=(
+    "setup_dir; test_put_copy; cleanup_dir"
+)

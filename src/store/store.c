@@ -2048,6 +2048,7 @@ void pho_xfer_clean(struct pho_xfer_target *xfer)
 {
     pho_attrs_free(&xfer->xt_attrs);
     free(xfer->xt_objuuid);
+    xfer->xt_objuuid = NULL;
 }
 
 int phobos_locate(const char *oid, const char *uuid, int version,
