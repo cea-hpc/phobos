@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -36,7 +36,6 @@ enum pho_cfg_params_lrs {
     PHO_CFG_LRS_mount_prefix = PHO_CFG_LRS_FIRST,
     PHO_CFG_LRS_policy,
     PHO_CFG_LRS_families,
-    PHO_CFG_LRS_lib_device,
     PHO_CFG_LRS_server_socket,
     PHO_CFG_LRS_lock_file,
     PHO_CFG_LRS_sync_time_ms,
