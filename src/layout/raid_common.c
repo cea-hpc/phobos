@@ -365,7 +365,9 @@ static int xfer_remain_to_write_per_medium(
 
     *size = 0;
 
-    rc = get_cfg_fs_block_size(proc->xfer->xd_params.put.family,
+    rc = get_cfg_fs_block_size(proc->xfer->xd_op == PHO_XFER_OP_COPY ?
+                                proc->xfer->xd_params.copy.put.family :
+                                proc->xfer->xd_params.put.family,
                                &fs_block_size);
     if (rc)
         return rc;
@@ -410,6 +412,7 @@ static void raid_writer_build_allocation_req(struct pho_data_processor *proc,
         &((struct raid_io_context *)
           proc->private_writer)[proc->current_target];
     size_t n_extents = n_total_extents(io_context);
+    struct pho_xfer_put_params *put_params;
     size_t *n_tags;
     int i, j;
 
@@ -417,8 +420,13 @@ static void raid_writer_build_allocation_req(struct pho_data_processor *proc,
 
     n_tags = xcalloc(n_extents, sizeof(*n_tags));
 
+    if (proc->xfer->xd_op == PHO_XFER_OP_COPY)
+        put_params = &proc->xfer->xd_params.copy.put;
+    else
+        put_params = &proc->xfer->xd_params.put;
+
     for (i = 0; i < n_extents; ++i)
-            n_tags[i] = proc->xfer->xd_params.put.tags.count;
+            n_tags[i] = put_params->tags.count;
 
     pho_srl_request_write_alloc(req, n_extents, n_tags);
     free(n_tags);
@@ -426,12 +434,12 @@ static void raid_writer_build_allocation_req(struct pho_data_processor *proc,
     for (i = 0; i < n_extents; ++i) {
         req->walloc->media[i]->size = size;
 
-        for (j = 0; j < proc->xfer->xd_params.put.tags.count; ++j)
+        for (j = 0; j < put_params->tags.count; ++j)
             req->walloc->media[i]->tags[j] =
-                xstrdup(proc->xfer->xd_params.put.tags.strings[j]);
+                xstrdup(put_params->tags.strings[j]);
     }
 
-    req->walloc->no_split = proc->xfer->xd_params.put.no_split;
+    req->walloc->no_split = put_params->no_split;
 }
 
 /** Generate the next read or delete allocation request for this eraser */
@@ -1275,7 +1283,9 @@ static void complete_and_transfer_release(struct pho_data_processor *proc,
         } else {
             release_req->media[i]->to_sync = true;
             release_req->media[i]->grouping =
-                xstrdup_safe(proc->xfer->xd_params.put.grouping);
+                (char *) xstrdup_safe(proc->xfer->xd_op == PHO_XFER_OP_COPY ?
+                                       proc->xfer->xd_params.copy.put.grouping :
+                                       proc->xfer->xd_params.put.grouping);
         }
     }
 

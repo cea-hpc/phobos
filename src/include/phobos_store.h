@@ -44,10 +44,6 @@ enum pho_xfer_flags {
      */
     PHO_XFER_OBJ_REPLACE    = (1 << 0),
     /* get: check the object's location before getting it */
-    /*
-     * This flag is ignored for the "get" part of the phobos_copy until we can
-     * both manage xfer put AND get param for a copy.
-     */
     PHO_XFER_OBJ_BEST_HOST  = (1 << 1),
     /* del: hard remove the object */
     PHO_XFER_OBJ_HARD_DEL   = (1 << 2),
@@ -124,9 +120,6 @@ struct pho_xfer_put_params {
  * GET parameters.
  * Node_name corresponds to the name of the node the object can be retrieved
  * from, if a phobos_get call fails.
- *
- * GET paramaters are ignored for the "get" part of a copy xfer until we can
- * both manage put AND get param for a copy.
  */
 struct pho_xfer_get_params {
     const char *copy_name;          /**< Copy to retrieve. */
@@ -421,10 +414,7 @@ int phobos_rename(const char *old_oid, const char *uuid, char *new_oid);
  * - size: unused
  * - fd: unused
  * - attrs: unused (can be NULL)
- * - flags: behavior flags (PHO_XFER_OBJ_BEST_HOST is ignored until we can both
- *          manage put AND get params)
- * - xd_params.get are ignored until we can both manage put AND get params. We
- *   use xd_params.put .
+ * - flags: behavior flags
  * - tags: tags defining constraints on which media can be selected to put the
  *   data
  *

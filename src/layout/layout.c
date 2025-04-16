@@ -86,13 +86,19 @@ static int build_layout_name(const char *layout_name, char *path, size_t len)
 static int build_layout_writer(struct pho_data_processor *encoder,
                                struct pho_xfer_desc *xfer)
 {
+    struct pho_xfer_put_params *put_params;
     char layout_name[NAME_MAX];
     struct layout_module *mod;
     const char *copy_name;
     int rc;
     int i;
 
-    rc = build_layout_name(xfer->xd_params.put.layout_name, layout_name,
+    if (xfer->xd_op == PHO_XFER_OP_COPY)
+        put_params = &xfer->xd_params.copy.put;
+    else
+        put_params = &xfer->xd_params.put;
+
+    rc = build_layout_name(put_params->layout_name, layout_name,
                            sizeof(layout_name));
     if (rc)
         return rc;
@@ -113,8 +119,8 @@ static int build_layout_writer(struct pho_data_processor *encoder,
      * module's code. In this implementation, the module is never unloaded.
      */
 
-    if (xfer->xd_params.put.copy_name) {
-        copy_name = xfer->xd_params.put.copy_name;
+    if (put_params->copy_name) {
+        copy_name = put_params->copy_name;
     } else {
         rc = get_cfg_default_copy_name(&copy_name);
         if (rc)

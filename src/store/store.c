@@ -240,11 +240,16 @@ static int send_generated_requests(struct pho_data_processor *proc,
         /* req_id is used to route responses to the appropriate encoder */
         req->id = enc_id;
         if (pho_request_is_write(req)) {
-            req->walloc->family = proc->xfer->xd_params.put.family;
-            req->walloc->library =
-                xstrdup_safe(proc->xfer->xd_params.put.library);
-            req->walloc->grouping =
-                xstrdup_safe(proc->xfer->xd_params.put.grouping);
+            struct pho_xfer_put_params *put_params;
+
+            if (proc->xfer->xd_op == PHO_XFER_OP_COPY)
+                put_params = &proc->xfer->xd_params.copy.put;
+            else
+                put_params = &proc->xfer->xd_params.put;
+
+            req->walloc->family = put_params->family;
+            req->walloc->library = xstrdup_safe(put_params->library);
+            req->walloc->grouping = xstrdup_safe(put_params->grouping);
         }
 
         data = pho_comm_data_init(comm);
@@ -1334,8 +1339,8 @@ cont:
 
             copy.object_uuid = xfer->xd_targets[i].xt_objuuid;
             copy.version = xfer->xd_targets[i].xt_version;
-            if (xfer->xd_params.put.copy_name) {
-                copy.copy_name = xfer->xd_params.put.copy_name;
+            if (xfer->xd_params.copy.put.copy_name) {
+                copy.copy_name = xfer->xd_params.copy.put.copy_name;
             } else {
                 rc2 = get_cfg_default_copy_name(&copy.copy_name);
                 if (rc2) {
@@ -1654,8 +1659,8 @@ static int store_perform_xfers(struct phobos_handle *pho)
                 copy.object_uuid = pho->xfers[i].xd_targets[j].xt_objuuid;
                 copy.version = pho->xfers[i].xd_targets[j].xt_version;
                 copy.copy_status = PHO_COPY_STATUS_INCOMPLETE;
-                if (pho->xfers[i].xd_params.put.copy_name) {
-                    copy.copy_name = pho->xfers[i].xd_params.put.copy_name;
+                if (pho->xfers[i].xd_params.copy.put.copy_name) {
+                    copy.copy_name = pho->xfers[i].xd_params.copy.put.copy_name;
                 } else {
                     rc2 = get_cfg_default_copy_name(&copy.copy_name);
                     if (rc2) {
@@ -2029,8 +2034,15 @@ clean:
 
 static void xfer_put_param_clean(struct pho_xfer_desc *xfer)
 {
-    string_array_free(&xfer->xd_params.put.tags);
-    pho_attrs_free(&xfer->xd_params.put.lyt_params);
+    struct pho_xfer_put_params *put_params;
+
+    if (xfer->xd_op == PHO_XFER_OP_COPY)
+        put_params = &xfer->xd_params.copy.put;
+    else
+        put_params = &xfer->xd_params.put;
+
+    string_array_free(&put_params->tags);
+    pho_attrs_free(&put_params->lyt_params);
 }
 
 static void (*xfer_param_cleaner[PHO_XFER_OP_LAST])(struct pho_xfer_desc *) = {

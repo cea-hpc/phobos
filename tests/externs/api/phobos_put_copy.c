@@ -11,7 +11,9 @@
 
 int main(int argc, char **argv)
 {
+    struct pho_xfer_target target_copy = {0};
     struct pho_xfer_target target = {0};
+    struct pho_xfer_desc xfer_copy = {0};
     struct pho_xfer_desc xfer = {0};
     struct stat statbuf;
     int fd;
@@ -54,8 +56,14 @@ int main(int argc, char **argv)
 
     pho_xfer_clean(&target);
 
-    xfer.xd_params.put.copy_name = argv[3];
-    rc = phobos_copy(&xfer, 1, NULL, NULL);
+    xfer_copy.xd_op = PHO_XFER_OP_COPY;
+    xfer_copy.xd_params.copy.put.family = PHO_RSC_DIR;
+    xfer_copy.xd_params.copy.put.copy_name = argv[3];
+    target_copy.xt_objid = argv[2];
+    xfer_copy.xd_ntargets = 1;
+    xfer_copy.xd_targets = &target_copy;
+
+    rc = phobos_copy(&xfer_copy, 1, NULL, NULL);
     if (rc) {
         printf("Error at copy: %d, %s .\n", -rc, strerror(-rc));
         exit(-rc);

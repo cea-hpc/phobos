@@ -278,17 +278,23 @@ static const struct raid_ops RAID1_OPS = {
 static int raid1_encoder_get_repl_count(struct pho_data_processor *enc,
                                         unsigned int *repl_count)
 {
+    struct pho_xfer_put_params *put_params;
     const char *string_repl_count;
     int rc;
     int i;
 
     *repl_count = 0;
 
-    if (pho_attrs_is_empty(&enc->xfer->xd_params.put.lyt_params))
+    if (enc->xfer->xd_op == PHO_XFER_OP_COPY)
+        put_params = &enc->xfer->xd_params.copy.put;
+    else
+        put_params = &enc->xfer->xd_params.put;
+
+    if (pho_attrs_is_empty(&put_params->lyt_params))
         string_repl_count = PHO_CFG_GET(cfg_lyt_raid1, PHO_CFG_LYT_RAID1,
                                         repl_count);
     else
-        string_repl_count = pho_attr_get(&enc->xfer->xd_params.put.lyt_params,
+        string_repl_count = pho_attr_get(&put_params->lyt_params,
                                          REPL_COUNT_ATTR_KEY);
 
     if (string_repl_count == NULL)
