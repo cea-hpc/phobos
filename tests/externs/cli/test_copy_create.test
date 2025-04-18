@@ -1,0 +1,340 @@
+#!/bin/bash
+#
+#  All rights reserved (c) 2014-2025 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+#
+# Integration test for copy create
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+################################################################################
+#                                    SETUP                                     #
+################################################################################
+
+function setup_raid1
+{
+    setup_tables
+    invoke_lrs
+
+    DIRS=(
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+         )
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
+function setup_raid1_repl
+{
+    setup_tables
+    invoke_lrs
+
+    DIRS=(
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+         )
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
+function setup_raid4
+{
+    setup_tables
+    invoke_lrs
+
+    DIRS=(
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+         )
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
+function setup_tape_dir
+{
+    setup_tables
+    invoke_daemons
+
+    DIRS=($(mktemp -d /tmp/test_pho.XXXX))
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+
+    export drive="$(get_lto_drives 6 1)"
+    export medium="$(get_tapes L6 1)"
+
+    $phobos drive add --unlock $drive
+    $phobos tape add -t LTO6 $medium
+    $phobos tape format --unlock $medium
+}
+
+function cleanup
+{
+    if [[ -w /dev/changer ]]; then
+        waive_daemons
+        drain_all_drives
+    else
+        waive_lrs
+    fi
+
+    drop_tables
+
+    rm -rf ${DIRS[@]}
+}
+
+################################################################################
+#                              TEST COPY CREATE                                #
+################################################################################
+
+function check_copies()
+{
+    local first=$1
+    local second=$2
+    local expected_copies=$3
+
+    local copies=$($phobos copy list)
+    local count=$(echo "$copies" | wc -l)
+    if [[ $count -ne $expected_copies ]]; then
+        error "There should be $expected_copies copies, got $count"
+    fi
+
+    echo "$copies" | grep "$first"
+    echo "$copies" | grep "$second"
+}
+
+function check_extents()
+{
+    local first=$1
+    local expected_ext_first=$2
+    local second=$3
+    local expected_ext_second=$4
+    local expected_exts=$(($expected_ext_first + $expected_ext_second))
+    local output=$5
+
+    local extents=($($phobos extent list --degroup -o $output))
+
+    local count=${#extents[@]}
+    if [[ $count -ne $expected_exts ]]; then
+        error "There should be $expected_exts extents, got $count"
+    fi
+
+    echo "${extents[@]}" | grep "$first"
+    count=0
+    for extent in ${extents[@]}; do
+        if [[ $extent == "$first" ]]; then
+            count=$(($count + 1))
+        fi
+    done
+    if [[ $count -ne $expected_ext_first ]]; then
+        error "There should be $expected_ext_first extents for $first," \
+              "got $count"
+    fi
+
+    echo "${extents[@]}" | grep "$second"
+    count=0
+    for extent in ${extents[@]}; do
+        if [[ $extent == "$second" ]]; then
+            count=$(($count + 1))
+        fi
+    done
+    if [[ $count -ne $expected_ext_second ]]; then
+        error "There should be $expected_ext_second extents for $second," \
+              "got $count"
+    fi
+}
+
+function test_copy_raid1_to_raid1()
+{
+    $phobos put -f dir /etc/hosts oid
+
+    $valg_phobos copy create -f dir oid copy-source ||
+        error "Phobos copy create should have worked"
+
+    check_copies "source" "copy-source" 2
+
+    check_extents "source" 1 "copy-source" 1 "copy_name"
+}
+
+function test_copy_raid1_repl()
+{
+    $phobos put -f dir --lyt-params=repl_count=2 /etc/hosts oid
+
+    $valg_phobos copy create -f dir --lyt-params=repl_count=2 oid copy-source ||
+        error "Phobos copy create should have worked"
+
+    check_copies "source" "copy-source" 2
+
+    check_extents "source" 2 "copy-source" 2 "copy_name"
+}
+
+function test_copy_raid1_to_raid1_repl()
+{
+    $phobos put -f dir /etc/hosts oid
+
+    $valg_phobos copy create -f dir --lyt-params=repl_count=2 oid copy-source ||
+        error "Phobos copy create should have worked"
+
+    check_copies "source" "copy-source" 2
+
+    check_extents "source" 1 "copy-source" 2 "copy_name"
+}
+
+function test_copy_raid1_repl_to_raid1()
+{
+    $phobos put -f dir --lyt-params=repl_count=2 /etc/hosts oid
+
+    $valg_phobos copy create -f dir oid copy-source ||
+        error "Phobos copy create should have worked"
+
+    check_copies "source" "copy-source" 2
+
+    check_extents "source" 2 "copy-source" 1 "copy_name"
+}
+
+function test_copy_raid1_to_raid4()
+{
+    $phobos put -f dir /etc/hosts oid
+
+    $valg_phobos copy create -f dir -l raid4 oid copy-source ||
+        error "Phobos copy create should have worked"
+
+    check_copies "source" "copy-source" 2
+
+    check_extents "source" 1 "copy-source" 3 "copy_name"
+}
+
+function test_copy_raid1_repl_to_raid4()
+{
+    $phobos put -f dir --lyt-params=repl_count=2 /etc/hosts oid
+
+    $valg_phobos copy create -f dir -l raid4 oid copy-source ||
+        error "Phobos copy create should have worked"
+
+    check_copies "source" "copy-source" 2
+
+    check_extents "source" 2 "copy-source" 3 "copy_name"
+}
+
+function test_copy_raid4_to_raid4()
+{
+    $phobos put -f dir -l raid4 /etc/hosts oid
+
+    $valg_phobos copy create -f dir -l raid4 oid copy-source ||
+        error "Phobos copy create should have worked"
+
+    check_copies "source" "copy-source" 2
+
+    check_extents "source" 3 "copy-source" 3 "copy_name"
+}
+
+function test_copy_raid4_to_raid1()
+{
+    $phobos put -f dir -l raid4 /etc/hosts oid
+
+    $valg_phobos -vv copy create -f dir oid copy-source ||
+        error "Phobos copy create should have worked"
+
+    check_copies "source" "copy-source" 2
+
+    check_extents "source" 3 "copy-source" 1 "copy_name"
+}
+
+function test_copy_raid4_to_raid1_repl()
+{
+    $phobos put -f dir -l raid4 /etc/hosts oid
+
+    $valg_phobos copy create -f dir -l raid1 --lyt-params=repl_count=2 \
+        oid copy-source || error "Phobos copy create should have worked"
+
+    check_copies "source" "copy-source" 2
+
+    check_extents "source" 3 "copy-source" 2 "copy_name"
+}
+
+function test_copy_dir_to_tape()
+{
+    $phobos put -f dir /etc/hosts oid
+
+    $valg_phobos copy create -f tape oid copy-source ||
+        error "Phobos copy create should have worked"
+
+    check_copies "source" "copy-source" 2
+
+    check_extents "source" 1 "copy-source" 1 "copy_name"
+
+    check_extents "['dir']" 1 "['tape']" 1 "family"
+}
+
+function test_copy_tape_to_dir()
+{
+    $phobos put -f tape /etc/hosts oid
+
+    $valg_phobos copy create -f dir oid copy-source ||
+        error "Phobos copy create should have worked"
+
+    check_copies "source" "copy-source" 2
+
+    check_extents "source" 1 "copy-source" 1 "copy_name"
+
+    check_extents "['tape']" 1 "['dir']" 1 "family"
+}
+
+function test_copy_user_copy_name()
+{
+    $phobos put -f dir --copy-name disk /etc/hosts oid
+
+    $valg_phobos copy create -f dir oid disk-copy &&
+        error "Phobos copy create should failed"
+
+    $valg_phobos copy create -f dir --copy-name disk oid disk-copy ||
+        error "Phobos copy create should have worked"
+
+    check_copies "disk" "disk-copy" 2
+
+    check_extents "disk" 1 "disk-copy" 1 "copy_name"
+}
+
+TESTS=("setup_raid1; test_copy_raid1_to_raid1; cleanup"
+       "setup_raid1_repl; test_copy_raid1_repl; cleanup"
+       "setup_raid1_repl; test_copy_raid1_to_raid1_repl; cleanup"
+       "setup_raid1_repl; test_copy_raid1_repl_to_raid1; cleanup"
+       "setup_raid4; test_copy_raid1_to_raid4; cleanup"
+       "setup_raid4; test_copy_raid1_repl_to_raid4; cleanup"
+       "setup_raid4; test_copy_raid4_to_raid4; cleanup"
+       "setup_raid4; test_copy_raid4_to_raid1; cleanup"
+       "setup_raid4; test_copy_raid4_to_raid1_repl; cleanup"
+       "setup_raid1; test_copy_user_copy_name; cleanup")
+
+if [[ -w /dev/changer ]]; then
+    TESTS+=("setup_tape_dir; test_copy_dir_to_tape; cleanup"
+            "setup_tape_dir; test_copy_tape_to_dir; cleanup")
+fi

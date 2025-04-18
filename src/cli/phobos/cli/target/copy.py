@@ -108,7 +108,9 @@ class CopyOptHandler(XferOptHandler):
         oid = self.params.get('oid')
 
         put_params = XferPutParams(create_put_params(self, copy_to_put))
-        get_params = XferGetParams(GetParams(copy_to_get, None, DSS_OBJ_ALIVE))
+        get_params = XferGetParams(GetParams(copy_name=copy_to_get,
+                                             node_name=None,
+                                             scope=DSS_OBJ_ALIVE))
         copy_params = XferCopyParams(get_params, put_params)
 
         self.client.copy_register(oid, copy_params)

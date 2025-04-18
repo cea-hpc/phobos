@@ -164,16 +164,12 @@ static int layout_select_query(GString **conditions, int n_conditions,
                     " json_agg(extent_uuid ORDER BY layout_index)"
                     " FROM layout"
                     " LEFT JOIN ("
-                    "  SELECT oid, object_uuid, version, lyt_info FROM object"
-                    "   LEFT JOIN ("
-                    "    SELECT object_uuid, version, lyt_info FROM copy)"
+                    "  SELECT oid, object_uuid, version, lyt_info, copy_name"
+                    "  FROM copy LEFT JOIN ("
+                    "    SELECT oid, object_uuid, version FROM object"
+                    "    UNION SELECT oid, object_uuid, version FROM deprecated_object)"
                     "    AS tmpO USING (object_uuid, version)"
-                    "  UNION SELECT oid, object_uuid, version, lyt_info"
-                    "   FROM deprecated_object"
-                    "    LEFT JOIN ("
-                    "     SELECT object_uuid, version, lyt_info FROM copy)"
-                    "     AS tmpD USING (object_uuid, version)"
-                    " ) AS tmp USING (object_uuid, version)");
+                    ") AS inner_table USING (object_uuid, version, copy_name)");
 
     if (n_conditions == 1)
         g_string_append(request, conditions[0]->str);
