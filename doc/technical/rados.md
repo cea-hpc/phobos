@@ -462,17 +462,10 @@ Library needed: librados
     seems to automatically replace the entry when it exists. A test has to be
     done to verify it. Then we could check the entry's existence before trying
     to add its new value.
-  - PHO_IO_SYNC_FILE (Sync file data to media on close): With librados it would
-    mean "Wait for the operation to complete before it closes"
   - PHO_IO_NO_REUSE (Drop file contents from system cache): it doesn't seem
     useful with RADOS unless we use the pin/unpin feature
-  - PHO_IO_DELETE (Delete extent from media): Currently, this flag is not
-    used by Phobos. Its goal is to delete a specific extent. As extents will
-    probably be stored as objects on RADOS, it would only mean "delete a
-    specific RADOS object".
 
-The first 3 flags and the last one can be used with Librados. No additional flag
-has to be added.
+The first 2 flags can be used with Librados. No additional flag has to be added.
 
 ### Interfaces
 

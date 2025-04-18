@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2024 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -45,13 +45,10 @@
 
 #define PHO_ATTR_BACKUP_JSON_FLAGS (JSON_COMPACT | JSON_SORT_KEYS)
 
-/* FIXME: only 2 combinations are used: REPLACE | NO_REUSE and DELETE */
 enum pho_io_flags {
     PHO_IO_MD_ONLY    = (1 << 0),   /**< Only operate on object MD */
     PHO_IO_REPLACE    = (1 << 1),   /**< Replace the entry if it exists */
-    PHO_IO_SYNC_FILE  = (1 << 2),   /**< Sync file data to media on close */
-    PHO_IO_NO_REUSE   = (1 << 3),   /**< Drop file contents from system cache */
-    PHO_IO_DELETE     = (1 << 4),   /**< Delete extent from media */
+    PHO_IO_NO_REUSE   = (1 << 2),   /**< Drop file contents from system cache */
 };
 
 /**
