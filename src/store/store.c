@@ -177,8 +177,8 @@ static int decoder_build(struct pho_data_processor *decoder,
     assert(xfer->xd_op == PHO_XFER_OP_GET || xfer->xd_op == PHO_XFER_OP_DEL ||
            xfer->xd_op == PHO_XFER_OP_COPY);
 
-    rc = dss_lazy_find_default_copy(dss, xfer->xd_targets->xt_objuuid,
-                                    xfer->xd_targets->xt_version, &copy);
+    rc = dss_lazy_find_copy(dss, xfer->xd_targets->xt_objuuid,
+                            xfer->xd_targets->xt_version, NULL, &copy);
     if (rc)
         LOG_RETURN(rc, "Cannot get copy");
 
@@ -678,7 +678,7 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_target *xfer)
         need_undelete = true;
 
     /* Retrieve default copy of the object */
-    rc = dss_lazy_find_default_copy(dss, obj->uuid, obj->version, &copy);
+    rc = dss_lazy_find_copy(dss, obj->uuid, obj->version, NULL, &copy);
     if (rc)
         LOG_GOTO(out_prev, rc, "Cannot find copy for objid:'%s'", obj->oid);
 
@@ -1061,7 +1061,7 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
         LOG_RETURN(rc, "Cannot find object for objid:'%s'",
                    xfer->xd_targets->xt_objid);
 
-    rc = dss_lazy_find_default_copy(dss, obj->uuid, obj->version, &copy);
+    rc = dss_lazy_find_copy(dss, obj->uuid, obj->version, NULL, &copy);
     if (rc)
         LOG_RETURN(rc, "Cannot find copy for objid:'%s'", obj->oid);
 
@@ -1121,7 +1121,7 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
         extents[0].media.family == PHO_RSC_TAPE :
         false;
 
-    rc = dss_lazy_find_default_copy(&pho->dss, obj.uuid, obj.version, &copy);
+    rc = dss_lazy_find_copy(&pho->dss, obj.uuid, obj.version, NULL, &copy);
     if (rc)
         LOG_RETURN(rc, "Cannot find copy for objid:'%s'", obj.oid);
 
@@ -1277,8 +1277,8 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     if (xfer->xd_rc == 0 && rc == 0 && xfer->xd_op == PHO_XFER_OP_GET) {
         struct copy_info *copy;
 
-        rc = dss_lazy_find_default_copy(&pho->dss, xfer->xd_targets->xt_objuuid,
-                                        xfer->xd_targets->xt_version, &copy);
+        rc = dss_lazy_find_copy(&pho->dss, xfer->xd_targets->xt_objuuid,
+                                xfer->xd_targets->xt_version, NULL, &copy);
         if (rc)
             LOG_GOTO(cont, rc,
                      "Error while retrieving copy info, "
@@ -2083,7 +2083,7 @@ int phobos_locate(const char *oid, const char *uuid, int version,
         LOG_GOTO(clean, rc, "Unable to find object to locate");
 
     /* find default copy */
-    rc = dss_lazy_find_default_copy(&dss, obj->uuid, obj->version, &copy);
+    rc = dss_lazy_find_copy(&dss, obj->uuid, obj->version, NULL, &copy);
     if (rc)
         LOG_GOTO(clean, rc,
                  "Unable to find the default copy of the object to locate");

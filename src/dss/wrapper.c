@@ -723,10 +723,11 @@ int dss_update_gc_for_tape(struct dss_handle *handle, const struct pho_id *tape)
     return check_orphan(handle, tape);
 }
 
-int dss_lazy_find_default_copy(struct dss_handle *handle, const char *uuid,
-                               int version, struct copy_info **copy)
+int dss_lazy_find_copy(struct dss_handle *handle, const char *uuid,
+                       int version, const char *copy_name,
+                       struct copy_info **copy)
 {
-    const char *default_copy_name = NULL;
+    const char *copy_to_retrieve = NULL;
     struct copy_info *copy_list = NULL;
     struct dss_filter filter;
     int copy_cnt = 0;
@@ -734,16 +735,20 @@ int dss_lazy_find_default_copy(struct dss_handle *handle, const char *uuid,
 
     ENTRY;
 
-    rc = get_cfg_default_copy_name(&default_copy_name);
-    if (rc)
-        LOG_RETURN(rc, "Cannot get default_copy_name from conf");
+    if (copy_name == NULL)  {
+        rc = get_cfg_default_copy_name(&copy_to_retrieve);
+        if (rc)
+            LOG_RETURN(rc, "Cannot get default copy name from conf");
+    } else {
+        copy_to_retrieve = copy_name;
+    }
 
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                           "     {\"DSS::COPY::object_uuid\": \"%s\"},"
                           "     {\"DSS::COPY::version\": \"%d\"},"
                           "     {\"DSS::COPY::copy_name\": \"%s\"}"
-                          "]}", uuid, version, default_copy_name);
+                          "]}", uuid, version, copy_to_retrieve);
     if (rc)
         LOG_RETURN(rc, "Cannot build filter");
 
@@ -751,9 +756,12 @@ int dss_lazy_find_default_copy(struct dss_handle *handle, const char *uuid,
     dss_filter_free(&filter);
     if (rc)
         LOG_RETURN(rc, "Cannot fetch copy '%s' for objuuid:'%s'",
-                   default_copy_name, uuid);
+                   copy_to_retrieve, uuid);
 
-    assert(copy_cnt == 1);
+    if (copy_cnt == 0) {
+        dss_res_free(copy_list, copy_cnt);
+        return -EINVAL;
+    }
 
     *copy = copy_info_dup(copy_list);
 
