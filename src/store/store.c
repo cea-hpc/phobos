@@ -617,7 +617,8 @@ out_md:
  * Delete xfer metadata from the DSS by \a objid, making the oid free to be used
  * again (unless layout information still lay in the DSS).
  */
-int object_md_del(struct dss_handle *dss, struct pho_xfer_target *xfer)
+int object_md_del(struct dss_handle *dss, struct pho_xfer_target *xfer,
+                  const char *copy_name)
 {
     struct object_info lock_obj = { .oid = xfer->xt_objid };
     struct object_info *prev_obj = NULL;
@@ -678,7 +679,7 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_target *xfer)
         need_undelete = true;
 
     /* Retrieve default copy of the object */
-    rc = dss_lazy_find_copy(dss, obj->uuid, obj->version, NULL, &copy);
+    rc = dss_lazy_find_copy(dss, obj->uuid, obj->version, copy_name, &copy);
     if (rc)
         LOG_GOTO(out_prev, rc, "Cannot find copy for objid:'%s'", obj->oid);
 
@@ -1320,7 +1321,8 @@ cont:
     if (pho->md_created && pho->md_created[xfer_idx] &&
             xfer->xd_op == PHO_XFER_OP_PUT && xfer->xd_rc) {
         for (i = 0; i < xfer->xd_ntargets; i++)
-            object_md_del(&pho->dss, &xfer->xd_targets[i]);
+            object_md_del(&pho->dss, &xfer->xd_targets[i],
+                          xfer->xd_params.put.copy_name);
     }
 
     /* Cleanup metadata for failed COPY */
