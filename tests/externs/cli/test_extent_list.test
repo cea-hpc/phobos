@@ -213,9 +213,9 @@ function test_extent_list_dirs_lib() {
 
 function test_extent_list_copy_name() {
     $phobos put -f dir -c source /etc/hosts bob
-    $phobos put -f dir -c cache /etc/hosts alice
+    $phobos put -f dir -c cache-copy /etc/hosts alice
 
-    local output=$($valg_phobos extent list --copy-name cache)
+    local output=$($valg_phobos extent list --copy-name cache-copy)
     local count=$(echo "$output" | wc -l)
     if [[ $count -ne 1 ]]; then
         error "There should be only one extent, got $count"

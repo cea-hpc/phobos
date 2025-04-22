@@ -76,7 +76,7 @@ check_SCRIPTS=acceptance.test \
               test_object_list.sh \
               test_phobos_tape_library_test.sh \
               test_ping.test \
-              test_put.sh \
+              test_put.test \
               test_raid1.test \
               test_raid4.test \
               test_rename.test \

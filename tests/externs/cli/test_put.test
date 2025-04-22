@@ -24,12 +24,10 @@
 #
 
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../test_launch_daemon.sh
-. $test_dir/../../tape_drive.sh
-
-set -xe
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
 
 ################################################################################
 #                                    SETUP                                     #
@@ -37,14 +35,14 @@ set -xe
 
 function dir_setup
 {
-    empty_put_dir1=$(mktemp -d /tmp/test.pho.XXXX)
+    export empty_put_dir1=$(mktemp -d /tmp/test.pho.XXXX)
     empty_put_dir2=$(mktemp -d /tmp/test.pho.XXXX)
     dirs="$empty_put_dir1 $empty_put_dir2"
 
     echo "adding directories $dirs"
     $phobos dir add $dirs
     $phobos dir format --fs posix --unlock $dirs
-    $phobos dir update --tags empty_put_dir1 $empty_put_dir1
+    $phobos dir update --tags empty_put_dir1,fast $empty_put_dir1
     $phobos dir update --tags empty_put_dir2 $empty_put_dir2
 }
 
@@ -62,6 +60,18 @@ function setup
     dir_setup
 }
 
+function setup_tape
+{
+    setup
+
+    drives="$(get_lto_drives 6 3)"
+    medias="$(get_tapes L6 3)"
+
+    $phobos drive add --unlock ${drives[@]}
+    $phobos tape add -t LTO6 ${medias[@]}
+    $phobos tape format --unlock ${medias[@]}
+}
+
 function cleanup
 {
     if [[ -w /dev/changer ]]; then
@@ -77,9 +87,6 @@ function cleanup
         drain_all_drives
     fi
 }
-
-trap cleanup EXIT
-setup
 
 ################################################################################
 #                               SIMPLE PUT TESTS                               #
@@ -121,8 +128,6 @@ function test_extent_path
         error "oid2 extent path (pt2) should contain extent uuid"
 }
 
-test_extent_path
-
 function test_xxh128_checksum
 {
     # enable extent xxh128
@@ -159,10 +164,6 @@ function test_xxh128_checksum
     fi
 }
 
-if [[ "${HAVE_XXH128}" == "yes" ]]; then
-    test_xxh128_checksum
-fi
-
 function test_md5_checksum
 {
     # enable extent md5
@@ -197,8 +198,6 @@ function test_md5_checksum
     fi
 }
 
-test_md5_checksum
-
 ################################################################################
 #                         TEST EMPTY PUT ON TAGGED DIR                         #
 ################################################################################
@@ -218,8 +217,6 @@ function test_empty_put
     echo "$output" | grep "empty_file1" | grep "$empty_put_dir1"
     echo "$output" | grep "empty_file2" | grep "$empty_put_dir2"
 }
-
-test_empty_put
 
 ################################################################################
 #                         PUT WITH --LYT-PARAMS OPTION                         #
@@ -245,8 +242,6 @@ function test_lyt_params
     lyt_params_helper "lp4" "--layout raid1 --lyt-params repl_count=2" 2
     lyt_params_helper "lp5" "--layout raid1 --lyt-params repl_count=1" 1
 }
-
-test_lyt_params
 
 ################################################################################
 #                         PUT WITH --OVERWRITE OPTION                          #
@@ -372,17 +367,6 @@ function test_overwrite_lyt_params
 
 function test_overwrite_family
 {
-    drain_all_drives
-
-    $phobos drive add --unlock /dev/st0 ||
-        error "Drive /dev/st0 should have been added"
-
-    $phobos tape add -t lto5 P00000L5 ||
-        error "Tape P00000L5 should have been added"
-
-    $phobos tape format --unlock P00000L5 ||
-        error "Tape P00000L5 should have been formated"
-
     local output_func="output_checkout extent family oid7"
     local put_func="put_checkout oid7"
 
@@ -414,14 +398,47 @@ function test_user_copy_name
     output_checkout copy copy_name oid_copytest copytest
 }
 
-test_overwrite_and_delete
-test_double_overwrite
-test_overwrite_metadata
-test_overwrite_lyt_params
-test_user_copy_name
+function test_user_copy_name_profile
+{
+    unset PHOBOS_STORE_default_family
+
+    put_checkout oid_copy_profile_dir "--copy-name cache"
+
+    output_checkout extent family oid_copy_profile_dir "['dir']"
+    output_checkout extent media_name oid_copy_profile_dir "['$empty_put_dir1']"
+
+    put_checkout oid_copy_profile_tape "--copy-name archive"
+    output_checkout extent family oid_copy_profile_tape \
+        "['tape', 'tape', 'tape']"
+    output_checkout extent layout oid_copy_profile_tape "raid4"
+
+    put_checkout oid_copy_profile_overload \
+        "--copy-name archive -l raid1 --lyt-params=repl_count=2"
+    output_checkout extent layout oid_copy_profile_overload "raid1"
+    output_checkout extent ext_count oid_copy_profile_overload "2"
+}
+
+TESTS=("setup; \
+            test_extent_path; \
+            test_md5_checksum; \
+            test_empty_put; \
+            test_lyt_params; \
+            test_overwrite_and_delete; \
+            test_double_overwrite; \
+            test_overwrite_metadata; \
+            test_overwrite_lyt_params; \
+            test_user_copy_name; \
+        cleanup")
+
+if [[ "${HAVE_XXH128}" == "yes" ]]; then
+    TESTS+=("setup; test_xxh128_checksum; cleanup")
+fi
 
 # Tape tests are available only if /dev/changer exists, which is the entry
 # point for the tape library.
 if [[ -w /dev/changer ]]; then
-    test_overwrite_family
+    TESTS+=("setup_tape; \
+                test_overwrite_family; \
+                test_user_copy_name_profile; \
+             cleanup")
 fi

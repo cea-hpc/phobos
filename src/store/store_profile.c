@@ -42,6 +42,9 @@
 #define PROFILE_TAGS_CFG_PARAM "tags"
 #define PROFILE_LIBRARY_CFG_PARAM "library"
 
+#define COPY_SECTION_CFG "copy \"%s\""
+#define COPY_PROFILE_CFG_PARAM "profile"
+
 /**
  * List of configuration parameters for profile store
  */
@@ -218,6 +221,40 @@ out:
     return rc;
 }
 
+/**
+ * Extract the values of the specified profile for a copy name from the config
+ * and set the parameters of xfer.
+ *
+ * @param[in] put_params the phobos xfer put parameters
+ *
+ * @return 0 on success, negative errro in case of failure
+ */
+static int apply_copy_to_put_params(struct pho_xfer_put_params *put_params)
+{
+    const char *cfg_val;
+    char *section_name;
+    int rc = 0;
+
+    rc = asprintf(&section_name, COPY_SECTION_CFG, put_params->copy_name);
+    if (rc < 0)
+        return -ENOMEM;
+
+    if (put_params->profile == NULL) {
+        rc = pho_cfg_get_val(section_name, COPY_PROFILE_CFG_PARAM, &cfg_val);
+        if (!rc)
+            put_params->profile = cfg_val;
+        else if (rc != -ENODATA)
+            goto out;
+    }
+
+    free(section_name);
+    return 0;
+
+out:
+    free(section_name);
+    return rc;
+}
+
 /** Return the (configured) default resource family. */
 static enum rsc_family default_family_from_cfg(void)
 {
@@ -242,6 +279,12 @@ int fill_put_params(struct pho_xfer_desc *xfer)
         put_params = &xfer->xd_params.put;
 
     for (lvl = PHO_CFG_LEVEL_PROCESS; lvl < PHO_CFG_LEVEL_LAST; ++lvl) {
+        if (put_params->copy_name != NULL) {
+            rc = apply_copy_to_put_params(put_params);
+            if (rc != 0)
+                return rc;
+        }
+
         rc = apply_defaults_to_put_params(put_params, lvl);
         if (rc != 0 && rc != -ENODATA)
             return rc;

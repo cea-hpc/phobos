@@ -37,7 +37,7 @@ function setup_objs
     $phobos del oid2
     $phobos put --copy-name "oid2-gen2" /etc/hosts oid2
 
-    $phobos put --copy-name "cache" /etc/hosts oid-cache
+    $phobos put --copy-name "cache-copy" /etc/hosts oid-cache
     $phobos put /etc/hosts oid-source
 }
 
@@ -114,7 +114,7 @@ function test_list_deprecated
 
 function test_list_copy_name
 {
-    local count=$($valg_phobos copy list --copy-name cache | wc -l)
+    local count=$($valg_phobos copy list --copy-name cache-copy | wc -l)
     if [[ $count -ne 1 ]]; then
         error "There should be one cache copy, got $count"
     fi
