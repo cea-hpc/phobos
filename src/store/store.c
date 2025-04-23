@@ -1422,8 +1422,8 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
                       size_t n_xfers, pho_completion_cb_t cb, void *udata)
 {
     union pho_comm_addr sock_addr = {0};
+    int rc, rc2 = 0;
     size_t i;
-    int rc;
 
     memset(pho, 0, sizeof(*pho));
     pho->comm = pho_comm_info_init();
@@ -1485,13 +1485,16 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
         pho_debug("Initializing %s %ld for %d objid(s)",
                   processor_type2str(&pho->processors[i]), i,
                   pho->xfers[i].xd_ntargets);
-        rc = init_enc_or_dec(&pho->processors[i], &pho->dss, &pho->xfers[i]);
-        if (rc)
-            pho_error(rc, "Error while creating processors for %d objid(s)",
+        rc2 = init_enc_or_dec(&pho->processors[i], &pho->dss, &pho->xfers[i]);
+        if (rc2) {
+            pho_error(rc2, "Error while creating processors for %d objid(s)",
                       pho->xfers[i].xd_ntargets);
-        if (rc || pho->processors[i].done)
+            rc = rc ? : rc2;
+        }
+
+        if (rc2 || pho->processors[i].done)
             store_end_xfer(pho, i, rc);
-        rc = 0;
+        rc2 = 0;
     }
 
 out:
