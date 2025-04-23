@@ -439,6 +439,18 @@ int phobos_copy(struct pho_xfer_desc *xfers, size_t n,
                 pho_completion_cb_t cb, void *udata);
 
 /**
+ * Delete a copy's object from the object store
+ *
+ * @param[in]   xfers       Copy objects to delete
+ * @param[in]   num_xfers   Number of objects to delete
+ *
+ * @return                  0 on success, -errno on failure
+ *
+ * This must be called after phobos_init.
+ */
+int phobos_copy_delete(struct pho_xfer_desc *xfers, size_t num_xfers);
+
+/**
  * Clean a pho_xfer_desc structure by freeing the uuid and attributes, and
  * the tags in case the xfer corresponds to a PUT operation.
  *
