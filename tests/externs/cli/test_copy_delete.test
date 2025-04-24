@@ -1,0 +1,329 @@
+#!/bin/bash
+#
+#  All rights reserved (c) 2014-2025 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+#
+# Integration test for copy delete
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+################################################################################
+#                                    SETUP                                     #
+################################################################################
+
+function setup_raid1
+{
+    setup_tables
+    invoke_lrs
+
+    DIRS=(
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+         )
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
+function setup_raid1_repl
+{
+    setup_tables
+    invoke_lrs
+
+    DIRS=(
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+         )
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
+function setup_raid4
+{
+    setup_tables
+    invoke_lrs
+
+    DIRS=(
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+         )
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
+function setup_tape_dir
+{
+    setup_tables
+    invoke_daemons
+
+    DIRS=($(mktemp -d /tmp/test_pho.XXXX))
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+
+    export drive="$(get_lto_drives 6 1)"
+    export medium="$(get_tapes L6 1)"
+
+    $phobos drive add --unlock $drive
+    $phobos tape add -t LTO6 $medium
+    $phobos tape format --unlock $medium
+}
+
+function cleanup
+{
+    if [[ -w /dev/changer ]]; then
+        waive_daemons
+        drain_all_drives
+    else
+        waive_lrs
+    fi
+
+    drop_tables
+
+    rm -rf ${DIRS[@]}
+}
+
+################################################################################
+#                              TEST COPY CREATE                                #
+################################################################################
+
+function test_copy_delete_raid1()
+{
+    $phobos put -f dir /etc/hosts oid
+
+    $phobos copy create -f dir oid copy-source
+
+    $valg_phobos copy delete oid source
+
+    local count=$($phobos copy list | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be one copy, got $count"
+    fi
+
+    count=$($phobos extent list | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be one extent, got $count"
+    fi
+}
+
+function test_copy_delete_raid1_repl()
+{
+    $phobos put -f dir --lyt-params=repl_count=2 /etc/hosts oid
+
+    $phobos copy create -f dir --lyt-params=repl_count=2 oid copy-source
+
+    $valg_phobos copy delete oid source
+
+    local count=$($phobos copy list | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be one copy, got $count"
+    fi
+
+    count=$($phobos extent list --degroup | wc -l)
+    if [[ $count -ne 2 ]]; then
+        error "There should be two extents, got $count"
+    fi
+}
+
+function test_copy_delete_raid4()
+{
+    $phobos put -f dir -l raid4 /etc/hosts oid
+
+    $phobos copy create -f dir -l raid4 oid copy-source
+
+    $valg_phobos copy delete oid source
+
+    local count=$($phobos copy list | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be one copy, got $count"
+    fi
+
+    count=$($phobos extent list --degroup | wc -l)
+    if [[ $count -ne 3 ]]; then
+        error "There should be three extents, got $count"
+    fi
+}
+
+function test_copy_delete_dir_tape()
+{
+    $phobos put -f tape /etc/hosts oid
+
+    $phobos copy create -f dir oid copy-source
+
+    $valg_phobos copy delete oid source
+
+    local count=$($phobos copy list | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be one copy, got $count"
+    fi
+
+    count=$($phobos extent list | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be one extent, got $count"
+    fi
+}
+
+function test_copy_delete_last()
+{
+    $phobos put -f dir /etc/hosts oid
+
+    $valg_phobos copy delete oid source &&
+        error "Copy delete should failed, can't delete the last copy"
+
+    local count=$($phobos copy list | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be one copy, got $count"
+    fi
+
+    count=$($phobos extent list | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be one extent, got $count"
+    fi
+}
+
+function check_copies()
+{
+    local uuid=$1
+    local expected_count=$2
+    local output=$3
+    local copy_list_filter=$4
+    local expected_copy=$5
+
+    local copies=$($phobos copy list -o $output -f csv $uuid |
+                    grep "$copy_list_filter")
+
+    local count=$(echo "$copies" | wc -l)
+    if [[ $count -ne $expected_count ]]; then
+        error "There should be $expected_count copies '$expected_copy' for " \
+              "uuid '$uuid', got $count"
+    fi
+    # Check that the last copy 'source' is for the version 1
+    echo "$copies" | grep "$expected_copy"
+}
+
+function check_extents()
+{
+    local extent_filter=$1
+    local params=$2
+    local expected_count=$3
+
+    local extents=$($phobos extent list -o object_uuid,version oid -f csv\
+                    $params | grep "$extent_filter")
+    count=$(echo "$extents" | wc -l)
+    if [[ $count -ne $expected_count ]]; then
+        error "There should be $expected_count extents for $extent_filter and" \
+              "$params, got $count"
+    fi
+}
+
+function test_copy_delete_deprec()
+{
+    $phobos put -f dir /etc/hosts oid
+    local uuid_gen1=$($phobos object list -o uuid oid)
+    $phobos copy create -f dir oid copy-source
+    $phobos del oid
+
+    $phobos put -f dir /etc/hosts oid
+    local uuid_gen2=$($phobos object list -o uuid oid)
+    $phobos copy create -f dir oid copy-source
+
+    $phobos put -f dir --overwrite /etc/hosts oid
+    $phobos copy create -f dir oid copy-source
+
+    $valg_phobos copy delete --deprecated --version 1 oid source &&
+        error "Copy delete should have failed, several copies with the same" \
+              "version"
+
+    # Delete a copy with version (should delete the copy 'source' from the
+    # only alive object)
+    $valg_phobos copy delete --deprecated --version 2 oid source ||
+        error "Copy should be deleted"
+
+    check_copies $uuid_gen2 1 "copy_name,version" "^source" "source,1"
+
+    check_extents $uuid_gen2 "--copy-name source" 1
+
+    # Delete a copy with uuid (should delete the copy 'source' from the deprec
+    # object gen1)
+    $valg_phobos copy delete --deprecated --uuid $uuid_gen1 oid source ||
+        error "Copy should be deleted"
+
+    check_copies $uuid_gen1 1 "copy_name,version" "copy-source" "copy-source,1"
+
+    check_extents $uuid_gen1 "" 1
+
+    # Delete with uuid and version
+    $valg_phobos copy delete --deprecated --uuid $uuid_gen2 --version 1 \
+        oid source || error "Copy should be deleted"
+
+    check_copies $uuid_gen2 1 "uuid,version" "$uuid_gen2,1" "$uuid_gen2,1"
+
+    check_extents "$uuid_gen2,1" "" 1
+}
+
+function test_copy_delete_deprec_only()
+{
+    $phobos put -f dir /etc/hosts oid
+    $phobos copy create -f dir oid copy-source
+    local uuid_gen1=$($phobos object list -o uuid oid)
+    $phobos del oid
+    $phobos put -f dir /etc/hosts oid
+    $phobos copy create -f dir oid copy-source
+    local uuid_gen2=$($phobos object list -o uuid oid)
+    $phobos put -f dir --overwrite /etc/hosts oid
+
+    # Delete a copy 'source' from object version 1 of gen 2
+    $valg_phobos copy delete --deprecated-only --version 1 --uuid $uuid_gen2 \
+        oid source || error "Copy delete should have worked"
+
+    check_copies $uuid_gen2 1 "copy_name,version" "copy-source" "copy-source,1"
+
+    check_extents "$uuid_gen2,1" "" 1
+
+    # Delete a copy 'source' from object gen 1
+    $valg_phobos copy delete --deprecated-only --uuid $uuid_gen1 oid source ||
+        error "Copy delete should have worked"
+
+    check_copies $uuid_gen1 1 "copy_name,version" "copy-source" "copy-source,1"
+
+    check_extents "$uuid_gen1,1" "" 1
+}
+
+TESTS=("setup_raid1; test_copy_delete_raid1; cleanup"
+       "setup_raid1_repl; test_copy_delete_raid1_repl; cleanup"
+       "setup_raid4; test_copy_delete_raid4; cleanup"
+       "setup_raid1; test_copy_delete_last; cleanup"
+       "setup_raid1; test_copy_delete_deprec; cleanup"
+       "setup_raid1; test_copy_delete_deprec_only; cleanup")
+
+if [[ -w /dev/changer ]]; then
+    TESTS+=("setup_tape_dir; test_copy_delete_dir_tape; cleanup")
+fi
