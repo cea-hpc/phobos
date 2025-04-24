@@ -1035,8 +1035,9 @@ static bool op_is_basic_decoder(struct pho_xfer_desc *xfer)
     return false;
 }
 
-static int get_and_check_copy(struct dss_handle *dss, struct object_info *obj,
-                              const char *copy_name, struct copy_info **copy)
+static int get_and_check_copy(struct dss_handle *dss, enum pho_xfer_flags flags,
+                              struct object_info *obj, const char *copy_name,
+                              struct copy_info **copy)
 {
     struct copy_info *copies;
     struct dss_filter filter;
@@ -1058,21 +1059,31 @@ static int get_and_check_copy(struct dss_handle *dss, struct object_info *obj,
         LOG_RETURN(rc, "Cannot fetch copy '%s' for object '%s'",
                    copy_name, obj->oid);
 
-    if (copy_count == 1)
-        LOG_GOTO(out_copy, rc = -EINVAL,
-                 "Cannot delete last copy of object '%s'", obj->oid);
+    assert(copy_count >= 1);
 
-    for (i = 0; i < copy_count; ++i) {
-        if (strcmp(copies[i].copy_name, copy_name) == 0) {
-            *copy = copy_info_dup(&copies[i]);
-            break;
+    if (flags & PHO_XFER_COPY_HARD_DEL) {
+        if (copy_count == 1)
+            LOG_GOTO(out_copy, rc = -EINVAL,
+                     "Cannot delete last copy of object '%s'", obj->oid);
+
+        for (i = 0; i < copy_count; ++i) {
+            if (strcmp(copies[i].copy_name, copy_name) == 0) {
+                *copy = copy_info_dup(&copies[i]);
+                break;
+            }
         }
-    }
 
-    // If we didn't find copy_name in the list
-    if (i == copy_count) {
-        pho_error(rc = -EINVAL, "Object '%s' has no copy named '%s'",
-                  obj->oid, copy_name);
+        // If we didn't find copy_name in the list
+        if (i == copy_count) {
+            pho_error(rc = -EINVAL, "Object '%s' has no copy named '%s'",
+                      obj->oid, copy_name);
+        }
+    } else if (flags & PHO_XFER_OBJ_HARD_DEL) {
+        if (copy_count > 1)
+            LOG_GOTO(out_copy, rc = -EINVAL,
+                     "Cannot delete an objet with several copies");
+
+        *copy = copy_info_dup(&copies[0]);
     }
 
 out_copy:
@@ -1086,17 +1097,15 @@ static int get_copy(struct dss_handle *dss, struct pho_xfer_desc *xfer,
 {
     int rc;
 
-    if (xfer->xd_op == PHO_XFER_OP_COPY || xfer->xd_op == PHO_XFER_OP_GET ||
-        (xfer->xd_op == PHO_XFER_OP_DEL &&
-         (xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL))) {
+    if (xfer->xd_op == PHO_XFER_OP_COPY || xfer->xd_op == PHO_XFER_OP_GET) {
         rc = dss_lazy_find_copy(dss, obj->uuid, obj->version,
                                 get_xfer_param_reference_copy_name(xfer), copy);
         if (rc)
             LOG_RETURN(rc, "Cannot find copy for objid:'%s'", obj->oid);
-    } else if (xfer->xd_op == PHO_XFER_OP_DEL &&
-               (xfer->xd_flags & PHO_XFER_COPY_HARD_DEL)) {
-        rc = get_and_check_copy(dss, obj, xfer->xd_params.delete.copy_name,
-                                copy);
+
+    } else if (xfer->xd_op == PHO_XFER_OP_DEL) {
+        rc = get_and_check_copy(dss, xfer->xd_flags, obj,
+                                xfer->xd_params.delete.copy_name, copy);
         if (rc)
             return rc;
     }

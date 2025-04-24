@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-#  All rights reserved (c) 2014-2024 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -299,6 +299,37 @@ function test_tape_hard_delete_after_soft_delete
     fi
 }
 
+function test_dir_hard_delete_with_copies()
+{
+    export PHOBOS_STORE_default_family="dir"
+
+    local prefix=$(generate_prefix_id)
+    local oid=${prefix}_id
+
+    $phobos put "${FILES[0]}" $oid || error "Object should be put"
+    $phobos copy create $oid copy-source || error "Object should be copied"
+
+    $valg_phobos delete --hard $oid &&
+        error "Phobos delete --hard should have failed"
+
+    local count=$($phobos object list | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "$oid shouldn't be deleted"
+    fi
+    [ -z $($phobos object list -d) ] ||
+        error "Deprecated object shouldn't be listed"
+
+    count=$($phobos copy list | wc -l)
+    if [[ $count -ne 2 ]]; then
+        error "There should be two copies, got $count"
+    fi
+
+    count=$($phobos extent list | wc -l)
+    if [[ $count -ne 2 ]]; then
+        error "There should be two extents, got $count"
+    fi
+}
+
 TESTS=(
     "setup_dir; test_delete; cleanup_dir"
     "setup_dir; test_dir_hard_delete raid1 1; cleanup_dir"
@@ -306,6 +337,7 @@ TESTS=(
     "setup_dir; test_dir_hard_delete raid4; cleanup_dir"
     "setup_dir; test_dir_hard_delete_deprec; cleanup_dir"
     "setup_dir; test_dir_hard_delete_deprec_only; cleanup_dir"
+    "setup_dir; test_dir_hard_delete_with_copies; cleanup_dir"
 )
 
 if [[ -w /dev/changer ]]; then
