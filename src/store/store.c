@@ -1912,6 +1912,7 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
             rc2 = phobos_locate(xfers[i].xd_targets->xt_objid,
                                 xfers[i].xd_targets->xt_objuuid,
                                 xfers[i].xd_targets->xt_version, hostname,
+                                xfers[i].xd_params.get.copy_name,
                                 &xfers[i].xd_params.get.node_name,
                                 &nb_new_lock);
             rc = rc ? : rc2;
@@ -2155,7 +2156,8 @@ void pho_xfer_clean(struct pho_xfer_target *xfer)
 }
 
 int phobos_locate(const char *oid, const char *uuid, int version,
-                  const char *focus_host, char **hostname, int *nb_new_lock)
+                  const char *focus_host, const char *copy_name,
+                  char **hostname, int *nb_new_lock)
 {
     struct object_info *obj = NULL;
     struct copy_info *copy = NULL;
@@ -2186,10 +2188,10 @@ int phobos_locate(const char *oid, const char *uuid, int version,
         LOG_GOTO(clean, rc, "Unable to find object to locate");
 
     /* find default copy */
-    rc = dss_lazy_find_copy(&dss, obj->uuid, obj->version, NULL, &copy);
+    rc = dss_lazy_find_copy(&dss, obj->uuid, obj->version, copy_name, &copy);
     if (rc)
         LOG_GOTO(clean, rc,
-                 "Unable to find the default copy of the object to locate");
+                 "Unable to find the copy of the object to locate");
 
     /* find layout to locate media */
     rc = dss_filter_build(&filter,

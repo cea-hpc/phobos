@@ -518,6 +518,8 @@ class LocateOptHandler(BaseOptHandler):
                             type=int, default=0)
         parser.add_argument('--focus-host',
                             help='Suggested hostname for early locking')
+        parser.add_argument('-c', '--copy-name',
+                            help='Copy of the object to locate')
 
 
     def exec_locate(self):
@@ -528,7 +530,8 @@ class LocateOptHandler(BaseOptHandler):
                 self.params.get('oid'),
                 self.params.get('uuid'),
                 self.params.get('version'),
-                self.params.get('focus_host'))
+                self.params.get('focus_host'),
+                self.params.get('copy_name'))
 
             print(hostname)
         except EnvironmentError as err:

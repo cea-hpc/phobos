@@ -58,6 +58,8 @@ static struct phobos_locate_state {
     enum rsc_family     rsc_family;
     struct object_info *objs;
     int n_objs;
+    struct copy_info *copies;
+    int n_copy;
 } phobos_locate_state;
 
 #define HOSTNAME "hostname"
@@ -112,6 +114,15 @@ static int local_setup(void **state, char *oid)
     assert_int_equal(pl_state->n_objs, 1);
     assert_string_equal(pl_state->objs[0].oid, oid);
 
+    /* get copy_name */
+    rc = phobos_store_copy_list((const char **) &pl_state->objs[0].uuid, 1,
+                                DSS_STATUS_FILTER_ALL, &pl_state->copies,
+                                &pl_state->n_copy, NULL);
+    assert_return_code(rc, -rc);
+    assert_int_equal(pl_state->n_copy, 1);
+    assert_string_equal(pl_state->copies[0].object_uuid,
+                        pl_state->objs[0].uuid);
+
     return 0;
 }
 
@@ -123,6 +134,11 @@ static int local_teardown(void **state)
     phobos_store_object_list_free(pl_state->objs, pl_state->n_objs);
     pl_state->objs = NULL;
     pl_state->n_objs = 0;
+
+    phobos_store_copy_list_free(pl_state->copies, pl_state->n_copy);
+    pl_state->copies = NULL;
+    pl_state->n_copy = 0;
+
     return 0;
 }
 
@@ -237,6 +253,7 @@ static void unlock_medium(struct phobos_locate_state *pl_state,
 /*********************/
 #define BAD_OID "bad_oid_to_locate"
 #define BAD_UUID "bad_uuid_to_locate"
+#define BAD_COPY "bad_copy_to_locate"
 static int pl_setup(void **state)
 {
     char *oid_pl = "oid_pl";
@@ -252,39 +269,44 @@ static void pl_enoent(void **state)
     int rc;
 
     /* bad OID */
-    rc = phobos_locate(BAD_OID, NULL, 0, NULL, &hostname, &nb_new_lock);
+    rc = phobos_locate(BAD_OID, NULL, 0, NULL, NULL, &hostname, &nb_new_lock);
     assert_int_equal(rc, -ENOENT);
 
     /* bad UUID */
-    rc = phobos_locate(NULL, BAD_UUID, 0, NULL, &hostname, &nb_new_lock);
+    rc = phobos_locate(NULL, BAD_UUID, 0, NULL, NULL, &hostname, &nb_new_lock);
     assert_int_equal(rc, -ENOENT);
 
     /* OID, bad UUID */
-    rc = phobos_locate(pl_state->objs[0].oid, BAD_UUID, 0, NULL, &hostname,
-                       &nb_new_lock);
+    rc = phobos_locate(pl_state->objs[0].oid, BAD_UUID, 0, NULL, NULL,
+                       &hostname, &nb_new_lock);
     assert_int_equal(rc, -ENOENT);
 
     /* bad OID, UUID */
-    rc = phobos_locate(BAD_OID, pl_state->objs[0].uuid, 0, NULL, &hostname,
-                       &nb_new_lock);
+    rc = phobos_locate(BAD_OID, pl_state->objs[0].uuid, 0, NULL, NULL,
+                       &hostname, &nb_new_lock);
     assert_int_equal(rc, -ENOENT);
 
     /* OID, bad version */
     rc = phobos_locate(pl_state->objs[0].oid, NULL,
-                       pl_state->objs[0].version + 1, NULL, &hostname,
+                       pl_state->objs[0].version + 1, NULL, NULL, &hostname,
                        &nb_new_lock);
     assert_int_equal(rc, -ENOENT);
 
     /* UUID, bad version */
     rc = phobos_locate(NULL, pl_state->objs[0].uuid,
-                       pl_state->objs[0].version + 1, NULL, &hostname,
+                       pl_state->objs[0].version + 1, NULL, NULL, &hostname,
                        &nb_new_lock);
     assert_int_equal(rc, -ENOENT);
 
     /* OID, UUID, bad version */
     rc = phobos_locate(pl_state->objs[0].oid, pl_state->objs[0].uuid,
-                       pl_state->objs[0].version + 1, NULL, &hostname,
+                       pl_state->objs[0].version + 1, NULL, NULL, &hostname,
                        &nb_new_lock);
+    assert_int_equal(rc, -ENOENT);
+
+    /* OID, bad copy_name */
+    rc = phobos_locate(pl_state->objs[0].oid, NULL, 0, NULL, BAD_COPY,
+                       &hostname, &nb_new_lock);
     assert_int_equal(rc, -ENOENT);
 }
 
@@ -298,7 +320,7 @@ static void pl_hostname(const char *expected_hostname, const char *focus_host,
 
     /* oid */
     if (alive) {
-        rc = phobos_locate(pl_state->objs[0].oid, NULL, 0, focus_host,
+        rc = phobos_locate(pl_state->objs[0].oid, NULL, 0, focus_host, NULL,
                            &hostname, &nb_new_lock);
         assert_return_code(rc, -rc);
         assert_non_null(hostname);
@@ -308,15 +330,15 @@ static void pl_hostname(const char *expected_hostname, const char *focus_host,
 
     /* oid, version */
     rc = phobos_locate(pl_state->objs[0].oid, NULL, pl_state->objs[0].version,
-                       focus_host, &hostname, &nb_new_lock);
+                       focus_host, NULL, &hostname, &nb_new_lock);
     assert_return_code(rc, -rc);
     assert_non_null(hostname);
     assert_string_equal(expected_hostname, hostname);
     free(hostname);
 
     /* uuid */
-    rc = phobos_locate(NULL, pl_state->objs[0].uuid, 0, focus_host, &hostname,
-                       &nb_new_lock);
+    rc = phobos_locate(NULL, pl_state->objs[0].uuid, 0, focus_host, NULL,
+                       &hostname, &nb_new_lock);
     assert_return_code(rc, -rc);
     assert_non_null(hostname);
     assert_string_equal(expected_hostname, hostname);
@@ -324,7 +346,7 @@ static void pl_hostname(const char *expected_hostname, const char *focus_host,
 
     /* uuid, version */
     rc = phobos_locate(NULL, pl_state->objs[0].uuid, pl_state->objs[0].version,
-                       focus_host, &hostname, &nb_new_lock);
+                       focus_host, NULL, &hostname, &nb_new_lock);
     assert_return_code(rc, -rc);
     assert_non_null(hostname);
     assert_string_equal(expected_hostname, hostname);
@@ -332,7 +354,7 @@ static void pl_hostname(const char *expected_hostname, const char *focus_host,
 
     /* oid, uuid */
     rc = phobos_locate(pl_state->objs[0].oid, pl_state->objs[0].uuid, 0,
-                       focus_host, &hostname, &nb_new_lock);
+                       focus_host, NULL, &hostname, &nb_new_lock);
     assert_return_code(rc, -rc);
     assert_non_null(hostname);
     assert_string_equal(expected_hostname, hostname);
@@ -340,7 +362,17 @@ static void pl_hostname(const char *expected_hostname, const char *focus_host,
 
     /* oid, uuid, version */
     rc = phobos_locate(pl_state->objs[0].oid, pl_state->objs[0].uuid,
-                       pl_state->objs[0].version, focus_host, &hostname,
+                       pl_state->objs[0].version, focus_host, NULL, &hostname,
+                       &nb_new_lock);
+    assert_return_code(rc, -rc);
+    assert_non_null(hostname);
+    assert_string_equal(expected_hostname, hostname);
+    free(hostname);
+
+    /* oid, uuid, copy name */
+    pho_debug("%s", pl_state->copies[0].copy_name);
+    rc = phobos_locate(pl_state->objs[0].oid, pl_state->objs[0].uuid, 0,
+                       focus_host, pl_state->copies[0].copy_name, &hostname,
                        &nb_new_lock);
     assert_return_code(rc, -rc);
     assert_non_null(hostname);
@@ -361,7 +393,7 @@ static void pl(void **state)
     int cnt;
     int rc;
 
-    rc = phobos_locate(NULL, NULL, 1, NULL, &hostname, &nb_new_lock);
+    rc = phobos_locate(NULL, NULL, 1, NULL, NULL, &hostname, &nb_new_lock);
     assert_int_equal(rc, -EINVAL);
 
     /* check ENOENT from object table */
@@ -402,7 +434,7 @@ static void pl(void **state)
     /* locate without any lock in deprecated table */
     if (pl_state->rsc_family == PHO_RSC_DIR) {
         rc = phobos_locate(pl_state->objs[0].oid, NULL,
-                           pl_state->objs[0].version, myself_hostname,
+                           pl_state->objs[0].version, myself_hostname, NULL,
                            &hostname, &nb_new_lock);
         assert_int_equal(rc, -ENODEV);
     } else {

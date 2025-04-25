@@ -713,7 +713,7 @@ class UtilClient:
                                      old_oid if old_oid else uuid, new_oid)))
 
     @staticmethod
-    def object_locate(oid, uuid, version, focus_host):
+    def object_locate(oid, uuid, version, focus_host, copy_name):
         """Locate an object"""
         hostname = c_char_p(None)
         nb_new_lock = c_int(0)
@@ -722,6 +722,7 @@ class UtilClient:
             uuid.encode('utf-8') if uuid else None,
             version,
             focus_host.encode('utf-8') if focus_host else None,
+            copy_name.encode('utf-8') if copy_name else None,
             byref(hostname), byref(nb_new_lock))
         if rc:
             raise EnvironmentError(rc, "Failed to locate object by %s '%s'" %

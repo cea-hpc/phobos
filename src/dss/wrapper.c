@@ -749,7 +749,7 @@ static int get_copy_from_dss(struct dss_handle *handle, const char *uuid,
 
     if (copy_cnt == 0) {
         dss_res_free(copy_list, copy_cnt);
-        return -EINVAL;
+        return -ENOENT;
     }
 
     *copy = copy_info_dup(copy_list);

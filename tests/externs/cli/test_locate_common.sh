@@ -73,6 +73,16 @@ function test_locate_cli
         error "Cli locate with uuid and version returned $locate_hostname " \
               "instead of $self_hostname"
     fi
+
+    $phobos put --copy-name blob /etc/hosts oid-copy
+    $valg_phobos locate --copy-name unknown_copy oid-copy &&
+        error "Locating an unknown copy must fail"
+
+    locate_hostname=$($valg_phobos locate --copy-name blob oid-copy)
+    if [ "$locate_hostname" != "$self_hostname" ]; then
+        error "Cli locate with copy-name returned $locate_hostname " \
+              "instead of $self_hostname"
+    fi
 }
 
 function test_medium_locate

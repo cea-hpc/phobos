@@ -3,6 +3,8 @@
 ## next
  * WARNING: TLC section names in the configuration file are changed from
    [tlc_libname] to [tlc "libname"]
+ * WARNING: phobos_locate has a new argument: the copy_name. The API
+   compatibility is broken. (The lhsm_phobos copytool must be also updated.)
 
 ## 2.2.0
  * WARNING: the db schema moves from 2.1 to 2.2 and a migration is needed

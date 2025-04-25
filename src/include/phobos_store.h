@@ -353,6 +353,7 @@ int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers);
  * @param[in]   focus_host  Hostname on which the caller would like to access
  *                          the object if there is no node more convenient (if
  *                          NULL, focus_host is set to local hostname)
+ * @param[in]   copy_name   Copy to locate
  * @param[out]  hostname    Allocated and returned hostname of the most
  *                          convenient node on which the object can be accessed
  *                          (NULL is returned on error)
@@ -371,7 +372,8 @@ int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers);
  * This must be called after phobos_init.
  */
 int phobos_locate(const char *obj_id, const char *uuid, int version,
-                  const char *focus_host, char **hostname, int *nb_new_lock);
+                  const char *focus_host, const char *copy_name,
+                  char **hostname, int *nb_new_lock);
 
 /**
  * Rename an object in the object store.

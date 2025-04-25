@@ -135,7 +135,6 @@ function cleanup
 
 # since we manipulate the hostname, keep the current one around for cleanup
 SELF_HOST="$(uname -n)"
-
 TESTS=("dir_setup; $LOG_COMPILER $test_bin dir; cleanup")
 
 if [[ -w /dev/changer ]]; then
