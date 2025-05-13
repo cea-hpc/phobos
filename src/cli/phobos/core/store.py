@@ -69,6 +69,78 @@ def attrs_as_dict(attrs):
     res = {k.decode('utf-8'): v.decode('utf-8') for k, v in res.items()}
     return res
 
+class PhoListFilters(Structure): # pylint: disable=too-few-public-methods, too-many-instance-attributes
+    """Phobos list filters parameters."""
+    _fields_ = [
+        ("res", POINTER(c_char_p)),
+        ("n_res", c_int),
+        ("_uuid", c_char_p),
+        ("version", c_int),
+        ("is_pattern", c_bool),
+        ("metadata", POINTER(c_char_p)),
+        ("n_metadata", c_int),
+        ("status_filter", c_int),
+        ("_copy_name", c_char_p)
+    ]
+
+    def __init__(self, list_filters):
+        super().__init__()
+        if list_filters.res:
+            enc_res = list([s.encode('utf-8')
+                            for _, s in enumerate(list_filters.res)])
+            self.res = (c_char_p * len(enc_res))(*enc_res)
+        else:
+            self.res = None
+
+        self.n_res = list_filters.n_res
+        self.uuid = list_filters.uuid
+        self.version = list_filters.version
+        self.is_pattern = list_filters.is_pattern
+
+        if list_filters.metadata:
+            enc_metadata = list([s.encode('utf-8')
+                                 for _, s in enumerate(list_filters.metadata)])
+            self.metadata = (c_char_p * len(enc_metadata))(*enc_metadata)
+        else:
+            self.metadata = None
+
+        self.n_metadata = list_filters.n_metadata
+        self.status_filter = list_filters.status_filter
+        self.copy_name = list_filters.copy_name
+
+    @property
+    def uuid(self):
+        """Wrapper to get uuid"""
+        return self._uuid.decode('utf-8') if self._uuid else None
+
+    @uuid.setter
+    def uuid(self, val):
+        """Wrapper to set uuid"""
+        # pylint: disable=attribute-defined-outside-init
+        self._uuid = val.encode('utf-8') if val else None
+
+    @property
+    def copy_name(self):
+        """Wrapper to get copy_name"""
+        return self._copy_name.decode('utf-8') if self._copy_name else None
+
+    @copy_name.setter
+    def copy_name(self, val):
+        """Wrapper to set copy_name"""
+        # pylint: disable=attribute-defined-outside-init
+        self._copy_name = val.encode('utf-8') if val else None
+
+
+class ListFilters(namedtuple('ListFilters',
+                             'res n_res uuid version is_pattern metadata '
+                             'n_metadata status_filter copy_name')):
+    """
+    Transition data structure for listing filters between
+    the CLI and the store.
+    """
+    __slots__ = ()
+ListFilters.__new__.__defaults__ = (None,) * len(ListFilters._fields)
+
 class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-many-instance-attributes
     """Phobos PUT parameters of the XferDescriptor."""
     _fields_ = [
@@ -665,23 +737,16 @@ class UtilClient:
                         DeprecatedObjectInfo
         objs = POINTER(obj_type)()
 
-        enc_res = [elt.encode('utf-8') for elt in res]
-        c_res_strlist = c_char_p * len(enc_res)
-
-        enc_metadata = [md.encode('utf-8') for md in metadata]
-        c_md_strlist = c_char_p * len(metadata)
-
-        enc_uuid = uuid.encode('utf-8') if uuid else None
-
         sort, kwargs = dss_sort('object', **kwargs)
         sref = byref(sort) if sort else None
 
-        rc = LIBPHOBOS.phobos_store_object_list(c_res_strlist(*enc_res),
-                                                len(enc_res),
-                                                enc_uuid, version,
-                                                is_pattern,
-                                                c_md_strlist(*enc_metadata),
-                                                len(metadata),
+        list_filters = ListFilters(res=res, n_res=len(res), uuid=uuid,
+                                   version=version, is_pattern=is_pattern,
+                                   metadata=metadata, n_metadata=len(metadata),
+                                   status_filter=0, copy_name=None)
+
+        filters_ref = byref(PhoListFilters(list_filters))
+        rc = LIBPHOBOS.phobos_store_object_list(filters_ref,
                                                 scope, byref(objs),
                                                 byref(n_objs), sref)
 
@@ -739,23 +804,15 @@ class UtilClient:
         n_copy = c_int(0)
         copy = POINTER(CopyInfo)()
 
-        n_status_number = c_int(status_number)
+        list_filters = ListFilters(res=res, n_res=len(res), uuid=uuid,
+                                   version=version, is_pattern=False,
+                                   metadata=None, n_metadata=0,
+                                   status_filter=status_number,
+                                   copy_name=copy_name)
 
-        enc_res = [elt.encode('utf-8') for elt in res]
-        c_res_strlist = c_char_p * len(enc_res)
-
-        enc_copy_name = copy_name.encode('utf-8') if copy_name else None
-        enc_uuid = uuid.encode('utf-8') if uuid else None
-
-        rc = LIBPHOBOS.phobos_store_copy_list(c_res_strlist(*enc_res),
-                                              len(enc_res),
-                                              enc_uuid,
-                                              version,
-                                              enc_copy_name,
-                                              scope,
-                                              n_status_number,
-                                              byref(copy),
-                                              byref(n_copy),
+        filters_ref = byref(PhoListFilters(list_filters))
+        rc = LIBPHOBOS.phobos_store_copy_list(filters_ref,
+                                              scope, byref(copy), byref(n_copy),
                                               None)
 
         if rc:

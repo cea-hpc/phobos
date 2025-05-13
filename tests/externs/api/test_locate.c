@@ -90,6 +90,7 @@ static int local_setup(void **state, char *oid)
     struct phobos_locate_state *pl_state = (struct phobos_locate_state *)*state;
     struct pho_xfer_target target = {0};
     struct pho_xfer_desc xfer = {0};
+    struct pho_list_filters filters = {0};
     int rc;
 
     /* open the xfer path and properly set xfer values */
@@ -107,16 +108,19 @@ static int local_setup(void **state, char *oid)
     pho_xfer_desc_clean(&xfer);
 
     /* get object info */
-    rc = phobos_store_object_list((const char **)&oid, 1, NULL, 0,
-                                  false, NULL, 0, DSS_OBJ_ALIVE,
+    filters.res = (const char **) &oid;
+    filters.n_res = 1;
+    rc = phobos_store_object_list(&filters, DSS_OBJ_ALIVE,
                                   &pl_state->objs, &pl_state->n_objs, NULL);
     assert_return_code(rc, -rc);
     assert_int_equal(pl_state->n_objs, 1);
     assert_string_equal(pl_state->objs[0].oid, oid);
 
     /* get copy_name */
-    rc = phobos_store_copy_list((const char **) &oid, 1, pl_state->objs[0].uuid,
-                                1, NULL, DSS_OBJ_ALIVE, DSS_STATUS_FILTER_ALL,
+    filters.uuid = pl_state->objs[0].uuid;
+    filters.version = 1;
+    filters.status_filter = DSS_STATUS_FILTER_ALL;
+    rc = phobos_store_copy_list(&filters, DSS_OBJ_ALIVE,
                                 &pl_state->copies, &pl_state->n_copy, NULL);
     assert_return_code(rc, -rc);
     assert_int_equal(pl_state->n_copy, 1);

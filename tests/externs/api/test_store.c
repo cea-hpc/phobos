@@ -221,12 +221,15 @@ out_free_mput:
 
         xfer_close_fd(xfer.xd_targets);
     } else if (!strcmp(argv[1], "list")) {
+        struct pho_list_filters filters = {0};
         struct object_info *objs;
         int n_objs;
 
         for (i = 3; i < argc; ++i) {
-            rc = phobos_store_object_list((const char **) &argv[i], 1, NULL, 0,
-                                          true, NULL, 0, DSS_OBJ_ALIVE, &objs,
+            filters.res = (const char **) &argv[i];
+            filters.n_res = 1;
+            filters.is_pattern = true;
+            rc = phobos_store_object_list(&filters, DSS_OBJ_ALIVE, &objs,
                                           &n_objs, NULL);
             if (rc) {
                 pho_error(rc, "LIST '%s' failed", argv[i]);

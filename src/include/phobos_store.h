@@ -472,6 +472,20 @@ void pho_xfer_desc_clean(struct pho_xfer_desc *xfer);
  */
 void pho_xfer_clean(struct pho_xfer_target *xfer);
 
+struct pho_list_filters {
+    const char **res;       /**< Resource to filters (oids) */
+    int n_res;              /**< Number of resources */
+    const char *uuid;       /**< UUID of the object */
+    int version;            /**< Version of the object */
+    bool is_pattern;        /**< True if search using POSIX pattern */
+    const char **metadata;  /**< Metadata filter */
+    int n_metadata;         /**< Number of metadata */
+    int status_filter;      /**< Number corresponding to the copy_status
+                              *  filter
+                              */
+    char *copy_name;        /**< Copy's name filter */
+};
+
 /**
  * Retrieve the objects that match the given pattern and metadata.
  * If given multiple objids or patterns, retrieve every item with name
@@ -482,14 +496,7 @@ void pho_xfer_clean(struct pho_xfer_target *xfer);
  *
  * The caller must release the list calling phobos_store_object_list_free().
  *
- * \param[in]       res             Objids or patterns, depending on
- *                                  \a is_pattern.
- * \param[in]       n_res           Number of requested objids or patterns.
- * \param[in]       uuid            UUID of the object.
- * \param[in]       version         Version of the object.
- * \param[in]       is_pattern      True if search using POSIX pattern.
- * \param[in]       metadata        Metadata filter.
- * \param[in]       n_metadata      Number of requested metadata.
+ * \param[in]       filters         The filters to use
  * \param[in]       scope           List only/also the deprecated objects.
  * \param[out]      objs            Retrieved objects.
  * \param[out]      n_objs          Number of retrieved items.
@@ -499,9 +506,7 @@ void pho_xfer_clean(struct pho_xfer_target *xfer);
  *
  * This must be called after phobos_init.
  */
-int phobos_store_object_list(const char **res, int n_res, const char *uuid,
-                             int version, bool is_pattern,
-                             const char **metadata, int n_metadata,
+int phobos_store_object_list(struct pho_list_filters *filters,
                              enum dss_obj_scope scope,
                              struct object_info **objs, int *n_objs,
                              struct dss_sort *sort);
@@ -521,15 +526,9 @@ void phobos_store_object_list_free(struct object_info *objs, int n_objs);
  *
  * The caller must release the list calling phobos_store_copy_list_free().
  *
- * \param[in]       res             Oids.
- * \param[in]       n_res           Number of requested oids.
- * \param[in]       uuid            Uuid's object filter.
- * \param[in]       version         Version's object filter.
- * \param[in]       copy_name       Copy's name filter.
+ * \param[in]       filters         The filters to use.
  * \param[in]       scope           Retrieve only/also in the deprecated
  *                                  objects.
- * \param[in]       status_filter   Number corresponding to the cpy_status
- *                                  filter
  * \param[out]      copy            Retrieved copies.
  * \param[out]      n_copy          Number of retrieved items.
  * \param[in]       sort            Sort filter.
@@ -539,9 +538,8 @@ void phobos_store_object_list_free(struct object_info *objs, int n_objs);
  *
  * This must be called after phobos_init.
  */
-int phobos_store_copy_list(const char **res, int n_res, char *uuid,
-                           int version, char *copy_name,
-                           enum dss_obj_scope scope, int status_filter,
+int phobos_store_copy_list(struct pho_list_filters *filters,
+                           enum dss_obj_scope scope,
                            struct copy_info **copy, int *n_copy,
                            struct dss_sort *sort);
 

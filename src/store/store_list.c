@@ -118,10 +118,7 @@ static void phobos_construct_status(GString *status_str, int status_filter)
     g_string_append_printf(status_str, "]}");
 }
 
-static int phobos_construct_obj_filter(const char **res, int n_res,
-                                       const char *uuid, int version,
-                                       bool is_pattern, const char **metadata,
-                                       int n_metadata,
+static int phobos_construct_obj_filter(struct pho_list_filters *filters,
                                        char **filter)
 {
     GString *filter_str = NULL;
@@ -133,10 +130,10 @@ static int phobos_construct_obj_filter(const char **res, int n_res,
     metadata_str = g_string_new(NULL);
     res_str = g_string_new(NULL);
 
-    count += n_metadata ? 1 : 0;
-    count += version ? 1 : 0;
-    count += n_res ? 1 : 0;
-    count += uuid ? 1 : 0;
+    count += filters->n_metadata ? 1 : 0;
+    count += filters->version ? 1 : 0;
+    count += filters->n_res ? 1 : 0;
+    count += filters->uuid ? 1 : 0;
 
     if (count > 0)
         filter_str = g_string_new("{\"$AND\" : [");
@@ -144,8 +141,9 @@ static int phobos_construct_obj_filter(const char **res, int n_res,
      * If there are at least one metadata, we construct a string containing
      * each metadata.
      */
-    if (n_metadata) {
-        phobos_construct_metadata(metadata_str, metadata, n_metadata);
+    if (filters->n_metadata) {
+        phobos_construct_metadata(metadata_str, filters->metadata,
+                                  filters->n_metadata);
         g_string_append_printf(filter_str, "%s %s", metadata_str->str,
                                --count != 0 ? "," : "");
     }
@@ -154,21 +152,22 @@ static int phobos_construct_obj_filter(const char **res, int n_res,
      * If there are at least one resource, we construct a string containing
      * each request.
      */
-    if (n_res) {
-        phobos_construct_res(res_str, res, n_res, is_pattern);
+    if (filters->n_res) {
+        phobos_construct_res(res_str, filters->res, filters->n_res,
+                             filters->is_pattern);
         g_string_append_printf(filter_str, "%s %s", res_str->str,
                                --count != 0 ? "," : "");
     }
 
-    if (version)
+    if (filters->version)
         g_string_append_printf(filter_str,
                                "{\"DSS::OBJ::version\": \"%d\"} %s",
-                               version, --count != 0 ? "," : "");
+                               filters->version, --count != 0 ? "," : "");
 
-    if (uuid)
+    if (filters->uuid)
         g_string_append_printf(filter_str,
                                "{\"DSS::OBJ::uuid\": \"%s\"} %s",
-                               uuid, --count != 0 ? "," : "");
+                               filters->uuid, --count != 0 ? "," : "");
 
     if (filter_str != NULL) {
         g_string_append(filter_str, "]}");
@@ -182,9 +181,7 @@ static int phobos_construct_obj_filter(const char **res, int n_res,
     return rc;
 }
 
-int phobos_store_object_list(const char **res, int n_res, const char *uuid,
-                             int version, bool is_pattern,
-                             const char **metadata, int n_metadata,
+int phobos_store_object_list(struct pho_list_filters *filters,
                              enum dss_obj_scope scope,
                              struct object_info **objs, int *n_objs,
                              struct dss_sort *sort)
@@ -203,8 +200,7 @@ int phobos_store_object_list(const char **res, int n_res, const char *uuid,
     if (rc != 0)
         return rc;
 
-    rc = phobos_construct_obj_filter(res, n_res, uuid, version, is_pattern,
-                                     metadata, n_metadata, &json_filter);
+    rc = phobos_construct_obj_filter(filters,  &json_filter);
     if (rc)
         LOG_RETURN(rc, "Failed to build the object filter");
 
@@ -245,9 +241,8 @@ void phobos_store_object_list_free(struct object_info *objs, int n_objs)
     dss_res_free(objs, n_objs);
 }
 
-int phobos_store_copy_list(const char **res, int n_res, char *uuid,
-                           int version, char *copy_name,
-                           enum dss_obj_scope scope, int status_filter,
+int phobos_store_copy_list(struct pho_list_filters *filters,
+                           enum dss_obj_scope scope,
                            struct copy_info **copy, int *n_copy,
                            struct dss_sort *sort)
 {
@@ -260,7 +255,8 @@ int phobos_store_copy_list(const char **res, int n_res, char *uuid,
     int count = 0;
     int rc;
 
-    if (status_filter <= 0 || status_filter > DSS_STATUS_FILTER_ALL)
+    if (filters->status_filter <= 0 ||
+        filters->status_filter > DSS_STATUS_FILTER_ALL)
         LOG_RETURN(-EINVAL,
                    "status_filter must be an integer between %d and %d",
                    DSS_STATUS_FILTER_INCOMPLETE, DSS_STATUS_FILTER_ALL);
@@ -277,18 +273,18 @@ int phobos_store_copy_list(const char **res, int n_res, char *uuid,
     status_str = g_string_new(NULL);
     res_str = g_string_new(NULL);
 
-    count += (status_filter != DSS_STATUS_FILTER_ALL ? 1 : 0);
-    count += (copy_name ? 1 : 0);
-    count += (version ? 1 : 0);
-    count += (n_res ? 1 : 0);
-    count += (uuid ? 1 : 0);
+    count += (filters->status_filter != DSS_STATUS_FILTER_ALL ? 1 : 0);
+    count += (filters->copy_name ? 1 : 0);
+    count += (filters->version ? 1 : 0);
+    count += (filters->n_res ? 1 : 0);
+    count += (filters->uuid ? 1 : 0);
 
     /**
      * If there are at least one resource, we construct a string containing
      * each request.
      */
-    if (n_res) {
-        phobos_construct_res(res_str, res, n_res, false);
+    if (filters->n_res) {
+        phobos_construct_res(res_str, filters->res, filters->n_res, false);
         g_string_append_printf(filter_str, "%s %s", res_str->str,
                                --count != 0 ? "," : "");
     }
@@ -298,30 +294,30 @@ int phobos_store_copy_list(const char **res, int n_res, char *uuid,
      * which happens if status_filter number is set to
      * DSS_STATUS_FILTER_ALL(= 111 in binary)
      */
-    if (status_filter != DSS_STATUS_FILTER_ALL) {
-        phobos_construct_status(status_str, status_filter);
+    if (filters->status_filter != DSS_STATUS_FILTER_ALL) {
+        phobos_construct_status(status_str, filters->status_filter);
         g_string_append_printf(filter_str, "%s %s", status_str->str,
                                --count != 0 ? "," : "");
     }
 
-    if (uuid)
+    if (filters->uuid)
         g_string_append_printf(filter_str,
                                "{\"DSS::COPY::object_uuid\": \"%s\"} %s",
-                               uuid, --count != 0 ? "," : "");
+                               filters->uuid, --count != 0 ? "," : "");
 
-    if (copy_name)
+    if (filters->copy_name)
         g_string_append_printf(filter_str,
                                "{\"DSS::COPY::copy_name\": \"%s\"} %s",
-                               copy_name, --count != 0 ? "," : "");
-    if (version)
+                               filters->copy_name, --count != 0 ? "," : "");
+    if (filters->version)
         g_string_append_printf(filter_str,
                                "{\"DSS::COPY::version\": \"%d\"} %s",
-                               version, --count != 0 ? "," : "");
+                               filters->version, --count != 0 ? "," : "");
 
     g_string_append(filter_str, "]}");
 
-    if (n_res || status_filter != DSS_STATUS_FILTER_ALL ||
-        copy_name || version || uuid) {
+    if (filters->n_res || filters->status_filter != DSS_STATUS_FILTER_ALL ||
+        filters->copy_name || filters->version || filters->uuid) {
 
         rc = dss_filter_build(&filter, "%s", filter_str->str);
         if (rc)
