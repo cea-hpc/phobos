@@ -165,8 +165,8 @@ int dss_lazy_find_object(struct dss_handle *hdl, const char *oid,
  *  Enum to indicate the scope of objects to find
  */
 enum dss_obj_scope {
-    DSS_OBJ_DEPRECATED_ONLY,
     DSS_OBJ_DEPRECATED,
+    DSS_OBJ_ALL,
     DSS_OBJ_ALIVE,
 };
 

@@ -220,10 +220,10 @@ int phobos_store_object_list(const char **res, int n_res, const char *uuid,
     case DSS_OBJ_ALIVE:
         rc = dss_object_get(&dss, filter_ptr, objs, n_objs, sort);
         break;
-    case DSS_OBJ_DEPRECATED_ONLY:
+    case DSS_OBJ_DEPRECATED:
         rc = dss_deprecated_object_get(&dss, filter_ptr, objs, n_objs, sort);
         break;
-    case DSS_OBJ_DEPRECATED:
+    case DSS_OBJ_ALL:
         rc = dss_get_living_and_deprecated_objects(&dss, filter_ptr, sort, objs,
                                                    n_objs);
         break;

@@ -203,54 +203,48 @@ static void dfo_deprec_object(void **void_state)
     struct test_state *state = (struct test_state *)*void_state;
 
     /* get obj from alive */
-    get_obj_and_check_res(state, 3, "oid1", NULL, 0, DSS_OBJ_DEPRECATED);
-    get_obj_and_check_res(state, 3, "oid1", NULL, 2, DSS_OBJ_DEPRECATED);
-    get_obj_and_check_res(state, 3, "oid1", "uuid2", 0, DSS_OBJ_DEPRECATED);
+    get_obj_and_check_res(state, 3, "oid1", NULL, 0, DSS_OBJ_ALL);
+    get_obj_and_check_res(state, 3, "oid1", NULL, 2, DSS_OBJ_ALL);
+    get_obj_and_check_res(state, 3, "oid1", "uuid2", 0, DSS_OBJ_ALL);
 
     /* get obj from deprecated */
-    get_obj_and_check_res(state, 2, "oid1", "uuid2", 1, DSS_OBJ_DEPRECATED);
+    get_obj_and_check_res(state, 2, "oid1", "uuid2", 1, DSS_OBJ_ALL);
 
     /* get obj from deprecated with uuid */
-    get_obj_and_check_res(state, 4, "oid2", "uuid3", 0, DSS_OBJ_DEPRECATED);
+    get_obj_and_check_res(state, 4, "oid2", "uuid3", 0, DSS_OBJ_ALL);
 
     /* Uuid and no version, get the latest version */
-    get_obj_and_check_res(state, 1, "oid1", "uuid1", 0, DSS_OBJ_DEPRECATED);
+    get_obj_and_check_res(state, 1, "oid1", "uuid1", 0, DSS_OBJ_ALL);
 
     /* wrong version */
-    check_dfo_fails_with_rc(state, "oid1", NULL, 3, DSS_OBJ_DEPRECATED,
-                            -ENOENT);
+    check_dfo_fails_with_rc(state, "oid1", NULL, 3, DSS_OBJ_ALL, -ENOENT);
 
     /* wrong uuid */
-    check_dfo_fails_with_rc(state, "oid1", "uuid3", 0, DSS_OBJ_DEPRECATED,
-                            -ENOENT);
+    check_dfo_fails_with_rc(state, "oid1", "uuid3", 0, DSS_OBJ_ALL, -ENOENT);
 
     /* No uuid and no version, several results are possible => error */
-    check_dfo_fails_with_rc(state, "oid2", NULL, 0, DSS_OBJ_DEPRECATED,
-                            -EINVAL);
+    check_dfo_fails_with_rc(state, "oid2", NULL, 0, DSS_OBJ_ALL, -EINVAL);
 
     /* No uuid and several deprec object with the same version => error */
-    check_dfo_fails_with_rc(state, "oid2", NULL, 1, DSS_OBJ_DEPRECATED,
-                            -EINVAL);
+    check_dfo_fails_with_rc(state, "oid2", NULL, 1, DSS_OBJ_ALL, -EINVAL);
 }
 
 static void dfo_deprec_only_object(void **void_state)
 {
     struct test_state *state = (struct test_state *)*void_state;
 
-    get_obj_and_check_res(state, 2, "oid1", "uuid2", 1,
-                          DSS_OBJ_DEPRECATED_ONLY);
+    get_obj_and_check_res(state, 2, "oid1", "uuid2", 1, DSS_OBJ_DEPRECATED);
 
     /* No uuid and no version, several results are possible => error */
-    check_dfo_fails_with_rc(state, "oid1", NULL, 0, DSS_OBJ_DEPRECATED_ONLY,
+    check_dfo_fails_with_rc(state, "oid1", NULL, 0, DSS_OBJ_DEPRECATED,
                             -EINVAL);
 
     /* No uuid and several deprec object with the same version => error */
-    check_dfo_fails_with_rc(state, "oid1", NULL, 1, DSS_OBJ_DEPRECATED_ONLY,
+    check_dfo_fails_with_rc(state, "oid1", NULL, 1, DSS_OBJ_DEPRECATED,
                             -EINVAL);
 
     /* Uuid and no version, get the latest version */
-    get_obj_and_check_res(state, 1, "oid1", "uuid1", 0,
-                          DSS_OBJ_DEPRECATED_ONLY);
+    get_obj_and_check_res(state, 1, "oid1", "uuid1", 0, DSS_OBJ_DEPRECATED);
 }
 
 int main(void)

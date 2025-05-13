@@ -1260,7 +1260,7 @@ static int store_end_delete_xfer(struct phobos_handle *pho,
         /* The object to delete can be alive or deprecated but there is no way
          * to know. So we move it to deprecated first, then we delete it.
          */
-        if (xfer->xd_params.delete.scope != DSS_OBJ_DEPRECATED_ONLY) {
+        if (xfer->xd_params.delete.scope != DSS_OBJ_DEPRECATED) {
             rc = dss_move_object_to_deprecated(dss, &obj, 1);
             if (rc)
                 LOG_RETURN(rc, "Unable to move object '%s:%d' to deprecated",

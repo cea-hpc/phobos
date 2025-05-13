@@ -432,7 +432,7 @@ int dss_find_object(struct dss_handle *hdl, const char *oid,
     if (rc)
         LOG_RETURN(rc, "Cannot build filter");
 
-    if (scope == DSS_OBJ_DEPRECATED_ONLY) {
+    if (scope == DSS_OBJ_DEPRECATED) {
         rc = dss_find_deprec_object(hdl, &filter, oid, uuid, version, obj);
     } else {
         rc = dss_object_get(hdl, &filter, &obj_list, &obj_cnt, NULL);
@@ -443,7 +443,7 @@ int dss_find_object(struct dss_handle *hdl, const char *oid,
 
         if (obj_cnt == 1) {
             *obj = object_info_dup(obj_list);
-        } else if (scope == DSS_OBJ_DEPRECATED) {
+        } else if (scope == DSS_OBJ_ALL) {
             /* If no object found in alive and deprec is True, search in
              * deprecated object table
              */
@@ -838,10 +838,10 @@ int dss_get_copy_from_object(struct dss_handle *handle,
     int rc = 0;
 
     g_string_append_printf(union_req, "(%s %s %s)",
-            (scope == DSS_OBJ_ALIVE || scope == DSS_OBJ_DEPRECATED) ?
+            (scope == DSS_OBJ_ALIVE || scope == DSS_OBJ_ALL) ?
                 "SELECT object_uuid, version, oid FROM object" : "",
-            scope == DSS_OBJ_DEPRECATED ? "UNION" : "",
-            (scope == DSS_OBJ_DEPRECATED || scope == DSS_OBJ_DEPRECATED_ONLY) ?
+            scope == DSS_OBJ_ALL ? "UNION" : "",
+            (scope == DSS_OBJ_ALL || scope == DSS_OBJ_DEPRECATED) ?
                 "SELECT object_uuid, version, oid FROM deprecated_object" : "");
 
     if (filter) {

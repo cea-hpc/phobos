@@ -31,8 +31,7 @@ from phobos.core.const import (DSS_STATUS_FILTER_ALL, # pylint: disable=no-name-
                                DSS_STATUS_FILTER_COMPLETE,
                                DSS_STATUS_FILTER_INCOMPLETE,
                                DSS_STATUS_FILTER_READABLE,
-                               DSS_OBJ_ALIVE, DSS_OBJ_DEPRECATED,
-                               DSS_OBJ_DEPRECATED_ONLY)
+                               DSS_OBJ_ALIVE, DSS_OBJ_ALL, DSS_OBJ_DEPRECATED)
 from phobos.core.ffi import LayoutInfo
 from phobos.core.store import PutParams
 
@@ -192,8 +191,8 @@ def create_put_params(obj, copy):
 def get_scope(deprec, deprec_only):
     """Set scope value."""
     if deprec:
-        return DSS_OBJ_DEPRECATED
+        return DSS_OBJ_ALL
     elif deprec_only:
-        return DSS_OBJ_DEPRECATED_ONLY
+        return DSS_OBJ_DEPRECATED
     else:
         return DSS_OBJ_ALIVE
