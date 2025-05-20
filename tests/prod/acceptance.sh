@@ -564,6 +564,66 @@ function test_copy_dir_to_tape
     rm -rf ${DIR}
 }
 
+function test_repack
+{
+    ENTRY
+
+    $phobos tape lock $($phobos tape list)
+
+    local prefix="$(generate_prefix_id)"
+    local oid0="$prefix.oid0"
+    local oid1="$prefix.oid1"
+
+    local tapes=$($phobos tape list --tags lto5 | head -n 2)
+    local tape1=$(echo $tapes | cut -d' ' -f1)
+    local tape2=$(echo $tapes | cut -d' ' -f2)
+
+    $phobos tape unlock $tape1
+    $phobos tape format --force $tape2
+
+    $phobos drive status
+    $phobos drive list -o all
+    $phobos tape list -o all
+
+    $phobos put ${FILES[0]} $oid0
+    $phobos put ${FILES[1]} $oid1
+
+    $phobos del $oid0
+
+    $phobos tape unlock $tape2
+    $phobos tape repack $tape1
+
+    local oid0_nb_extents="$($phobos extent list --name $tape1 $oid0 | wc -l)"
+    if (( oid0_nb_extents != 0 )); then
+        error "'$oid0' shouldn't be on '$tape1'"
+    fi
+
+    oid0_nb_extents="$($phobos extent list --name $tape2 $oid0 | wc -l)"
+    if (( oid0_nb_extents != 0 )); then
+        error "'$oid0' shouldn't be on '$tape2'"
+    fi
+
+    local oid1_nb_extents="$($phobos extent list --name $tape1 $oid1 | wc -l)"
+    if (( oid1_nb_extents != 0 )); then
+        error "'$oid1' shouldn't be on '$tape1'"
+    fi
+
+    oid1_nb_extents="$($phobos extent list --name $tape2 $oid1 | wc -l)"
+    if (( oid1_nb_extents != 1 )); then
+        error "'$oid1' should be on '$tape2'"
+    fi
+
+    local nb=$($phobos object list --pattern --deprecated-only $prefix.*| wc -l)
+    if (( nb != 0 )); then
+        error "repack should have deleted deprecated objects"
+    fi
+
+    nb=$($phobos object list --pattern $prefix.* | wc -l)
+    if (( nb != 1 )); then
+        error "repack should have let non-deprecated objects alive"
+    fi
+}
+
 trap cleanup_test EXIT
 setup_test
 
@@ -578,4 +638,5 @@ if ! $database_online; then
     test_put_with_tags
     test_lock
     test_copy_dir_to_tape
+    test_repack
 fi
