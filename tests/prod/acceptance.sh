@@ -445,6 +445,125 @@ function test_lock
     $phobos tape unlock $($phobos tape list)
 }
 
+function check_copies()
+{
+    local oid=$1
+    local expected_copies=$2
+    shift 2
+    local copy_names=( "$@" )
+
+    local copies=$($phobos copy list $oid)
+    local count=$(echo "$copies" | wc -l)
+    if [[ $count -ne $expected_copies ]]; then
+        error "There should be $expected_copies copies, got $count"
+    fi
+
+    for copy in "${copy_names[@]}"; do
+        echo "$copies" | grep "$copy"
+    done
+}
+
+function check_extents()
+{
+    local output=$1
+    local oid=$2
+    shift 2
+    local extents_and_count=( "$@" )
+
+    local array_length=${#extents_and_count[@]}
+    local expected_extent_count=0
+
+    for (( i=1; i<$array_length; i+=2 )); do
+        (( expected_extent_count += ${extents_and_count[$i]} ))
+    done
+
+    local extents=($($phobos extent list --degroup -o $output $oid))
+
+    local count=${#extents[@]}
+    if [[ $count -ne $expected_extent_count ]]; then
+        error "There should be $expected_extent_count extents, got $count"
+    fi
+
+    for (( i=0; i<$array_length; i++ )); do
+        local current_extent="${extents_and_count[$i]}"
+        i=$((i+1))
+        local expected_count="${extents_and_count[$i]}"
+
+        echo "${extents[@]}" | grep "$current_extent"
+        local count=0
+
+        for extent in ${extents[@]}; do
+            if [[ $extent == "$current_extent" ]]; then
+                count=$(($count + 1))
+            fi
+        done
+
+        if [[ $count -ne $expected_count ]]; then
+            error "There should be $expected_count extents for" \
+                  "$current_extent, got $count"
+        fi
+    done
+}
+
+function test_copy_on_dir
+{
+    ENTRY
+
+    local oid="$(generate_prefix_id).oid"
+    local TEST_DIRS=(
+          $(mktemp -d /tmp/test_pho.XXXX)
+          $(mktemp -d /tmp/test_pho.XXXX)
+         )
+
+    $phobos dir add ${TEST_DIRS[@]}
+    $phobos dir format --unlock ${TEST_DIRS[@]}
+
+    $phobos put -f dir ${FILES[0]} $oid
+
+    $phobos copy create -f dir $oid copy-source ||
+        error "Phobos copy create should have worked"
+
+    check_copies "$oid" 2 "source" "copy-source"
+    check_extents "copy_name" "$oid" "source" 1 "copy-source" 1
+
+    $phobos copy delete $oid source
+
+    check_copies "$oid" 1 "copy-source"
+    check_extents "copy_name" "$oid" "copy-source" 1
+
+    $phobos dir lock ${TEST_DIRS[@]}
+    rm -rf ${TEST_DIRS[@]}
+}
+
+function test_copy_dir_to_tape
+{
+    ENTRY
+
+    local oid="$(generate_prefix_id).oid"
+    local DIR=$(mktemp -d /tmp/test_pho.XXXX)
+
+    $phobos dir add $DIR
+    $phobos dir format --unlock $DIR
+
+    $phobos put -f dir ${FILES[0]} $oid
+
+    $phobos copy create -f tape $oid copy-source ||
+        error "Phobos copy create should have worked"
+
+    check_copies "$oid" 2 "source" "copy-source"
+    check_extents "copy_name" "$oid" "source" 1 "copy-source" 1
+    check_extents "family" "$oid" "['dir']" 1 "['tape']" 1
+
+    $phobos copy delete $oid source
+
+    check_copies "$oid" 1 "copy-source"
+    check_extents "copy_name" "$oid" "copy-source" 1
+    check_extents "family" "$oid" "['tape']" 1
+
+    $phobos dir lock $DIR
+    rm -rf ${DIR}
+}
+
 trap cleanup_test EXIT
 setup_test
 
@@ -452,9 +571,11 @@ test_put_get
 test_put_delete
 test_multi_put
 test_concurrent_put_get_retry
+test_copy_on_dir
 
 if ! $database_online; then
     # These tests can only work if setup_tape was called
     test_put_with_tags
     test_lock
+    test_copy_dir_to_tape
 fi
