@@ -196,6 +196,8 @@ struct pho_xfer_target {
  *
  * This must be called using the following order:
  *   phobos_init -> ... -> phobos_fini
+ *
+ * @return              0 on success or -errno on failure.
  */
 int phobos_init(void);
 
@@ -223,6 +225,8 @@ void phobos_fini(void);
  * Individual completion notifications are issued via xd_callback.
  * This function returns the first encountered error or 0 if all
  * sub-operations have succeeded.
+ *
+ * @return              0 on success or -errno on failure.
  *
  * This must be called after phobos_init.
  */
@@ -265,6 +269,8 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
  * This function returns the first encountered error or 0 if all
  * sub-operations have succeeded.
  *
+ * @return              0 on success or -errno on failure.
+ *
  * This must be called after phobos_init.
  */
 int phobos_get(struct pho_xfer_desc *xfers, size_t n,
@@ -279,8 +285,10 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
  * Other fields are not used.
  *
  * Individual completion notifications are issued via xd_callback.
- * This function returns the first encountered error of 0 if all
+ * This function returns the first encountered error or 0 if all
  * sub-operations have succeeded.
+ *
+ * @return              0 on success or -errno on failure.
  *
  * This must be called after phobos_init.
  */
@@ -435,6 +443,8 @@ int phobos_rename(const char *old_oid, const char *uuid, char *new_oid);
  * Individual completion notifications are issued via xd_callback.
  * This function returns the first encountered error or 0 if all
  * sub-operations have succeeded.
+ *
+ * @return              0 on success or -errno on failure.
  *
  * This must be called after phobos_init.
  */
