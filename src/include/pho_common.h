@@ -642,6 +642,9 @@ struct mocking_functions {
  * thread safe.
  */
 struct phobos_global_context {
+    /** Number of references of this global context */
+    int pgc_refcount;
+
     /** Content of Phobos' configuration file */
     struct config config;
     /** Minimum level of logs to display */
@@ -664,8 +667,6 @@ struct phobos_global_context {
 /**
  * Initialize the phobos_global_context structure. Must be called before any
  * other phobos function or module loading routine.
- *
- * /!\ Not thread safe
  */
 int pho_context_init(void);
 
@@ -673,8 +674,6 @@ int pho_context_init(void);
  * Release the phobos_global_context structure. Once called, no phobos function
  * or module loading routine should be called unless pho_context_init is called
  * again.
- *
- * /!\ Not thread safe
  */
 void pho_context_fini(void);
 

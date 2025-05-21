@@ -4,12 +4,15 @@
 #include <string.h>
 
 static struct phobos_global_context *PHO_CONTEXT;
+static pthread_mutex_t PHO_CONTEXT_LOCK = PTHREAD_MUTEX_INITIALIZER;
 
 /* must be called before calling any other phobos function */
 int pho_context_init(void)
 {
-    if (PHO_CONTEXT)
-        LOG_RETURN(-EALREADY, "global state already initialized");
+    MUTEX_LOCK(&PHO_CONTEXT_LOCK);
+
+    if (PHO_CONTEXT != NULL)
+        goto thread_init;
 
     PHO_CONTEXT = xcalloc(1, sizeof(*PHO_CONTEXT));
 
@@ -19,14 +22,31 @@ int pho_context_init(void)
     pthread_mutex_init(&PHO_CONTEXT->config.lock, NULL);
     pho_context_reset_mock_functions();
 
+thread_init:
+    PHO_CONTEXT->pgc_refcount++;
+
+    MUTEX_UNLOCK(&PHO_CONTEXT_LOCK);
+
     return 0;
 }
 
 void pho_context_fini(void)
 {
-    pthread_mutex_destroy(&PHO_CONTEXT->config.lock);
-    free(PHO_CONTEXT);
-    PHO_CONTEXT = NULL;
+    if (PHO_CONTEXT == NULL)
+        return;
+
+    MUTEX_LOCK(&PHO_CONTEXT_LOCK);
+
+    PHO_CONTEXT->pgc_refcount--;
+
+    if (PHO_CONTEXT->pgc_refcount == 0) {
+        pho_cfg_local_fini();
+        pthread_mutex_destroy(&PHO_CONTEXT->config.lock);
+        free(PHO_CONTEXT);
+        PHO_CONTEXT = NULL;
+    }
+
+    MUTEX_UNLOCK(&PHO_CONTEXT_LOCK);
 }
 
 struct phobos_global_context *phobos_context(void)
