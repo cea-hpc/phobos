@@ -1,0 +1,78 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2025 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+# test phobos put in multithreaded context
+
+test_bin_dir=$PWD
+test_bin="$test_bin_dir/test_multithread"
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
+
+function setup()
+{
+    setup_tables
+
+    export PHOBOS_LRS_families="dir"
+    export PHOBOS_STORE_default_family="dir"
+
+    invoke_lrs
+
+    setup_test_dirs
+    setup_dummy_files 8 1k 1
+
+    dirs=()
+    for i in {1..4}; do dirs+=("$(mktemp -d ${DIR_TEST_IN}/XXXXXX)"); done
+
+    $phobos dir add ${dirs[@]}
+    $phobos dir format --unlock ${dirs[@]}
+}
+
+function cleanup()
+{
+    waive_lrs
+
+    cleanup_dummy_files
+    cleanup_test_dirs
+
+    drop_tables
+}
+
+function test_8put()
+{
+    local args=
+    for i in {0..7}; do args="${args} ${FILES[i]} obj${i}"; done
+
+    $LOG_COMPILER $test_bin ${args}
+
+    if [[ $($phobos object list | wc -l) != 8 ]]; then
+        error "8 objects should have been added to phobos"
+    fi
+}
+
+TESTS=(
+    "setup; test_8put; cleanup"
+)
+
+# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:
