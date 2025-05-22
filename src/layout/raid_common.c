@@ -476,9 +476,7 @@ static void raid_reader_eraser_build_allocation_req(
 
 static void raid_io_context_set_extent_info(struct raid_io_context *io_context,
                                             pho_resp_write_elt_t **medium,
-                                            int extent_idx, size_t extent_size,
-                                            size_t extent_size_remainder,
-                                            size_t offset)
+                                            int extent_idx, size_t offset)
 {
     struct extent *extents = io_context->write.extents;
     int i;
@@ -486,18 +484,28 @@ static void raid_io_context_set_extent_info(struct raid_io_context *io_context,
     for (i = 0; i < n_total_extents(io_context); i++) {
         extents[i].uuid = generate_uuid();
         extents[i].layout_idx = extent_idx + i;
+        extents[i].offset = offset;
+        extents[i].media.family = (enum rsc_family)medium[i]->med_id->family;
+
+        pho_id_name_set(&extents[i].media, medium[i]->med_id->name,
+                        medium[i]->med_id->library);
+    }
+}
+
+static void raid_io_context_set_extent_size(struct raid_io_context *io_context,
+                                            size_t extent_size,
+                                            size_t extent_size_remainder)
+{
+    struct extent *extents = io_context->write.extents;
+    int i;
+
+    for (i = 0; i < n_total_extents(io_context); i++) {
         if (extent_size_remainder > 0)
             extents[i].size = extent_size + (i < extent_size_remainder ||
                                              i >= io_context->n_data_extents ?
                                              1 : 0);
         else
             extents[i].size = extent_size;
-
-        extents[i].offset = offset;
-        extents[i].media.family = (enum rsc_family)medium[i]->med_id->family;
-
-        pho_id_name_set(&extents[i].media, medium[i]->med_id->name,
-                        medium[i]->med_id->library);
     }
 }
 
@@ -846,8 +854,12 @@ static int raid_reader_split_setup(struct pho_data_processor *proc,
     if (rc)
         goto close_iod;
 
-    if (!io_context->current_split_chunk_size)
-        set_current_split_chunk_size(io_context, n_media);
+    if (!io_context->current_split_chunk_size) {
+        if (proc->io_block_size)
+            io_context->current_split_chunk_size = proc->io_block_size;
+        else
+            set_current_split_chunk_size(io_context, n_media);
+    }
 
     if (!proc->reader_stripe_size)
         proc->reader_stripe_size = io_context->current_split_chunk_size *
@@ -1083,18 +1095,36 @@ static int raid_writer_split_setup(struct pho_data_processor *proc,
 
     raid_io_context_set_extent_info(io_context, wresp->media,
                                     io_context->current_split * n_extents,
-                                    extent_size, extent_size_remainder,
                                     proc->writer_offset);
+
     rc = raid_io_context_open(io_context, proc, n_extents,
                               proc->current_target, PHO_PROC_ENCODER);
     if (rc)
         return rc;
 
-    if (!io_context->current_split_chunk_size)
-        set_current_split_chunk_size(io_context, n_extents);
+    if (!io_context->current_split_chunk_size) {
+        if (proc->io_block_size)
+            io_context->current_split_chunk_size = proc->io_block_size;
+        else
+            set_current_split_chunk_size(io_context, n_extents);
+    }
 
     proc->writer_stripe_size = io_context->current_split_chunk_size *
                                io_context->n_data_extents;
+
+    /* We check whether extent_size is not smaller than stripe_size. If it
+     * isn't, we don't need extent_size to be a multiple of stripe_size.
+     * Also, we check if this is the last split to write. If it is, extent_size
+     * doesn't need to be a multiple of stripe_size.
+     */
+    if (extent_size > io_context->current_split_chunk_size &&
+        proc->object_size != io_context->current_split_offset +
+                                (extent_size * io_context->n_data_extents) +
+                                 extent_size_remainder)
+        extent_size -= extent_size % io_context->current_split_chunk_size;
+
+    raid_io_context_set_extent_size(io_context, extent_size,
+                                    extent_size_remainder);
 
     /* keep a buff.size compliant with new stripe size */
     if (proc->buff.size && proc->buff.size % proc->writer_stripe_size != 0)
@@ -1305,7 +1335,6 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
     bool need_alloc_for_next_target = false;
     bool need_partial_release = false;
     bool need_full_release = false;
-    size_t full_split_to_write = 0;
     bool last_target_ended = false;
     bool need_new_alloc = false;
     bool target_ended = false;
@@ -1361,11 +1390,8 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
 
     rc = io_context->ops->write_from_buff(proc);
 
-    for (i = 0; i < io_context->n_data_extents; i++)
-        full_split_to_write += io_context->write.extents[i].size;
-
     split_ended = (proc->writer_offset - io_context->current_split_offset) >=
-                  full_split_to_write;
+                   io_context->current_split_size;
     target_ended = proc->writer_offset == proc->object_size;
     last_target_ended = target_ended &&
                         (proc->current_target + 1) == proc->xfer->xd_ntargets;

@@ -47,7 +47,9 @@ static int posix_reader_step(struct pho_data_processor *proc, pho_resp_t *resp,
 
     /* first init step from the data processor */
     if (proc->buff.size == 0) {
+        proc->reader_stripe_size = proc->io_block_size;
         update_io_size(posix_reader, &proc->reader_stripe_size);
+
         return 0;
     }
 
@@ -153,7 +155,9 @@ static int posix_writer_step(struct pho_data_processor *proc, pho_resp_t *resp,
 
     /* first init step from the data processor */
     if (proc->buff.size == 0) {
+        proc->writer_stripe_size = proc->io_block_size;
         update_io_size(posix_writer, &proc->writer_stripe_size);
+
         return 0;
     }
 

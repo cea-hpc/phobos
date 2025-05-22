@@ -162,6 +162,12 @@ int layout_encoder(struct pho_data_processor *encoder,
     if (rc)
         layout_destroy(encoder);
 
+    /* get io_block_size from conf */
+    rc = get_cfg_io_block_size(&encoder->io_block_size,
+                               xfer->xd_params.put.family);
+    if (rc)
+        layout_destroy(encoder);
+
     return rc;
 };
 
@@ -204,6 +210,12 @@ int layout_decoder(struct pho_data_processor *decoder,
     }
 
     rc = set_posix_writer(decoder);
+    if (rc)
+        layout_destroy(decoder);
+
+    /* get io_block_size from conf */
+    rc = get_cfg_io_block_size(&decoder->io_block_size,
+                               layout->extents[0].media.family);
     if (rc)
         layout_destroy(decoder);
 

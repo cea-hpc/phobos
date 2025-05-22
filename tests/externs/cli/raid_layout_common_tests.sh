@@ -437,7 +437,7 @@ function test_put_get_split()
 
 function test_put_get_split_different_block_size()
 {
-    local file=$(make_file 2740KB)
+    local file=$(make_file 2640KB)
     local oid=$FUNCNAME
     local out=/tmp/out.$$
 
