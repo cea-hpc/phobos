@@ -5,6 +5,7 @@
    configuration parameter allows to limit the number of concurrent writes per
    grouping on one phobosd instance. The default 0 value reproduces the
    previous unlimited behaviour.
+ * fix large sends (e.g. during a 'lib scan" with over 1500 slots)
 
 ## 3.0.0
  * WARNING: the db schema moves from 2.2 to 3.0 and a migration is needed
