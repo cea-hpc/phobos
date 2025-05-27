@@ -1,10 +1,34 @@
 # CHANGELOG UPDATES
 
-## next
+## 3.0.0
+ * WARNING: the db schema moves from 2.2 to 3.0 and a migration is needed
  * WARNING: TLC section names in the configuration file are changed from
    [tlc_libname] to [tlc "libname"]
  * WARNING: phobos_locate has a new argument: the copy_name. The API
    compatibility is broken. (The lhsm_phobos copytool must be also updated.)
+ * object copy create/list/delete is available, with "--copy-name" at locate,
+   put and get, "get_preferred_order" configuration option taken into account at
+   get
+ * config man page is now available
+ * autocompletion is added to CLI (check the README.md for more information on
+   how to activate it)
+ * the CLI arguments are homogenized between commands operating on the same
+   target
+ * fix client crash on "del --hard"
+ * cli,api: default library for lib scan/refresh and ldm open is available
+ * lrs: fix fifo find_write_device for unloaded tape without grouping
+ * raid: check the real size of an extent against the expected size
+ * locate: avoid locking media not compatible
+ * fix miscellaneous memory leaks fix
+ * bugfix: incomplete set of orphan extents when deleting with several replicas
+ * lrs: bugfix when requeuing a format request
+ * lrs: do not decrement the health counter without TLC
+ * doc: add tutorial on automatic failover setup
+ * autotools: add `cli` files when doing `make install`
+ * add get to DSS schema migration continuous integration test
+ * cli: internal code reorganization
+ * podman: add a containerfile and postgres script
+ * add repack and copy test to acceptance test
 
 ## 2.2.0
  * WARNING: the db schema moves from 2.1 to 2.2 and a migration is needed
