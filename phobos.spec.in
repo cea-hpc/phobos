@@ -45,6 +45,7 @@ BuildRequires: xxhash-devel
 BuildRequires: libcmocka-devel
 BuildRequires: libuuid-devel
 BuildRequires: python3-argcomplete
+BuildRequires: python3-sphinx
 
 Requires: %{postgres_prefix}-server
 Requires: %{postgres_prefix}-contrib
