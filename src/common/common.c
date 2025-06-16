@@ -306,13 +306,11 @@ int64_t str2int64(const char *str)
            || (errno != 0 && val == 0))
         return INT64_MIN;
 
-    if (endptr == str)
-        /* nothing was read */
+    /* nothing was read or there are characters after numeric input */
+    if (endptr == str || *endptr != '\0') {
+        errno = EINVAL;
         return INT64_MIN;
-
-    if (*endptr != '\0')
-        /* characters after numeric input */
-        return INT64_MIN;
+    }
 
     return val;
 }
@@ -386,7 +384,7 @@ static gboolean pho_ht_iter_cb_wrapper(gpointer key, gpointer val, gpointer ud)
 
 int pho_ht_foreach(GHashTable *ht, pho_ht_iter_cb_t cb, void *data)
 {
-    struct pho_ht_data  phd = {.cb = cb, .ud = data, .rc = 0};
+    struct pho_ht_data phd = {.cb = cb, .ud = data, .rc = 0};
 
     g_hash_table_find(ht, pho_ht_iter_cb_wrapper, &phd);
     return phd.rc;

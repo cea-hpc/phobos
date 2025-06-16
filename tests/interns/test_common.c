@@ -26,18 +26,23 @@
 #include "config.h"
 #endif
 
-#include "pho_test_utils.h"
-#include "pho_common.h"
 #include <glib.h>
+#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+#include <cmocka.h>
+
+#include "pho_test_utils.h"
+#include "pho_common.h"
 
 /* callback function for parsing */
 static int parse_line(void *arg, char *line, size_t size, int stream)
 {
-    GList   **ctx = (GList **)arg;
-    int       len;
+    GList **ctx = (GList **)arg;
+    int len;
 
     if (line == NULL)
         return -EINVAL;
@@ -47,54 +52,78 @@ static int parse_line(void *arg, char *line, size_t size, int stream)
     if (len >= size)
         line[len - 1] = '\0';
 
-    /* remove '\n' */
-    if ((len > 0) && (line[len - 1] == '\n'))
-        line[len - 1] = '\0';
-
     *ctx = g_list_append(*ctx, xstrdup(line));
     return 0;
 }
 
-static void print_lines(GList *lines)
+static void command_call_success(void **state)
 {
-    GList *l;
-    int i = 0;
+    GList *lines = NULL;
+    char buffer[256];
+    GList *line;
+    FILE *hosts;
+    int rc = 0;
 
-    /* print the list */
-    for (l = lines; l != NULL; l = l->next) {
-        i++;
-        pho_debug("%d: <%s>", i, (char *)l->data);
-    }
-}
-
-static int test_cmd(void *arg)
-{
-    GList   *lines = NULL;
-    int      rc = 0;
+    hosts = fopen("/etc/hosts", "r");
+    assert_non_null(hosts);
 
     /** call a command and call cb_func for each output line */
-    rc = command_call((char *)arg, parse_line, &lines);
-    if (rc)
-        fprintf(stderr, "command '%s' return with status %d\n", (char *)arg,
-                rc);
-    else
-        print_lines(lines);
+    rc = command_call("cat /etc/hosts", parse_line, &lines);
+    assert_return_code(rc, -rc);
+
+    line = lines;
+    while (fgets(buffer, sizeof(buffer), hosts)) {
+        size_t buffer_length = strlen(buffer);
+
+        if (buffer[buffer_length - 1] == '\n')
+            buffer[buffer_length - 1] = '\0';
+
+        assert_string_equal(buffer, (char *) line->data);
+        line = line->next;
+    }
+
+    fclose(hosts);
 
     g_list_free_full(lines, free);
-    return rc;
 }
 
-static int test_convert(void *arg)
+#define ERROR_MAKER_SCRIPT "test_common_error.sh"
+
+static void command_call_failure(void **state)
 {
-    int64_t val = str2int64(arg);
+    char *full_command;
+    char buffer[4096];
+    const char *pwd;
+    int rc;
 
-    if (val == INT64_MIN)
-        return -1;
+    pwd = getcwd(buffer, 4096);
+    rc = asprintf(&full_command, "%s/%s 42", pwd, ERROR_MAKER_SCRIPT);
+    assert(rc > 0);
 
-    if (val != strtoll(arg, NULL, 10))
-        return -1;
+    rc = command_call(full_command, NULL, NULL);
+    assert_int_equal(rc, 42);
 
-    return 0;
+    free(full_command);
+}
+
+static void check_str2int64(void **state)
+{
+    assert_int_equal(str2int64("32"), 32);
+    assert_int_equal(str2int64("-1"), -1);
+    assert_int_equal(str2int64("58000000000"), 58000000000);
+    assert_int_equal(str2int64("-63000000000"), -63000000000);
+
+    assert_int_equal(str2int64("90000000000000000000"), INT64_MIN);
+    assert_int_not_equal(errno, 0);
+
+    assert_int_equal(str2int64("-90000000000000000000"), INT64_MIN);
+    assert_int_not_equal(errno, 0);
+
+    assert_int_equal(str2int64("dqs2167"), INT64_MIN);
+    assert_int_not_equal(errno, 0);
+
+    assert_int_equal(str2int64("2167dqs"), INT64_MIN);
+    assert_int_not_equal(errno, 0);
 }
 
 static GHashTable *test_hash_table_new(void)
@@ -107,40 +136,39 @@ static GHashTable *test_hash_table_new(void)
     g_hash_table_insert(ht, "D", "3");
     g_hash_table_insert(ht, "E", "4");
     g_hash_table_insert(ht, "F", "5");
+
     return ht;
 }
 
-static int itm_cnt_cb(const void *k, void *v, void *ud)
+static int item_count_callback(__attribute__((unused)) const void *key,
+                               __attribute__((unused)) void *value,
+                               void *user_data)
 {
-    int *views = ud;
+    int *views = user_data;
 
     *views += 1;
     return 0;
 }
 
-static int test_iter(void *arg)
+static void hashtable_foreach_success(void **state)
 {
-    GHashTable  *ht = test_hash_table_new();
-    int          views = 0;
-    int          rc = 0;
+    GHashTable *ht = test_hash_table_new();
+    int views = 0;
+    int rc = 0;
 
-    rc = pho_ht_foreach(ht, itm_cnt_cb, &views);
-    if (rc)
-        goto out_free;
+    rc = pho_ht_foreach(ht, item_count_callback, &views);
+    assert_return_code(rc, -rc);
 
-    if (views != g_hash_table_size(ht)) {
-        rc = -EPROTO;
-        goto out_free;
-    }
+    assert_int_equal(views, g_hash_table_size(ht));
 
-out_free:
     g_hash_table_destroy(ht);
-    return rc;
 }
 
-static int itm_stop_at_2nd_cb(const void *k, void *v, void *ud)
+static int item_stop_at_2nd_iter(__attribute__((unused)) const void *key,
+                                 __attribute__((unused)) void *vvalue,
+                                 void *user_data)
 {
-    int *views = ud;
+    int *views = user_data;
 
     *views += 1;
     if (*views == 2) {
@@ -152,60 +180,32 @@ static int itm_stop_at_2nd_cb(const void *k, void *v, void *ud)
     return 0;
 }
 
-static int test_iter_err(void *arg)
+static void hashtable_foreach_failure(void **state)
 {
-    GHashTable  *ht = test_hash_table_new();
-    int          views = 0;
-    int          rc;
+    GHashTable *ht = test_hash_table_new();
+    int views = 0;
+    int rc = 0;
 
-    rc = pho_ht_foreach(ht, itm_stop_at_2nd_cb, &views);
-    if (rc == 0 || views != 2) {
-        /* itm_stop_at_2nd_cb is expected to fail */
-        rc = -EPROTO;
-        goto out_free;
-    }
+    rc = pho_ht_foreach(ht, item_stop_at_2nd_iter, &views);
+    assert_int_equal(rc, -EMULTIHOP);
+    assert_int_equal(views, 2);
 
-    rc = 0;
-
-out_free:
     g_hash_table_destroy(ht);
-    return rc;
 }
 
 int main(int argc, char **argv)
 {
+    const struct CMUnitTest test_common[] = {
+        cmocka_unit_test(command_call_success),
+        cmocka_unit_test(command_call_failure),
+
+        cmocka_unit_test(check_str2int64),
+
+        cmocka_unit_test(hashtable_foreach_success),
+        cmocka_unit_test(hashtable_foreach_failure),
+    };
+
     test_env_initialize();
 
-    /* test commands */
-    pho_run_test("Test1: command calls + output callback", test_cmd,
-                 "cat /etc/passwd", PHO_TEST_SUCCESS);
-    pho_run_test("Test2: failing command", test_cmd,
-                 "cat /foo/bar", PHO_TEST_FAILURE);
-
-    /* test str2int64 */
-    pho_run_test("Test3a: str2int64 positive val", test_convert, "32",
-                 PHO_TEST_SUCCESS);
-    pho_run_test("Test3b: str2int64 negative val", test_convert, "-1",
-                 PHO_TEST_SUCCESS);
-    pho_run_test("Test3c: str2int64 positive 64", test_convert, "58000000000",
-                 PHO_TEST_SUCCESS);
-    pho_run_test("Test3d: str2int64 negative 64", test_convert, "-63000000000",
-                 PHO_TEST_SUCCESS);
-    pho_run_test("Test3e: str2int64 value over 2^64", test_convert,
-                 "90000000000000000000", PHO_TEST_FAILURE);
-    pho_run_test("Test3e: str2int64 value below -2^64", test_convert,
-                 "-90000000000000000000", PHO_TEST_FAILURE);
-    pho_run_test("Test3f: str2int64 value with prefix", test_convert, "dqs2167",
-                 PHO_TEST_FAILURE);
-    pho_run_test("Test3g: str2int64 value with suffix", test_convert, "2167s",
-                 PHO_TEST_FAILURE);
-
-    /* test phobos custom iterators over GHashTable */
-    pho_run_test("Test4: traverse ghashtable", test_iter, NULL,
-                 PHO_TEST_SUCCESS);
-    pho_run_test("Test4: error stops ghashtable traversal", test_iter_err, NULL,
-                 PHO_TEST_SUCCESS);
-
-    fprintf(stderr, "test_common: all tests successful\n");
-    exit(EXIT_SUCCESS);
+    return cmocka_run_group_tests(test_common, NULL, NULL);
 }
