@@ -27,12 +27,6 @@ if [[ ! -w /dev/changer ]]; then
 fi
 
 declare -A test_tapes
-# For preprod test, TEST_TAPES syntax example:
-# TEST_TAPES='(["L6"]="073206L6 073207L6")'
-eval test_tapes=$TEST_TAPES
-# For preprod test, TEST_DRIVES syntax example:
-# TEST_DRIVES="/dev/sg4 /dev/sg6"
-eval test_drives=\"$TEST_DRIVES\"
 
 test_dir=$(dirname $(readlink -e $0))
 
@@ -59,6 +53,13 @@ else
     start_phobosdb="phobos_db setup_tables"
     stop_phobosdb="phobos_db drop_tables"
     exec_nonregression=false
+
+    # For preprod test, TEST_TAPES syntax example:
+    # TEST_TAPES='(["L6"]="073206L6 073207L6")'
+    eval test_tapes=$TEST_TAPES
+    # For preprod test, TEST_DRIVES syntax example:
+    # TEST_DRIVES='(["5"]="/dev/sg4 /dev/sg6")'
+    eval test_drives=$TEST_DRIVES
 fi
 
 if [ -z ${DATABASE_ONLINE+x} ]; then
@@ -137,6 +138,22 @@ function get_test_tapes()
     fi
 }
 
+function get_test_drives()
+{
+    local technology=$1
+    local count=$2
+
+    if $exec_nonregression; then
+        get_lto_drives $technology $count
+    else
+        if [ -z "${test_drives[$technology]}" ]; then
+            log "No drives available for technology $technology"
+            return 1
+        fi
+        echo ${test_drives[$technology]} | cut -d' ' -f1-$count
+    fi
+}
+
 function setup_tape
 {
     ENTRY
@@ -184,8 +201,8 @@ function setup_tape
         exit_error "Tapes are not all added"
 
     # get drives
-    local drives="$(get_lto_drives 5 ${N_DRIVES_L5}) \
-                  $(get_lto_drives 6 ${N_DRIVES_L6})"
+    local drives="$(get_test_drives 5 ${N_DRIVES_L5}) \
+                  $(get_test_drives 6 ${N_DRIVES_L6})"
 
     local nb_drives=$(echo "$drives" | wc -w)
     if (( nb_drives == 0 )); then
@@ -407,14 +424,13 @@ function test_lock
         return 0
     fi
 
-    $stop_phobosd
+    for drive in $($phobos drive list); do
+        $phobos drive unload $drive
+    done
 
     # lock all drives except one, lock all tapes except one
     $phobos drive lock $($phobos drive list)
     $phobos tape lock $($phobos tape list)
-
-    drain_all_drives
-    $start_phobosd
 
     local tapes=$($phobos tape list --tags $tape_model | head -n 2)
     local tape1=$(echo $tapes | cut -d' ' -f1)
