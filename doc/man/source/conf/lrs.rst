@@ -23,6 +23,27 @@ Example:
     [lrs]
     families = tape,dir,rados_pool
 
+*fifo_max_write_per_grouping*
+---------------
+
+The **fifo_max_write_per_grouping** parameter defines the maximum number of
+concurrent write operation per grouping per fifo scheduler.
+Any strictly positive value limits concurrent writes up to this maximum number.
+0 stands for no limit.
+This parameter is only used by the fifo write schedulers.
+fifo_max_write_per_grouping = 0
+which will be used by Phobos to communicate between clients and the daemon.
+
+If this parameter is not specified, Phobos defaults to the following:
+**fifo_max_write_per_grouping = 0**.
+
+Example:
+
+.. code:: ini
+
+    [lrs]
+    fifo_max_write_per_grouping = 7
+
 *lock_file*
 -----------
 
