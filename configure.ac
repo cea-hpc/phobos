@@ -125,7 +125,6 @@ AC_SUBST(ac_configure_args)
 
 AC_CONFIG_FILES([Makefile
          src/Makefile
-         src/proto/Makefile
          src/include/Makefile
          src/common/Makefile
          src/module-loader/Makefile

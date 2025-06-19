@@ -19,7 +19,7 @@ phobos_tlc_LDADD=../dss/libpho_dss.la \
           ../common/libpho_common.la \
           ../communication/libpho_comm.la \
           ../daemon/libpho_daemon.la \
-          ../serializer/libpho_serializer_tlc.la \
+          ../serializer/libpho_serializer.la \
           scsi/libpho_scsi.la
 phobos_tlc_LDFLAGS=-Wl,-rpath=$(libdir) -Wl,-rpath=$(pkglibdir)
 

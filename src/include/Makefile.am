@@ -1,7 +1,6 @@
-SUFFIXES = .pb-c.h
-
-protodir=../proto
+protodir=../serializer
 proto_headers=pho_proto_common.pb-c.h pho_proto_lrs.pb-c.h pho_proto_tlc.pb-c.h
+
 noinst_HEADERS=pho_cache.h \
                pho_cfg.h \
                pho_comm.h \

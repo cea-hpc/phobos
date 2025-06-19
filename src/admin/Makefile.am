@@ -9,7 +9,6 @@ libphobos_admin_la_LIBADD=../dss/libpho_dss.la ../cfg/libpho_cfg.la \
                           ../communication/libpho_comm.la \
                           ../io/libpho_io.la ../ldm/libpho_ldm.la \
                           ../serializer/libpho_serializer.la \
-                          ../serializer/libpho_serializer_tlc.la \
                           ../layout-modules/libpho_layout_raid1.la \
                           ../io-modules/libpho_io_adapter_posix.la \
                           ../io-modules/libpho_io_adapter_ltfs.la

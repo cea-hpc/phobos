@@ -16,8 +16,7 @@ libpho_lib_adapter_scsi_la_CFLAGS=-fPIC $(AM_CFLAGS)
 libpho_lib_adapter_scsi_la_LIBADD=../common/libpho_common.la \
                                   ../cfg/libpho_cfg.la \
                                   ../communication/libpho_comm.la \
-                                  ../serializer/libpho_serializer.la \
-                                  ../serializer/libpho_serializer_tlc.la
+                                  ../serializer/libpho_serializer.la
 libpho_lib_adapter_scsi_la_LDFLAGS=-version-info 0:0:0
 
 libpho_dev_adapter_dir_la_SOURCES=ldm_dev_dir.c
