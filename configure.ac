@@ -126,16 +126,16 @@ AC_SUBST(ac_configure_args)
 AC_CONFIG_FILES([Makefile
          src/Makefile
          src/include/Makefile
-         src/common/Makefile
+         src/core/common/Makefile
          src/module-loader/Makefile
          src/ldm/Makefile
-         src/dss/Makefile
-         src/cfg/Makefile
+         src/core/dss/Makefile
+         src/core/cfg/Makefile
          src/lrs/Makefile
          src/io/Makefile
          src/layout/Makefile
-         src/serializer/Makefile
-         src/communication/Makefile
+         src/core/serializer/Makefile
+         src/core/communication/Makefile
          src/store/Makefile
          src/io-modules/Makefile
          src/layout-modules/Makefile

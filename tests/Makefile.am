@@ -3,16 +3,16 @@ AM_LDFLAGS=@CMOCKA_LIBS@
 
 TO_SRC=../src
 
-CFG_LIB=$(TO_SRC)/cfg/libpho_cfg.la
-COMMON_LIB=$(TO_SRC)/common/libpho_common.la
+CFG_LIB=$(TO_SRC)/core/cfg/libpho_cfg.la
+COMMON_LIB=$(TO_SRC)/core/common/libpho_common.la
 DAEMON_LIB=$(TO_SRC)/daemon/libpho_daemon.la
-DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
+DSS_LIB=$(TO_SRC)/core/dss/libpho_dss.la
 MOD_LOAD_LIB=$(TO_SRC)/module-loader/libpho_module_loader.la
 IO_LIB=$(TO_SRC)/io/libpho_io.la $(MOD_LOAD_LIB)
 LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la $(MOD_LOAD_LIB)
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
-SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
-COMM_LIB=$(TO_SRC)/communication/libpho_comm.la
+SERIALIZER_LIB=$(TO_SRC)/core/serializer/libpho_serializer.la
+COMM_LIB=$(TO_SRC)/core/communication/libpho_comm.la
 SCSI_LIB=$(TO_SRC)/tlc/scsi/libpho_scsi.la
 TLC_LIB=$(TO_SRC)/tlc/libpho_tlc.la
 

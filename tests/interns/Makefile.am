@@ -6,11 +6,11 @@ AM_CFLAGS=$(CC_OPT) @CMOCKA_CFLAGS@
 AM_LDFLAGS=@CMOCKA_LIBS@
 
 ADMIN_LIB=$(TO_SRC)/admin/libphobos_admin.la
-CFG_LIB=$(TO_SRC)/cfg/libpho_cfg.la
-COMMON_LIB=$(TO_SRC)/common/libpho_common.la
-COMMUNICATION_LIB=$(TO_SRC)/communication/libpho_comm.la
+CFG_LIB=$(TO_SRC)/core/cfg/libpho_cfg.la
+COMMON_LIB=$(TO_SRC)/core/common/libpho_common.la
+COMMUNICATION_LIB=$(TO_SRC)/core/communication/libpho_comm.la
 DAEMON_LIB=$(TO_SRC)/daemon/libpho_daemon.la
-DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
+DSS_LIB=$(TO_SRC)/core/dss/libpho_dss.la
 MOD_LOAD_LIB=$(TO_SRC)/module-loader/libpho_module_loader.la
 IO_LIB=$(TO_SRC)/io/libpho_io.la $(MOD_LOAD_LIB)
 LAYOUT_LIB=$(TO_SRC)/layout/libpho_layout.la
@@ -24,7 +24,7 @@ IO_POSIX_LIB=$(TO_SRC)/io-modules/libpho_io_adapter_posix.la
 IO_LTFS_LIB=$(TO_SRC)/io-modules/libpho_io_adapter_ltfs.la
 MAPPER_LIB=$(TO_SRC)/io-modules/libpho_mapper.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
-SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
+SERIALIZER_LIB=$(TO_SRC)/core/serializer/libpho_serializer.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
 SCSI_LIB=$(TO_SRC)/tlc/scsi/libpho_scsi.la
 TLC_LIB=$(TO_SRC)/tlc/libpho_tlc.la
@@ -120,15 +120,16 @@ test_dss_lazy_find_object_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/store \
 
 test_dss_lock_SOURCES=test_dss_lock.c
 test_dss_lock_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
-test_dss_lock_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss $(TESTS_LIB_INCLUDES)
+test_dss_lock_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/core/dss $(TESTS_LIB_INCLUDES)
 
 test_dss_logs_SOURCES=test_dss_logs.c
 test_dss_logs_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
-test_dss_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss $(TESTS_LIB_INCLUDES)
+test_dss_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/core/dss $(TESTS_LIB_INCLUDES)
 
 test_dss_medium_locate_SOURCES=test_dss_medium_locate.c
 test_dss_medium_locate_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
-test_dss_medium_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss $(TESTS_LIB_INCLUDES)
+test_dss_medium_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/core/dss \
+        $(TESTS_LIB_INCLUDES)
 
 test_dss_object_move_SOURCES=test_dss_object_move.c
 test_dss_object_move_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
@@ -182,12 +183,12 @@ test_mapper_CFLAGS=$(AM_CFLAGS) -I..
 test_phobos_admin_medium_locate_SOURCES=test_phobos_admin_medium_locate.c
 test_phobos_admin_medium_locate_LDADD=$(ADMIN_LIB) $(TESTS_LIB) \
                                       $(TESTS_LIB_DEPS)
-test_phobos_admin_medium_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss \
+test_phobos_admin_medium_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/core/dss \
                                        $(TESTS_LIB_INCLUDES)
 
 test_pho_cache_SOURCES=test_pho_cache.c
 test_pho_cache_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
-test_pho_cache_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I..
+test_pho_cache_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/core/dss -I..
 
 test_ping_SOURCES=test_ping.c mock_communication.c
 test_ping_LDADD=$(ADMIN_LIB) $(COMMON_LIB) $(COMMUNICATION_LIB) $(DSS_LIB) \
@@ -209,7 +210,7 @@ test_store_profile_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/store
 
 test_store_object_md_SOURCES=test_store_object_md.c
 test_store_object_md_LDADD=$(STORE_LIB)
-test_store_object_md_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I$(TO_SRC)/store
+test_store_object_md_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/core/dss -I$(TO_SRC)/store
 
 test_store_object_md_get_SOURCES=test_store_object_md_get.c
 test_store_object_md_get_LDADD=$(STORE_LIB) $(ADMIN_LIB) $(TESTS_LIB) \
