@@ -40,6 +40,7 @@ check_PROGRAMS=phobos_put_copy \
                test_dss \
                test_locate \
                test_lock_clean \
+               test_mput_sync_error \
                test_raid1_split_locate \
                test_scsi \
                test_store \
@@ -53,6 +54,7 @@ check_SCRIPTS=test_bad_comm.sh \
               test_store.test \
               test_locate.test \
               test_lock_clean.sh \
+              test_mput_sync_error.test \
               test_put_copy.test \
               test_raid1_split_locate.sh \
               test_scsi.test \
@@ -93,6 +95,11 @@ test_locate_CFLAGS=$(AM_CFLAGS) $(TESTS_INCLUDE)
 test_lock_clean_SOURCES=test_lock_clean.c
 test_lock_clean_LDADD=$(ADMIN_LIB) $(STORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_lock_clean_CFLAGS=$(TESTS_INCLUDE)
+
+test_mput_sync_error_SOURCES=test_mput_sync_error.c
+test_mput_sync_error_LDADD=$(STORE_LIB) $(ADMIN_LIB) $(LAYOUT_LIB) \
+                           $(TESTS_LIB) $(TESTS_LIB_DEPS)
+test_mput_sync_error_CFLAGS=$(AM_CFLAGS) $(TESTS_INCLUDE)
 
 if RADOS_ENABLED
 test_lib_dev_rados_SOURCES=test_lib_dev_rados.c
