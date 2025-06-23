@@ -418,50 +418,6 @@ bool _pho_cfg_get_bool(int first_index, int last_index, int param_index,
         return default_val;
 }
 
-int pho_cfg_get_substring_value(const char *section, const char *name,
-                                enum rsc_family family, char **substring)
-{
-    const char *cfg_val;
-    char *token_dup;
-    char *save_ptr;
-    char *key;
-    int rc;
-
-    rc = pho_cfg_get_val(section, name, &cfg_val);
-    if (rc)
-        return rc;
-
-    token_dup = xstrdup(cfg_val);
-
-    key = strtok_r(token_dup, ",", &save_ptr);
-    if (key == NULL)
-        key = token_dup;
-
-    rc = -EINVAL;
-
-    do {
-        char *value = strchr(key, '=');
-
-        if (value == NULL)
-            continue;
-
-        *value++ = '\0';
-        if (strcmp(key, rsc_family_names[family]) != 0)
-            continue;
-
-        rc = 0;
-
-        *substring = xstrdup(value);
-
-        break;
-    } while ((key = strtok_r(NULL, ",", &save_ptr)) != NULL);
-
-    free(token_dup);
-
-    return rc;
-
-}
-
 int _pho_cfg_get_substring_value(int first_index, int last_index,
                                  int param_index,
                                  const struct pho_config_item *module_params,
@@ -507,7 +463,6 @@ int _pho_cfg_get_substring_value(int first_index, int last_index,
     free(token_dup);
 
     return rc;
-
 }
 
 /** @TODO to be implemented

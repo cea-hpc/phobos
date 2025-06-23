@@ -199,18 +199,14 @@ int tape_drive_compat_models(const char *tape_model, const char *drive_model,
 /**
  * Helper to get a substring value configuration parameter.
  *
- * @param[in]  section   Name of the section to look for the parameter.
- * @param[in]  name      Name of the parameter to read.
- * @param[in]  family    Name of the family to read in the parameter.
- * @param[out] value     Value of the parameter.
+ * @param[in]  param      Code-level default values to use if necessary.
+ * @param[in]  family     Name of the family to read in the parameter.
+ * @param[out] substring  Value of the parameter.
  *
  * @return  0            The parameter is returned successfully.
  * @return  -ENODATA     The parameter is not found.
  * @return  -EINVAL      The parameter or family are invalid.
  */
-int pho_cfg_get_substring_value(const char *section, const char *name,
-                                enum rsc_family family, char **substring);
-
 int _pho_cfg_get_substring_value(int first_index, int last_index,
                                   int param_index,
                                   const struct pho_config_item *module_params,

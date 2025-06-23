@@ -118,7 +118,8 @@ int get_cfg_sync_time_ms_value(enum rsc_family family,
     char *value;
     int rc;
 
-    rc = pho_cfg_get_substring_value("lrs", "sync_time_ms", family, &value);
+    rc = PHO_CFG_GET_SUBSTRING_VALUE(cfg_lrs, PHO_CFG_LRS, sync_time_ms,
+                                     family, &value);
     if (rc)
         return rc;
 
@@ -139,7 +140,8 @@ int get_cfg_sync_nb_req_value(enum rsc_family family, unsigned int *threshold)
     char *value;
     int rc;
 
-    rc = pho_cfg_get_substring_value("lrs", "sync_nb_req", family, &value);
+    rc = PHO_CFG_GET_SUBSTRING_VALUE(cfg_lrs, PHO_CFG_LRS, sync_nb_req,
+                                     family, &value);
     if (rc)
         return rc;
 
@@ -158,7 +160,8 @@ int get_cfg_sync_wsize_value(enum rsc_family family, unsigned long *threshold)
     char *value;
     int rc;
 
-    rc = pho_cfg_get_substring_value("lrs", "sync_wsize_kb", family, &value);
+    rc = PHO_CFG_GET_SUBSTRING_VALUE(cfg_lrs, PHO_CFG_LRS, sync_wsize_kb,
+                                     family, &value);
     if (rc)
         return rc;
 
