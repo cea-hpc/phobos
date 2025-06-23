@@ -96,8 +96,8 @@ int get_cfg_fs_block_size(enum rsc_family family, size_t *size)
     char *value;
     int rc;
 
-    rc = pho_cfg_get_substring_value("io", FS_BLOCK_SIZE_ATTR_KEY, family,
-                                     &value);
+    rc = PHO_CFG_GET_SUBSTRING_VALUE(cfg_io, PHO_CFG_IO, fs_block_size,
+                                     family, &value);
     if (rc == 0) {
         *size = str2int64(value);
         free(value);

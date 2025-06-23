@@ -467,7 +467,47 @@ int _pho_cfg_get_substring_value(int first_index, int last_index,
                                  const struct pho_config_item *module_params,
                                  enum rsc_family family, char **substring)
 {
-    return 0;
+    const char *cfg_val;
+    char *token_dup;
+    char *save_ptr;
+    char *key;
+    int rc;
+
+    cfg_val = _pho_cfg_get(first_index, last_index, param_index, module_params);
+    if (!cfg_val) {
+        pho_debug("Failed to retrieve config parameter #%d", param_index);
+        return -ENODATA;
+    }
+
+    token_dup = xstrdup(cfg_val);
+
+    key = strtok_r(token_dup, ",", &save_ptr);
+    if (key == NULL)
+        key = token_dup;
+
+    rc = -EINVAL;
+
+    do {
+        char *value = strchr(key, '=');
+
+        if (value == NULL)
+            continue;
+
+        *value++ = '\0';
+        if (strcmp(key, rsc_family_names[family]) != 0)
+            continue;
+
+        rc = 0;
+
+        *substring = xstrdup(value);
+
+        break;
+    } while ((key = strtok_r(NULL, ",", &save_ptr)) != NULL);
+
+    free(token_dup);
+
+    return rc;
+
 }
 
 /** @TODO to be implemented

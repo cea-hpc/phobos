@@ -45,6 +45,7 @@ export PHOBOS_LAYOUT_RAID1_repl_count=2
 # update phy_spc_free and resize a tape to its "true" phy_spc_free, instead
 # of keeping the "fake" 1024 bytes size of this test)
 export PHOBOS_LRS_sync_nb_req="dir=1,tape=2,rados_pool=5"
+export PHOBOS_IO_fs_block_size="dir=0,tape=0"
 
 test_raid1_split_locate_bin=$test_dir/test_raid1_split_locate
 IN_FILE=/tmp/raid1_split_in_file

@@ -537,10 +537,13 @@ function test_overhead()
                  $(mktemp $DIR_TEST_IN/test.pho.XXXX)
                 )
 
+    $phobos dir lock ${DIRS[1]}
+
     local dev=$(df --output=source ${DIRS[1]} | tail -n1)
     local block_size=$(blockdev --getbsz $dev)
     local size=$($phobos dir list -o stats.phys_spc_free ${DIRS[0]})
-    local file_size=$(($size / 2))
+    local file_size=$(($size / 4))
+    local fake_fs_block_size=$(($size * 2))
 
     # Write 2 files of the total size available on the medium
     dd if=/dev/urandom of="${files[0]}" bs=$file_size count=1
@@ -555,7 +558,7 @@ function test_overhead()
     export PHOBOS_LRS_sync_nb_req="dir=1"
     export PHOBOS_LRS_sync_wsize_kb="dir=100000000000"
 
-    export PHOBOS_IO_fs_block_size="dir=$block_size"
+    export PHOBOS_IO_fs_block_size="dir=$fake_fs_block_size"
 
     # With the overhead, should failed with no space
     set +e
@@ -568,40 +571,18 @@ function test_overhead()
     fi
     set -e
 
-    unset PHOBOS_IO_fs_block_size
-    # Without the overhead at the alloc, should write but last sync should
-    # failed
-    set +e
-    output=$($valg_phobos put -T first --file $DIR_TEST_OUT/mput_no_split \
-             --no-split 2>&1)
-    rc=$?
-    if [[ $rc -eq 0 ]]; then
-        error "phobos put --file should have failed"
-    fi
-    set -e
-    echo "$output" | grep "received error write release to last request"
-
-    # Remove the overhead added at the alloc
-    local nb_blocks=$(((($size + ($block_size - 1)) / $block_size) - 3 * 2))
-    file_size=$(($nb_blocks / 2))
-    dd if=/dev/urandom of="${files[0]}" bs=$block_size count=$file_size
-    dd if=/dev/urandom of="${files[1]}" bs=$block_size count=$file_size
-
+    # Since the files use half the space of the medium, and the overheads are
+    # lower than the other half, the put should succeed
     export PHOBOS_IO_fs_block_size="dir=$block_size"
-    # With the overhead at the alloc, should succeed with no space left on
-    # medium
-    $valg_phobos put -T second --file $DIR_TEST_OUT/mput_no_split --no-split ||
-        error "phobos put --file should have worked"
+    $valg_phobos put -T first --file $DIR_TEST_OUT/mput_no_split --no-split
 
-    local count=$($phobos extent list --degroup | wc -l)
-    if [[ $count -ne 2 ]]; then
-        error "There should be two extents (got $count)"
-    fi
+    $phobos dir unlock ${DIRS[1]}
 
-    local phys_spc_free=$($phobos dir list -o stats.phys_spc_free ${DIRS[1]})
-    if [[ $phys_spc_free -ne 0 ]]; then
-        error "There should be no space left (got $phys_spc_free)"
-    fi
+    # With no overhead set, Phobos should use the default one for dirs, which
+    # is low enough that the medium can hold both files and the overheads
+    unset PHOBOS_IO_fs_block_size
+    $valg_phobos put --file $DIR_TEST_OUT/mput_no_split --no-split \
+        --overwrite
 }
 
 ################################################################################

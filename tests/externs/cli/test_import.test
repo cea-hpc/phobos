@@ -99,6 +99,7 @@ function media_split_fill
     dd if=/dev/random of="$IN_FILE" count=$obj_size bs=1
 
     waive_lrs
+    export PHOBOS_IO_fs_block_size="dir=0,tape=0"
     for medium in $(nodeset -e "${media}"); do
         resize_medium $medium $media_size
     done
