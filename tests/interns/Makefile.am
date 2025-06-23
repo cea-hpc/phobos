@@ -6,11 +6,8 @@ AM_CFLAGS=$(CC_OPT) @CMOCKA_CFLAGS@
 AM_LDFLAGS=@CMOCKA_LIBS@
 
 ADMIN_LIB=$(TO_SRC)/admin/libphobos_admin.la
-CFG_LIB=$(TO_SRC)/core/cfg/libpho_cfg.la
-COMMON_LIB=$(TO_SRC)/core/common/libpho_common.la
-COMMUNICATION_LIB=$(TO_SRC)/core/communication/libpho_comm.la
+CORE_LIB=$(TO_SRC)/core/libpho_core.la
 DAEMON_LIB=$(TO_SRC)/daemon/libpho_daemon.la
-DSS_LIB=$(TO_SRC)/core/dss/libpho_dss.la
 MOD_LOAD_LIB=$(TO_SRC)/module-loader/libpho_module_loader.la
 IO_LIB=$(TO_SRC)/io/libpho_io.la $(MOD_LOAD_LIB)
 LAYOUT_LIB=$(TO_SRC)/layout/libpho_layout.la
@@ -24,13 +21,12 @@ IO_POSIX_LIB=$(TO_SRC)/io-modules/libpho_io_adapter_posix.la
 IO_LTFS_LIB=$(TO_SRC)/io-modules/libpho_io_adapter_ltfs.la
 MAPPER_LIB=$(TO_SRC)/io-modules/libpho_mapper.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
-SERIALIZER_LIB=$(TO_SRC)/core/serializer/libpho_serializer.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
 SCSI_LIB=$(TO_SRC)/tlc/scsi/libpho_scsi.la
 TLC_LIB=$(TO_SRC)/tlc/libpho_tlc.la
 
-TESTS_LIB_DEPS=$(LRS_LIB) $(LDM_LIB) $(IO_LIB) $(DSS_LIB) $(SERIALIZER_LIB) \
-               $(CFG_LIB) $(COMMON_LIB) $(DAEMON_LIB) $(TLC_LIB)
+TESTS_LIB_DEPS=$(LRS_LIB) $(LDM_LIB) $(IO_LIB) $(CORE_LIB) $(DAEMON_LIB) \
+               $(TLC_LIB)
 TESTS_LIB=../libpho_test_utils.la
 TESTS_LIB_INCLUDES=-I$(TO_SRC)/tlc -I$(TO_SRC)/tlc/scsi -I..
 
@@ -89,11 +85,11 @@ test_common_LDADD=$(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_common_CFLAGS=$(AM_CFLAGS) -I..
 
 test_communication_SOURCES=test_communication.c
-test_communication_LDADD=$(COMMUNICATION_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
+test_communication_LDADD=$(CORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_communication_CFLAGS=$(AM_CFLAGS) -I..
 
 test_copy_cfg_SOURCES=test_copy_cfg.c
-test_copy_cfg_LDADD=$(CFG_LIB) $(COMMON_LIB)
+test_copy_cfg_LDADD=$(CORE_LIB)
 test_copy_cfg_CFLAGS=$(AM_CFLAGS) -I..
 
 test_dev_tape_SOURCES=test_dev_tape.c
@@ -143,8 +139,8 @@ test_io_LDADD+=$(ADMIN_LIB)
 endif
 
 test_layout_module_SOURCES=test_layout_module.c
-test_layout_module_LDADD=$(LAYOUT_LIB) $(IO_POSIX_LIB) $(RAID1_LIB) $(CFG_LIB) \
-                         $(COMMON_LIB) -ldl
+test_layout_module_LDADD=$(LAYOUT_LIB) $(IO_POSIX_LIB) $(RAID1_LIB) \
+                         $(CORE_LIB) -ldl
 test_layout_module_CFLAGS=$(AM_CFLAGS) -I..
 
 test_ldm_SOURCES=test_ldm.c
@@ -156,7 +152,7 @@ test_log_LDADD=$(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_log_CFLAGS=$(AM_CFLAGS) -I..
 
 test_lrs_cfg_SOURCES=test_lrs_cfg.c
-test_lrs_cfg_LDADD=$(LRS_LIB) $(CFG_LIB) $(COMMON_LIB)
+test_lrs_cfg_LDADD=$(LRS_LIB) $(CORE_LIB)
 test_lrs_cfg_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
 
 test_lrs_device_SOURCES=test_lrs_device.c
@@ -164,9 +160,8 @@ test_lrs_device_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_lrs_device_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs $(TESTS_LIB_INCLUDES)
 
 test_lrs_scheduling_SOURCES=test_lrs_scheduling.c
-test_lrs_scheduling_LDADD=$(LRS_LIB) $(LDM_LIB) $(MOD_LOAD_LIB) $(DSS_LIB) \
-                          $(SERIALIZER_LIB) $(CFG_LIB) $(IO_LIB) $(COMMON_LIB) \
-                          $(TESTS_LIB) $(TESTS_LIB_DEPS)
+test_lrs_scheduling_LDADD=$(LRS_LIB) $(LDM_LIB) $(MOD_LOAD_LIB) $(CORE_LIB) \
+                          $(CFG_LIB) $(IO_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_lrs_scheduling_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I..
 
 test_ltfs_logs_SOURCES=test_ltfs_logs.c
@@ -191,8 +186,7 @@ test_pho_cache_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_pho_cache_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/core/dss -I..
 
 test_ping_SOURCES=test_ping.c mock_communication.c
-test_ping_LDADD=$(ADMIN_LIB) $(COMMON_LIB) $(COMMUNICATION_LIB) $(DSS_LIB) \
-                $(LDM_LIB)
+test_ping_LDADD=$(ADMIN_LIB) $(CORE_LIB) $(LDM_LIB)
 test_ping_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/admin
 
 test_scsi_logs_SOURCES=test_scsi_logs.c
@@ -204,8 +198,7 @@ test_scsi_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I$(TO_SRC)/ldm-modules \
 # TODO: try to link against the phobos_store library instead of
 # the store_profile object file
 test_store_profile_SOURCES=test_store_profile.c
-test_store_profile_LDADD=$(CFG_LIB) $(COMMON_LIB) \
-                       $(TO_SRC)/store/.libs/store_profile.o
+test_store_profile_LDADD=$(CORE_LIB) $(TO_SRC)/store/.libs/store_profile.o
 test_store_profile_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/store
 
 test_store_object_md_SOURCES=test_store_object_md.c

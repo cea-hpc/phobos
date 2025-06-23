@@ -27,14 +27,10 @@ phobosd_SOURCES=health.h health.c \
                 $(IO_SCHEDULERS)
 
 phobosd_CFLAGS=$(AM_CFLAGS)
-phobosd_LDADD=../core/dss/libpho_dss.la \
-              ../core/cfg/libpho_cfg.la \
+phobosd_LDADD=../core/libpho_core.la \
               ../ldm/libpho_ldm.la \
               ../module-loader/libpho_module_loader.la \
               ../io/libpho_io.la \
-              ../core/serializer/libpho_serializer.la \
-              ../core/communication/libpho_comm.la \
-              ../core/common/libpho_common.la \
               ../daemon/libpho_daemon.la
 
 phobosd_LDFLAGS=-Wl,-rpath=$(libdir) -Wl,-rpath=$(pkglibdir)
