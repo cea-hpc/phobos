@@ -1,11 +1,14 @@
 # CHANGELOG UPDATES
 
-## Next
+## 3.1.0
  * limited number of write per grouping: the new "fifo_max_write_per_grouping"
    configuration parameter allows to limit the number of concurrent writes per
    grouping on one phobosd instance. The default 0 value reproduces the
    previous unlimited behaviour.
  * fix large sends (e.g. during a 'lib scan" with over 1500 slots)
+ * handle external command errors better by using the glib2
+   spawn_check_wait_status function
+ * use the io_block_size parameter to set the write size of new objects on media
 
 ## 3.0.0
  * WARNING: the db schema moves from 2.2 to 3.0 and a migration is needed
