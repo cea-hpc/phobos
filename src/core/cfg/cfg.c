@@ -462,6 +462,14 @@ int pho_cfg_get_substring_value(const char *section, const char *name,
 
 }
 
+int _pho_cfg_get_substring_value(int first_index, int last_index,
+                                 int param_index,
+                                 const struct pho_config_item *module_params,
+                                 enum rsc_family family, char **substring)
+{
+    return 0;
+}
+
 /** @TODO to be implemented
 int pho_cfg_match(const char *section_pattern, const char *name_pattern,
                   struct pho_config_item *items, int *count);

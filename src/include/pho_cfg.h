@@ -211,6 +211,19 @@ int tape_drive_compat_models(const char *tape_model, const char *drive_model,
 int pho_cfg_get_substring_value(const char *section, const char *name,
                                 enum rsc_family family, char **substring);
 
+int _pho_cfg_get_substring_value(int first_index, int last_index,
+                                  int param_index,
+                                  const struct pho_config_item *module_params,
+                                  enum rsc_family family,
+                                  char **substring);
+
+#define PHO_CFG_GET_SUBSTRING_VALUE(_params_list, _cfg_namespace, _name, \
+                                    _family, _result)  \
+        _pho_cfg_get_substring_value(_cfg_namespace ## _FIRST, \
+                                     _cfg_namespace ## _LAST, \
+                                     _cfg_namespace ## _ ##_name, \
+                                     (_params_list), (_family), (_result))
+
 /**
  * Get the default copy name from the conf.
  *
