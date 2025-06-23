@@ -590,7 +590,7 @@ function test_repack
     local oid0="$prefix.oid0"
     local oid1="$prefix.oid1"
 
-    local tapes=$($phobos tape list --tags lto5 | head -n 2)
+    local tapes=$($phobos tape list --tags lto6 | head -n 2)
     local tape1=$(echo $tapes | cut -d' ' -f1)
     local tape2=$(echo $tapes | cut -d' ' -f2)
 
