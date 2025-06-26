@@ -613,7 +613,7 @@ struct mock_ltfs {
 /**
  * Callback function to mock an ioctl call as used in the SCSI library module
  */
-typedef int (*mock_ioctl_t)(int fd, unsigned long request, void *sg_io_hdr);
+typedef int (*mock_ioctl_t)(int fd, unsigned long request, ...);
 
 /**
  * Structure containing functions mocked by the tests. For testing purposes
@@ -694,9 +694,7 @@ struct phobos_global_context *phobos_context(void);
  */
 void phobos_module_context_set(struct phobos_global_context *context);
 
-void pho_context_reset_scsi_ioctl(void);
-
-void pho_context_reset_mock_ltfs_functions(void);
+void pho_context_reset_mock_functions(void);
 
 /**
  * Generate a unparsed UUID and return it as a string

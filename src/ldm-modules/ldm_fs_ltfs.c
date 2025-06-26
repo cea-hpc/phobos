@@ -197,6 +197,9 @@ static int ltfs_get_label(const char *mnt_path, char *fs_label, size_t llen,
 
     memset(fs_label, 0, llen);
 
+    if (context->mocks.mock_ltfs.mock_getxattr == NULL)
+        context->mocks.mock_ltfs.mock_getxattr = getxattr;
+
     /* We really want null-termination */
     rc = context->mocks.mock_ltfs.mock_getxattr(mnt_path, LTFS_VNAME_XATTR,
                                                 fs_label, llen - 1);
@@ -228,6 +231,9 @@ static int ltfs_mount(const char *dev_path, const char *mnt_path,
     if (!cmd)
         LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build LTFS mount command");
 
+    if (context->mocks.mock_ltfs.mock_mkdir == NULL)
+        context->mocks.mock_ltfs.mock_mkdir = mkdir;
+
     /* create the mount point */
     if (context->mocks.mock_ltfs.mock_mkdir(mnt_path, 0750) != 0 &&
         errno != EEXIST) {
@@ -237,6 +243,9 @@ static int ltfs_mount(const char *dev_path, const char *mnt_path,
         LOG_GOTO(out_free, rc = -errno, "Failed to create mount point %s",
                  mnt_path);
     }
+
+    if (context->mocks.mock_ltfs.mock_command_call == NULL)
+        context->mocks.mock_ltfs.mock_command_call = command_call;
 
     /* mount the filesystem */
     /* XXX: we do not instrument the "ltfs_collect_output" function to retrieve
@@ -293,6 +302,9 @@ static int ltfs_umount(const char *dev_path, const char *mnt_path,
     if (!cmd)
         LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build LTFS umount command");
 
+    if (context->mocks.mock_ltfs.mock_command_call == NULL)
+        context->mocks.mock_ltfs.mock_command_call = command_call;
+
     /* unmount the filesystem */
     rc = context->mocks.mock_ltfs.mock_command_call(cmd, ltfs_collect_output,
                                                     NULL);
@@ -327,6 +339,9 @@ static int ltfs_format(const char *dev_path, const char *label,
     if (fs_spc != NULL)
         memset(fs_spc, 0, sizeof(*fs_spc));
 
+    if (context->mocks.mock_ltfs.mock_command_call == NULL)
+        context->mocks.mock_ltfs.mock_command_call = command_call;
+
     /* Format the media */
     rc = context->mocks.mock_ltfs.mock_command_call(cmd, ltfs_format_filter,
                                                     fs_spc);
@@ -357,6 +372,9 @@ static int ltfs_release(const char *dev_path, json_t **message)
     if (!cmd)
         LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build %s command",
                  __func__);
+
+    if (context->mocks.mock_ltfs.mock_command_call == NULL)
+        context->mocks.mock_ltfs.mock_command_call = command_call;
 
     /* Release the drive */
     rc = context->mocks.mock_ltfs.mock_command_call(cmd, ltfs_collect_output,

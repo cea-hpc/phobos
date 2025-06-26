@@ -216,13 +216,18 @@ static bool op_to_mock(enum scsi_operation_type op_to_mock,
     }
 }
 
-static int mock_ioctl(int fd, unsigned long request, void *sg_io_hdr)
+static int mock_ioctl(int fd, unsigned long request, ...)
 {
-    struct sg_io_hdr *hdr = (struct sg_io_hdr *)sg_io_hdr;
     struct scsi_req_sense *sbp;
+    struct sg_io_hdr *hdr;
     int operation_to_mock;
     uint8_t type = 0;
+    va_list args;
     uint8_t code;
+
+    va_start(args, request);
+    hdr = (struct sg_io_hdr *) va_arg(args, void *);
+    va_end(args);
 
     get_op_params(hdr, &code, &type);
     operation_to_mock = mock();
@@ -275,7 +280,7 @@ static void scsi_dev_load_logs_check(struct dss_and_tlc_lib *dss_and_tlc_lib,
     }
 
     if (should_fail) {
-        pho_context_reset_scsi_ioctl();
+        pho_context_reset_mock_functions();
         assert_int_equal(-rc, EINVAL);
     } else {
         assert_return_code(-rc, rc);
@@ -370,7 +375,7 @@ static void scsi_dev_unload_logs_check(struct dss_and_tlc_lib *dss_and_tlc_lib,
     }
 
     if (should_fail) {
-        pho_context_reset_scsi_ioctl();
+        pho_context_reset_mock_functions();
         assert_int_equal(-rc, EINVAL);
     } else {
         assert_return_code(-rc, rc);

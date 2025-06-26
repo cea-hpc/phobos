@@ -51,6 +51,9 @@ static int pho_ltfs_sync(const char *root_path, json_t **message)
     if (message)
         *message = NULL;
 
+    if (context->mocks.mock_ltfs.mock_setxattr == NULL)
+        context->mocks.mock_ltfs.mock_setxattr = setxattr;
+
     /* flush the LTFS partition to tape */
     if (context->mocks.mock_ltfs.mock_setxattr(root_path, LTFS_SYNC_ATTR_NAME,
                                                (void *)&one, sizeof(one),
