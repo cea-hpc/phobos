@@ -622,10 +622,16 @@ typedef int (*mock_ioctl_t)(int fd, unsigned long request, ...);
 struct mocking_functions {
     /** LTFS mocking functions used by the module "ldm_fs_ltfs".  */
     struct mock_ltfs mock_ltfs;
+
     /** Callback to mock the ioctl call used by the ldm module "ldm_lib_scsi" to
      * interact with the tape library.
      */
     mock_ioctl_t mock_ioctl;
+
+    /** Callback to generate an error in multi-put with partial releases
+     * settings.
+     */
+    int (*mock_failure_after_second_partial_release)(void);
 };
 
 /**

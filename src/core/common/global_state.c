@@ -47,4 +47,5 @@ void pho_context_reset_mock_functions(void)
     PHO_CONTEXT->mocks.mock_ltfs.mock_statfs = NULL;
     PHO_CONTEXT->mocks.mock_ltfs.mock_getxattr = NULL;
     PHO_CONTEXT->mocks.mock_ltfs.mock_setxattr = NULL;
+    PHO_CONTEXT->mocks.mock_failure_after_second_partial_release = NULL;
 }

@@ -52,11 +52,23 @@
 #include <stddef.h>
 #include <cmocka.h>
 
+#include <../../../src/layout/raid_common.h>
+
 #define FILE_FOR_MPUT "/etc/hosts"
 static int object_count;
 
+static int counter;
+static int failure_after_second_call(void)
+{
+    if (++counter == 2)
+        return 42;
+
+    return 0;
+}
+
 static void sync_with_error(void **state)
 {
+    struct phobos_global_context *context = phobos_context();
     struct pho_xfer_desc xfer = {0};
     int rc;
     int i;
@@ -81,8 +93,11 @@ static void sync_with_error(void **state)
         xfer.xd_params.put.family = PHO_RSC_TAPE;
     }
 
+    context->mocks.mock_failure_after_second_partial_release =
+        failure_after_second_call;
+
     rc = phobos_put(&xfer, 1, NULL, NULL);
-    assert_return_code(rc, -rc);
+    assert(rc == 42);
 
     for (i = 0; i < object_count; i++) {
         close(xfer.xd_targets[i].xt_fd);

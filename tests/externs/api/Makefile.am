@@ -8,7 +8,7 @@ AM_LDFLAGS=@CMOCKA_LIBS@
 
 ADMIN_LIB=$(TO_SRC)/admin/libphobos_admin.la
 CORE_LIB=$(TO_SRC)/core/libpho_core.la
-LAYOUT_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
+LAYOUT_COMMON_LIB=$(TO_SRC)/layout/libpho_layout_common.la
 LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 MOD_LOAD_LIB=$(TO_SRC)/module-loader/libpho_module_loader.la
@@ -88,7 +88,7 @@ test_dss_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_dss_CFLAGS=$(TESTS_INCLUDE)
 
 test_locate_SOURCES=test_locate.c
-test_locate_LDADD=$(STORE_LIB) $(ADMIN_LIB) $(LAYOUT_LIB) \
+test_locate_LDADD=$(STORE_LIB) $(ADMIN_LIB) $(RAID1_LIB) \
                   $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_locate_CFLAGS=$(AM_CFLAGS) $(TESTS_INCLUDE)
 
@@ -97,9 +97,12 @@ test_lock_clean_LDADD=$(ADMIN_LIB) $(STORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_lock_clean_CFLAGS=$(TESTS_INCLUDE)
 
 test_mput_sync_error_SOURCES=test_mput_sync_error.c
-test_mput_sync_error_LDADD=$(STORE_LIB) $(ADMIN_LIB) $(LAYOUT_LIB) \
+test_mput_sync_error_LDADD=$(STORE_LIB) $(LAYOUT_COMMON_LIB) \
                            $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_mput_sync_error_CFLAGS=$(AM_CFLAGS) $(TESTS_INCLUDE)
+if USE_XXHASH
+test_mput_sync_error_LDFLAGS=-lxxhash
+endif
 
 if RADOS_ENABLED
 test_lib_dev_rados_SOURCES=test_lib_dev_rados.c

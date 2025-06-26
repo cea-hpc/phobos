@@ -1378,9 +1378,19 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
 
     /* manage received allocation and partial release */
     if (resp) {
+        struct phobos_global_context *context = phobos_context();
+
         rc = raid_writer_split_setup(proc, resp);
-        if (rc) {
-           return rc;
+        if (rc)
+            return rc;
+
+        if (pho_response_is_partial_release(resp)) {
+            if (context->mocks.mock_failure_after_second_partial_release !=
+                    NULL) {
+                rc = context->mocks.mock_failure_after_second_partial_release();
+                if (rc)
+                    return rc;
+            }
         }
     }
 
