@@ -261,7 +261,7 @@ static void scsi_dev_load_logs_check(struct dss_and_tlc_lib *dss_and_tlc_lib,
     assert_non_null(full_message);
 
     if (should_fail) {
-        context->mock_ioctl = &mock_ioctl;
+        context->mocks.mock_ioctl = &mock_ioctl;
 
         will_return_always(mock_ioctl, op);
     }
@@ -356,7 +356,7 @@ static void scsi_dev_unload_logs_check(struct dss_and_tlc_lib *dss_and_tlc_lib,
     dss_logs_delete(&dss_and_tlc_lib->dss, NULL);
 
     if (should_fail) {
-        context->mock_ioctl = &mock_ioctl;
+        context->mocks.mock_ioctl = &mock_ioctl;
 
         will_return_always(mock_ioctl, op);
     }

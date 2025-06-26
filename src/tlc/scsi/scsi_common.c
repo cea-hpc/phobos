@@ -281,7 +281,7 @@ int scsi_execute(struct scsi_error *err, int fd, enum scsi_direction direction,
     hdr.timeout = timeout_msec;
     /* hdr.flags = 0: default */
 
-    rc = context->mock_ioctl(fd, SG_IO, &hdr);
+    rc = context->mocks.mock_ioctl(fd, SG_IO, &hdr);
     if (rc) {
         err->rc = -errno;
         err->status = SCSI_FATAL_ERROR;

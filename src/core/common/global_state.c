@@ -26,7 +26,7 @@ int pho_context_init(void)
     pho_log_callback_set(NULL); /* set default log callback */
     PHO_CONTEXT->log_dev_output = false;
     pthread_mutex_init(&PHO_CONTEXT->config.lock, NULL);
-    PHO_CONTEXT->mock_ioctl = do_ioctl;
+    PHO_CONTEXT->mocks.mock_ioctl = do_ioctl;
     pho_context_reset_mock_ltfs_functions();
 
     return 0;
@@ -51,14 +51,14 @@ void phobos_module_context_set(struct phobos_global_context *context)
 
 void pho_context_reset_scsi_ioctl(void)
 {
-    PHO_CONTEXT->mock_ioctl = &do_ioctl;
+    PHO_CONTEXT->mocks.mock_ioctl = &do_ioctl;
 }
 
 void pho_context_reset_mock_ltfs_functions(void)
 {
-    PHO_CONTEXT->mock_ltfs.mock_mkdir = mkdir;
-    PHO_CONTEXT->mock_ltfs.mock_command_call = command_call;
-    PHO_CONTEXT->mock_ltfs.mock_statfs = statfs;
-    PHO_CONTEXT->mock_ltfs.mock_getxattr = getxattr;
-    PHO_CONTEXT->mock_ltfs.mock_setxattr = setxattr;
+    PHO_CONTEXT->mocks.mock_ltfs.mock_mkdir = mkdir;
+    PHO_CONTEXT->mocks.mock_ltfs.mock_command_call = command_call;
+    PHO_CONTEXT->mocks.mock_ltfs.mock_statfs = statfs;
+    PHO_CONTEXT->mocks.mock_ltfs.mock_getxattr = getxattr;
+    PHO_CONTEXT->mocks.mock_ltfs.mock_setxattr = setxattr;
 }

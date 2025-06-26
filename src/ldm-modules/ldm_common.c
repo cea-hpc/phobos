@@ -126,7 +126,7 @@ int logged_statfs(const char *path, struct ldm_fs_space *fs_spc,
     if (path == NULL)
         return -EINVAL;
 
-    if (context->mock_ltfs.mock_statfs(path, &stfs) != 0) {
+    if (context->mocks.mock_ltfs.mock_statfs(path, &stfs) != 0) {
         *message = json_pack("s++", "statfs('", path, "') failed");
         LOG_RETURN(-errno, "statfs('%s') failed", path);
     }

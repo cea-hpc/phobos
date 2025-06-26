@@ -616,6 +616,19 @@ struct mock_ltfs {
 typedef int (*mock_ioctl_t)(int fd, unsigned long request, void *sg_io_hdr);
 
 /**
+ * Structure containing functions mocked by the tests. For testing purposes
+ * only.
+ */
+struct mocking_functions {
+    /** LTFS mocking functions used by the module "ldm_fs_ltfs".  */
+    struct mock_ltfs mock_ltfs;
+    /** Callback to mock the ioctl call used by the ldm module "ldm_lib_scsi" to
+     * interact with the tape library.
+     */
+    mock_ioctl_t mock_ioctl;
+};
+
+/**
  * Structure containing global information about Phobos. This structure is
  * shared between all threads and modules.
  *
@@ -638,14 +651,8 @@ struct phobos_global_context {
      */
     struct pho_cache *lrs_media_cache[PHO_RSC_LAST];
 
-    /* /!\ The following fields are for testing purposes only /!\ */
-
-    /** LTFS mocking functions used by the module "ldm_fs_ltfs".  */
-    struct mock_ltfs mock_ltfs;
-    /** Callback to mock the ioctl call used by the ldm module "ldm_lib_scsi" to
-     * interact with the tape library.
-     */
-    mock_ioctl_t mock_ioctl;
+    /* /!\ The following field is for testing purposes only /!\ */
+    struct mocking_functions mocks;
 };
 
 /**
