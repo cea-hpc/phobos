@@ -158,6 +158,7 @@ void media_info_cleanup(struct media_info *medium)
     pho_lock_clean(&medium->lock);
     free(medium->rsc.model);
     string_array_free(&medium->tags);
+    string_array_free(&medium->groupings);
 }
 
 void media_info_free(struct media_info *mda)
@@ -168,6 +169,7 @@ void media_info_free(struct media_info *mda)
     pho_lock_clean(&mda->lock);
     free(mda->rsc.model);
     string_array_free(&mda->tags);
+    string_array_free(&mda->groupings);
     free(mda);
 }
 

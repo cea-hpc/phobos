@@ -1609,7 +1609,7 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
             continue;
 
         if (sched->family == PHO_RSC_TAPE && pmedia) {
-            bool is_compat;
+            bool is_compat = false;
 
             /* DIR or RADOS resource */
             if (pmedia->rsc.id.family == PHO_RSC_DIR ||

@@ -92,8 +92,11 @@ static int tlc_init(struct tlc *tlc, const char *library)
     rc = tlc_library_open(&tlc->lib, lib_dev, &json_message);
     if (rc) {
         if (json_message) {
+            char *dump = json_dumps(json_message, 0);
+
             pho_error(rc, "Failed to open library device '%s': %s",
-                      lib_dev, json_dumps(json_message, 0));
+                      lib_dev, dump);
+            free(dump);
             json_decref(json_message);
             return rc;
         } else {
