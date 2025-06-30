@@ -1221,6 +1221,39 @@ static void raid_writer_split_close(struct pho_data_processor *proc, int *rc)
     }
 }
 
+static int raid_writer_handle_partial_release_resp(
+    struct pho_data_processor *encoder,
+    pho_resp_release_t *rel_resp
+)
+{
+    struct raid_io_context *io_context;
+    int rc = 0;
+    int i, j;
+
+    for (i = 0; i < encoder->current_target; i++) {
+        io_context =
+            &((struct raid_io_context *) encoder->private_writer)[i];
+
+        if (io_context->write.released)
+            continue;
+
+        encoder->dest_layout[i].ext_count =
+            io_context->write.written_extents->len;
+        encoder->dest_layout[i].extents = (struct extent *)
+            g_array_free(io_context->write.written_extents, FALSE);
+
+        io_context->write.written_extents = NULL;
+        io_context->write.n_released_media = 0;
+
+        for (j = 0; j < encoder->dest_layout->ext_count; ++j)
+            encoder->dest_layout[i].extents[j].state = PHO_EXT_ST_SYNC;
+
+        io_context->write.released = true;
+    }
+
+    return rc;
+}
+
 static int raid_writer_handle_release_resp(struct pho_data_processor *encoder,
                                            pho_resp_release_t *rel_resp)
 {
@@ -1373,10 +1406,15 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
     }
 
     /* manage release */
-    if (resp && pho_response_is_release(resp) &&
-        !pho_response_is_partial_release(resp)) {
-        rc = raid_writer_handle_release_resp(proc, resp->release);
-        goto set_target_rc;
+    if (resp && pho_response_is_release(resp)) {
+        if (pho_response_is_partial_release(resp)) {
+            rc = raid_writer_handle_partial_release_resp(proc, resp->release);
+            if (rc)
+                goto set_target_rc;
+        } else {
+            rc = raid_writer_handle_release_resp(proc, resp->release);
+            goto set_target_rc;
+        }
     }
 
     /* manage received allocation and partial release */
