@@ -318,6 +318,9 @@ struct pho_id {
     char            library[PHO_URI_MAX]; /**< Library owning the resource */
 };
 
+#define FMT_PHO_ID "(%s:%s:%s)"
+#define PHO_ID(id) rsc_family2str((id).family), (id).library, (id).name
+
 static inline void pho_id_name_set(struct pho_id *id, const char *name,
                                    const char *library)
 {

@@ -97,25 +97,22 @@ int dss_one_medium_get_from_id(struct dss_handle *dss,
                           medium_id->name, medium_id->library);
     if (rc)
         LOG_RETURN(rc,
-                   "Unable to build filter for media family %s, name %s and "
-                   "library %s", rsc_family2str(medium_id->family),
-                   medium_id->name, medium_id->library);
+                   "Unable to build filter for media "FMT_PHO_ID,
+                   PHO_ID(*medium_id));
 
     rc = dss_media_get(dss, &filter, medium_info, &cnt, NULL);
     dss_filter_free(&filter);
     if (rc)
         LOG_RETURN(rc,
-                   "Error while getting medium info for family %s, name %s "
-                   "and library %s", rsc_family2str(medium_id->family),
-                   medium_id->name, medium_id->library);
+                   "Error while getting medium info "FMT_PHO_ID,
+                   PHO_ID(*medium_id));
 
     /* (family, id) is the primary key of the media table */
     assert(cnt <= 1);
 
     if (cnt == 0) {
-        pho_warn("Medium (family %s, name %s, library %s) is absent from media "
-                 "table", rsc_family2str(medium_id->family), medium_id->name,
-                 medium_id->library);
+        pho_warn("Medium "FMT_PHO_ID" is absent from media "
+                 "table", PHO_ID(*medium_id));
         dss_res_free(*medium_info, cnt);
         return(-ENOENT);
     }
@@ -136,17 +133,13 @@ int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
 
     /* check ADMIN STATUS to see if the medium is available */
     if (medium_info->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED) {
-        pho_warn("Medium (family %s, name %s, library %s) is admin locked",
-                 rsc_family2str(medium_id->family), medium_id->name,
-                 medium_id->library);
+        pho_warn("Medium "FMT_PHO_ID" is admin locked", PHO_ID(*medium_id));
         GOTO(clean, rc = -EACCES);
     }
 
     if (!medium_info->flags.get) {
-        pho_warn("Get are prevented by operation flag on this medium "
-                 "(family %s, name %s, library %s)",
-                 rsc_family2str(medium_id->family), medium_id->name,
-                 medium_id->library);
+        pho_warn("Get are prevented by operation flag on this "
+                 "medium "FMT_PHO_ID, PHO_ID(*medium_id));
         GOTO(clean, rc = -EPERM);
     }
 

@@ -5034,7 +5034,8 @@ sub process {
 			    $dstat !~ /^for\s*$Constant\s+(?:$Ident|-?$Constant)$/ &&	# for (...) bar()
 			    $dstat !~ /^do\s*{/ &&					# do {...
 			    $dstat !~ /^\(\{/ &&						# ({...
-			    $ctx !~ /^.\s*#\s*define\s+TRACE_(?:SYSTEM|INCLUDE_FILE|INCLUDE_PATH)\b/)
+			    $ctx !~ /^.\s*#\s*define\s+TRACE_(?:SYSTEM|INCLUDE_FILE|INCLUDE_PATH)\b/ &&
+			    $ctx !~ /^.\s*#\s*define\s+PHO_ID\b/)       # #define PHO_ID
 			{
 				if ($dstat =~ /^\s*if\b/) {
 					ERROR("MULTISTATEMENT_MACRO_USE_DO_WHILE",
