@@ -21,6 +21,7 @@
 Phobos CLI arguments utilities
 """
 
+from phobos.cli.common.utils import str_to_timestamp
 from phobos.core.const import rsc_family2str # pylint: disable=no-name-in-module
 from phobos.core.ffi import ResourceFamily
 
@@ -70,6 +71,30 @@ def add_list_arguments(parser, attr, default_output, sort_option=False, # pylint
         parser.add_argument('--status',
                             help=("filter the output by status name, choose "
                                   "from {locked, unlocked, failed}"))
+
+def add_log_arguments(parser, verb):
+    """Default arguments for logs actions"""
+    parser.add_argument('-D', '--drive',
+                        help='drive ID of the logs to %s' % verb)
+    parser.add_argument('-T', '--tape', help='tape ID of the logs to %s' % verb)
+    parser.add_argument('--library',
+                        help="Library containing the target drive and tape")
+    parser.add_argument('-e', '--errno', type=int,
+                        help='error number of the logs to %s' % verb)
+    parser.add_argument('--errors', action='store_true',
+                        help='%s all errors' % verb)
+    parser.add_argument('-c', '--cause', help='cause of the logs to %s' % verb,
+                        choices=["library_scan", "library_open",
+                                 "device_lookup", "medium_lookup",
+                                 "device_load", "device_unload",
+                                 "ltfs_mount", "ltfs_umount", "ltfs_format",
+                                 "ltfs_df", "ltfs_sync"])
+    parser.add_argument('--start', type=str_to_timestamp, default=0,
+                        help="timestamp of the most recent logs to %s,"
+                             "in format YYYY-MM-DD [hh:mm:ss]" % verb)
+    parser.add_argument('--end', type=str_to_timestamp, default=0,
+                        help="timestamp of the oldest logs to %s,"
+                             "in format 'YYYY-MM-DD [hh:mm:ss]'" % verb)
 
 def add_object_arguments(parser):
     """Default arguments for get object-like actions"""

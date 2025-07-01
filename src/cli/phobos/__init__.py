@@ -28,32 +28,18 @@ specific command line parameters and the API entry points for phobos to trigger
 actions.
 """
 
-import argparse
-import json
 from shlex import shlex
 import sys
-import datetime
 
 import os
-import os.path
-
-from ctypes import (c_int, c_long, byref, pointer, c_bool)
 
 from phobos.core.admin import Client as AdminClient
-from phobos.core.const import (rsc_family2str, # pylint: disable=no-name-in-module
-                               PHO_RSC_TAPE, PHO_RSC_NONE,
-                               PHO_OPERATION_INVALID,
-                               str2operation_type)
-from phobos.core.ffi import (DevInfo, MediaInfo, ResourceFamily,
-                             Id, LogFilter, Timeval)
-from phobos.core.store import (attrs_as_dict, DelParams, PutParams,
-                               UtilClient, XferClient)
+from phobos.core.ffi import ResourceFamily
+from phobos.core.store import (attrs_as_dict, DelParams, UtilClient)
 from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
-                               DSSInteractHandler, BaseResourceOptHandler,
                                env_error_format, XferOptHandler)
 from phobos.cli.common.args import add_put_arguments, add_object_arguments
-from phobos.cli.common.utils import (attr_convert, check_output_attributes,
-                                     create_put_params, get_params_status,
+from phobos.cli.common.utils import (attr_convert, create_put_params,
                                      set_library, get_scope)
 from phobos.cli.target.copy import CopyOptHandler
 from phobos.cli.target.dir import DirOptHandler
@@ -61,6 +47,7 @@ from phobos.cli.target.drive import DriveOptHandler
 from phobos.cli.target.extent import ExtentOptHandler
 from phobos.cli.target.lib import LibOptHandler
 from phobos.cli.target.lock import LocksOptHandler
+from phobos.cli.target.logs import LogsOptHandler
 from phobos.cli.target.object import ObjectOptHandler
 from phobos.cli.target.rados import RadosPoolOptHandler
 from phobos.cli.target.tape import TapeOptHandler
@@ -565,212 +552,6 @@ class SchedOptHandler(BaseOptHandler):
                     adm.sched_conf_get(config_items)
                 else:
                     adm.sched_conf_set(config_items)
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-
-def str_to_timestamp(value):
-    """
-    Check that the date 'value' has a correct format and return it as
-    timestamp
-    """
-    try:
-        if value.__contains__(' '):
-            element = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
-        elif value.__contains__('-'):
-            element = datetime.datetime.strptime(value, "%Y-%m-%d")
-        else:
-            raise ValueError()
-    except ValueError:
-        raise argparse.ArgumentTypeError("%s is not a valid date format" %
-                                         value)
-
-    return datetime.datetime.timestamp(element)
-
-
-class LogsDumpOptHandler(BaseOptHandler):
-    """Handler for persistent logs dumping"""
-    label = "dump"
-    descr = "handler for persistent logs dumping"
-    epilog = """Will dump persistent logs recorded by Phobos to stdout or a file
-    if provided, according to given filters."""
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        super(LogsDumpOptHandler, cls).add_options(parser)
-        parser.add_argument('-D', '--drive',
-                            help='drive ID of the logs to dump')
-        parser.add_argument('-T', '--tape',
-                            help='tape ID of the logs to dump')
-        parser.add_argument('--library',
-                            help="Library containing the target drive and tape")
-        parser.add_argument('-e', '--errno', type=int,
-                            help='error number of the logs to dump')
-        parser.add_argument('--errors', action='store_true',
-                            help='dump all errors')
-        parser.add_argument('-c', '--cause',
-                            help='cause of the logs to dump',
-                            choices=["library_scan", "library_open",
-                                     "device_lookup", "medium_lookup",
-                                     "device_load", "device_unload",
-                                     "ltfs_mount", "ltfs_umount", "ltfs_format",
-                                     "ltfs_df", "ltfs_sync"])
-        parser.add_argument('--start', type=str_to_timestamp, default=0,
-                            help="timestamp of the most recent logs to dump,"
-                                 "in format YYYY-MM-DD [hh:mm:ss]")
-        parser.add_argument('--end', type=str_to_timestamp, default=0,
-                            help="timestamp of the oldest logs to dump,"
-                                 "in format 'YYYY-MM-DD [hh:mm:ss]'")
-
-
-class LogsClearOptHandler(BaseOptHandler):
-    """Handler for persistent logs clearing"""
-    label = "clear"
-    descr = "handler for persistent logs clearing"
-    epilog = """Will clear persistent logs recorded by Phobos, according to
-    given filters."""
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        super(LogsClearOptHandler, cls).add_options(parser)
-        parser.add_argument('-D', '--drive',
-                            help='drive ID of the logs to dump')
-        parser.add_argument('-T', '--tape',
-                            help='tape ID of the logs to dump')
-        parser.add_argument('--library',
-                            help="Library containing the target drive and tape")
-        parser.add_argument('-e', '--errno', type=int,
-                            help='error number of the logs to dump')
-        parser.add_argument('--errors', action='store_true',
-                            help='clear all errors')
-        parser.add_argument('-c', '--cause',
-                            help='cause of the logs to dump',
-                            choices=["library_scan", "library_open",
-                                     "device_lookup", "medium_lookup",
-                                     "device_load", "device_unload",
-                                     "ltfs_mount", "ltfs_umount", "ltfs_format",
-                                     "ltfs_df", "ltfs_sync"])
-        parser.add_argument('--start', type=str_to_timestamp, default=0,
-                            help="timestamp of the most recent logs to dump,"
-                                 "in format YYYY-MM-DD [hh:mm:ss]")
-        parser.add_argument('--end', type=str_to_timestamp, default=0,
-                            help="timestamp of the oldest logs to dump,"
-                                 "in format 'YYYY-MM-DD [hh:mm:ss]'")
-        parser.add_argument('--clear-all', action='store_true',
-                            help='must be specified to clear all logs, will '
-                                 'have no effect, if any of the other '
-                                 'arguments is specified')
-
-def create_log_filter(library, device, medium, _errno, cause, start, end, \
-                      errors): # pylint: disable=too-many-arguments
-    """Create a log filter structure with the given parameters."""
-    device_id = Id(PHO_RSC_TAPE if (device or library) else PHO_RSC_NONE,
-                   name=device if device else "",
-                   library=library if library else "")
-    medium_id = Id(PHO_RSC_TAPE if (medium or library) else PHO_RSC_NONE,
-                   name=medium if medium else "",
-                   library=library if library else "")
-    c_errno = (pointer(c_int(int(_errno))) if _errno else None)
-    c_cause = (c_int(str2operation_type(cause)) if cause else
-               c_int(PHO_OPERATION_INVALID))
-    c_start = Timeval(c_long(int(start)), 0)
-    c_end = Timeval(c_long(int(end)), 999999)
-    c_errors = (c_bool(errors) if errors else None)
-
-    return (byref(LogFilter(device_id, medium_id, c_errno, c_cause, c_start,
-                            c_end, c_errors))
-            if device or medium or library or _errno or cause or start or
-            end or errors else None)
-
-
-class LogsOptHandler(BaseOptHandler):
-    """Handler of logs commands"""
-    label = "logs"
-    descr = "interact with the persistent logs recorded by Phobos"
-    verbs = [
-        LogsDumpOptHandler,
-        LogsClearOptHandler
-    ]
-    family = ResourceFamily(ResourceFamily.RSC_TAPE)
-    library = None
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    def exec_dump(self):
-        """Dump logs to stdout"""
-        device = self.params.get('drive')
-        medium = self.params.get('tape')
-        _errno = self.params.get('errno')
-        cause = self.params.get('cause')
-        start = self.params.get('start')
-        end = self.params.get('end')
-        errors = self.params.get('errors')
-        if (device or medium):
-            #if we have a resource we need the library otion or the default
-            set_library(self)
-        else:
-            #if we have no resource the library could be None if not set
-            self.library = self.params.get('library')
-
-        if _errno and errors:
-            self.logger.error("only one of '--errors' or '--errno' must be "
-                              "provided")
-            sys.exit(os.EX_USAGE)
-
-        log_filter = create_log_filter(self.library, device, medium, _errno,
-                                       cause, start, end, errors)
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                adm.dump_logs(sys.stdout.fileno(), log_filter)
-
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-    def exec_clear(self):
-        """Clear logs"""
-        device = self.params.get('drive')
-        medium = self.params.get('tape')
-        _errno = self.params.get('errno')
-        cause = self.params.get('cause')
-        start = self.params.get('start')
-        end = self.params.get('end')
-        errors = self.params.get('errors')
-        if (device or medium):
-            #if we have a resource we need the library otion or the default
-            set_library(self)
-        else:
-            #if we have no resource the library could be None if not set
-            self.library = self.params.get('library')
-
-        if _errno and errors:
-            self.logger.error("only one of '--errors' or '--errno' must be "
-                              "provided")
-            sys.exit(os.EX_USAGE)
-
-        log_filter = create_log_filter(self.library, device, medium, _errno,
-                                       cause, start, end, errors)
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                adm.clear_logs(log_filter, self.params.get('clear_all'))
-
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))

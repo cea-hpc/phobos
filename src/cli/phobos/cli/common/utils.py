@@ -22,8 +22,10 @@ Phobos CLI utilities
 """
 
 from argparse import ArgumentTypeError
-from shlex import shlex
+from ctypes import byref, c_int, c_long, c_bool, pointer
+import datetime
 import os
+from shlex import shlex
 import sys
 
 import phobos.core.cfg as cfg
@@ -31,9 +33,25 @@ from phobos.core.const import (DSS_STATUS_FILTER_ALL, # pylint: disable=no-name-
                                DSS_STATUS_FILTER_COMPLETE,
                                DSS_STATUS_FILTER_INCOMPLETE,
                                DSS_STATUS_FILTER_READABLE,
-                               DSS_OBJ_ALIVE, DSS_OBJ_ALL, DSS_OBJ_DEPRECATED)
-from phobos.core.ffi import LayoutInfo
+                               DSS_OBJ_ALIVE, DSS_OBJ_ALL, DSS_OBJ_DEPRECATED,
+                               PHO_OPERATION_INVALID, PHO_RSC_NONE,
+                               PHO_RSC_TAPE, str2operation_type)
+from phobos.core.ffi import Id, LayoutInfo, LogFilter, Timeval
 from phobos.core.store import PutParams
+
+def attr_convert(usr_attr):
+    """Convert k/v pairs as expressed by the user into a dictionnary."""
+    tkn_iter = shlex(usr_attr, posix=True)
+    tkn_iter.whitespace = '=,'
+    tkn_iter.whitespace_split = True
+
+    kv_pairs = list(tkn_iter) # [k0, v0, k1, v1...]
+
+    if len(kv_pairs) % 2 != 0:
+        print(kv_pairs)
+        raise ValueError("Invalid attribute string")
+
+    return dict(zip(kv_pairs[0::2], kv_pairs[1::2]))
 
 def check_max_width_is_valid(value):
     """Check that the width 'value' is greater than the one of '...}'"""
@@ -49,6 +67,47 @@ def check_output_attributes(attrs, out_attrs, logger):
     if bad_attrs:
         logger.error("bad output attributes: %s", " ".join(bad_attrs))
         sys.exit(os.EX_USAGE)
+
+def create_log_filter(library, device, medium, _errno, cause, start, end, \
+                      errors): # pylint: disable=too-many-arguments
+    """Create a log filter structure with the given parameters."""
+    device_id = Id(PHO_RSC_TAPE if (device or library) else PHO_RSC_NONE,
+                   name=device if device else "",
+                   library=library if library else "")
+    medium_id = Id(PHO_RSC_TAPE if (medium or library) else PHO_RSC_NONE,
+                   name=medium if medium else "",
+                   library=library if library else "")
+    c_errno = (pointer(c_int(int(_errno))) if _errno else None)
+    c_cause = (c_int(str2operation_type(cause)) if cause else
+               c_int(PHO_OPERATION_INVALID))
+    c_start = Timeval(c_long(int(start)), 0)
+    c_end = Timeval(c_long(int(end)), 999999)
+    c_errors = (c_bool(errors) if errors else None)
+
+    return (byref(LogFilter(device_id, medium_id, c_errno, c_cause, c_start,
+                            c_end, c_errors))
+            if device or medium or library or _errno or cause or start or
+            end or errors else None)
+
+def create_put_params(obj, copy):
+    """Create the put params from the arguments"""
+    lyt_attrs = obj.params.get('layout_params')
+    if lyt_attrs is not None:
+        lyt_attrs = attr_convert(lyt_attrs)
+        obj.logger.debug("Loaded layout params set %r", lyt_attrs)
+
+    put_params = PutParams(profile=obj.params.get('profile'),
+                           copy_name=copy,
+                           grouping=obj.params.get('grouping'),
+                           family=obj.params.get('family'),
+                           library=obj.params.get('library'),
+                           layout=obj.params.get('layout'),
+                           lyt_params=lyt_attrs,
+                           no_split=obj.params.get('no_split'),
+                           overwrite=obj.params.get('overwrite'),
+                           tags=obj.params.get('tags', []))
+
+    return put_params
 
 def get_params_status(status, logger):
     """Get the status filter"""
@@ -68,6 +127,15 @@ def get_params_status(status, logger):
 
     return status_number
 
+def get_scope(deprec, deprec_only):
+    """Get scope value."""
+    if deprec:
+        return DSS_OBJ_ALL
+    elif deprec_only:
+        return DSS_OBJ_DEPRECATED
+    else:
+        return DSS_OBJ_ALIVE
+
 def handle_sort_option(params, resource, logger, **kwargs):
     """Handle the sort/rsort option"""
 
@@ -77,6 +145,7 @@ def handle_sort_option(params, resource, logger, **kwargs):
 
     for key in ['sort', 'rsort']:
         if params.get(key):
+
             if isinstance(resource, LayoutInfo):
                 attrs_sort = list(resource.get_sort_fields().keys())
             else:
@@ -144,6 +213,23 @@ def set_library(obj):
     if not obj.library:
         obj.library = cfg.get_default_library(obj.family)
 
+def str_to_timestamp(value):
+    """
+    Check that the date 'value' has a correct format and return it as
+    timestamp
+    """
+    try:
+        if value.__contains__(' '):
+            element = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        elif value.__contains__('-'):
+            element = datetime.datetime.strptime(value, "%Y-%m-%d")
+        else:
+            raise ValueError()
+    except ValueError:
+        raise ArgumentTypeError("%s is not a valid date format" % value)
+
+    return datetime.datetime.timestamp(element)
+
 def uncase_fstype(choices):
     """Check if an uncase FS type is a valid choice."""
     def find_choice(choice):
@@ -153,46 +239,3 @@ def uncase_fstype(choices):
                 return choices[key]
         return choice
     return find_choice
-
-def attr_convert(usr_attr):
-    """Convert k/v pairs as expressed by the user into a dictionnary."""
-    tkn_iter = shlex(usr_attr, posix=True)
-    tkn_iter.whitespace = '=,'
-    tkn_iter.whitespace_split = True
-
-    kv_pairs = list(tkn_iter) # [k0, v0, k1, v1...]
-
-    if len(kv_pairs) % 2 != 0:
-        print(kv_pairs)
-        raise ValueError("Invalid attribute string")
-
-    return dict(zip(kv_pairs[0::2], kv_pairs[1::2]))
-
-def create_put_params(obj, copy):
-    """Create the put params from the arguments"""
-    lyt_attrs = obj.params.get('layout_params')
-    if lyt_attrs is not None:
-        lyt_attrs = attr_convert(lyt_attrs)
-        obj.logger.debug("Loaded layout params set %r", lyt_attrs)
-
-    put_params = PutParams(profile=obj.params.get('profile'),
-                           copy_name=copy,
-                           grouping=obj.params.get('grouping'),
-                           family=obj.params.get('family'),
-                           library=obj.params.get('library'),
-                           layout=obj.params.get('layout'),
-                           lyt_params=lyt_attrs,
-                           no_split=obj.params.get('no_split'),
-                           overwrite=obj.params.get('overwrite'),
-                           tags=obj.params.get('tags', []))
-
-    return put_params
-
-def get_scope(deprec, deprec_only):
-    """Set scope value."""
-    if deprec:
-        return DSS_OBJ_ALL
-    elif deprec_only:
-        return DSS_OBJ_DEPRECATED
-    else:
-        return DSS_OBJ_ALIVE
