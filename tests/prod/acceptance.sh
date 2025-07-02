@@ -98,7 +98,7 @@ function setup_test
 
         $start_tlc
         $start_phobosd
-        $phobos ping phobosd
+        $phobos phobosd ping
         if ! $database_online; then
             setup_tape
         fi

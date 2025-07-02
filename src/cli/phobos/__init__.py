@@ -34,7 +34,6 @@ import sys
 import os
 
 from phobos.core.admin import Client as AdminClient
-from phobos.core.ffi import ResourceFamily
 from phobos.core.store import (attrs_as_dict, DelParams, UtilClient)
 from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
                                env_error_format, XferOptHandler)
@@ -49,8 +48,10 @@ from phobos.cli.target.lib import LibOptHandler
 from phobos.cli.target.lock import LocksOptHandler
 from phobos.cli.target.logs import LogsOptHandler
 from phobos.cli.target.object import ObjectOptHandler
+from phobos.cli.target.phobosd import PhobosdOptHandler
 from phobos.cli.target.rados import RadosPoolOptHandler
 from phobos.cli.target.tape import TapeOptHandler
+from phobos.cli.target.tlc import TLCOptHandler
 
 
 def mput_file_line_parser(line):
@@ -557,85 +558,6 @@ class SchedOptHandler(BaseOptHandler):
             sys.exit(abs(err.errno))
 
 
-class PhobosdPingOptHandler(BaseOptHandler):
-    """Phobosd ping"""
-    label = 'phobosd'
-    descr = 'ping local phobosd process'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-class TLCPingOptHandler(BaseOptHandler):
-    """TLC ping"""
-    label = 'tlc'
-    descr = 'ping the Tape Library Controler'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(TLCPingOptHandler, cls).add_options(parser)
-        parser.add_argument('--library', help="Library of the TLC to ping")
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-class PingOptHandler(BaseOptHandler):
-    """Ping phobos daemon"""
-    label = 'ping'
-    descr = 'ping the phobos daemons'
-    verbs = [
-        PhobosdPingOptHandler,
-        TLCPingOptHandler,
-    ]
-    family = None
-    library = None
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add ping option to the parser"""
-        super(PingOptHandler, cls).add_options(parser)
-        parser.set_defaults(verb=cls.label)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    def exec_phobosd(self):
-        """Ping the lrs daemon to check if it is online."""
-        try:
-            with AdminClient(lrs_required=True) as adm:
-                adm.ping_lrs()
-
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-        self.logger.info("Ping sent to phobosd successfully")
-
-    def exec_tlc(self):
-        """Ping the TLC daemon to check if it is online."""
-        self.family = ResourceFamily(ResourceFamily.RSC_TAPE)
-        set_library(self)
-
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                adm.ping_tlc(self.library)
-
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-        self.logger.info("Ping sent to TLC %s successfully", self.library)
-
-
 HANDLERS = [
     # Resource interfaces
     CopyOptHandler,
@@ -648,11 +570,12 @@ HANDLERS = [
     LocksOptHandler,
     LogsOptHandler,
     ObjectOptHandler,
-    PingOptHandler,
+    PhobosdOptHandler,
     RadosPoolOptHandler,
     RenameOptHandler,
     SchedOptHandler,
     TapeOptHandler,
+    TLCOptHandler,
     UndeleteOptHandler,
 
     # Store command interfaces

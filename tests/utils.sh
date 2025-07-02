@@ -57,7 +57,7 @@ function wait_for_lrs()
     local Nretry=10
     local N=0
 
-    while ! $phobos ping phobosd; do
+    while ! $phobos phobosd ping; do
         local N=$((N+1))
 
         if [ $N -ge $Nretry ]; then

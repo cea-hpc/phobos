@@ -47,9 +47,9 @@ function cleanup
 function test_ping_phobosd
 {
     invoke_lrs
-    $valg_phobos ping phobosd || error "Phobosd ping should be successful"
+    $valg_phobos phobosd ping || error "Phobosd ping should be successful"
     waive_lrs
-    $valg_phobos ping phobosd && error "Phobosd ping should fail"
+    $valg_phobos phobosd ping && error "Phobosd ping should fail"
 
     return 0
 }
@@ -57,27 +57,27 @@ function test_ping_phobosd
 function test_ping_tlc
 {
     # No TLC
-    $valg_phobos ping tlc && error "TLC ping should fail"
-    $valg_phobos ping tlc --library library_bis && \
+    $valg_phobos tlc ping && error "TLC ping should fail"
+    $valg_phobos tlc ping --library library_bis && \
         error "TLC library_bis ping should fail"
 
     # Only TLC legacy
     invoke_tlc
-    $valg_phobos ping tlc || error "TLC ping should be successful"
-    $valg_phobos ping tlc --library library_bis && \
+    $valg_phobos tlc ping || error "TLC ping should be successful"
+    $valg_phobos tlc ping --library library_bis && \
         error "TLC library_bis ping should fail"
     waive_tlc
 
     # Only TLC library_bis
     invoke_tlc_bis
-    $valg_phobos ping tlc && error "TLC ping should fail"
-    $valg_phobos ping tlc --library library_bis || \
+    $valg_phobos tlc ping && error "TLC ping should fail"
+    $valg_phobos tlc ping --library library_bis || \
         error "TLC library_bis ping should be successful"
 
     # TLC legacy and library_bis
     invoke_tlc
-    $valg_phobos ping tlc || error "TLC ping should be successful"
-    $valg_phobos ping tlc --library library_bis || \
+    $valg_phobos tlc ping || error "TLC ping should be successful"
+    $valg_phobos tlc ping --library library_bis || \
         error "TLC library_bis ping should be successful"
     waive_tlc
     waive_tlc_bis

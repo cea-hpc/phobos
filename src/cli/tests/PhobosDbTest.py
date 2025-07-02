@@ -229,12 +229,12 @@ class MigratorTest(unittest.TestCase):
 
             # Check that phobosd is running
             nb_try = 0
-            process = Popen('$phobos ping phobosd', shell=True, stdout=PIPE)
+            process = Popen('$phobos phobosd ping', shell=True, stdout=PIPE)
             result, _ = process.communicate()
             while process.returncode and nb_try < 5:
                 time.sleep(0.5)
                 nb_try += 1
-                process = Popen('$phobos ping phobosd', shell=True, stdout=PIPE)
+                process = Popen('$phobos phobosd ping', shell=True, stdout=PIPE)
                 result, _ = process.communicate()
 
             if process.returncode:
