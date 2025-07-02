@@ -1,6 +1,7 @@
 # CHANGELOG UPDATES
 
 ## Next
+ * WARNING: the db schema moves from 3.0 to 3.2 and a migration is needed
  * WARNING: change the `phobos ping [phobosd|tlc]` command to
    `phobos phobosd ping` and `phobos tlc ping`
  * store: existing object grouping is now taken into account when creating a
