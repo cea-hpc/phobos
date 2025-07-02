@@ -43,8 +43,9 @@ enum pho_cfg_params_lrs {
     PHO_CFG_LRS_sync_wsize_kb,
     PHO_CFG_LRS_max_health,
     PHO_CFG_LRS_fifo_max_write_per_grouping,
+    PHO_CFG_LRS_locate_lock_expirancy,
 
-    PHO_CFG_LRS_LAST = PHO_CFG_LRS_fifo_max_write_per_grouping,
+    PHO_CFG_LRS_LAST = PHO_CFG_LRS_locate_lock_expirancy,
 };
 
 extern const struct pho_config_item cfg_lrs[];

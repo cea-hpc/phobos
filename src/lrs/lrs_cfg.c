@@ -84,6 +84,11 @@ const struct pho_config_item cfg_lrs[] = {
         .name    = "fifo_max_write_per_grouping",
         .value   = "0",
     },
+    [PHO_CFG_LRS_locate_lock_expirancy] = {
+        .section = "lrs",
+        .name    = "locate_lock_expirancy",
+        .value   = "300000",
+    },
 };
 
 static int _get_unsigned_long_from_string(const char *value,
