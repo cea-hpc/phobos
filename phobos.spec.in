@@ -170,7 +170,7 @@ register-python-argcomplete phobos > %{buildroot}/%{_sysconfdir}/bash_completion
 %{_mandir}/man1/*
 
 %config(noreplace) %{_sysconfdir}/phobos.conf
-%config(noreplace) %{_sysconfdir}/bash_completion.d/phobos-argcomplete.sh
+%config %{_sysconfdir}/bash_completion.d/phobos-argcomplete.sh
 %dir %{phobosdocdir}
 %doc %{phobosdocdir}/README.md
 %doc %{phobosdocdir}/template.conf
