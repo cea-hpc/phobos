@@ -24,7 +24,7 @@ Example:
     families = tape,dir,rados_pool
 
 *fifo_max_write_per_grouping*
----------------
+-----------------------------
 
 The **fifo_max_write_per_grouping** parameter defines the maximum number of
 concurrent write operation per grouping per fifo scheduler.
