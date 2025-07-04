@@ -17,6 +17,7 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/cli/action/get.py \
 	   phobos/cli/action/getmd.py \
 	   phobos/cli/action/list.py \
+	   phobos/cli/action/locate.py \
 	   phobos/cli/action/lock.py \
 	   phobos/cli/action/mput.py \
 	   phobos/cli/action/ping.py \

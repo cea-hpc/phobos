@@ -27,6 +27,7 @@ import sys
 from phobos.cli.action.delete import DeleteOptHandler
 from phobos.cli.action.get import GetOptHandler
 from phobos.cli.action.getmd import GetMDOptHandler
+from phobos.cli.action.locate import LocateOptHandler
 from phobos.cli.action.mput import MPutOptHandler
 from phobos.cli.action.put import PutOptHandler
 from phobos.cli.action.rename import RenameOptHandler
@@ -178,6 +179,34 @@ class StoreGetOptHandler(XferOptHandler):
                                  oid, uuid)
             else:
                 self.logger.info("Object '%s' successfully retrieved", oid)
+
+
+class StoreLocateOptHandler(BaseResourceOptHandler):
+    """Locate object handler."""
+
+    label = 'locate'
+    descr = 'Find the hostname which has the best access to an object if any'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add command options."""
+        LocateOptHandler(cls).add_options(parser)
+
+    def exec_locate(self):
+        """Locate object"""
+        client = UtilClient()
+        try:
+            hostname, _ = client.object_locate(
+                self.params.get('oid'),
+                self.params.get('uuid'),
+                self.params.get('version'),
+                self.params.get('focus_host'),
+                self.params.get('copy_name'))
+
+            print(hostname)
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
 
 class StorePutOptHandler(XferOptHandler):

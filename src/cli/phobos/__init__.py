@@ -32,7 +32,6 @@ import os
 import sys
 
 from phobos.core.admin import Client as AdminClient
-from phobos.core.store import UtilClient
 from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
                                env_error_format)
 from phobos.cli.target.copy import CopyOptHandler
@@ -46,55 +45,12 @@ from phobos.cli.target.object import ObjectOptHandler
 from phobos.cli.target.phobosd import PhobosdOptHandler
 from phobos.cli.target.rados import RadosPoolOptHandler
 from phobos.cli.target.store import (StoreDeleteOptHandler, StoreGetOptHandler,
-                                     StoreGetMDOptHandler, StoreMPutOptHandler,
+                                     StoreGetMDOptHandler,
+                                     StoreLocateOptHandler, StoreMPutOptHandler,
                                      StorePutOptHandler, StoreRenameOptHandler,
                                      StoreUndeleteOptHandler)
 from phobos.cli.target.tape import TapeOptHandler
 from phobos.cli.target.tlc import TLCOptHandler
-
-
-class LocateOptHandler(BaseOptHandler):
-    """Locate object handler."""
-
-    label = 'locate'
-    descr = 'Find the hostname which has the best access to an object if any'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add command options."""
-        super(LocateOptHandler, cls).add_options(parser)
-        parser.set_defaults(verb=cls.label)
-        parser.add_argument('oid', help='Object ID to locate')
-        parser.add_argument('--uuid', help='UUID of the object')
-        parser.add_argument('--version', help='Version of the object',
-                            type=int, default=0)
-        parser.add_argument('--focus-host',
-                            help='Suggested hostname for early locking')
-        parser.add_argument('-c', '--copy-name',
-                            help='Copy of the object to locate')
-
-
-    def exec_locate(self):
-        """Locate object"""
-        client = UtilClient()
-        try:
-            hostname, _ = client.object_locate(
-                self.params.get('oid'),
-                self.params.get('uuid'),
-                self.params.get('version'),
-                self.params.get('focus_host'),
-                self.params.get('copy_name'))
-
-            print(hostname)
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
 
 
 class FairShareOptHandler(BaseOptHandler):
@@ -193,7 +149,6 @@ HANDLERS = [
     DriveOptHandler,
     ExtentOptHandler,
     LibOptHandler,
-    LocateOptHandler,
     LocksOptHandler,
     LogsOptHandler,
     ObjectOptHandler,
@@ -205,6 +160,7 @@ HANDLERS = [
 
     # Store command interfaces
     StoreDeleteOptHandler,
+    StoreLocateOptHandler,
     StoreGetOptHandler,
     StoreGetMDOptHandler,
     StoreMPutOptHandler,
