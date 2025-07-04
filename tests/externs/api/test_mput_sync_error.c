@@ -90,7 +90,8 @@ static void sync_with_error(void **state)
         xfer.xd_targets[i].xt_size = st.st_size;
         xfer.xd_targets[i].xt_objid = xstrdup(str);
 
-        xfer.xd_params.put.family = PHO_RSC_TAPE;
+        /* Get default family from environment variable instead */
+        xfer.xd_params.put.family = PHO_RSC_INVAL;
     }
 
     context->mocks.mock_failure_after_second_partial_release =

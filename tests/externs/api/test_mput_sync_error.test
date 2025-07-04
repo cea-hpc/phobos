@@ -35,15 +35,36 @@ test_bin="$test_bin_dir/test_mput_sync_error"
 . $test_dir/test_launch_daemon.sh
 . $test_dir/tape_drive.sh
 
-function setup
+export PHOBOS_IO_fs_block_size="dir=0,tape=0"
+
+function setup_dir
 {
+    local nb_req="$1"
+
+    export PHOBOS_LRS_families="dir"
+
+    setup_tables
+    DAEMON_OPTIONS=("PHOBOS_LRS_sync_nb_req=\"dir=$nb_req\"")
+    invoke_lrs
+
+    local dir="$(mktemp -d /tmp/test.pho.XXXX)"
+    $phobos dir add --unlock $dir
+
+    $phobos dir format $dir
+}
+
+function setup_tape
+{
+    local nb_req="$1"
+
     local N_TAPES=1
     local N_DRIVES=1
 
     export PHOBOS_LRS_families="tape"
 
     setup_tables
-    invoke_daemons "PHOBOS_LRS_sync_nb_req=\"tape=1\""
+    DAEMON_OPTIONS=("PHOBOS_LRS_sync_nb_req=\"tape=$nb_req\"")
+    invoke_daemons
 
     local tape="$(get_tapes L5 $N_TAPES)"
     $phobos tape add --type lto5 "$tape"
@@ -54,11 +75,60 @@ function setup
     $phobos tape format $tape --unlock
 }
 
-function cleanup
+function cleanup_dir
+{
+    waive_lrs
+    drop_tables
+}
+
+function cleanup_tape
 {
     waive_daemons
     drain_all_drives
     drop_tables
 }
 
-TESTS=("setup; $LOG_COMPILER $test_bin 2; cleanup")
+function test_mput_error
+{
+    local family="$1"
+    local object_count="$2"
+    local sync_nb_req="$3"
+
+    local output
+    local expected_count=$((sync_nb_req * 2))
+
+    export PHOBOS_LRS_sync_nb_req="$family=$sync_nb_req"
+    export PHOBOS_STORE_default_family="$family"
+
+    $LOG_COMPILER $test_bin $object_count
+
+    local object_count="$($phobos object list | wc -l)"
+    if ((object_count != expected_count)); then
+        error "'$expected_count' object(s) should have been inserted, found '$object_count'"
+    fi
+
+    local copy_count="$($phobos copy list | wc -l)"
+    if ((copy_count != expected_count)); then
+        error "'$expected_count' copy/copies should have been inserted, found '$copy_count'"
+    fi
+
+    local extent_count="$($phobos extent list | wc -l)"
+    if ((extent_count != expected_count)); then
+        error "'$expected_count' extent(s) should have been inserted, found '$extent_count'"
+    fi
+
+    local object_on_medium_count="$($phobos $family list -o stats.nb_obj)"
+    if ((object_on_medium_count != expected_count)); then
+        error "The $family should only have '$expected_count' object registered, found '$object_on_tape_count'"
+    fi
+}
+
+TESTS=("setup_dir 1; test_mput_error dir 3 1; cleanup_dir"
+       "setup_dir 2; test_mput_error dir 5 2; cleanup_dir"
+       "setup_dir 3; test_mput_error dir 8 3; cleanup_dir")
+
+if [[ -w /dev/changer ]]; then
+    TESTS+=("setup_tape 1; test_mput_error tape 3 1; cleanup_tape"
+            "setup_tape 2; test_mput_error tape 5 2; cleanup_tape"
+            "setup_tape 3; test_mput_error tape 8 3; cleanup_tape")
+fi
