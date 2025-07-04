@@ -128,6 +128,21 @@ static inline bool pho_request_is_release_read(const pho_req_t *req)
 }
 
 /**
+ * Request partial release write checker.
+ *
+ * \param[in]       req         Request.
+ *
+ * \return                      true if the request is a partial release write
+ *                              one, false else.
+ */
+static inline bool pho_request_is_partial_release_write(const pho_req_t *req)
+{
+    return (req->release != NULL &&
+            req->release->kind == PHO_REQUEST_KIND__RQ_RELEASE_WRITE &&
+            req->release->partial);
+}
+
+/**
  * Request release write checker.
  *
  * \param[in]       req         Request.

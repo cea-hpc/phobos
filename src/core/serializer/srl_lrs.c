@@ -73,6 +73,8 @@ const char *pho_srl_request_kind_str(pho_req_t *req)
         return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_READ];
     if (pho_request_is_release_read(req))
         return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_RELEASE_READ];
+    if (pho_request_is_partial_release_write(req))
+        return "partial write release";
     if (pho_request_is_release_write(req))
         return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_RELEASE_WRITE];
     if (pho_request_is_format(req))

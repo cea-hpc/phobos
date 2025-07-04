@@ -25,8 +25,6 @@
 # Integration test for mput with error on partial release handling
 #
 
-skip "Test cannot succeed currently"
-
 test_bin_dir=$PWD
 test_dir=$(dirname $(readlink -e $0))
 test_bin="$test_bin_dir/test_mput_sync_error"
@@ -44,7 +42,8 @@ function setup_dir
     export PHOBOS_LRS_families="dir"
 
     setup_tables
-    DAEMON_OPTIONS=("PHOBOS_LRS_sync_nb_req=\"dir=$nb_req\"")
+    DAEMON_OPTIONS=("PHOBOS_LRS_sync_nb_req=\"dir=$nb_req\"" "PHOBOS_LRS_sync_time_ms=\"dir=9999999999\""
+                    "PHOBOS_LRS_sync_wsize_kb=\"dir=999999999999\"")
     invoke_lrs
 
     local dir="$(mktemp -d /tmp/test.pho.XXXX)"

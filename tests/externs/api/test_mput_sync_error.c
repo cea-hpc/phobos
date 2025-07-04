@@ -23,34 +23,17 @@
  * \brief  Tests for the mput with error on partial release handling
  */
 
-/* phobos stuff */
-#include "dss_lock.h"
-#include "phobos_store.h"
-#include "phobos_admin.h"
-#include "pho_common.h" /* get_hostname */
-#include "pho_dss.h"
-#include "pho_cfg.h"
-#include "pho_ldm.h"
-#include "pho_test_utils.h"
-#include "test_setup.h"
-
-/* standard stuff */
-#include <errno.h>
 #include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#include <glib.h>
-#include <time.h>
+#include <sys/types.h>
 
-/* cmocka stuff */
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <cmocka.h>
+
+#include "phobos_store.h"
+#include "pho_test_utils.h"
 
 #include <../../../src/layout/raid_common.h>
 

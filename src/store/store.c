@@ -1505,7 +1505,7 @@ static int store_lrs_response_process(struct phobos_handle *pho,
     int rc;
 
     pho_debug("%s %d for %d objid(s) received a response of type %s",
-              processor_type2str(proc), resp->req_id,
+              processor_type2str(proc), proc->current_target,
               proc->xfer->xd_ntargets, pho_srl_response_kind_str(resp));
 
     rc = processor_communicate(proc, &pho->comm, resp, resp->req_id);

@@ -254,6 +254,10 @@ void raid_writer_processor_destroy(struct pho_data_processor *proc)
 
         io_context->write.written_extents = NULL;
         io_context->write.to_release_media = NULL;
+        for (j = 0; j < n_total_extents(io_context); ++j) {
+            free(io_context->write.extents[j].uuid);
+            free(io_context->write.extents[j].address.buff);
+        }
         free(io_context->write.extents);
         free(io_context->iods);
         g_string_free(io_context->write.user_md, TRUE);
@@ -1021,6 +1025,34 @@ release:
    return rc;
 }
 
+static int prepare_writer_release_request(struct pho_data_processor *proc,
+                                          pho_resp_t *new_resp)
+{
+    int rc;
+    int i;
+
+    rc = clock_gettime(CLOCK_REALTIME, &proc->writer_start_req);
+    if (rc)
+        LOG_RETURN(-errno, "clock_gettime: unable to get CLOCK_REALTIME");
+
+    if (!pho_response_is_partial_release(new_resp)) {
+        write_resp_destroy(proc);
+        proc->write_resp = copy_response_write_alloc(new_resp);
+    }
+
+    /* prepare release and potential next alloc */
+    proc->writer_release_alloc =
+        xcalloc(2, sizeof(*proc->writer_release_alloc));
+    pho_srl_request_release_alloc(proc->writer_release_alloc,
+                                  proc->write_resp->walloc->n_media, false);
+    for (i = 0; i < proc->write_resp->walloc->n_media; i++) {
+        rsc_id_cpy(proc->writer_release_alloc->release->media[i]->med_id,
+                   proc->write_resp->walloc->media[i]->med_id);
+    }
+
+    return 0;
+}
+
 static int raid_writer_split_setup(struct pho_data_processor *proc,
                                    pho_resp_t *new_resp)
 {
@@ -1036,28 +1068,6 @@ static int raid_writer_split_setup(struct pho_data_processor *proc,
     int i;
 
     ENTRY;
-
-    if (new_resp) {
-        rc = clock_gettime(CLOCK_REALTIME, &proc->writer_start_req);
-        if (rc)
-            LOG_RETURN(-errno, "clock_gettime: unable to get CLOCK_REALTIME");
-
-        if (!pho_response_is_partial_release(new_resp)) {
-            write_resp_destroy(proc);
-            proc->write_resp = copy_response_write_alloc(new_resp);
-        }
-
-
-        /* prepare release and potential next alloc */
-        proc->writer_release_alloc =
-            xcalloc(2, sizeof(*proc->writer_release_alloc));
-        pho_srl_request_release_alloc(proc->writer_release_alloc,
-                                      proc->write_resp->walloc->n_media, false);
-        for (i = 0; i < proc->write_resp->walloc->n_media; i++) {
-            rsc_id_cpy(proc->writer_release_alloc->release->media[i]->med_id,
-                       proc->write_resp->walloc->media[i]->med_id);
-        }
-    }
 
     wresp = proc->write_resp->walloc;
     n_extents = n_total_extents(io_context);
@@ -1419,20 +1429,22 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
 
     /* manage received allocation and partial release */
     if (resp) {
-        struct phobos_global_context *context = phobos_context();
-
-        rc = raid_writer_split_setup(proc, resp);
+        rc = prepare_writer_release_request(proc, resp);
         if (rc)
             goto set_target_rc;
 
         if (pho_response_is_partial_release(resp)) {
+            struct phobos_global_context *context = phobos_context();
+
             if (context->mocks.mock_failure_after_second_partial_release !=
-                    NULL) {
+                    NULL)
                 rc = context->mocks.mock_failure_after_second_partial_release();
-                if (rc)
-                    goto set_target_rc;
-            }
+        } else {
+            rc = raid_writer_split_setup(proc, resp);
         }
+
+        if (rc)
+            goto check_for_release;
     }
 
     /* write */
@@ -1463,6 +1475,7 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
         }
     }
 
+check_for_release:
     need_full_release = rc || ((split_ended && !target_ended) ||
                           need_alloc_for_next_target || last_target_ended);
 
