@@ -1351,30 +1351,33 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
         rc = xfer_remain_to_write_per_medium(
                  proc, &all_target_remain_to_write_per_medium);
         if (rc)
-            return rc;
+            goto set_target_rc;
 
         *reqs = xcalloc(1, sizeof(**reqs));
         *n_reqs = 1;
         raid_writer_build_allocation_req(proc, *reqs,
                                          all_target_remain_to_write_per_medium);
-        return 0;
+        goto set_target_rc;
     }
 
     /* manage error */
     if (resp && pho_response_is_error(resp)) {
         proc->xfer->xd_rc = resp->error->rc;
         proc->done = true;
-        LOG_RETURN(proc->xfer->xd_rc,
-                   "%s %d received error %s to last request",
-                   processor_type2str(proc), resp->req_id,
-                   pho_srl_error_kind_str(resp->error));
+
+        LOG_GOTO(set_target_rc, rc = proc->xfer->xd_rc,
+                 "%s %d received error %s to last request",
+                 processor_type2str(proc), resp->req_id,
+                 pho_srl_error_kind_str(resp->error));
 
     }
 
     /* manage release */
     if (resp && pho_response_is_release(resp) &&
-        !pho_response_is_partial_release(resp))
-        return raid_writer_handle_release_resp(proc, resp->release);
+        !pho_response_is_partial_release(resp)) {
+        rc = raid_writer_handle_release_resp(proc, resp->release);
+        goto set_target_rc;
+    }
 
     /* manage received allocation and partial release */
     if (resp) {
@@ -1382,21 +1385,23 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
 
         rc = raid_writer_split_setup(proc, resp);
         if (rc)
-            return rc;
+            goto set_target_rc;
 
         if (pho_response_is_partial_release(resp)) {
             if (context->mocks.mock_failure_after_second_partial_release !=
                     NULL) {
                 rc = context->mocks.mock_failure_after_second_partial_release();
                 if (rc)
-                    return rc;
+                    goto set_target_rc;
             }
         }
     }
 
     /* write */
-    if (!proc->buff.size)
-        return 0;
+    if (!proc->buff.size) {
+        rc = 0;
+        goto set_target_rc;
+    }
 
     rc = io_context->ops->write_from_buff(proc);
 
@@ -1461,6 +1466,15 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
         raid_writer_build_allocation_req(proc, *reqs + *n_reqs,
                                          all_target_remain_to_write_per_medium);
         (*n_reqs)++;
+    }
+
+set_target_rc:
+    if (rc) {
+        if (proc->xfer->xd_rc == 0)
+            proc->xfer->xd_rc = rc;
+
+        for (i = proc->current_target; i < proc->xfer->xd_ntargets; i++)
+            proc->xfer->xd_targets[i].xt_rc = rc;
     }
 
     return rc;

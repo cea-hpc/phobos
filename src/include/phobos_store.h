@@ -188,6 +188,7 @@ struct pho_xfer_target {
     int               xt_fd;      /**< FD of the source/destination. */
     struct pho_attrs  xt_attrs;   /**< User defined attributes. */
     ssize_t           xt_size;    /**< Amount of data to write. */
+    int               xt_rc;      /**< Outcome for this target's xfer. */
 };
 
 /**

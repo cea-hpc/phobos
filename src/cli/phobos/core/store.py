@@ -365,6 +365,7 @@ class XferTarget(Structure): # pylint: disable=too-many-instance-attributes
         ("xt_fd", c_int),
         ("xt_attrs", PhoAttrs),
         ("xt_size", c_ssize_t),
+        ("xt_rc", c_int),
     ]
 
     def __init__(self):
@@ -372,6 +373,7 @@ class XferTarget(Structure): # pylint: disable=too-many-instance-attributes
         self.xt_fd = -1
         self.xt_version = -1
         self.xt_size = -1
+        self.xt_rc = 0
 
     @property
     def xt_objid(self):

@@ -391,7 +391,6 @@ static int processor_communicate(struct pho_data_processor *proc,
     if (rc)
         return rc;
 
-
     /* A release generates no new IO. */
     if (pho_response_is_release(resp) &&
         !pho_response_is_partial_release(resp)) {
@@ -1038,12 +1037,15 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
     if (!xfer->xd_targets->xt_objid && !xfer->xd_targets->xt_objuuid)
         LOG_RETURN(rc = -EINVAL, "uuid or oid must be provided");
 
-    if (xfer->xd_op == PHO_XFER_OP_GET)
+    if (xfer->xd_op == PHO_XFER_OP_GET) {
+        proc->type = PHO_PROC_DECODER;
         /* Keep dss_lazy_find with the get to keep the same behavior */
         rc = dss_lazy_find_object(dss, xfer->xd_targets->xt_objid,
                                   xfer->xd_targets->xt_objuuid,
                                   xfer->xd_targets->xt_version, &obj);
-    else
+    } else {
+        proc->type = (xfer->xd_op == PHO_XFER_OP_DEL ? PHO_PROC_ERASER :
+                                                       PHO_PROC_COPIER);
         rc = dss_find_object(dss, xfer->xd_targets->xt_objid,
                              xfer->xd_targets->xt_objuuid,
                              xfer->xd_targets->xt_version,
@@ -1051,6 +1053,7 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
                                 xfer->xd_params.delete.scope :
                                 xfer->xd_params.copy.get.scope,
                              &obj);
+    }
     if (rc)
         LOG_RETURN(rc, "Cannot find object for objid:'%s'",
                    xfer->xd_targets->xt_objid);
@@ -1172,6 +1175,9 @@ static int store_end_encoder_xfer(struct phobos_handle *pho,
     int i;
 
     for (i = 0; i < xfer->xd_ntargets; i++) {
+        if (xfer->xd_targets[i].xt_rc)
+            continue;
+
         pho_debug("Saving layout for objid:'%s'", xfer->xd_targets[i].xt_objid);
         rc = dss_extent_insert(&pho->dss, encoder->dest_layout[i].extents,
                                encoder->dest_layout[i].ext_count);
@@ -1236,6 +1242,15 @@ static int store_end_decoder_xfer(struct phobos_handle *pho,
     return rc;
 }
 
+static bool success_on_partial_put(struct pho_xfer_desc *xfer)
+{
+    for (int i = 0; i < xfer->xd_ntargets; i++)
+        if (xfer->xd_targets[i].xt_rc == 0)
+            return true;
+
+    return false;
+}
+
 /**
  * Mark the end of a transfer (successful or not) by updating the processor
  * structure, saving the data processor layout to the DSS if necessary, properly
@@ -1253,6 +1268,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
 {
     struct pho_data_processor *proc = &pho->processors[xfer_idx];
     struct pho_xfer_desc *xfer = &pho->xfers[xfer_idx];
+    bool update_partial_put;
     int i;
 
     /* Don't end an encoder twice */
@@ -1264,7 +1280,12 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     pho->n_ended_xfers++;
     proc->done = true;
 
-    if (xfer->xd_rc || rc)
+    /* If a part of the put suceeded, the objects, copies and extents that were
+     * written should be properly updated and kept in the database, so don't
+     * skip them in case of errors.
+     */
+    update_partial_put = is_encoder(proc) && success_on_partial_put(xfer);
+    if (!update_partial_put && (xfer->xd_rc || rc))
         goto cont;
 
     /* Once the encoder is done and successful, save the layout and metadata */
@@ -1287,14 +1308,15 @@ cont:
                  is_uuid_arg(&xfer->xd_targets[i], xfer->xd_op) ?
                     "uuid" : "oid",
                  oid_or_uuid_val(&xfer->xd_targets[i], xfer->xd_op),
-                 xfer->xd_rc ? "failed" : "succeeded");
+                 xfer->xd_targets[i].xt_rc ? "failed" : "succeeded");
 
     /* Cleanup metadata for failed PUT */
     if (pho->md_created && pho->md_created[xfer_idx] &&
             xfer->xd_op == PHO_XFER_OP_PUT && xfer->xd_rc) {
         for (i = 0; i < xfer->xd_ntargets; i++)
-            object_md_del(&pho->dss, &xfer->xd_targets[i],
-                          xfer->xd_params.put.copy_name);
+            if (xfer->xd_targets[i].xt_rc)
+                object_md_del(&pho->dss, &xfer->xd_targets[i],
+                              xfer->xd_params.put.copy_name);
     }
 
     /* Cleanup metadata for failed COPY */
@@ -1735,6 +1757,7 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
                pho_completion_cb_t cb, void *udata)
 {
     size_t i;
+    size_t j;
     int rc;
 
     /* Ensure conf is loaded, to retrieve default values */
@@ -1745,6 +1768,8 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
     for (i = 0; i < n; i++) {
         xfers[i].xd_op = PHO_XFER_OP_PUT;
         xfers[i].xd_rc = 0;
+        for (j = 0; j < xfers[i].xd_ntargets; j++)
+            xfers[i].xd_targets[j].xt_rc = 0;
 
         rc = fill_put_params(&xfers[i]);
         if (rc)
@@ -1768,6 +1793,8 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
     for (i = 0; i < n; i++) {
         xfers[i].xd_op = PHO_XFER_OP_GET;
         xfers[i].xd_rc = 0;
+        for (j = 0; j < xfers[i].xd_ntargets; j++)
+            xfers[i].xd_targets[j].xt_rc = 0;
         /* If the uuid is given by the user, we don't own that memory.
          * The simplest solution is to duplicate it here so that it can
          * be freed at the end by pho_xfer_desc_clean().
@@ -1852,11 +1879,14 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
 int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
                  pho_completion_cb_t cb, void *udata)
 {
+    size_t j;
     size_t i;
 
     for (i = 0; i < n; i++) {
         xfers[i].xd_op = PHO_XFER_OP_GETMD;
         xfers[i].xd_rc = 0;
+        for (j = 0; j < xfers[i].xd_ntargets; j++)
+            xfers[i].xd_targets[j].xt_rc = 0;
     }
 
     return phobos_xfer(xfers, n, cb, udata);
@@ -1864,11 +1894,14 @@ int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
 
 int phobos_delete(struct pho_xfer_desc *xfers, size_t num_xfers)
 {
+    size_t j;
     size_t i;
 
     for (i = 0; i < num_xfers; i++) {
         xfers[i].xd_op = PHO_XFER_OP_DEL;
         xfers[i].xd_rc = 0;
+        for (j = 0; j < xfers[i].xd_ntargets; j++)
+            xfers[i].xd_targets[j].xt_rc = 0;
         /* If the uuid is given by the user, we don't own that memory.
          * The simplest solution is to duplicate it here so that it can
          * be freed at the end by pho_xfer_desc_clean().
@@ -1890,10 +1923,13 @@ int phobos_delete(struct pho_xfer_desc *xfers, size_t num_xfers)
 int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers)
 {
     size_t i;
+    size_t j;
 
     for (i = 0; i < num_xfers; i++) {
         xfers[i].xd_op = PHO_XFER_OP_UNDEL;
         xfers[i].xd_rc = 0;
+        for (j = 0; j < xfers[i].xd_ntargets; j++)
+            xfers[i].xd_targets[j].xt_rc = 0;
     }
 
     return phobos_xfer(xfers, num_xfers, NULL, NULL);
@@ -2080,6 +2116,7 @@ int phobos_copy(struct pho_xfer_desc *xfers, size_t n,
                 pho_completion_cb_t cb, void *udata)
 {
     size_t i;
+    size_t j;
     int rc;
 
     /* Ensure conf is loaded, to retrieve default values */
@@ -2090,6 +2127,8 @@ int phobos_copy(struct pho_xfer_desc *xfers, size_t n,
     for (i = 0; i < n; i++) {
         xfers[i].xd_op = PHO_XFER_OP_COPY;
         xfers[i].xd_rc = 0;
+        for (j = 0; j < xfers[i].xd_ntargets; j++)
+            xfers[i].xd_targets[j].xt_rc = 0;
         /* If the uuid is given by the user, we don't own that memory.
          * The simplest solution is to duplicate it here so that it can
          * be freed at the end by pho_xfer_desc_clean().
@@ -2115,10 +2154,13 @@ int phobos_copy(struct pho_xfer_desc *xfers, size_t n,
 int phobos_copy_delete(struct pho_xfer_desc *xfers, size_t num_xfers)
 {
     size_t i;
+    size_t j;
 
     for (i = 0; i < num_xfers; i++) {
         xfers[i].xd_op = PHO_XFER_OP_DEL;
         xfers[i].xd_rc = 0;
+        for (j = 0; j < xfers[i].xd_ntargets; j++)
+            xfers[i].xd_targets[j].xt_rc = 0;
         /* If the uuid is given by the user, we don't own that memory.
          * The simplest solution is to duplicate it here so that it can
          * be freed at the end by pho_xfer_desc_clean().
