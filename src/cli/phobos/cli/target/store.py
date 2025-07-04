@@ -29,6 +29,7 @@ from phobos.cli.action.get import GetOptHandler
 from phobos.cli.action.getmd import GetMDOptHandler
 from phobos.cli.action.mput import MPutOptHandler
 from phobos.cli.action.put import PutOptHandler
+from phobos.cli.action.rename import RenameOptHandler
 from phobos.cli.action.undelete import UndeleteOptHandler
 from phobos.cli.common import (BaseResourceOptHandler, env_error_format,
                                XferOptHandler)
@@ -287,6 +288,30 @@ class StoreMPutOptHandler(StorePutOptHandler):
         self.logger.error("'mput' is a deprecated command, use 'put --file' "
                           "instead")
         sys.exit(os.EX_USAGE)
+
+class StoreRenameOptHandler(BaseResourceOptHandler):
+    """Rename object handler"""
+    label = "rename"
+    descr = 'Change the oid of an object generation, '\
+            'among living or deprecated objects tables.'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add command options for object rename."""
+        RenameOptHandler(cls).add_options(parser)
+
+    def exec_rename(self):
+        """Rename object"""
+        client = UtilClient()
+        old_oid = self.params.get('oid')
+        uuid = self.params.get('uuid')
+        new_oid = self.params.get('new_oid')
+
+        try:
+            client.object_rename(old_oid, uuid, new_oid)
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
 
 class StoreUndeleteOptHandler(BaseResourceOptHandler):

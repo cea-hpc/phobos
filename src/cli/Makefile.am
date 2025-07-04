@@ -21,6 +21,7 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/cli/action/mput.py \
 	   phobos/cli/action/ping.py \
 	   phobos/cli/action/put.py \
+	   phobos/cli/action/rename.py \
 	   phobos/cli/action/resource_delete.py \
 	   phobos/cli/action/status.py \
 	   phobos/cli/action/undelete.py \
