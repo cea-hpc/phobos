@@ -68,6 +68,16 @@ def check_output_attributes(attrs, out_attrs, logger):
         logger.error("bad output attributes: %s", " ".join(bad_attrs))
         sys.exit(os.EX_USAGE)
 
+
+class ConfigItem:
+    """Element in Phobos' configuration"""
+
+    def __init__(self, section, key, value):
+        self.section = section
+        self.key = key
+        self.value = value
+
+
 def create_log_filter(library, device, medium, _errno, cause, start, end, \
                       errors): # pylint: disable=too-many-arguments
     """Create a log filter structure with the given parameters."""

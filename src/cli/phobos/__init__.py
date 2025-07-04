@@ -28,12 +28,17 @@ specific command line parameters and the API entry points for phobos to trigger
 actions.
 """
 
-import os
 import sys
 
-from phobos.core.admin import Client as AdminClient
-from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
-                               env_error_format)
+# Without this import, a serialization error occurs because an assert
+# inside protoc fails on pho_request__descriptor when trying to send a request
+# from the store to the lrs. The descriptor inside the request differs from the
+# global descriptor, causing the assert to fail. The descriptor inside the
+# request comes from libphobos_admin, whereas the global descriptor comes from
+# libphobos_store. Keep this import until the problem is resolved.
+import phobos.core.admin # pylint: disable=unused-import
+
+from phobos.cli.common import PhobosActionContext
 from phobos.cli.target.copy import CopyOptHandler
 from phobos.cli.target.dir import DirOptHandler
 from phobos.cli.target.drive import DriveOptHandler
@@ -44,6 +49,7 @@ from phobos.cli.target.logs import LogsOptHandler
 from phobos.cli.target.object import ObjectOptHandler
 from phobos.cli.target.phobosd import PhobosdOptHandler
 from phobos.cli.target.rados import RadosPoolOptHandler
+from phobos.cli.target.sched import SchedOptHandler
 from phobos.cli.target.store import (StoreDeleteOptHandler, StoreGetOptHandler,
                                      StoreGetMDOptHandler,
                                      StoreLocateOptHandler, StoreMPutOptHandler,
@@ -51,95 +57,6 @@ from phobos.cli.target.store import (StoreDeleteOptHandler, StoreGetOptHandler,
                                      StoreUndeleteOptHandler)
 from phobos.cli.target.tape import TapeOptHandler
 from phobos.cli.target.tlc import TLCOptHandler
-
-
-class FairShareOptHandler(BaseOptHandler):
-    """Handler for fair_share configuration parameters"""
-    label = "fair_share"
-    descr = "handler for fair_share configuration parameters"
-    epilog = """If neither --min nor --max are set, this command will query the
-    configuration information from the local daemon and output them to
-    stdout."""
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        super(FairShareOptHandler, cls).add_options(parser)
-        parser.add_argument('-t', '--type', required=True,
-                            help="tape technology")
-        parser.add_argument('--min',
-                            help="of the form r,w,f where r, w and f are "
-                            "integers representing the minimum number of "
-                            "devices that ought to be allocated to the read, "
-                            "write and format schedulers respectively")
-        parser.add_argument('--max',
-                            help="of the form r,w,f where r, w and f are "
-                            "integers representing the maximum number of "
-                            "devices that ought to be allocated to the read, "
-                            "write and format schedulers respectively")
-
-class ConfigItem:
-    """Element in Phobos' configuration"""
-
-    def __init__(self, section, key, value):
-        self.section = section
-        self.key = key
-        self.value = value
-
-
-class SchedOptHandler(BaseOptHandler):
-    """Handler of sched commands"""
-    label = "sched"
-    descr = "update configuration elements of the local scheduler"
-    verbs = [
-        FairShareOptHandler
-    ]
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    def exec_fair_share(self):
-        """Run the fair share command"""
-        _type = self.params.get("type")
-        mins = self.params.get("min")
-        maxs = self.params.get("max")
-
-        config_items = []
-
-        if mins:
-            config_items.append(ConfigItem("io_sched_tape",
-                                           "fair_share_" + _type + "_min",
-                                           mins))
-        if maxs:
-            config_items.append(ConfigItem("io_sched_tape",
-                                           "fair_share_" + _type + "_max",
-                                           maxs))
-
-        try:
-            with AdminClient(lrs_required=True) as adm:
-                if not mins and not maxs:
-                    config_items.append(
-                        ConfigItem("io_sched_tape",
-                                   "fair_share_" + _type + "_min",
-                                   None))
-                    config_items.append(
-                        ConfigItem("io_sched_tape",
-                                   "fair_share_" + _type + "_max",
-                                   None))
-                    adm.sched_conf_get(config_items)
-                else:
-                    adm.sched_conf_set(config_items)
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
 
 
 HANDLERS = [
