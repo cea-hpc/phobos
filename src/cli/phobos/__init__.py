@@ -47,48 +47,10 @@ from phobos.cli.target.phobosd import PhobosdOptHandler
 from phobos.cli.target.rados import RadosPoolOptHandler
 from phobos.cli.target.store import (StoreDeleteOptHandler, StoreGetOptHandler,
                                      StoreGetMDOptHandler, StoreMPutOptHandler,
-                                     StorePutOptHandler)
+                                     StorePutOptHandler,
+                                     StoreUndeleteOptHandler)
 from phobos.cli.target.tape import TapeOptHandler
 from phobos.cli.target.tlc import TLCOptHandler
-
-
-class UndeleteOptHandler(BaseOptHandler):
-    """Undelete objects handler."""
-
-    label = 'undelete'
-    alias = ['undel']
-    descr = 'Move back deprecated objects into phobos namespace'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add command options for undelete object."""
-        super(UndeleteOptHandler, cls).add_options(parser)
-        parser.set_defaults(verb=cls.label)
-        parser.add_argument('oids', nargs='+', help='Object OIDs to undelete')
-        parser.add_argument('--uuid', help='UUID of the object')
-
-    def exec_undelete(self):
-        """Undelete objetc"""
-        client = UtilClient()
-        oids = self.params.get('oids')
-        uuid = self.params.get('uuid')
-
-        if len(oids) > 1 and uuid is not None:
-            self.logger.error("Only one oid can be provided with the --uuid "
-                              "option")
-            sys.exit(os.EX_USAGE)
-
-        try:
-            client.object_undelete(oids, uuid)
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
 
 
 class RenameOptHandler(BaseOptHandler):
@@ -276,7 +238,6 @@ HANDLERS = [
     SchedOptHandler,
     TapeOptHandler,
     TLCOptHandler,
-    UndeleteOptHandler,
 
     # Store command interfaces
     StoreDeleteOptHandler,
@@ -284,6 +245,7 @@ HANDLERS = [
     StoreGetMDOptHandler,
     StoreMPutOptHandler,
     StorePutOptHandler,
+    StoreUndeleteOptHandler
 ]
 
 def phobos_main(args=None):

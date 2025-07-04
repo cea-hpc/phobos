@@ -29,6 +29,7 @@ from phobos.cli.action.get import GetOptHandler
 from phobos.cli.action.getmd import GetMDOptHandler
 from phobos.cli.action.mput import MPutOptHandler
 from phobos.cli.action.put import PutOptHandler
+from phobos.cli.action.undelete import UndeleteOptHandler
 from phobos.cli.common import (BaseResourceOptHandler, env_error_format,
                                XferOptHandler)
 from phobos.cli.common.utils import (attr_convert, create_put_params,
@@ -265,6 +266,7 @@ class StorePutOptHandler(XferOptHandler):
 
         try:
             self.client.run()
+
         except IOError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
@@ -285,3 +287,32 @@ class StoreMPutOptHandler(StorePutOptHandler):
         self.logger.error("'mput' is a deprecated command, use 'put --file' "
                           "instead")
         sys.exit(os.EX_USAGE)
+
+
+class StoreUndeleteOptHandler(BaseResourceOptHandler):
+    """Undelete objects handler."""
+    label = 'undelete'
+    alias = ['undel']
+    descr = 'Move back deprecated objects into phobos namespace'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add command options for undelete object."""
+        UndeleteOptHandler(cls).add_options(parser)
+
+    def exec_undelete(self):
+        """Undelete objetc"""
+        client = UtilClient()
+        oids = self.params.get('oids')
+        uuid = self.params.get('uuid')
+
+        if len(oids) > 1 and uuid is not None:
+            self.logger.error("Only one oid can be provided with the --uuid "
+                              "option")
+            sys.exit(os.EX_USAGE)
+
+        try:
+            client.object_undelete(oids, uuid)
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))

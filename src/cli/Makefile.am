@@ -23,6 +23,7 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/cli/action/put.py \
 	   phobos/cli/action/resource_delete.py \
 	   phobos/cli/action/status.py \
+	   phobos/cli/action/undelete.py \
 	   phobos/cli/action/unlock.py \
 	   phobos/cli/common/__init__.py \
 	   phobos/cli/common/args.py \
