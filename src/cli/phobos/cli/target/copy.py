@@ -61,7 +61,6 @@ class CopyDeleteOptHandler(DeleteOptHandler):
         super(CopyDeleteOptHandler, cls).add_options(parser)
         parser.add_argument('oid', help='targeted object')
         parser.add_argument('copy', help='copy name')
-        add_object_arguments(parser)
 
 
 class CopyListOptHandler(ListOptHandler):

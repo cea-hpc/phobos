@@ -23,7 +23,7 @@
 
 import unittest
 
-from phobos import attr_convert
+from phobos.cli.common.utils import attr_convert
 
 class AttrConvertTest(unittest.TestCase):
     """

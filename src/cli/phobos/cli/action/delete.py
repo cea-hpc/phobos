@@ -22,6 +22,7 @@ Delete action for Phobos CLI
 """
 
 from phobos.cli.action import ActionOptHandler
+from phobos.cli.common.args import add_object_arguments
 
 class DeleteOptHandler(ActionOptHandler):
     """Option handler for delete action"""
@@ -31,3 +32,4 @@ class DeleteOptHandler(ActionOptHandler):
     @classmethod
     def add_options(cls, parser):
         super(DeleteOptHandler, cls).add_options(parser)
+        add_object_arguments(parser)

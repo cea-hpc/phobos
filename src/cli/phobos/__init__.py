@@ -28,17 +28,13 @@ specific command line parameters and the API entry points for phobos to trigger
 actions.
 """
 
+import os
 import sys
 
-import os
-
 from phobos.core.admin import Client as AdminClient
-from phobos.core.store import (attrs_as_dict, DelParams, UtilClient)
+from phobos.core.store import UtilClient
 from phobos.cli.common import (BaseOptHandler, PhobosActionContext,
-                               env_error_format, XferOptHandler)
-from phobos.cli.common.args import add_put_arguments, add_object_arguments
-from phobos.cli.common.utils import (attr_convert, create_put_params,
-                                     set_library, get_scope)
+                               env_error_format)
 from phobos.cli.target.copy import CopyOptHandler
 from phobos.cli.target.dir import DirOptHandler
 from phobos.cli.target.drive import DriveOptHandler
@@ -49,67 +45,11 @@ from phobos.cli.target.logs import LogsOptHandler
 from phobos.cli.target.object import ObjectOptHandler
 from phobos.cli.target.phobosd import PhobosdOptHandler
 from phobos.cli.target.rados import RadosPoolOptHandler
-from phobos.cli.target.store import (StoreGetOptHandler, StoreGetMDOptHandler,
-                                     StoreMPutOptHandler, StorePutOptHandler)
+from phobos.cli.target.store import (StoreDeleteOptHandler, StoreGetOptHandler,
+                                     StoreGetMDOptHandler, StoreMPutOptHandler,
+                                     StorePutOptHandler)
 from phobos.cli.target.tape import TapeOptHandler
 from phobos.cli.target.tlc import TLCOptHandler
-
-
-class DeleteOptHandler(BaseOptHandler):
-    """Delete objects handler."""
-
-    label = 'delete'
-    alias = ['del']
-    descr = 'remove an object from phobos namespace and '\
-            'add it to deprecated objects'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add command options."""
-        super(DeleteOptHandler, cls).add_options(parser)
-
-        parser.add_argument('oids', nargs='+',
-                            help='Object IDs to delete')
-        parser.add_argument('--hard', action='store_true',
-                            help='Require a hardware remove of the object')
-        add_object_arguments(parser)
-        parser.set_defaults(verb=cls.label)
-
-    def exec_delete(self):
-        """Delete objects."""
-        client = UtilClient()
-
-        deprec = self.params.get('deprecated')
-        deprec_only = self.params.get('deprecated_only')
-        oids = self.params.get('oids')
-        uuid = self.params.get('uuid')
-        version = self.params.get('version')
-
-        if not self.params.get('hard') and (deprec or deprec_only):
-            self.logger.error("--deprecated or --deprecated-only can only be "
-                              "used with the --hard option")
-            sys.exit(os.EX_USAGE)
-
-        if len(oids) > 1 and (uuid is not None or version is not None):
-            self.logger.error("Only one oid can be provided with the --uuid or "
-                              "--version option")
-            sys.exit(os.EX_USAGE)
-
-        scope = get_scope(deprec, deprec_only)
-
-        try:
-            client.object_delete(oids, uuid, version,
-                                 DelParams(copy_name=None, scope=scope),
-                                 self.params.get('hard'))
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
 
 
 class UndeleteOptHandler(BaseOptHandler):
@@ -322,7 +262,6 @@ class SchedOptHandler(BaseOptHandler):
 HANDLERS = [
     # Resource interfaces
     CopyOptHandler,
-    DeleteOptHandler,
     DirOptHandler,
     DriveOptHandler,
     ExtentOptHandler,
@@ -340,6 +279,7 @@ HANDLERS = [
     UndeleteOptHandler,
 
     # Store command interfaces
+    StoreDeleteOptHandler,
     StoreGetOptHandler,
     StoreGetMDOptHandler,
     StoreMPutOptHandler,

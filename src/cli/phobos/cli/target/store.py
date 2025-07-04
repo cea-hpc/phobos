@@ -24,14 +24,77 @@ Store target for Phobos CLI
 import os
 import sys
 
+from phobos.cli.action.delete import DeleteOptHandler
 from phobos.cli.action.get import GetOptHandler
 from phobos.cli.action.getmd import GetMDOptHandler
 from phobos.cli.action.mput import MPutOptHandler
 from phobos.cli.action.put import PutOptHandler
-from phobos.cli.common import env_error_format, XferOptHandler
+from phobos.cli.common import (BaseResourceOptHandler, env_error_format,
+                               XferOptHandler)
 from phobos.cli.common.utils import (attr_convert, create_put_params,
-                                     mput_file_line_parser)
-from phobos.core.store import attrs_as_dict
+                                     get_scope, mput_file_line_parser)
+from phobos.core.store import attrs_as_dict, DelParams, UtilClient
+
+
+class ObjectDeleteOptHandler(DeleteOptHandler):
+    """Option handler for object delete action"""
+    label = 'delete'
+    descr = 'remove an object from phobos namespace and '\
+            'add it to deprecated objects'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add command options."""
+        super(ObjectDeleteOptHandler, cls).add_options(parser)
+        parser.add_argument('oids', nargs='+',
+                            help='Object IDs to delete')
+        parser.add_argument('--hard', action='store_true',
+                            help='Require a hardware remove of the object')
+        parser.set_defaults(verb=cls.label)
+
+
+class StoreDeleteOptHandler(BaseResourceOptHandler):
+    """Delete objects handler."""
+    label = 'delete'
+    alias = ['del']
+    descr = 'remove an object from phobos namespace and '\
+            'add it to deprecated objects'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add command options."""
+        ObjectDeleteOptHandler(cls).add_options(parser)
+
+    def exec_delete(self):
+        """Delete objects."""
+        client = UtilClient()
+
+        deprec = self.params.get('deprecated')
+        deprec_only = self.params.get('deprecated_only')
+        oids = self.params.get('oids')
+        uuid = self.params.get('uuid')
+        version = self.params.get('version')
+
+        if not self.params.get('hard') and (deprec or deprec_only):
+            self.logger.error("--deprecated or --deprecated-only can only be "
+                              "used with the --hard option")
+            sys.exit(os.EX_USAGE)
+
+        if len(oids) > 1 and (uuid is not None or version is not None):
+            self.logger.error("Only one oid can be provided with the --uuid or "
+                              "--version option")
+            sys.exit(os.EX_USAGE)
+
+        scope = get_scope(deprec, deprec_only)
+
+        try:
+            client.object_delete(oids, uuid, version,
+                                 DelParams(copy_name=None, scope=scope),
+                                 self.params.get('hard'))
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
 
 class StoreGetMDOptHandler(XferOptHandler):
     """Retrieve object from backend."""
@@ -94,7 +157,6 @@ class StoreGetOptHandler(XferOptHandler):
                                  best_host)
         try:
             self.client.run()
-
         except IOError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
