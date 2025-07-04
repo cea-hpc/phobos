@@ -17,8 +17,11 @@ function invoke_daemon()
     local PID_VAR_NAME=$3
     shift 3
 
-    DAEMON_PID_FILEPATH=${PID_FILEPATH} $LOG_COMPILER $LOG_FLAGS \
-        ${daemon_bin} "$@" &
+    local full_command="
+        ${DAEMON_OPTIONS[@]} DAEMON_PID_FILEPATH=${PID_FILEPATH}
+        $LOG_COMPILER $LOG_FLAGS ${daemon_bin} $@ &"
+    eval $full_command
+
     wait $! || { echo "failed to start ${daemon_bin}"; return 1; }
     eval ${PID_VAR_NAME}=`cat ${PID_FILEPATH}`
 }

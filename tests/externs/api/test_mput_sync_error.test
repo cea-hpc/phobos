@@ -35,16 +35,15 @@ test_bin="$test_bin_dir/test_mput_sync_error"
 . $test_dir/test_launch_daemon.sh
 . $test_dir/tape_drive.sh
 
-export PHOBOS_LRS_families="tape"
-export PHOBOS_LRS_sync_nb_req="tape=1"
-
 function setup
 {
     local N_TAPES=1
     local N_DRIVES=1
 
+    export PHOBOS_LRS_families="tape"
+
     setup_tables
-    invoke_daemons
+    invoke_daemons "PHOBOS_LRS_sync_nb_req=\"tape=1\""
 
     local tape="$(get_tapes L5 $N_TAPES)"
     $phobos tape add --type lto5 "$tape"
