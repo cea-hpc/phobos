@@ -1437,11 +1437,8 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
         if (rc)
             return rc;
 
-        /* Xfer can only contain more than 1 object if it's a PUT operation
-         * with the no_split option.
-         */
-        if (xfers->xd_ntargets > 1 && !xfers->xd_params.put.no_split &&
-            xfers->xd_op != PHO_XFER_OP_PUT)
+        /* Xfer can only contain more than 1 target if it's a PUT operation */
+        if (xfers->xd_ntargets > 1 && xfers->xd_op != PHO_XFER_OP_PUT)
             return -ENOTSUP;
     }
 
