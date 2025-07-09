@@ -42,3 +42,24 @@ Example:
 
     [copy]
     get_preferred_order = fast,cache
+
+*Copy name link with a profile*
+-------------------------------
+
+A copy name can be linked to a profile. When a new copy is created, it will
+check whether the copy name is associated with a profile. If so, the put
+parameters specified in the profile will be used to create the new copy.
+
+To define which profile a copy should use, a new section must be added to the
+configuration file using the following format: **[copy "%s"]**, where "%s"
+should be replaced with the copy name.
+
+If no section is specified, Phobos will not use a profile when creating the new
+copy.
+
+Example:
+
+.. code:: ini
+
+    [copy "cache"]
+    profile = fast
