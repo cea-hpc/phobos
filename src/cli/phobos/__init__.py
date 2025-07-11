@@ -50,6 +50,7 @@ from phobos.cli.target.logs import LogsOptHandler
 from phobos.cli.target.object import ObjectOptHandler
 from phobos.cli.target.phobosd import PhobosdOptHandler
 from phobos.cli.target.rados import RadosPoolOptHandler
+from phobos.cli.target.store import (StoreGetOptHandler, StoreGetMDOptHandler)
 from phobos.cli.target.tape import TapeOptHandler
 from phobos.cli.target.tlc import TLCOptHandler
 
@@ -67,101 +68,6 @@ def mput_file_line_parser(line):
                          + str(len(file_entry)))
 
     return file_entry
-
-
-class StoreGetMDHandler(XferOptHandler):
-    """Retrieve object from backend."""
-    label = 'getmd'
-    descr = 'retrieve object metadata from backend'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add options for the GETMD command."""
-        super(StoreGetMDHandler, cls).add_options(parser)
-        parser.add_argument('object_id', help='Object to target')
-
-    @staticmethod
-    def _compl_notify(data, xfr, err_code): # pylint: disable=unused-argument
-        """Custom completion handler to display metadata."""
-        if err_code != 0:
-            return
-
-        res = []
-        itm = attrs_as_dict(xfr.contents.xd_targets[0].xt_attrs)
-        if not itm:
-            return
-
-        for key, value in sorted(itm.items()):
-            res.append('%s=%s' % (key, value))
-
-        print(','.join(res))
-
-    def exec_getmd(self):
-        """Retrieve an object attributes from backend."""
-        oid = self.params.get('object_id')
-        self.logger.debug("Retrieving attrs for 'objid:%s'", oid)
-        self.client.getmd_register(oid, None)
-        try:
-            self.client.run(compl_cb=self._compl_notify)
-        except IOError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-
-class StoreGetHandler(XferOptHandler):
-    """Retrieve object from backend."""
-    label = 'get'
-    descr = 'retrieve object from backend'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add options for the GET command."""
-        super(StoreGetHandler, cls).add_options(parser)
-        parser.add_argument('object_id', help='Object to retrieve')
-        parser.add_argument('dest_file', help='Destination file')
-        parser.add_argument('--version', help='Version of the object',
-                            type=int, default=0)
-        parser.add_argument('--uuid', help='UUID of the object')
-        parser.add_argument('--best-host', action='store_true',
-                            help="Only get object if the current host is the "
-                                 "most optimal one or if the object can be "
-                                 "accessed from any node, else return the best "
-                                 "hostname to get this object")
-        parser.add_argument('-c', '--copy-name',
-                            help='Copy of the object to get')
-
-    def exec_get(self):
-        """Retrieve an object from backend."""
-        oid = self.params.get('object_id')
-        dst = self.params.get('dest_file')
-        version = self.params.get('version')
-        uuid = self.params.get('uuid')
-        best_host = self.params.get('best_host')
-        copy_name = self.params.get('copy_name')
-        self.logger.debug("Retrieving object 'objid:%s' to '%s'", oid, dst)
-        self.client.get_register(oid, dst, (uuid, version, copy_name),
-                                 best_host)
-        try:
-            self.client.run()
-        except IOError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-        if version != 0:
-            if uuid is not None:
-                self.logger.info("Object '%s@%d' with uuid '%s' "
-                                 "successfully retrieved",
-                                 oid, version, uuid)
-            else:
-                self.logger.info("Object '%s@%d' successfully retrieved",
-                                 oid, version)
-        else:
-            if uuid is not None:
-                self.logger.info("Object '%s' with uuid '%s' "
-                                 "successfully retrieved",
-                                 oid, uuid)
-            else:
-                self.logger.info("Object '%s' successfully retrieved", oid)
 
 
 class StorePutHandler(XferOptHandler):
@@ -579,8 +485,8 @@ HANDLERS = [
     UndeleteOptHandler,
 
     # Store command interfaces
-    StoreGetHandler,
-    StoreGetMDHandler,
+    StoreGetOptHandler,
+    StoreGetMDOptHandler,
     StoreMPutHandler,
     StorePutHandler,
 ]

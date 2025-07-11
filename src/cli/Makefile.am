@@ -14,6 +14,8 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/cli/action/delete.py \
 	   phobos/cli/action/dump.py \
 	   phobos/cli/action/format.py \
+	   phobos/cli/action/get.py \
+	   phobos/cli/action/getmd.py \
 	   phobos/cli/action/list.py \
 	   phobos/cli/action/lock.py \
 	   phobos/cli/action/ping.py \
@@ -36,6 +38,7 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/cli/target/media.py \
 	   phobos/cli/target/object.py \
 	   phobos/cli/target/phobosd.py \
+	   phobos/cli/target/store.py \
 	   phobos/cli/target/rados.py \
 	   phobos/cli/target/tape.py \
 	   phobos/cli/target/tlc.py \
