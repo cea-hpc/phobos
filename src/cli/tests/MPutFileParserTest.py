@@ -26,7 +26,7 @@ This file is for testing the parser used for the "put --file" command line.
 
 import unittest
 
-from phobos import mput_file_line_parser
+from phobos.cli.common.utils import mput_file_line_parser
 
 class CliTestMultiPutParser(unittest.TestCase):
     """Try to parse a mput line entry to detect broken strings."""

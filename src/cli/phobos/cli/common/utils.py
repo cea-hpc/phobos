@@ -164,6 +164,20 @@ def handle_sort_option(params, resource, logger, **kwargs):
             kwargs[key] = sort_attr
     return kwargs
 
+def mput_file_line_parser(line):
+    """Convert a mput file line into the 3 values needed for each put."""
+    line_parser = shlex(line, posix=True)
+    line_parser.whitespace = ' '
+    line_parser.whitespace_split = True
+
+    file_entry = list(line_parser) # [src_file, oid, user_md]
+
+    if len(file_entry) != 3:
+        raise ValueError("expecting 3 elements (src_file, oid, metadata), got "
+                         + str(len(file_entry)))
+
+    return file_entry
+
 OP_NAME_FROM_LETTER = {'P': 'put', 'G': 'get', 'D': 'delete'}
 def parse_set_access_flags(flags):
     """From [+|-]PGD flags, return a dict with media operations to set

@@ -28,7 +28,6 @@ specific command line parameters and the API entry points for phobos to trigger
 actions.
 """
 
-from shlex import shlex
 import sys
 
 import os
@@ -50,154 +49,10 @@ from phobos.cli.target.logs import LogsOptHandler
 from phobos.cli.target.object import ObjectOptHandler
 from phobos.cli.target.phobosd import PhobosdOptHandler
 from phobos.cli.target.rados import RadosPoolOptHandler
-from phobos.cli.target.store import (StoreGetOptHandler, StoreGetMDOptHandler)
+from phobos.cli.target.store import (StoreGetOptHandler, StoreGetMDOptHandler,
+                                     StoreMPutOptHandler, StorePutOptHandler)
 from phobos.cli.target.tape import TapeOptHandler
 from phobos.cli.target.tlc import TLCOptHandler
-
-
-def mput_file_line_parser(line):
-    """Convert a mput file line into the 3 values needed for each put."""
-    line_parser = shlex(line, posix=True)
-    line_parser.whitespace = ' '
-    line_parser.whitespace_split = True
-
-    file_entry = list(line_parser) # [src_file, oid, user_md]
-
-    if len(file_entry) != 3:
-        raise ValueError("expecting 3 elements (src_file, oid, metadata), got "
-                         + str(len(file_entry)))
-
-    return file_entry
-
-
-class StorePutHandler(XferOptHandler):
-    """Insert objects into backend."""
-    label = 'put'
-    descr = 'insert object into backend. Either "--file" or "src_file" and '\
-            '"oid" must be provided.'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add options for the PUT command."""
-        super(StorePutHandler, cls).add_options(parser)
-        # The type argument allows to transform 'a,b,c' into ['a', 'b', 'c'] at
-        # parse time rather than post processing it
-        add_put_arguments(parser)
-        parser.add_argument('--grouping',
-                            help='Set the grouping of the new objects')
-        parser.add_argument('-c', '--copy-name',
-                            help='Copy name for this object instance')
-
-        parser.add_argument('-m', '--metadata',
-                            help='Comma-separated list of key=value')
-        parser.add_argument('--overwrite', action='store_true',
-                            help='Allow object update')
-        parser.add_argument('--file',
-                            help='File containing lines like: '\
-                                 '<src_file>  <object_id>  <metadata|->')
-        parser.add_argument('--no-split', action='store_true',
-                            help='Prevent splitting object over multiple '
-                            'media.')
-        parser.add_argument('src_file', help='File to insert', nargs='?')
-        parser.add_argument('object_id', help='Desired object ID', nargs='?')
-
-    def register_multi_puts(self, mput_file, put_params):
-        """Register the put requests from the given file"""
-        if mput_file == '-':
-            fin = sys.stdin
-        else:
-            fin = open(mput_file)
-
-        mput_list = []
-        for i, line in enumerate(fin):
-            # Skip empty lines and comments
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-
-            try:
-                match = mput_file_line_parser(line)
-            except ValueError as err:
-                self.logger.error("Format error on line %d: %s: %s", i + 1,
-                                  str(err), line)
-                sys.exit(os.EX_DATAERR)
-
-            src = match[0]
-            oid = match[1]
-            attrs = match[2]
-
-            if attrs == '-':
-                attrs = None
-            else:
-                attrs = attr_convert(attrs)
-                self.logger.debug("Loaded attributes set %r", attrs)
-
-            self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
-            # A xfer with N objects will be built in order to group the alloc
-            mput_list.append((oid, src, attrs))
-
-        self.client.mput_register(mput_list, put_params=put_params)
-
-        if fin is not sys.stdin:
-            fin.close()
-
-
-    def exec_put(self):
-        """Insert an object into backend."""
-        src = self.params.get('src_file')
-        oid = self.params.get('object_id')
-        mput_file = self.params.get('file')
-
-        if not mput_file and (not src and not oid):
-            self.logger.error("either '--file' or 'src_file'/'oid' must be "
-                              "provided")
-            sys.exit(os.EX_USAGE)
-        elif mput_file and (src or oid):
-            self.logger.error("only one of '--file' or 'src_file'/'oid' must "
-                              "be provided")
-            sys.exit(os.EX_USAGE)
-
-        if not mput_file and not (src and oid):
-            self.logger.error("both src and oid must be provided")
-            sys.exit(os.EX_USAGE)
-
-        attrs = self.params.get('metadata')
-        if attrs is not None:
-            attrs = attr_convert(attrs)
-            self.logger.debug("Loaded attributes set %r", attrs)
-
-        put_params = create_put_params(self, self.params.get('copy_name'))
-
-        if mput_file:
-            self.register_multi_puts(mput_file, put_params)
-        else:
-            self.client.put_register(oid, src, attrs=attrs,
-                                     put_params=put_params)
-            self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
-
-        try:
-            self.client.run()
-        except IOError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-
-class StoreMPutHandler(StorePutHandler):
-    """Deprecated, use 'put --file' instead."""
-    label = 'mput'
-    descr = "Deprecated, use 'put --file' instead."
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add options for the PUT command."""
-        #super(StoreMPutHandler, cls).add_options(parser)
-        parser.description = "Deprecated, use 'put --file' instead."
-
-    def exec_mput(self):
-        """Deprecated, use 'put --file' instead."""
-        self.logger.error("'mput' is a deprecated command, use 'put --file' "
-                          "instead")
-        sys.exit(os.EX_USAGE)
 
 
 class DeleteOptHandler(BaseOptHandler):
@@ -487,8 +342,8 @@ HANDLERS = [
     # Store command interfaces
     StoreGetOptHandler,
     StoreGetMDOptHandler,
-    StoreMPutHandler,
-    StorePutHandler,
+    StoreMPutOptHandler,
+    StorePutOptHandler,
 ]
 
 def phobos_main(args=None):
