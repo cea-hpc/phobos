@@ -267,6 +267,7 @@ struct pho_lock {
     char          *hostname;
     int            owner;
     struct timeval timestamp;
+    struct timeval last_locate;
     bool           is_early;
 };
 

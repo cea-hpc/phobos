@@ -124,7 +124,8 @@ static const char * const lock_query[] = {
                                "  DELETE FROM lock"
                                "   WHERE type = lock_type AND id = lock_id;"
                                "END $$;",
-    [DSS_STATUS_QUERY]       = "SELECT hostname, owner, timestamp, is_early"
+    [DSS_STATUS_QUERY]       = "SELECT hostname, owner, timestamp, "
+                               "  last_locate, is_early"
                                "  FROM lock "
                                "  WHERE type = '%s'::lock_type AND id = '%s';",
     [DSS_CLEAN_DEVICE_QUERY] = "WITH id_host AS (SELECT id || '_' || library "
@@ -322,6 +323,7 @@ static int basic_unlock(struct dss_handle *handle, enum dss_type lock_type,
 static int basic_status(struct dss_handle *handle, enum dss_type lock_type,
                         const char *lock_id, struct pho_lock *lock)
 {
+    struct timeval last_locate_timestamp;
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
     struct timeval lock_timestamp;
@@ -348,10 +350,12 @@ static int basic_status(struct dss_handle *handle, enum dss_type lock_type,
 
     if (lock) {
         str2timeval(PQgetvalue(res, 0, 2), &lock_timestamp);
+        str2timeval(PQgetvalue(res, 0, 3), &last_locate_timestamp);
         init_pho_lock(lock, PQgetvalue(res, 0, 0),
                       (int) strtoll(PQgetvalue(res, 0, 1), NULL, 10),
                       &lock_timestamp,
-                      psqlstrbool2bool(*PQgetvalue(res, 0, 3)));
+                      &last_locate_timestamp,
+                      psqlstrbool2bool(*PQgetvalue(res, 0, 4)));
     }
 
 out_cleanup:

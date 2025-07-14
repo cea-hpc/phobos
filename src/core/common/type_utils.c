@@ -67,11 +67,13 @@ gboolean g_pho_id_equal(gconstpointer p_pho_id_1, gconstpointer p_pho_id_2)
 }
 
 void init_pho_lock(struct pho_lock *lock, char *hostname, int owner,
-                   struct timeval *timestamp, bool is_early)
+                   struct timeval *timestamp, struct timeval *last_locate,
+                   bool is_early)
 {
     lock->hostname = xstrdup_safe(hostname);
     lock->owner = owner;
     lock->timestamp = *timestamp;
+    lock->last_locate = *last_locate;
     lock->is_early = is_early;
 }
 
@@ -80,6 +82,8 @@ void pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src)
     lock_dst->hostname = xstrdup_safe(lock_src->hostname);
     lock_dst->owner = lock_src->owner;
     lock_dst->timestamp = lock_src->timestamp;
+    lock_dst->last_locate = lock_src->last_locate;
+    lock_dst->is_early = lock_src->is_early;
 }
 
 void pho_lock_clean(struct pho_lock *lock)
@@ -404,6 +408,13 @@ int str2timeval(const char *tv_str, struct timeval *tv)
 {
     struct tm tmp_tm = {0};
     char *usec_ptr;
+
+    if (tv_str == NULL || !strcmp(tv_str, "")) {
+        tv->tv_sec = 0;
+        tv->tv_usec = 0;
+
+        return 0;
+    }
 
     usec_ptr = strptime(tv_str, "%Y-%m-%d %T", &tmp_tm);
     if (!usec_ptr)
