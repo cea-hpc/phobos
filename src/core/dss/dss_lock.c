@@ -99,8 +99,10 @@ enum lock_query_idx {
 
 static const char * const lock_query[] = {
     [DSS_LOCK_QUERY]         = "INSERT INTO lock"
-                               " (type, id, owner, hostname, is_early)"
-                               " VALUES ('%s'::lock_type, '%s', %d, '%s', %s);",
+                               " (type, id, owner, hostname, last_locate, "
+                               "  is_early)"
+                               " VALUES ('%s'::lock_type, '%s', %d, '%s', %s, "
+                               "         %s);",
     [DSS_REFRESH_QUERY]      = "DO $$"
                                  DECLARE_BLOCK
                                " BEGIN"
@@ -264,7 +266,8 @@ static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
 
     g_string_printf(request, lock_query[DSS_LOCK_QUERY],
                     dss_type_names[lock_type], lock_id, lock_owner,
-                    lock_hostname, is_early ? "TRUE" : "FALSE");
+                    lock_hostname, is_early ? "now()" : "NULL",
+                    is_early ? "TRUE" : "FALSE");
 
     rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
 
