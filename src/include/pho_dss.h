@@ -848,13 +848,14 @@ int dss_lock_hostname(struct dss_handle *handle, enum dss_type type,
  * @param[in]   type            Type of the ressources's lock to refresh.
  * @param[in]   item_list       List of ressources's lock to refresh.
  * @param[in]   item_cnt        Number of ressources's lock to refresh.
+ * @param[in]   locate          True if only need to update `last_locate` field.
  *
  * @return                      0 on success,
  *                             -ENOLCK if the lock does not exist,
  *                             -EACCES if the lock owner does not match.
  */
 int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
-                     const void *item_list, int item_cnt);
+                     const void *item_list, int item_cnt, bool locate);
 
 /**
  * Release locks.

@@ -134,7 +134,7 @@ static void dss_refresh_ok(void **state)
     rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &old_lock);
     assert_int_equal(rc, -rc);
 
-    rc = dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1);
+    rc = dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, false);
     assert_int_equal(rc, -rc);
 
     rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &new_lock);
@@ -155,7 +155,7 @@ static void dss_refresh_not_exists(void **state)
 
     assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1) == 0);
 
-    rc = dss_lock_refresh(handle, DSS_OBJECT, &BAD_LOCK, 1);
+    rc = dss_lock_refresh(handle, DSS_OBJECT, &BAD_LOCK, 1, false);
     assert_int_equal(rc, -ENOLCK);
 
     assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true) == 0);
@@ -170,7 +170,7 @@ static void dss_refresh_bad_owner(void **state)
     assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1) == 0);
 
     rc = _dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
-                           BAD_LOCK_OWNER, 1337);
+                           BAD_LOCK_OWNER, 1337, false);
     assert_int_equal(rc, -EACCES);
 
     assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true) == 0);
@@ -190,8 +190,8 @@ static void dss_refresh_early_other_pid(void **state)
     assert(_dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1,
                      hostname, 0, false) == 0);
 
-    assert(dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1) == 0);
-    rc = dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1);
+    assert(dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, false) == 0);
+    rc = dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1, false);
     assert_int_equal(rc, -EACCES);
 
     assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, false) == 0);
@@ -378,7 +378,7 @@ static void dss_multiple_refresh_ok(void **state)
                          (struct pho_lock *) &old_lock);
     assert_return_code(rc, -rc);
 
-    rc = dss_lock_refresh(handle, DSS_OBJECT, GOOD_LOCKS, 3);
+    rc = dss_lock_refresh(handle, DSS_OBJECT, GOOD_LOCKS, 3, false);
     assert_return_code(rc, -rc);
 
     rc = dss_lock_status(handle, DSS_OBJECT, GOOD_LOCKS, 3,
@@ -416,7 +416,7 @@ static void dss_multiple_refresh_not_exists(void **state)
                          (struct pho_lock *) &old_lock);
     assert_return_code(rc, -rc);
 
-    rc = dss_lock_refresh(handle, DSS_OBJECT, BAD_LOCKS, 3);
+    rc = dss_lock_refresh(handle, DSS_OBJECT, BAD_LOCKS, 3, false);
     assert_int_equal(rc, -ENOLCK);
 
     rc = dss_lock_status(handle, DSS_OBJECT, GOOD_LOCKS, 3,
@@ -481,7 +481,34 @@ static void dss_lock_last_locate(void **state)
     assert_int_equal(rc, -rc);
     assert_int_equal(lock.last_locate.tv_sec, 0);
     assert_int_equal(lock.last_locate.tv_usec, 0);
+    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true) == 0);
+    pho_lock_clean(&lock);
+}
 
+static void dss_lock_update_last_locate(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    const char *lock_hostname = "A_TRUE_HOSTNAME";
+    struct pho_lock lock;
+    struct timeval tv;
+    int rc;
+
+    rc = dss_lock_hostname(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                           lock_hostname);
+    assert_return_code(rc, -rc);
+
+    assert(dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &lock) == 0);
+    tv = lock.last_locate;
+    pho_lock_clean(&lock);
+
+    rc = dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true);
+    assert_return_code(rc, -rc);
+
+    assert(dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &lock) == 0);
+    assert(tv.tv_sec < lock.last_locate.tv_sec ||
+           (tv.tv_sec == lock.last_locate.tv_sec &&
+            tv.tv_usec < lock.last_locate.tv_usec));
+    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true) == 0);
     pho_lock_clean(&lock);
 }
 
@@ -507,6 +534,7 @@ int main(void)
         cmocka_unit_test(dss_multiple_refresh_not_exists),
         cmocka_unit_test(dss_lock_hostname_unlock_ok),
         cmocka_unit_test(dss_lock_last_locate),
+        cmocka_unit_test(dss_lock_update_last_locate),
     };
 
     pho_context_init();

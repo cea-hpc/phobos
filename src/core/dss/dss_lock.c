@@ -57,6 +57,7 @@ do {                                                  \
 enum lock_query_idx {
     DSS_LOCK_QUERY,
     DSS_REFRESH_QUERY,
+    DSS_REFRESH_LOCATE_QUERY,
     DSS_UNLOCK_QUERY,
     DSS_UNLOCK_FORCE_QUERY,
     DSS_STATUS_QUERY,
@@ -111,6 +112,8 @@ static const char * const lock_query[] = {
                                " UPDATE lock SET timestamp = now()"
                                  WHERE_CONDITION
                                "END $$;",
+    [DSS_REFRESH_LOCATE_QUERY] = "UPDATE lock SET last_locate = now()"
+                               "  WHERE type = '%s'::lock_type AND id = '%s';",
     [DSS_UNLOCK_QUERY]       = "DO $$"
                                  DECLARE_BLOCK
                                " BEGIN"
@@ -279,16 +282,20 @@ static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
 
 static int basic_refresh(struct dss_handle *handle, enum dss_type lock_type,
                          const char *lock_id, int lock_owner,
-                         const char *lock_hostname)
+                         const char *lock_hostname, bool locate)
 {
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
     PGresult *res;
     int rc = 0;
 
-    g_string_printf(request, lock_query[DSS_REFRESH_QUERY],
-                    dss_type_names[lock_type], lock_id, lock_owner,
-                    lock_hostname);
+    if (!locate)
+        g_string_printf(request, lock_query[DSS_REFRESH_QUERY],
+                        dss_type_names[lock_type], lock_id, lock_owner,
+                        lock_hostname);
+    else
+        g_string_printf(request, lock_query[DSS_REFRESH_LOCATE_QUERY],
+                        dss_type_names[lock_type], lock_id);
 
     rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
 
@@ -453,7 +460,8 @@ int dss_lock_hostname(struct dss_handle *handle, enum dss_type type,
 
 int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
                       const void *item_list, int item_cnt,
-                      const char *lock_hostname, int lock_owner)
+                      const char *lock_hostname, int lock_owner,
+                      bool locate)
 {
     PGconn *conn = handle->dh_conn;
     GString **ids;
@@ -472,7 +480,7 @@ int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
         int rc2;
 
         rc2 = basic_refresh(handle, type, ids[i]->str,
-                            lock_owner, lock_hostname);
+                            lock_owner, lock_hostname, locate);
 
         if (rc2) {
             rc = rc ? : rc2;
@@ -487,7 +495,7 @@ cleanup:
 }
 
 int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
-                     const void *item_list, int item_cnt)
+                     const void *item_list, int item_cnt, bool locate)
 {
     const char *hostname;
     int pid;
@@ -495,7 +503,8 @@ int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
     if (fill_host_owner(&hostname, &pid))
         LOG_RETURN(-EINVAL, "Couldn't retrieve hostname");
 
-    return _dss_lock_refresh(handle, type, item_list, item_cnt, hostname, pid);
+    return _dss_lock_refresh(handle, type, item_list, item_cnt, hostname, pid,
+                             locate);
 }
 
 int _dss_unlock(struct dss_handle *handle, enum dss_type type,

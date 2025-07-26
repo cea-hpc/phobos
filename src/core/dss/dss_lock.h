@@ -42,7 +42,7 @@ int _dss_lock(struct dss_handle *handle, enum dss_type type,
 
 int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
                       const void *item_list, int item_cnt,
-                      const char *lock_hostname, int lock_owner);
+                      const char *lock_hostname, int lock_owner, bool locate);
 
 int _dss_unlock(struct dss_handle *handle, enum dss_type type,
                 const void *item_list, int item_cnt, const char *lock_hostname,
