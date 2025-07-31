@@ -65,6 +65,7 @@ check_PROGRAMS=test_attrs \
                test_pho_cache \
                test_ping \
                test_scsi_logs \
+               test_stats \
                test_store_profile \
                test_store_object_md \
                test_store_object_md_get \
@@ -194,6 +195,10 @@ test_scsi_logs_LDADD=$(MOD_LOAD_LIB) $(SCSI_LIB) $(LDM_SCSI_LIB) $(ADMIN_LIB) \
                      $(TESTS_LIB) $(TESTS_LIB_DEPS) $(TLC_LIB)
 test_scsi_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I$(TO_SRC)/ldm-modules \
                       $(TESTS_LIB_INCLUDES)
+
+test_stats_SOURCES=test_stats.c
+test_stats_LDADD=$(CORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
+test_stats_CFLAGS=$(AM_CFLAGS) -I..
 
 # TODO: try to link against the phobos_store library instead of
 # the store_profile object file

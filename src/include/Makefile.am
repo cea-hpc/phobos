@@ -17,6 +17,7 @@ noinst_HEADERS=pho_cache.h \
                pho_srl_common.h \
                pho_srl_lrs.h \
                pho_srl_tlc.h \
+               pho_stats.h \
                pho_types.h \
                pho_type_utils.h \
                slist.h \

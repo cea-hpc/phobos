@@ -21,10 +21,11 @@ SERIALIZER_SRC=serializer/proto_common.pb-c.c serializer/proto_lrs.pb-c.c \
         serializer/proto_tlc.pb-c.c serializer/srl_lrs.c \
         serializer/srl_tlc.c serializer/pho_proto_common.proto \
         serializer/pho_proto_lrs.proto serializer/pho_proto_tlc.proto
+STATS_SRC=stats/stats.c
 
 
 libpho_core_la_SOURCES=${CFG_SRC} ${COMMON_SRC} ${COMM_SRC} ${DSS_SRC} \
-        ${DSS_SUBHEADERS} ${SERIALIZER_SRC}
+        ${DSS_SUBHEADERS} ${SERIALIZER_SRC} ${STATS_SRC}
 libpho_core_la_CFLAGS=${LIBPQ_CFLAGS} ${AM_CFLAGS}
 libpho_core_la_LDFLAGS=-version-info 0:0:0
 libpho_core_la_LDFLAGS+=-lini_config -ljansson -lm -luuid ${LIBPQ_LIBS} \
