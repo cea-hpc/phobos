@@ -42,9 +42,47 @@
 #include "pho_daemon.h"
 #include "pho_srl_lrs.h"
 #include "pho_type_utils.h"
+#include "pho_stats.h"
 
 #include "lrs_cfg.h"
 #include "lrs_sched.h"
+
+/** namespace for stats in this file */
+#define LRS_STAT_NS "req"
+
+/** used for indexing stats on requests */
+enum req_type {
+    PHO_REQ_READ    = 0,
+    PHO_REQ_WRITE   = 1,
+    PHO_REQ_FORMAT  = 2,
+    PHO_REQ_RELEASE = 3,
+    PHO_REQ_NOTIFY  = 4,
+    PHO_REQ_PING    = 5,
+    PHO_REQ_MONITOR = 6,
+    PHO_REQ_CONFIGURE = 7,
+
+    PHO_REQ_COUNT   = 8
+};
+/** used for tagging stats on requests */
+const char *req_name[PHO_REQ_COUNT] = { "READ", "WRITE", "FORMAT", "RELEASE",
+                                        "NOTIFY", "PING", "MONITOR",
+                                        "CONFIGURE" };
+
+struct lrs_stats {
+    struct pho_stat *req_stats[PHO_REQ_COUNT];  /*!< Counters per req type */
+    struct pho_stat *stat_release_tosync_media; /*!< nbr of media released
+                                                 *   with 'tosync'
+                                                 */
+    struct pho_stat *stat_tosync_size; /*!< written_size of tosync media */
+    struct pho_stat *stat_tosync_extents; /*!< nbr of extents of tosync media */
+    struct pho_stat *stat_release_nosync_media; /*!< nbr of media released
+                                                 *   with 'nosync'
+                                                 */
+    struct pho_stat *stat_nosync_size; /*!< written_size of nosync media */
+    struct pho_stat *stat_read_n_media; /*!< requested media in read requests */
+    struct pho_stat *stat_write_n_media; /*!< requested media in write requests
+                                          */
+};
 
 /**
  * Local Resource Scheduler instance, composed of two parts:
@@ -64,7 +102,10 @@ struct lrs {
                                                 * communication thread
                                                 */
     const char *lock_file;                     /*!< Daemon lock file path */
+
+    struct lrs_stats stats;
 };
+
 
 /* ****************************************************************************/
 /* Daemon context *************************************************************/
@@ -178,7 +219,8 @@ static void n_media_per_release(struct req_container *req_cont)
         rel->n_media - req_cont->params.release.n_tosync_media;
 }
 
-static void init_release_container(struct req_container *req_cont)
+static void init_release_container(struct lrs_stats *stats,
+                                   struct req_container *req_cont)
 {
     struct tosync_medium *tosync_media = NULL;
     struct nosync_medium *nosync_media = NULL;
@@ -188,6 +230,11 @@ static void init_release_container(struct req_container *req_cont)
     size_t i;
 
     n_media_per_release(req_cont);
+
+    pho_stat_incr(stats->stat_release_tosync_media,
+        req_cont->params.release.n_tosync_media);
+    pho_stat_incr(stats->stat_release_nosync_media,
+        req_cont->params.release.n_nosync_media);
 
     if (req_cont->params.release.n_tosync_media)
         tosync_media = xcalloc(req_cont->params.release.n_tosync_media,
@@ -210,6 +257,10 @@ static void init_release_container(struct req_container *req_cont)
             pho_id_name_set(&tosync_media[tosync_media_index].medium,
                             media->med_id->name, media->med_id->library);
 
+            pho_stat_incr(stats->stat_tosync_size, media->size_written);
+            pho_stat_incr(stats->stat_tosync_extents,
+                          media->nb_extents_written);
+
             tosync_media_index++;
         } else {
             nosync_media[nosync_media_index].medium.family =
@@ -217,6 +268,8 @@ static void init_release_container(struct req_container *req_cont)
             nosync_media[tosync_media_index].written_size = media->size_written;
             pho_id_name_set(&nosync_media[nosync_media_index].medium,
                             media->med_id->name, media->med_id->library);
+
+            pho_stat_incr(stats->stat_nosync_size, media->size_written);
 
             nosync_media_index++;
         }
@@ -423,16 +476,20 @@ send_error:
     return rc;
 }
 
-static void init_rwalloc_container(struct req_container *reqc)
+static void init_rwalloc_container(struct lrs_stats *stats,
+                                   struct req_container *reqc)
 {
     struct rwalloc_params *rwalloc_params = &reqc->params.rwalloc;
     bool is_write = pho_request_is_write(reqc->req);
     size_t i;
 
-    if (is_write)
+    if (is_write) {
         rwalloc_params->n_media = reqc->req->walloc->n_media;
-    else
+        pho_stat_incr(stats->stat_write_n_media, rwalloc_params->n_media);
+    } else {
         rwalloc_params->n_media = reqc->req->ralloc->n_required;
+        pho_stat_incr(stats->stat_read_n_media, rwalloc_params->n_media);
+    }
 
     rwalloc_params->media = xcalloc(rwalloc_params->n_media,
                                     sizeof(*rwalloc_params->media));
@@ -463,12 +520,13 @@ static void init_rwalloc_container(struct req_container *reqc)
         rml_init(&rwalloc_params->media_list, reqc);
 }
 
-static void init_request_container_param(struct req_container *reqc)
+static void init_request_container_param(struct lrs_stats *stats,
+                                         struct req_container *reqc)
 {
     if (pho_request_is_release(reqc->req))
-        init_release_container(reqc);
+        init_release_container(stats, reqc);
     else if (pho_request_is_write(reqc->req) || pho_request_is_read(reqc->req))
-        init_rwalloc_container(reqc);
+        init_rwalloc_container(stats, reqc);
     else if (pho_request_is_notify(reqc->req))
         reqc->params.notify.notified_device = NULL;
 }
@@ -783,14 +841,17 @@ send_error:
 static bool handle_quick_requests(struct lrs *lrs, struct req_container *reqc)
 {
     if (pho_request_is_ping(reqc->req)) {
+        pho_stat_incr(lrs->stats.req_stats[PHO_REQ_PING], 1);
         _process_ping_request(lrs, reqc);
         sched_req_free(reqc);
         return true;
     } else if (pho_request_is_monitor(reqc->req)) {
+        pho_stat_incr(lrs->stats.req_stats[PHO_REQ_MONITOR], 1);
         _process_monitor_request(lrs, reqc);
         sched_req_free(reqc);
         return true;
     } else if (pho_request_is_configure(reqc->req)) {
+        pho_stat_incr(lrs->stats.req_stats[PHO_REQ_CONFIGURE], 1);
         _process_configure_request(lrs, reqc);
         sched_req_free(reqc);
         return true;
@@ -854,13 +915,24 @@ static int _prepare_requests(struct lrs *lrs, bool *schedulers_to_signal,
             LOG_GOTO(send_err, rc2 = -EINVAL,
                      "Requested family is not handled by the daemon");
 
-        init_request_container_param(req_cont);
+        init_request_container_param(&lrs->stats, req_cont);
         if (pho_request_is_release(req_cont->req)) {
+            pho_stat_incr(lrs->stats.req_stats[PHO_REQ_RELEASE], 1);
             rc2 = process_release_request(lrs->sched[fam], &lrs->dss, req_cont);
             rc = rc ? : rc2;
             if (!rc2)
                 schedulers_to_signal[fam] = true;
         } else {
+            /* update stats about other requests */
+            if (pho_request_is_format(req_cont->req))
+                pho_stat_incr(lrs->stats.req_stats[PHO_REQ_FORMAT], 1);
+            else if (pho_request_is_read(req_cont->req))
+                pho_stat_incr(lrs->stats.req_stats[PHO_REQ_READ], 1);
+            else if (pho_request_is_write(req_cont->req))
+                pho_stat_incr(lrs->stats.req_stats[PHO_REQ_WRITE], 1);
+            else if (pho_request_is_notify(req_cont->req))
+                pho_stat_incr(lrs->stats.req_stats[PHO_REQ_NOTIFY], 1);
+
             if (running) {
                 tsqueue_push(&lrs->sched[fam]->incoming, req_cont);
                 schedulers_to_signal[fam] = true;
@@ -984,6 +1056,39 @@ static void lrs_fini(struct lrs *lrs)
     _delete_lock_file(lrs->lock_file);
 }
 
+/** Initialize and register stats for the LRS */
+static int lrs_stats_init(struct lrs_stats *lrs_stats)
+{
+    int i;
+
+    for (i = 0; i < PHO_REQ_COUNT; i++) {
+        char *tag_string = NULL;
+
+        if (asprintf(&tag_string, "request=%s", req_name[i]) == -1)
+            LOG_RETURN(-ENOMEM, "Failed to allocate string");
+
+        lrs_stats->req_stats[i] = pho_stat_create(PHO_STAT_COUNTER, LRS_STAT_NS,
+                                                  "count", tag_string);
+        free(tag_string);
+    }
+    lrs_stats->stat_release_tosync_media = pho_stat_create(PHO_STAT_COUNTER,
+                                LRS_STAT_NS, "release_tosync_media_cnt", NULL);
+    lrs_stats->stat_tosync_size = pho_stat_create(PHO_STAT_COUNTER,
+                                LRS_STAT_NS, "release_tosync_size", NULL);
+    lrs_stats->stat_tosync_extents = pho_stat_create(PHO_STAT_COUNTER,
+                                LRS_STAT_NS, "release_tosync_extents", NULL);
+    lrs_stats->stat_release_nosync_media = pho_stat_create(PHO_STAT_COUNTER,
+                                LRS_STAT_NS, "release_nosync_media_cnt", NULL);
+    lrs_stats->stat_nosync_size = pho_stat_create(PHO_STAT_COUNTER,
+                                LRS_STAT_NS, "release_nosync_size", NULL);
+    lrs_stats->stat_read_n_media = pho_stat_create(PHO_STAT_COUNTER,
+                                LRS_STAT_NS, "read_media_reqd", NULL);
+    lrs_stats->stat_write_n_media = pho_stat_create(PHO_STAT_COUNTER,
+                                LRS_STAT_NS, "write_media_reqd", NULL);
+
+    return 0;
+}
+
 /**
  * Initialize a new LRS.
  *
@@ -1029,6 +1134,10 @@ static int lrs_init(struct lrs *lrs)
     rc = dss_init(&lrs->dss);
     if (rc)
         LOG_GOTO(err, rc, "Failed to init comm dss handle");
+
+    rc = lrs_stats_init(&lrs->stats);
+    if (rc)
+        LOG_GOTO(err, rc, "Failed to initialize stats");
 
     return rc;
 
