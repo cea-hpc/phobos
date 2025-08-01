@@ -354,6 +354,8 @@ static inline bool is_device_shared_between_schedulers(struct lrs_dev *dev)
 /**
  * Add a new sync request to a device
  *
+ * Must be called with the device lock.
+ *
  * \param[in,out]   dev     device to add the sync request
  * \param[in]       reqc    sync request to add
  * \param[in]       medium  index in reqc of the medium to sync

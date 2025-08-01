@@ -542,19 +542,18 @@ static int release_medium(struct lrs_sched *sched,
     if (release->rc == 0)
         rc = update_phys_spc_free(comm_dss, dev->ld_dss_media_info,
                                   release->size_written);
+    if (release->to_sync)
+        /* ownership of reqc is passed to the device thread */
+        push_new_sync_to_device(dev, reqc, medium_index);
 
     /* Acknowledgement of the request */
     dev->ld_ongoing_io = false;
-    if (dev->ld_ongoing_grouping.grouping) {
+    if (dev->ld_ongoing_grouping.grouping && !reqc->req->release->partial) {
         free(dev->ld_ongoing_grouping.grouping);
         dev->ld_ongoing_grouping.grouping = NULL;
     }
 
     MUTEX_UNLOCK(&dev->ld_mutex);
-
-    if (release->to_sync)
-        /* ownership of reqc is passed to the device thread, no free here */
-        push_new_sync_to_device(dev, reqc, medium_index);
 
     return rc;
 }
