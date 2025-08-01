@@ -1686,50 +1686,59 @@ int phobos_admin_ping_tlc(const char *library, bool *library_is_up)
 }
 
 /**
- * Construct the medium string for the extent list filter.
- *
- * The caller must ensure medium_str is initialized before calling.
- *
- * \param[in,out]   medium_str      Empty medium string.
- * \param[in]       medium          Medium filter.
- */
-static void phobos_construct_medium(GString *medium_str, const char *medium)
-{
-    /**
-     * We prefered putting this line in a separate function to ease a
-     * possible future change that would allow for multiple medium selection.
-     */
-    g_string_append_printf(medium_str, "{\"DSS::EXT::medium_id\": \"%s\"}",
-                           medium);
-}
-
-static void phobos_construct_library(GString *library_str, const char *library)
-{
-    g_string_append_printf(library_str,
-                           "{\"DSS::EXT::medium_library\": \"%s\"}", library);
-}
-
-static void phobos_construct_library_medium(GString *lib_med_str,
-                                            const char *medium,
-                                            const char *library)
-{
-    g_string_append_printf(lib_med_str,
-                           "{\"$AND\": [{\"DSS::EXT::medium_id\": \"%s\"}, "
-                           "{\"DSS::EXT::medium_library\": \"%s\"}]}",
-                           medium, library);
-}
-/**
  * Construct the extent string for the extent list filter.
  *
  * The caller must ensure extent_str is initialized before calling.
  *
  * \param[in,out]   extent_str      Empty extent string.
+ * \param[in]       medium          Medium filter.
+ * \param[in]       library         Library filter.
+ * \param[in]       orphan          Orphan state filter.
+ */
+static void phobos_construct_extent(GString *extent_str, const char *medium,
+                                    const char *library, bool orphan)
+{
+    int count = 0;
+
+    count += (medium != NULL ? 1 : 0);
+    count += (library != NULL ? 1 : 0);
+    count += (orphan ? 1 : 0);
+
+    if (count == 0)
+        return;
+
+    g_string_append_printf(extent_str, "{\"$AND\":[");
+
+    if (medium)
+        g_string_append_printf(extent_str,
+                               "{\"DSS::EXT::medium_id\": \"%s\"}%s",
+                                medium, --count != 0 ? "," : "");
+
+    if (library)
+        g_string_append_printf(extent_str,
+                               "{\"DSS::EXT::medium_library\": \"%s\"}%s",
+                               library, --count != 0 ? "," : "");
+
+    if (orphan)
+        g_string_append_printf(extent_str,
+                               "{\"DSS::EXT::state\": \"%s\"}",
+                               extent_state2str(PHO_EXT_ST_ORPHAN));
+
+    g_string_append_printf(extent_str, "]}");
+}
+
+/**
+ * Construct the object string for the extent list filter.
+ *
+ * The caller must ensure obj_str is initialized before calling.
+ *
+ * \param[in,out]   obj_str         Empty object string.
  * \param[in]       res             Ressource filter.
  * \param[in]       n_res           Number of requested resources.
  * \param[in]       is_pattern      True if search done using POSIX pattern.
  * \param[in]       copy_name       Copy name filter.
  */
-static void phobos_construct_extent(GString *extent_str, const char **res,
+static void phobos_construct_object(GString *obj_str, const char **res,
                                     int n_res, bool is_pattern,
                                     const char *copy_name)
 {
@@ -1737,78 +1746,76 @@ static void phobos_construct_extent(GString *extent_str, const char **res,
     char *res_suffix = (is_pattern ? "}" : "");
     int i;
 
-    if (copy_name) {
-        g_string_append_printf(extent_str, "{\"$AND\" : [");
-        g_string_append_printf(extent_str,
-                               "{\"DSS::COPY::copy_name\":\"%s\"}%s",
-                               copy_name, n_res ? "," : "");
-    }
-
-    if (n_res > 1)
-        g_string_append_printf(extent_str, "{\"$OR\" : [");
-
-    for (i = 0; i < n_res; ++i)
-        g_string_append_printf(extent_str,
-                               "%s {\"DSS::OBJ::oid\":\"%s\"}%s %s",
-                               res_prefix,
-                               res[i],
-                               res_suffix,
-                               (i + 1 != n_res) ? "," : "");
-
-    if (n_res > 1)
-        g_string_append_printf(extent_str, "]}");
+    g_string_append_printf(obj_str, "{\"$AND\" : [");
 
     if (copy_name)
-        g_string_append_printf(extent_str, "]}");
+        g_string_append_printf(obj_str,
+                               "{\"DSS::COPY::copy_name\":\"%s\"}%s",
+                               copy_name, n_res ? "," : "");
+
+    if (n_res) {
+        g_string_append_printf(obj_str, "{\"$OR\" : [");
+
+        for (i = 0; i < n_res; ++i)
+            g_string_append_printf(obj_str,
+                                   "%s {\"DSS::OBJ::oid\":\"%s\"}%s %s",
+                                   res_prefix,
+                                   res[i],
+                                   res_suffix,
+                                   (i + 1 != n_res) ? "," : "");
+
+        g_string_append_printf(obj_str, "]}");
+    }
+
+    g_string_append_printf(obj_str, "]}");
 }
 
 int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
                              int n_res, bool is_pattern, const char *medium,
                              const char *library, const char *copy_name,
-                             struct layout_info **layouts,
+                             bool orphan, struct layout_info **layouts,
                              int *n_layouts, struct dss_sort *sort)
 {
-    struct dss_filter *lib_med_filter_ptr = NULL;
-    struct dss_filter *ext_filter_ptr = NULL;
-    struct dss_filter lib_med_filter;
-    struct dss_filter ext_filter;
+    struct dss_filter *extent_filter_ptr = NULL;
+    struct dss_filter *obj_filter_ptr = NULL;
+    struct dss_filter extent_filter;
+    struct dss_filter obj_filter;
     bool library_is_valid;
     bool medium_is_valid;
-    GString *lib_med_str;
+    bool copy_is_valid;
     GString *extent_str;
+    GString *obj_str;
     int rc = 0;
 
-    lib_med_str = g_string_new(NULL);
     extent_str = g_string_new(NULL);
+    obj_str = g_string_new(NULL);
+
     medium_is_valid = (medium && strcmp(medium, ""));
     library_is_valid = (library && strcmp(library, ""));
 
-    if (medium_is_valid && !library_is_valid)
-        phobos_construct_medium(lib_med_str, medium);
-    else if (library_is_valid && !medium_is_valid)
-        phobos_construct_library(lib_med_str, library);
-    else if (library_is_valid && medium_is_valid)
-        phobos_construct_library_medium(lib_med_str, medium, library);
+    if (medium_is_valid || library_is_valid || orphan) {
+        phobos_construct_extent(extent_str, medium, library, orphan);
 
-    if (lib_med_str->len > 0) {
-        rc = dss_filter_build(&lib_med_filter, "%s", lib_med_str->str);
+        rc = dss_filter_build(&extent_filter, "%s", extent_str->str);
         if (rc)
             goto release_extent;
 
-        lib_med_filter_ptr = &lib_med_filter;
+        extent_filter_ptr = &extent_filter;
     }
 
     /**
      * If there are at least one resource, we construct a string containing
      * each request.
      */
-    if (n_res || copy_name) {
-        phobos_construct_extent(extent_str, res, n_res, is_pattern, copy_name);
-        rc = dss_filter_build(&ext_filter, "%s", extent_str->str);
+    copy_is_valid = (copy_name && strcmp(copy_name, ""));
+
+    if (n_res || copy_is_valid) {
+        phobos_construct_object(obj_str, res, n_res, is_pattern, copy_name);
+        rc = dss_filter_build(&obj_filter, "%s", obj_str->str);
         if (rc)
             goto release_extent;
 
-        ext_filter_ptr = &ext_filter;
+        obj_filter_ptr = &obj_filter;
     }
 
     /**
@@ -1816,17 +1823,17 @@ int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
      * necessary, thus passing them as NULL to dss_full_layout_get ensures
      * the expected behaviour.
      */
-    rc = dss_full_layout_get(&adm->dss, ext_filter_ptr, lib_med_filter_ptr,
+    rc = dss_full_layout_get(&adm->dss, obj_filter_ptr, extent_filter_ptr,
                              layouts, n_layouts, sort);
     if (rc)
         pho_error(rc, "Cannot fetch layouts");
 
 release_extent:
-    g_string_free(lib_med_str, TRUE);
+    g_string_free(obj_str, TRUE);
     g_string_free(extent_str, TRUE);
 
-    dss_filter_free(lib_med_filter_ptr);
-    dss_filter_free(ext_filter_ptr);
+    dss_filter_free(extent_filter_ptr);
+    dss_filter_free(obj_filter_ptr);
 
     return rc;
 }

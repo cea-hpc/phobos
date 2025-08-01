@@ -326,6 +326,7 @@ int phobos_admin_ping_tlc(const char *library, bool *library_is_up);
  * \param[in]       medium          Single medium filter.
  * \param[in]       library         Single library filter.
  * \param[in]       copy_name       Single copy name filter.
+ * \param[in]       orphan          Orphan state filter.
  * \param[out]      layouts         Retrieved layouts.
  * \param[out]      n_layouts       Number of retrieved items.
  *
@@ -337,7 +338,7 @@ int phobos_admin_ping_tlc(const char *library, bool *library_is_up);
 int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
                              int n_res, bool is_pattern, const char *medium,
                              const char *library, const char *copy_name,
-                             struct layout_info **layouts,
+                             bool orphan, struct layout_info **layouts,
                              int *n_layouts, struct dss_sort *sort);
 
 /**

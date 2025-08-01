@@ -290,6 +290,7 @@ class Client: # pylint: disable=too-many-public-methods
         layouts = pointer(LayoutInfo())
         library_name = kwargs.get('library')
         copy_name = kwargs.get('copy_name')
+        orphan = kwargs.get('orphan')
 
         enc_medium = medium.encode('utf-8') if medium else None
         enc_library = library_name.encode('utf-8') if library_name else None
@@ -308,6 +309,7 @@ class Client: # pylint: disable=too-many-public-methods
                                                       enc_medium,
                                                       enc_library,
                                                       enc_copy_name,
+                                                      orphan,
                                                       byref(layouts),
                                                       byref(n_layouts),
                                                       sref)

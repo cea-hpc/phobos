@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  All rights reserved (c) 2014-2024 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -232,11 +232,41 @@ function test_extent_list_copy_name() {
     echo "$output" | grep "bob"
 }
 
+function test_extent_list_orphan() {
+    $phobos put -f dir /etc/hosts oid1-orphan
+    $phobos put -f dir /etc/hosts oid2-orphan
+
+    local output=$($valg_phobos extent list -f csv -o oid,state --orphan |
+                   tail -n +2 | wc -l)
+    if [[ $output -ne 0 ]]; then
+        error "There should be no orphan extent, got $output"
+    fi
+
+    local extent_uuid=$($phobos extent list -o ext_uuid oid1-orphan)
+    extent_uuid=${extent_uuid#\[\'}
+    extent_uuid=${extent_uuid%\'\]}
+
+    $PSQL << EOF
+UPDATE extent SET state = 'orphan' WHERE extent_uuid='$extent_uuid';
+EOF
+
+    output=$($valg_phobos extent list --orphan)
+    local count=$(echo "$output" | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be one extent, got $count"
+    fi
+
+    if [[ "$output" != "oid1-orphan" ]]; then
+        error "It should be oid1-orphan, got $oid"
+    fi
+}
+
 TEST_SETUP=setup
 TESTS=("test_extent_list_degroup"
        "test_extent_list_pattern"
        "test_extent_list_copy_name"
-       "test_extent_list_dirs_lib")
+       "test_extent_list_dirs_lib"
+       "test_extent_list_orphan")
 
 if [[ -w /dev/changer ]]; then
     TESTS+=("test_extent_list_tapes_lib")

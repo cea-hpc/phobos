@@ -58,6 +58,8 @@ class ExtentListOptHandler(ListOptHandler):
         parser.add_argument('-p', '--pattern', action='store_true',
                             help="filter using POSIX regexp instead of "
                                  "exact extent")
+        parser.add_argument('--orphan', action='store_true',
+                            help="list only extent that are orphan")
 
 
 class ExtentOptHandler(BaseResourceOptHandler):
@@ -79,6 +81,9 @@ class ExtentOptHandler(BaseResourceOptHandler):
 
         if self.params.get('copy_name'):
             kwargs['copy_name'] = self.params.get('copy_name')
+
+        if self.params.get('orphan'):
+            kwargs['orphan'] = self.params.get('orphan')
 
         kwargs = handle_sort_option(self.params, LayoutInfo(), self.logger,
                                     **kwargs)
