@@ -1,0 +1,167 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2025 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Test that the phobosd does not get stuck when a client disconnects without
+# releasing its resources.
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+
+function dir_setup
+{
+    setup_tables
+    # start phobosd manually to kill it even if client1 never releases the lock
+    $phobosd -i &
+    phobosd_pid=$!
+
+    export dirs="
+        $(mktemp -d "$PWD/test.pho.XXXX")
+        $(mktemp -d "$PWD/test.pho.XXXX")
+    "
+    echo "adding directories $dirs"
+    $phobos dir add $dirs
+    $phobos dir format --fs posix --unlock $dirs
+    export PHOBOS_STORE_default_family="dir"
+}
+
+function tape_setup
+{
+    setup_tables
+    invoke_tlc
+    # start phobosd manually to kill it even if client1 never releases the lock
+    $phobosd -i &
+    phobosd_pid=$!
+
+    # get tapes
+    local tapes="$(get_tapes L6 2)"
+    $phobos tape add --type lto6 "$tapes"
+
+    # get drives
+    local drives="$(get_lto_drives 6 2)"
+    $phobos drive add --unlock $drives
+
+    # format tapes
+    $phobos tape format $tapes --unlock
+    export PHOBOS_STORE_default_family="tape"
+}
+
+function env_setup
+{
+    export PHOBOS_LRS_lock_file="$test_dir/phobosd.lock"
+}
+
+function env_cleanup
+{
+    kill -9 $(pgrep phobosd)
+    rm -f ${PHOBOS_LRS_lock_file}
+    unset PHOBOS_LRS_lock_file
+    unset PHOBOS_STORE_default_family
+    if [[ -w /dev/changer ]]; then
+        waive_tlc
+    fi
+
+    drop_tables
+    if [[ -w /dev/changer ]]; then
+        drain_all_drives
+    fi
+}
+
+function dir_cleanup
+{
+    kill -9 ${phobosd_pid}
+    rm -f ${PHOBOS_LRS_lock_file}
+    drop_tables
+    rm -rf $dirs
+    rm -rf /tmp/out*
+}
+
+function tape_cleanup
+{
+    kill -9 ${phobosd_pid}
+    rm -f ${PHOBOS_LRS_lock_file}
+    waive_tlc
+    drop_tables
+    drain_all_drives
+}
+
+# Execute a phobos command but quit without ending after having get the booking
+function phobos_broken_client()
+{
+    (
+        tmp_gdb_script=$(mktemp)
+        trap "rm $tmp_gdb_script" EXIT
+        cat <<EOF > "$tmp_gdb_script"
+set breakpoint pending on
+break raid_writer_split_setup
+commands
+quit
+end
+run $phobos $*
+EOF
+
+        DEBUGINFOD_URLS="" gdb -batch -x "$tmp_gdb_script" -q python3
+    )
+}
+
+function test_client_disconnection
+{
+    phobos_broken_client put --layout raid1 --lyt-params repl_count=1 /etc/hosts oid1 &
+    local pid1=$!
+    wait $pid1
+    $phobos put --layout raid1 --lyt-params repl_count=1 /etc/hosts oid2 ||
+        error "Object oid2 should be put even if first client failed"
+
+    oids="$($phobos extent list -o oid)"
+    if [[ "${oids}" !=  "oid2" ]]; then
+        error "oid2 should be the existing one"
+    fi
+}
+
+function test_client_disconnection_dir
+{
+    phobos_broken_client put --family dir --layout raid1 --lyt-params repl_count=1 /etc/hosts oid1 &
+    local pid1=$!
+    wait $pid1
+    $phobos put --family dir --layout raid1 --lyt-params repl_count=1 /etc/hosts oid2 ||
+        error "Object oid2 should be put even if first client failed"
+
+    oids="$($phobos extent list -o oid)"
+    if [[ "${oids}" !=  "oid2" ]]; then
+        error "oid2 should be the existing one"
+    fi
+}
+
+TEST_SETUP=env_setup
+TEST_CLEANUP=env_cleanup
+
+# test locate on dir
+TESTS=("dir_setup; test_client_disconnection; dir_cleanup")
+
+
+if [[ -w /dev/changer ]]; then
+    TESTS+=("tape_setup; test_client_disconnection; tape_cleanup")
+fi

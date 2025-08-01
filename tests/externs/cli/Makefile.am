@@ -40,6 +40,7 @@ check_PROGRAMS=test_fair_share \
                medium_locker
 
 check_SCRIPTS=acceptance.test \
+              test_client_disconnection.test \
               test_compatible_drive_exists.test \
               test_copy_create.test \
               test_copy_delete.test \
