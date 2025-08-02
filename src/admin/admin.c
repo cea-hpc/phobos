@@ -1463,9 +1463,10 @@ free_ext:
     return rc;
 }
 
-static int _retrieve_fstype_from_medium(struct admin_handle *adm,
-                                        const struct pho_id *medium,
-                                        enum fs_type *fstype)
+static int _retrieve_source_info(struct admin_handle *adm,
+                                 const struct pho_id *medium,
+                                 struct string_array *tags,
+                                 enum fs_type *fs_type)
 {
     struct dss_filter filter;
     struct media_info *media;
@@ -1486,16 +1487,18 @@ static int _retrieve_fstype_from_medium(struct admin_handle *adm,
     dss_filter_free(&filter);
     if (rc)
         LOG_RETURN(rc,
-                   "Failed to retrieve medium (family '%s', name '%s', library "
-                   "'%s') info from DSS", rsc_family2str(medium->family),
-                   medium->name, medium->library);
+                   "Failed to retrieve medium "FMT_PHO_ID" info from DSS",
+                   PHO_ID(*medium));
 
     if (count != 1) {
         dss_res_free(media, count);
         LOG_RETURN(-EINVAL, "Did not retrieve one medium, %d instead", count);
     }
 
-    *fstype = media->fs.type;
+    string_array_dup(tags, &media->tags);
+    if (fs_type)
+        *fs_type = media->fs.type;
+
     dss_res_free(media, count);
 
     return 0;
@@ -1507,10 +1510,13 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     enum fs_type source_fs_type = PHO_FS_INVAL;
     struct pho_io_descr iod_source = {0};
     struct pho_io_descr iod_target = {0};
+    struct string_array empty_tags = {0};
     struct pho_ext_loc loc_source = {0};
     struct pho_ext_loc loc_target = {0};
     struct io_adapter_module *ioa = {0};
+    struct string_array *ptr_tags;
     struct extent *ext_res = NULL;
+    struct string_array src_tags;
     GArray *new_ext_uuids = NULL;
     int ext_cnt_done = 0;
     struct pho_id target;
@@ -1532,26 +1538,45 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     if (rc)
         return rc;
 
+    rc = _retrieve_source_info(adm, source, &src_tags,
+                               source_fs_type == PHO_FS_INVAL ?
+                                  &source_fs_type : NULL);
+    if (rc)
+        LOG_GOTO(free_ext, rc,
+                 "Failed to retrieve info for "FMT_PHO_ID, PHO_ID(*source));
+
     total_size = _sum_extent_size(ext_res, ext_cnt);
     if (total_size == 0)
         goto format;
-
-    new_ext_uuids = g_array_new(FALSE, TRUE, sizeof(ext_res[0].uuid));
 
     /* Prepare read allocation */
     rc = _get_source_medium(adm, source, &loc_source, &iod_source, &ioa,
                             &source_fs_type);
     if (rc)
-        goto free_ext;
+        goto free_tags;
 
-    /* Prepare write allocation */
-    rc = _get_target_medium(adm, source, total_size, tags, &loc_target,
+    /* Prepare write allocation
+     * Use the same tags as the source medium
+     */
+    if (tags->count == 0)
+        ptr_tags = &src_tags;
+    /* Use no tags */
+    else if (tags->count == 1 && strcmp(tags->strings[0], "") == 0)
+        ptr_tags = &empty_tags;
+    /* Use the tags specified */
+    else
+        ptr_tags = tags;
+
+    rc = _get_target_medium(adm, source, total_size, ptr_tags, &loc_target,
                             &iod_target, &target);
     if (rc) {
         free(loc_source.root_path);
+
         _send_and_recv_release(adm, source, &iod_source, 3, NULL, NULL, 0, 0);
-        goto free_ext;
+        goto free_tags;
     }
+
+    new_ext_uuids = g_array_new(FALSE, TRUE, sizeof(ext_res[0].uuid));
 
     /* Copy loop */
     for (i = 0; i < ext_cnt; ++i, ++ext_cnt_done) {
@@ -1606,20 +1631,10 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     new_ext_uuids = NULL;
 
 format:
-    if (source_fs_type == PHO_FS_INVAL) {
-        rc = _retrieve_fstype_from_medium(adm, source, &source_fs_type);
-        if (rc)
-            LOG_GOTO(free_ext, rc,
-                     "Failed to retrieve FS type for (family '%s', name '%s', "
-                     "library '%s')", rsc_family2str(source->family),
-                     source->name, source->library);
-    }
-
     rc = phobos_admin_format(adm, source, 1, 1, source_fs_type, true, true);
     if (rc)
         LOG_GOTO(free_ext, rc,
-                 "Failed to format (family '%s', name '%s', library '%s')",
-                 rsc_family2str(source->family), source->name, source->library);
+                 "Failed to format "FMT_PHO_ID, PHO_ID(*source));
 
     rc = _clean_database_following_format(adm, source);
 
@@ -1634,6 +1649,9 @@ free_ext:
             pho_error(rc, "Failed to update state of new extents to orphan");
 
     }
+
+free_tags:
+    string_array_free(&src_tags);
     dss_res_free(ext_res, ext_cnt);
 
     return rc;

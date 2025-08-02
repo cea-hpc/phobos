@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-#  All rights reserved (c) 2014-2024 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -32,16 +32,15 @@ test_dir=$(dirname $(readlink -e $0))
 function setup
 {
     setup_tables
-    invoke_tlc
+    invoke_daemons
     invoke_tlc_bis
-    invoke_lrs
 }
 
 function cleanup
 {
-    waive_lrs
-    waive_tlc
     waive_tlc_bis
+    waive_daemons
+    drain_all_drives
     drop_tables
     rm -f /tmp/oid-repack*
     rm -f /tmp/oid_bis-repack*
@@ -106,20 +105,24 @@ function tape_setup
     setup
 
     export drives="$(get_lto_drives 5 2)"
-    export media="$(get_tapes L5 3 | nodeset -e)"
+    export media="$(get_tapes L5 4 | nodeset -e)"
     export tape_bis="$(get_tapes_bis L6 1)"
     export drive_bis="$(get_lto_drives_bis 6 1)"
 
     export medium_origin="$(echo $media | cut -d' ' -f1)"
     export medium_alt="$(echo $media | cut -d' ' -f2)"
     export medium_other="$(echo $media | cut -d' ' -f3)"
+    export medium_origin_bis="$(echo $media | cut -d' ' -f4)"
 
     $phobos drive add --unlock $drives
     $phobos tape add -t lto5 -T origin $medium_origin
+    $phobos tape add -t lto5 -T origin $medium_origin_bis
     $phobos tape add -t lto5 -T alt $medium_alt
     $phobos tape add -t lto5 $medium_other
 
     $phobos tape format --unlock $media
+    # Lock it to prevent write on it
+    $phobos tape lock $medium_origin_bis
 
     if [[ ${bis} = "bis" ]]; then
         $phobos drive add --unlock --library library_bis $drive_bis
@@ -130,6 +133,8 @@ function tape_setup
     else
         obj_setup
     fi
+
+    $phobos tape unlock $medium_origin_bis
 }
 
 function tape_cleanup
@@ -142,6 +147,12 @@ function test_simple_repack
 {
     local family=$1
 
+    $phobos tape lock $medium_origin_bis
+    $valg_phobos tape repack $medium_origin &&
+        error "Repack should have failed"
+
+    $phobos tape unlock $medium_origin_bis
+
     # Make 'alt' medium not empty to prevent its selection for repack
     $phobos put -T alt /etc/hosts oid5
 
@@ -152,12 +163,12 @@ function test_simple_repack
         error "repack should not have selected a used medium"
     fi
 
-    nb=$($phobos extent list --name $medium_other | wc -l)
+    nb=$($phobos extent list --name $medium_origin_bis | wc -l)
     if [ $nb -ne 3 ]; then
         error "repack should have copied 3 extents to the empty medium"
     fi
 
-    nb=$($phobos tape list -o stats.nb_obj $(echo $media | cut -d' ' -f3))
+    nb=$($phobos tape list -o stats.nb_obj $medium_origin_bis)
     if [ $nb -ne 3 ]; then
         error "tape stats should have said 3 extents were copied"
     fi
@@ -265,12 +276,14 @@ function test_dedup_repack_setup
 
     $phobos drive add --unlock $drives
     $phobos tape add -t lto5 -T origin $medium_origin
-    $phobos tape add -t lto5 $medium_other
 
-    $phobos tape format --unlock $media
+    $phobos tape format --unlock $medium_origin
 
     $phobos put -T origin /etc/hosts oid-1
     $phobos put -T origin /etc/hosts oid-2
+
+    $phobos tape add -t lto5 -T origin $medium_other
+    $phobos tape format --unlock $medium_other
 
     object_uuid1=$($phobos object list -o uuid oid-1)
     extent_uuid1=$($phobos extent list --degroup -o ext_uuid oid-1)
@@ -321,11 +334,15 @@ function test_dedup_repack
         error "file oid-repack-dedup is not correctly retrieved"
 }
 
-function test_tagged_repack
+function test_tags_repack
 {
-    local family=$1
+    $phobos tape lock $medium_alt
+    $valg_phobos tape repack -T alt $medium_origin &&
+        error "Repack should have failed"
 
-    $phobos $family repack -T alt $medium_origin
+    $phobos tape unlock $medium_alt
+    $valg_phobos tape repack -T alt $medium_origin ||
+        error "Repack should have succeed"
 
     nb=$($phobos extent list --name $medium_alt | wc -l)
     if [ $nb -ne 3 ]; then
@@ -339,7 +356,41 @@ function test_tagged_repack
 
     obj_check
 
-    state=$($phobos $family list -o fs.status $medium_origin)
+    state=$($phobos tape list -o fs.status $medium_origin)
+    if [ "$state" != "empty" ]; then
+        error "repack should format source medium"
+    fi
+}
+
+function test_tags_empty_repack
+{
+    $phobos tape lock $medium_other
+    $phobos tape lock $medium_origin_bis
+    $phobos tape lock $medium_alt
+    $valg_phobos tape repack -T "" $medium_origin &&
+        error "Repack should have failed"
+
+    $phobos tape unlock $medium_other
+    $phobos tape unlock $medium_origin_bis
+    $phobos tape unlock $medium_alt
+    $valg_phobos tape repack -T "" $medium_origin ||
+        error "Repack should have succeed"
+
+    nb=$(($phobos extent list --name $medium_alt;
+          $phobos extent list --name $medium_other;
+          $phobos extent list --name $medium_origin_bis) | wc -l)
+    if [ $nb -ne 3 ]; then
+        error "repack should have copied 3 extents to one available medium"
+    fi
+
+    nb=$($phobos object list --deprecated-only | wc -l)
+    if [ $nb -ne 0 ]; then
+        error "repack should have deleted deprecated objects"
+    fi
+
+    obj_check
+
+    state=$($phobos tape list -o fs.status $medium_origin)
     if [ "$state" != "empty" ]; then
         error "repack should format source medium"
     fi
@@ -348,6 +399,7 @@ function test_tagged_repack
 function test_simple_repack_library_bis
 {
     # Make 'origin' and 'alt' medium not empty to prevent selection for repack
+    $phobos tape lock $medium_origin_bis
     $phobos put -T origin /etc/hosts oid5
     $phobos put -T alt /etc/hosts oid6
 
@@ -375,11 +427,10 @@ function test_simple_repack_library_bis
 
     obj_check_bis
 
-    # TODO WAITING availaibility of library option in media list
-    #state=$($phobos $family list --library library_bis -o fs.status $tape_bis)
-    #if [ "$state" != "empty" ]; then
-    #    error "repack should format source medium in library bis"
-    #fi
+    state=$($phobos tape list --library library_bis -o fs.status $tape_bis)
+    if [ "$state" != "empty" ]; then
+        error "repack should format source medium in library bis"
+    fi
 }
 
 if [[ ! -w /dev/changer ]]; then
@@ -387,11 +438,11 @@ if [[ ! -w /dev/changer ]]; then
 fi
 
 TEST_CLEANUP=cleanup
-TESTS=("tape_setup;test_simple_repack tape;tape_cleanup")
-TESTS+=("tape_setup;test_deprec_repack tape;tape_cleanup")
-TESTS+=("test_raid1_repack_setup;test_raid1_repack tape;tape_cleanup")
-TESTS+=("tape_setup;test_orphan_repack tape;tape_cleanup")
-TESTS+=("test_dedup_repack_setup;test_dedup_repack tape;tape_cleanup")
-TESTS+=("tape_setup;test_tagged_repack tape;tape_cleanup")
-TESTS+=("tape_setup bis;test_simple_repack_library_bis;tape_cleanup")
-
+TESTS=("tape_setup;test_simple_repack tape;tape_cleanup"
+       "tape_setup;test_deprec_repack tape;tape_cleanup"
+       "test_raid1_repack_setup;test_raid1_repack tape;tape_cleanup"
+       "tape_setup;test_orphan_repack tape;tape_cleanup"
+       "test_dedup_repack_setup;test_dedup_repack tape;tape_cleanup"
+       "tape_setup;test_tags_repack;tape_cleanup"
+       "tape_setup;test_tags_empty_repack;tape_cleanup"
+       "tape_setup bis;test_simple_repack_library_bis;tape_cleanup")
