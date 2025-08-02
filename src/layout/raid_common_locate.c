@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2024 CEA/DAM.
+ *  All rights reserved (c) 2014-2025 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -586,14 +586,22 @@ static int reserve_locks(struct dss_handle *dss, GHashTable *hosts,
             struct extent_location *loc;
 
             loc = extents->pdata[ext_index];
-            if (loc && loc->hostname && !strcmp(loc->hostname, hostname))
+            if (loc && loc->hostname && !strcmp(loc->hostname, hostname)) {
                 /* already locked by the proper host */
+
+                int rc;
+
+                rc = dss_lock_refresh(dss, DSS_MEDIA, loc->medium, 1, true);
+                if (rc)
+                    pho_debug("locate: failed to update locate timestamp for"
+                              FMT_PHO_ID, PHO_ID(loc->medium->rsc.id));
                 nb_locks_per_split[i]++;
+            }
         }
     }
 
     return lock_extents(dss, hosts, extents, nb_locks_per_split, hostname,
-                        n_data_extents, n_parity_extents);
+                      n_data_extents, n_parity_extents);
 }
 
 int raid_locate(struct dss_handle *dss, struct layout_info *layout,
