@@ -667,12 +667,13 @@ static int check_orphan(struct dss_handle *handle, const struct pho_id *tape)
 
     g_string_append_printf(request,
         "UPDATE extent SET state = 'orphan' "
-        "WHERE extent_uuid NOT IN ("
-        "  SELECT extent_uuid FROM layout"
-        ")"
-        " AND medium_id = '%s' AND medium_family = '%s' AND"
-        " medium_library = '%s'"
-        ";", tape->name, rsc_family2str(tape->family), tape->library);
+        "WHERE extent_uuid IN ("
+        "  SELECT extent.extent_uuid FROM extent "
+        "    LEFT JOIN layout ON extent.extent_uuid = layout.extent_uuid "
+        "  WHERE layout.extent_uuid IS NULL AND "
+        "    extent.medium_id = '%s' AND extent.medium_family = '%s' AND "
+        "    extent.medium_library = '%s');",
+        tape->name, rsc_family2str(tape->family), tape->library);
 
     rc = execute_and_commit_or_rollback(handle->dh_conn, request, &res,
                                         PGRES_COMMAND_OK);
