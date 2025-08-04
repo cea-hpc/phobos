@@ -51,6 +51,7 @@
 #define LRS_STAT_NS "req"
 
 /** used for indexing stats on requests */
+/* FIXME duplicate of PHO_REQUEST_KIND etc. ? */
 enum req_type {
     PHO_REQ_READ    = 0,
     PHO_REQ_WRITE   = 1,
@@ -60,13 +61,14 @@ enum req_type {
     PHO_REQ_PING    = 5,
     PHO_REQ_MONITOR = 6,
     PHO_REQ_CONFIGURE = 7,
+    PHO_REQ_STAT    = 8,
 
-    PHO_REQ_COUNT   = 8
+    PHO_REQ_COUNT   = PHO_REQ_STAT + 1,
 };
 /** used for tagging stats on requests */
 const char *req_name[PHO_REQ_COUNT] = { "READ", "WRITE", "FORMAT", "RELEASE",
                                         "NOTIFY", "PING", "MONITOR",
-                                        "CONFIGURE" };
+                                        "CONFIGURE", "STAT" };
 
 struct lrs_stats {
     struct pho_stat *req_stats[PHO_REQ_COUNT];  /*!< Counters per req type */
@@ -476,6 +478,59 @@ send_error:
     return rc;
 }
 
+static int _process_stat_request(struct lrs *lrs,
+                                 const struct req_container *req_cont)
+{
+    struct resp_container resp_cont;
+    json_t *stats;
+    int rc;
+
+    resp_cont.resp = xmalloc(sizeof(*resp_cont.resp));
+
+    stats = json_array();
+    if (!stats)
+        LOG_GOTO(free_resp, rc = -ENOMEM, "Failed to allocate json array");
+
+    resp_cont.socket_id = req_cont->socket_id;
+    pho_srl_response_stat_alloc(resp_cont.resp);
+    resp_cont.resp->req_id = req_cont->req->id;
+
+    /* FIXME for now just dummy contents */
+    json_t *dummy_stats = json_object();
+
+    if (!dummy_stats)
+        LOG_GOTO(free_resp, rc = -ENOMEM, "Failed to allocate json_object");
+
+    json_object_set(dummy_stats, "hello", json_string("world"));
+
+    rc = json_array_append_new(stats, dummy_stats);
+    if (rc == -1)
+        LOG_GOTO(free_stats, rc = -ENOMEM, "Failed to append stat to array");
+    /* --- */
+
+    resp_cont.resp->stat->stats = json_dumps(stats, 0);
+    json_decref(stats);
+    if (!resp_cont.resp->stat->stats)
+        LOG_GOTO(free_resp, rc = -ENOMEM, "Failed to dump stats string");
+
+    rc = _send_message(&lrs->comm, &resp_cont);
+    pho_srl_response_free(resp_cont.resp, false);
+    free(resp_cont.resp);
+    if (rc)
+        LOG_GOTO(send_error, rc, "Failed to send stat response");
+
+    return 0;
+
+free_stats:
+    json_decref(stats);
+free_resp:
+    free(resp_cont.resp);
+send_error:
+    _send_error(lrs, rc, req_cont);
+
+    return rc;
+}
+
 static void init_rwalloc_container(struct lrs_stats *stats,
                                    struct req_container *reqc)
 {
@@ -848,6 +903,11 @@ static bool handle_quick_requests(struct lrs *lrs, struct req_container *reqc)
     } else if (pho_request_is_monitor(reqc->req)) {
         pho_stat_incr(lrs->stats.req_stats[PHO_REQ_MONITOR], 1);
         _process_monitor_request(lrs, reqc);
+        sched_req_free(reqc);
+        return true;
+    } else if (pho_request_is_stat(reqc->req)) {
+        pho_stat_incr(lrs->stats.req_stats[PHO_REQ_STAT], 1);
+        _process_stat_request(lrs, reqc);
         sched_req_free(reqc);
         return true;
     } else if (pho_request_is_configure(reqc->req)) {

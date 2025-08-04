@@ -632,4 +632,21 @@ int phobos_admin_notify_media_update(struct admin_handle *adm,
                                      size_t count,
                                      lock_conflict_handler_t on_conflict);
 
+/**
+ * Retrieve stats from the local process (either phobosd or tlc).
+ *
+ * @param[in]  adm    Valid admin handle
+ * @param[in]  full_name (optional) Full name of the stat to be retrieved.
+ *                    It can be in the form "namespace" or "namespace.name".
+ * @param[in]  tags   (optional) list of comma-separated key=value to filter
+ *                    the requested stats, e.g. "key1=value1,key2=value2".
+ * @param[in,out]  stats  Allocated JSON string containing stats information.
+ *
+ * @return             0 on success, negative error on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
+ */
+int phobos_admin_stats(struct admin_handle *adm, const char *full_name,
+                       const char *tags, char **stats);
+
 #endif

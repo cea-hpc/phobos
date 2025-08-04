@@ -43,6 +43,7 @@ typedef PhoRequest__Format          pho_req_format_t;
 typedef PhoRequest__Notify          pho_req_notify_t;
 typedef PhoRequest__Monitor         pho_req_monitor_t;
 typedef PhoRequest__Configure       pho_req_configure_t;
+typedef PhoRequest__Stat            pho_req_stat_t;
 
 typedef PhoResponse                 pho_resp_t;
 typedef PhoResponse__Write          pho_resp_write_t;
@@ -53,6 +54,7 @@ typedef PhoResponse__Release        pho_resp_release_t;
 typedef PhoResponse__Format         pho_resp_format_t;
 typedef PhoResponse__Notify         pho_resp_notify_t;
 typedef PhoResponse__Monitor        pho_resp_monitor_t;
+typedef PhoResponse__Stat           pho_resp_stat_t;
 typedef PhoResponse__Error          pho_resp_error_t;
 
 /******************************************************************************/
@@ -221,6 +223,20 @@ static inline bool pho_request_is_monitor(const pho_req_t *req)
 }
 
 /**
+ * Request stat checker.
+ *
+ * \param[in]   req    request
+ *
+ * \return             true if the request is a stat one,
+ *                     false otherwise.
+ */
+static inline bool pho_request_is_stat(const pho_req_t *req)
+{
+    return req->stat != NULL;
+}
+
+
+/**
  * Response write alloc checker.
  *
  * \param[in]       resp        Response.
@@ -365,6 +381,19 @@ static inline bool pho_response_is_monitor(const pho_resp_t *resp)
 }
 
 /**
+ * Response stat checker.
+ *
+ * \param[in]   resp   response
+ *
+ * \return             true if the response is a stat one,
+ *                     false otherwise.
+ */
+static inline bool pho_response_is_stat(const pho_resp_t *resp)
+{
+    return resp->stat != NULL;
+}
+
+/**
  * Response error checker.
  *
  * \param[in]       resp        Response.
@@ -486,6 +515,14 @@ void pho_srl_request_notify_alloc(pho_req_t *req);
 void pho_srl_request_monitor_alloc(pho_req_t *req);
 
 /**
+ * Allocation of stat request contents.
+ *
+ * \param[out]   req   request
+ */
+void pho_srl_request_stat_alloc(pho_req_t *req);
+
+
+/**
  * Release of request contents.
  *
  * \param[in]       req         Pointer to the request data structure.
@@ -551,6 +588,12 @@ void pho_srl_response_notify_alloc(pho_resp_t *resp);
  * \param[out]    resp   Pointer to the response data structure.
  */
 void pho_srl_response_monitor_alloc(pho_resp_t *resp);
+
+/** Allocation of stat response contents.
+ *
+ * \param[out]    resp   Pointer to the response data structure.
+ */
+void pho_srl_response_stat_alloc(pho_resp_t *resp);
 
 /**
  * Allocation of error response contents.

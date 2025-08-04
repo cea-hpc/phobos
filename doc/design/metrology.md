@@ -38,12 +38,10 @@ Two options could be considered for collecting Phobosd statistics:
   tool). Thus, we choose this latter choice.
 
 
-The Phobos admin client will query statistics from Phobosd by extending the
-existing "monitor" call of the protocol. This RPC currently takes a device
-family as argument (e.g. 'dir', 'tape'...), and returns the status of the
-corresponding drives in JSON format. While the JSON output format is suitable
-for returning any daemon statistics, the input parameters may need to be
-modified to meet the requirements for this design.
+The Phobos admin client will query statistics from Phobosd by add adding a new
+"Stat" call to the protocol. This RPC takes an optional stat name and optional
+tags in argument, and returns a JSON string including all matched daemon
+statistics.
 
 ### Statistics types
 In accordance with the types of metrics expected by statistics collection tools,

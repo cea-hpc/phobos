@@ -119,6 +119,16 @@ message PhoRequest {
         required PhoResourceFamily family = 1;
     }
 
+    /** Body of the stats request */
+    message Stat {
+        optional string ns        = 1; /* Filter for stats namespace
+                                        * Notice protobuff does not leave
+                                        * 'namespace' as field name.
+                                        */
+        optional string name      = 2; // filter for stat name
+        optional string tags      = 3; // filters on tags
+    }
+
     message Configure {
         required PhoConfigureOp op    = 1; // Type of the request
         required string configuration = 2; // JSON format containing
@@ -154,6 +164,7 @@ message PhoRequest {
     optional bool ping           = 9; // Is the request a ping request ?
     optional Monitor monitor     = 10; // Monitor body.
     optional Configure configure = 11; // Configure body.
+    optional Stat   stat         = 12; // Stat body.
 }
 
 /** LRS protocol response, emitted by the LRS. */
@@ -222,6 +233,11 @@ message PhoResponse {
         required string status = 1; // JSON str containing status information.
     }
 
+    /** Body of the stat response */
+    message Stat {
+        required string stats = 1; // JSON str containing stats.
+    }
+
     message Configure {
         optional string configuration = 1; // JSON format containing
                                            // configuration information. Only
@@ -250,4 +266,5 @@ message PhoResponse {
     optional bool ping           = 9;  // Is the response a ping response ?
     optional Monitor monitor     = 10; // Monitor body.
     optional Configure configure = 11; // Configure body.
+    optional Stat stat           = 12; // Stat body.
 }

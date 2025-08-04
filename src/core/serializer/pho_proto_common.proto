@@ -89,6 +89,7 @@ enum PhoRequestKind {
     RQ_MONITOR       = 6; // Query information about the current status of the
                           // LRS.
     RQ_CONFIGURE     = 7; // Get/Set configuration information from the LRS
+    RQ_STAT          = 8; // Retrieve stats from the LRS
 }
 
 /** LRS sync threshold */

@@ -44,6 +44,7 @@ check_PROGRAMS=phobos_put_copy \
                test_multithread \
                test_raid1_split_locate \
                test_scsi \
+               test_stats \
                test_store \
                test_store_retry \
                test_undelete
@@ -61,7 +62,8 @@ check_SCRIPTS=test_bad_comm.sh \
               test_raid1_split_locate.sh \
               test_scsi.test \
               test_store_retry.sh \
-              test_undelete.sh
+              test_undelete.sh \
+              test_stats.sh
 
 if RADOS_ENABLED
 check_PROGRAMS+=test_lib_dev_rados test_io_rados test_fs_rados
@@ -146,3 +148,7 @@ test_store_retry_CFLAGS=$(TESTS_INCLUDE)
 test_undelete_SOURCES=test_undelete.c
 test_undelete_LDADD=$(STORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_undelete_CFLAGS=$(TESTS_INCLUDE)
+
+test_stats_SOURCES=test_stats.c
+test_stats_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
+test_stats_CFLAGS=$(TESTS_INCLUDE)

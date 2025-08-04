@@ -842,6 +842,68 @@ int phobos_admin_device_status(struct admin_handle *adm,
     return rc;
 }
 
+/** Parse a string of format "namespace.name" to a (namespace, name) peer.
+ */
+static void parse_full_name(const char *full_name, char **namespace,
+                            char **name)
+{
+    *namespace = NULL;
+    *name = NULL;
+
+    if (!full_name || strlen(full_name) == 0)
+        return;
+
+    /* is the filter only on namespace? */
+    char *dot_pos = strchr(full_name, '.');
+
+    if (!dot_pos) {
+        /* namespace only */
+        *namespace = xstrdup(full_name);
+        return;
+    }
+
+    size_t ns_len = dot_pos - full_name;
+
+    *namespace = xmalloc(ns_len + 1);
+    strncpy(*namespace, full_name, ns_len);
+    (*namespace)[ns_len] = '\0';
+
+    dot_pos++;
+    *name = xstrdup(dot_pos);
+}
+
+int phobos_admin_stats(struct admin_handle *adm, const char *full_name,
+                       const char *tags, char **stats)
+{
+    pho_resp_t *resp = NULL;
+    pho_req_t req;
+    int rc;
+
+    if (!stats)
+        return -EINVAL;
+
+    pho_srl_request_stat_alloc(&req);
+
+    req.id = 0;
+    parse_full_name(full_name, &req.stat->ns, &req.stat->name);
+    req.stat->tags = xstrdup_safe(tags);
+
+    rc = comm_send_and_recv(&adm->phobosd_comm, &req, &resp);
+    if (rc)
+        return rc;
+
+    if (pho_response_is_stat(resp))
+        *stats = xstrdup(resp->stat->stats);
+    else if (pho_response_is_error(resp))
+        rc = resp->error->rc;
+    else
+        rc = -EPROTO;
+
+    pho_srl_response_free(resp, true);
+
+    return rc;
+}
+
 int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
                                unsigned int num_dev, const char *host,
                                const char *library,

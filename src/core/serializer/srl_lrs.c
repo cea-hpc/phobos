@@ -38,8 +38,9 @@ enum _RESP_KIND {
     _RESP_FORMAT,
     _RESP_NOTIFY,
     _RESP_MONITOR,
-    _RESP_ERROR,
     _RESP_CONFIGURE,
+    _RESP_STAT,
+    _RESP_ERROR,
 };
 
 static const char *const SRL_REQ_KIND_STRS[] = {
@@ -51,6 +52,7 @@ static const char *const SRL_REQ_KIND_STRS[] = {
     [PHO_REQUEST_KIND__RQ_NOTIFY]    = "notify",
     [PHO_REQUEST_KIND__RQ_MONITOR]   = "monitor",
     [PHO_REQUEST_KIND__RQ_CONFIGURE] = "configure",
+    [PHO_REQUEST_KIND__RQ_STAT]      = "stat",
 };
 
 static const char *const SRL_RESP_KIND_STRS[] = {
@@ -62,6 +64,7 @@ static const char *const SRL_RESP_KIND_STRS[] = {
     [_RESP_NOTIFY]    = "notify",
     [_RESP_MONITOR]   = "monitor",
     [_RESP_CONFIGURE] = "configure",
+    [_RESP_STAT]      = "stat",
     [_RESP_ERROR]     = "error"
 };
 
@@ -85,6 +88,8 @@ const char *pho_srl_request_kind_str(pho_req_t *req)
         return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_MONITOR];
     if (pho_request_is_configure(req))
         return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_CONFIGURE];
+    if (pho_request_is_stat(req))
+        return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_STAT];
 
     return "<invalid>";
 }
@@ -105,10 +110,12 @@ const char *pho_srl_response_kind_str(pho_resp_t *resp)
         return SRL_RESP_KIND_STRS[_RESP_NOTIFY];
     if (pho_response_is_monitor(resp))
         return SRL_RESP_KIND_STRS[_RESP_MONITOR];
-    if (pho_response_is_error(resp))
-        return SRL_RESP_KIND_STRS[_RESP_ERROR];
     if (pho_response_is_configure(resp))
         return SRL_RESP_KIND_STRS[_RESP_CONFIGURE];
+    if (pho_response_is_stat(resp))
+        return SRL_RESP_KIND_STRS[_RESP_STAT];
+    if (pho_response_is_error(resp))
+        return SRL_RESP_KIND_STRS[_RESP_ERROR];
 
     return "<invalid>";
 }
@@ -131,6 +138,8 @@ int request_kind_from_response(pho_resp_t *resp)
         return PHO_REQUEST_KIND__RQ_MONITOR;
     else if (pho_response_is_configure(resp))
         return PHO_REQUEST_KIND__RQ_CONFIGURE;
+    else if (pho_response_is_stat(resp))
+        return PHO_REQUEST_KIND__RQ_STAT;
     else if (pho_response_is_error(resp))
         return resp->error->req_kind;
     else
@@ -139,7 +148,7 @@ int request_kind_from_response(pho_resp_t *resp)
 
 const char *pho_srl_error_kind_str(pho_resp_error_t *err)
 {
-    if (err->req_kind > PHO_REQUEST_KIND__RQ_CONFIGURE)
+    if (err->req_kind > PHO_REQUEST_KIND__RQ_STAT)
         return "<invalid>";
 
     return SRL_REQ_KIND_STRS[err->req_kind];
@@ -270,6 +279,15 @@ void pho_srl_request_monitor_alloc(pho_req_t *req)
     pho_request__monitor__init(req->monitor);
 }
 
+void pho_srl_request_stat_alloc(pho_req_t *req)
+{
+    pho_request__init(req);
+
+    req->stat = xmalloc(sizeof(*req->stat));
+
+    pho_request__stat__init(req->stat);
+}
+
 void pho_srl_request_free(pho_req_t *req, bool unpack)
 {
     if (unpack) {
@@ -343,6 +361,14 @@ void pho_srl_request_free(pho_req_t *req, bool unpack)
         free(req->configure->configuration);
         free(req->configure);
         req->configure = NULL;
+    }
+
+    if (req->stat) {
+        free(req->stat->ns);
+        free(req->stat->name);
+        free(req->stat->tags);
+        free(req->stat);
+        req->stat = NULL;
     }
 }
 
@@ -455,6 +481,16 @@ void pho_srl_response_monitor_alloc(pho_resp_t *resp)
     resp->monitor->status = NULL;
 }
 
+void pho_srl_response_stat_alloc(pho_resp_t *resp)
+{
+    pho_response__init(resp);
+
+    resp->stat = xmalloc(sizeof(*resp->stat));
+
+    pho_response__stat__init(resp->stat);
+    resp->stat->stats = NULL;
+}
+
 void pho_srl_response_error_alloc(pho_resp_t *resp)
 {
     pho_response__init(resp);
@@ -545,6 +581,12 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
         free(resp->configure->configuration);
         free(resp->configure);
         resp->configure = NULL;
+    }
+
+    if (resp->stat) {
+        free(resp->stat->stats);
+        free(resp->stat);
+        resp->stat = NULL;
     }
 }
 
