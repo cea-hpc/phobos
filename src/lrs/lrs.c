@@ -482,31 +482,20 @@ static int _process_stat_request(struct lrs *lrs,
                                  const struct req_container *req_cont)
 {
     struct resp_container resp_cont;
-    json_t *stats;
     int rc;
 
     resp_cont.resp = xmalloc(sizeof(*resp_cont.resp));
-
-    stats = json_array();
-    if (!stats)
-        LOG_GOTO(free_resp, rc = -ENOMEM, "Failed to allocate json array");
 
     resp_cont.socket_id = req_cont->socket_id;
     pho_srl_response_stat_alloc(resp_cont.resp);
     resp_cont.resp->req_id = req_cont->req->id;
 
-    /* FIXME for now just dummy contents */
-    json_t *dummy_stats = json_object();
-
-    if (!dummy_stats)
-        LOG_GOTO(free_resp, rc = -ENOMEM, "Failed to allocate json_object");
-
-    json_object_set(dummy_stats, "hello", json_string("world"));
-
-    rc = json_array_append_new(stats, dummy_stats);
-    if (rc == -1)
-        LOG_GOTO(free_stats, rc = -ENOMEM, "Failed to append stat to array");
-    /* --- */
+    /* dump stats */
+    json_t *stats = pho_stats_dump_json(req_cont->req->stat->ns,
+                                        req_cont->req->stat->name,
+                                        req_cont->req->stat->tags);
+    if (!stats)
+        LOG_GOTO(free_resp, rc = -EINVAL, "Failed to retrieve stats");
 
     resp_cont.resp->stat->stats = json_dumps(stats, 0);
     json_decref(stats);
@@ -521,8 +510,6 @@ static int _process_stat_request(struct lrs *lrs,
 
     return 0;
 
-free_stats:
-    json_decref(stats);
 free_resp:
     free(resp_cont.resp);
 send_error:

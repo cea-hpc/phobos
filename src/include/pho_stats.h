@@ -26,6 +26,7 @@
 #define _PHO_STATS_H
 
 #include <stdint.h>
+#include <jansson.h>
 
 struct pho_stat;
 
@@ -91,5 +92,17 @@ struct pho_stat *pho_stat_iter_next(struct pho_stat_iter *iter);
  * Close an iterator
  */
 void pho_stat_iter_close(struct pho_stat_iter *iter);
+
+/**
+ * Dumps stats as JSON. Apply the same filters as pho_stat_iter_init().
+ *
+ * \param[in] namespace Filter on the namespace name. Optional, can be NULL.
+ * \param[in] name      Filter on the metric name. Optional, can be NULL.
+ * \param[in] tag_set   A list of tag of coma-separated filters in the format
+ *                      "tag=value,tag=value,...".
+ * \return  A newly allocated json on success, NULL on error.
+ */
+json_t *pho_stats_dump_json(const char *ns_filter, const char *name_filter,
+                            const char *tag_set);
 
 #endif

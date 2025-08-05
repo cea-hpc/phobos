@@ -51,7 +51,9 @@ struct pho_stat {
     enum pho_stat_type type;
     char *namespace;
     char *name;
-    struct tag_list tag_list;
+    char *full_name; /**< copy of the full stat name, ready for dump */
+    char *tags; /**< copy of the tags ready for building dump */
+    struct tag_list tag_list; /* parsed tags for matching */
 
     _Atomic uint_least64_t value;
 };
@@ -157,12 +159,18 @@ struct pho_stat *pho_stat_create(enum pho_stat_type type,
     assert(namespace != NULL && name != NULL);
 
     if (tokenize_tags(tags, &stat->tag_list) != 0) {
-        pho_debug("Invalid format for tags: '%s'", tags);
+        pho_error(-EINVAL, "Invalid format for tags: '%s'", tags);
         return NULL;
     }
     stat->type = type;
     stat->namespace = xstrdup_safe(namespace);
     stat->name = xstrdup_safe(name);
+    asprintf(&stat->full_name, "%s.%s", stat->namespace, stat->name);
+    if (!stat->full_name) {
+        pho_error(-ENOMEM, "Failed to allocate string in asprintf()");
+        abort();
+    }
+    stat->tags = xstrdup_safe(tags);
 
     atomic_init(&stat->value, 0);
 
@@ -308,4 +316,54 @@ void pho_stat_iter_close(struct pho_stat_iter *iter)
 
     free_taglist(&iter->tag_list);
     free(iter);
+}
+
+/**
+ * Dump stats as json
+ */
+json_t *pho_stats_dump_json(const char *ns_filter, const char *name_filter,
+                            const char *tag_set)
+{
+    struct pho_stat_iter *iter;
+    struct pho_stat *stat;
+    json_t *dump;
+    int rc = 0;
+
+    dump = json_array();
+    if (!dump)
+        return NULL;
+
+    iter = pho_stat_iter_init(ns_filter, name_filter, tag_set);
+    if (!iter)
+        LOG_GOTO(free_json, rc = -EINVAL, "Failed to get stat iterator");
+
+    while ((stat = pho_stat_iter_next(iter)) != NULL) {
+        json_t *metric;
+
+        metric = json_object();
+        if (!metric)
+            LOG_GOTO(close_iter, rc = -ENOMEM,
+                     "Failed to allocate json_object");
+
+        json_object_set_new(metric, "name", json_string(stat->full_name));
+        json_object_set_new(metric, "tags", json_string(stat->tags));
+        json_object_set_new(metric, "value", json_integer(stat->value));
+
+        rc = json_array_append_new(dump, metric);
+        if (rc == -1) {
+            json_decref(metric);
+            LOG_GOTO(close_iter, rc = -ENOMEM,
+                     "Failed to append json_object to json array");
+        }
+    }
+
+close_iter:
+    pho_stat_iter_close(iter);
+
+free_json:
+    if (rc != 0) {
+        json_decref(dump);
+        return NULL;
+    }
+    return dump;
 }
