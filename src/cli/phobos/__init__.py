@@ -42,6 +42,7 @@ from phobos.cli.target.object import ObjectOptHandler
 from phobos.cli.target.phobosd import PhobosdOptHandler
 from phobos.cli.target.rados import RadosPoolOptHandler
 from phobos.cli.target.sched import SchedOptHandler
+from phobos.cli.target.stats import StatsOptHandler
 from phobos.cli.target.store import (StoreDeleteOptHandler, StoreGetOptHandler,
                                      StoreGetMDOptHandler,
                                      StoreLocateOptHandler, StoreMPutOptHandler,
@@ -64,6 +65,7 @@ HANDLERS = [
     PhobosdOptHandler,
     RadosPoolOptHandler,
     SchedOptHandler,
+    StatsOptHandler,
     TapeOptHandler,
     TLCOptHandler,
 

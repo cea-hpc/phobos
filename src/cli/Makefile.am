@@ -45,6 +45,7 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/cli/target/object.py \
 	   phobos/cli/target/phobosd.py \
 	   phobos/cli/target/sched.py \
+	   phobos/cli/target/stats.py \
 	   phobos/cli/target/store.py \
 	   phobos/cli/target/rados.py \
 	   phobos/cli/target/tape.py \

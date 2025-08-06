@@ -86,6 +86,7 @@ check_SCRIPTS=acceptance.test \
               test_repack.test \
               test_resource_availability.test \
               test_resource_management.sh \
+              test_stats.test \
               test_tlc.test \
               test_tlc_load_unload.test \
               test_tlc_status_refresh.test \

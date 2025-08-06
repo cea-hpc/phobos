@@ -1,0 +1,147 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2025 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for stats
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+
+
+function dir_setup
+{
+    local dir="$(mktemp -d /tmp/test.pho.XXXX)"
+    $phobos dir add "$dir"
+    $phobos dir format --fs posix --unlock "$dir"
+    echo "$dir"
+}
+
+declare -a phobos_dirs
+
+function setup
+{
+    setup_tables
+    invoke_lrs
+
+    # create 3 dirs to allow RAID4 writes
+    for i in {1..3}; do
+        dir=$(dir_setup)
+        phobos_dirs+=("$dir")
+    done
+}
+
+function cleanup
+{
+    waive_lrs
+    for dir in "${phobos_dirs[@]}"; do
+        rm -rf "$dir"
+    done
+    drop_tables
+}
+
+function test_stats_valid_args
+{
+    $phobos stats req || error "failed stats call"
+    $phobos stats req.count || error "failed stats call"
+    $phobos stats req.count --tags request=READ || error "failed stats call"
+    $phobos stats req.count --format json || error "failed stats call"
+    $phobos stats req.count --format lines || error "failed stats call"
+
+    # borderline cases
+    $phobos stats "" || error "failed stats call"
+    $phobos stats req. || error "failed stats call"
+    $phobos stats req.count --tags "" || error "failed stats call"
+    $phobos stats x || error "failed stats call"
+    $phobos stats x.y || error "failed stats call"
+    long_string=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 5000)
+    $phobos stats "$long_string" || error "failed stats call"
+    $phobos stats "$long_string.$long_string" || error "failed stats call"
+}
+
+function test_stats_invalid_args
+{
+    $phobos stats req.count --tags request && error "invalid tag should fail" ||
+        true
+    $phobos stats --format "xml" && error "invalid format should fail" || true
+}
+
+function get_value #name #tags
+{
+    $phobos stats "$1" --tags "$2" | awk '{print $(NF)}' | cut -d '=' -f 2
+}
+
+function test_stats_values
+{
+    local test_file=$(mktemp /tmp/testfile.XXXXXX)
+    dd if=/dev/urandom of=$test_file bs=1k count=1
+    local test_out=$(mktemp -u /tmp/testfile.XXXXXX)
+
+    $phobos put --family dir $test_file oid1 || error "put error"
+    $phobos put --family dir -l raid1 $test_file oid2 || error "put error"
+    $phobos put --family dir -l raid4 $test_file oid3 || error "put error"
+    $phobos get oid1 $test_out || error "get error"
+    rm -f $test_out
+    $phobos get oid2 $test_out || error "get error"
+    rm -f $test_out
+    $phobos get oid3 $test_out || error "get error"
+    rm -f $test_out
+    rm -f $test_file
+
+    $phobos stats || error "phobos stats failed"
+
+    # In this test:
+    # we formatted 3 dirs
+    # we put 3 objects (3 WRITE + 3 release sync)
+    # we read 3 objects (3 READ + 3 release nosync)
+    # we release 6 media for write (1 with simple layout, 2 with mirror,
+    #                             3 with raid4)
+    # we release 4 media for read (1 with simple layout, 1 with mirror,
+    #                              2 with raid4)
+
+    [ "$(get_value req.count request=FORMAT)" = "3" ] ||
+        error "3 FORMAT requests expected"
+    [ "$(get_value req.count request=WRITE)" = "3" ] ||
+        error "3 WRITE requests expected"
+    [ "$(get_value req.count request=READ)" = "3" ] ||
+        error "3 READ requests expected"
+    [ "$(get_value req.count request=RELEASE)" = "6" ] ||
+        error "6 release requests expected"
+    [ "$(get_value req.release_tosync_media_cnt)" = "6" ] ||
+        error "6 tosync media expected"
+    [ "$(get_value req.release_nosync_media_cnt)" = "4" ] ||
+        error "4 nosync media expected"
+    [ "$(get_value req.write_media_reqd)" = "6" ] ||
+        error "6 write media required expected"
+    [ "$(get_value req.read_media_reqd)" = "4" ] ||
+        error "4 read media required expected"
+}
+
+TEST_SETUP=setup
+TESTS=("test_stats_valid_args" \
+       "test_stats_invalid_args" \
+       "test_stats_values")
+TEST_CLEANUP=cleanup
+
+# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:

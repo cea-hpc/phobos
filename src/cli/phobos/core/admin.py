@@ -516,6 +516,32 @@ class Client: # pylint: disable=too-many-public-methods
 
         return count.value
 
+    def stats(self, fullname, tags):
+        """Retrieve stats from Phobos Daemon."""
+        stats_str = c_char_p(None)
+
+        fullname_encoded = (fullname.encode('utf-8') if fullname else None)
+        tags_encoded = (tags.encode('utf-8') if tags else None)
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_stats(byref(self.handle),
+                                                fullname_encoded,
+                                                tags_encoded,
+                                                byref(stats_str))
+        if rc:
+            raise EnvironmentError(rc, "Failed to retrieve stats")
+
+        if not stats_str.value:
+            return None
+
+        # Convert to JSON
+        try:
+            stats_json = json.loads(stats_str.value.decode('utf-8'))
+        except json.JSONDecodeError as jerr:
+            raise EnvironmentError(errno.EPROTO,
+                                   f"Failed to decode JSON: {jerr}")
+
+        return stats_json
+
     @staticmethod
     def layout_list_free(layouts, n_layouts):
         """Free a previously obtained layout list."""

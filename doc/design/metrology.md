@@ -86,7 +86,7 @@ action=write,family=tape,param=sync   req.time_sec=536132
 The command to retrieve statistics from the local phobosd uses the following
 syntax:
 ```
-phobos stats [namespace[.name]] [--filter <tag>=<value>[,<tag>=<value>...]] \
+phobos stats [namespace[.name]] [--tags <tag>=<value>[,<tag>=<value>...]] \
              [--format={lines|json}] [--tlc[=<tlcname>]]
 ```
 
@@ -102,9 +102,9 @@ Examples:
 # retrieve all stats from the local phobosd, as json
 phobos stats --format=json
 # retrieve all stats about read requests for tapes
-phobos stats req --filter action=read,family=tape
+phobos stats req --tags action=read,family=tape
 # retrieve all requests counts for tapes
-phobos stats req.nb --filter family=tape
+phobos stats req.nb --tags family=tape
 # retrieve SCSI call stats from the TLC
 phobos stats scsi --format=json --tlc
 ```
