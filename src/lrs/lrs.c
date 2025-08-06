@@ -72,15 +72,17 @@ const char *req_name[PHO_REQ_COUNT] = { "READ", "WRITE", "FORMAT", "RELEASE",
 
 struct lrs_stats {
     struct pho_stat *req_stats[PHO_REQ_COUNT];  /*!< Counters per req type */
-    struct pho_stat *stat_release_tosync_media; /*!< nbr of media released
+    struct pho_stat *stat_rls_tosync_media; /*!< nbr of media released
                                                  *   with 'tosync'
                                                  */
-    struct pho_stat *stat_tosync_size; /*!< written_size of tosync media */
-    struct pho_stat *stat_tosync_extents; /*!< nbr of extents of tosync media */
-    struct pho_stat *stat_release_nosync_media; /*!< nbr of media released
+    struct pho_stat *stat_rls_tosync_size; /*!< written_size of tosync media */
+    struct pho_stat *stat_rls_tosync_extents; /*!< nbr of extents of tosync
+                                               * media
+                                               */
+    struct pho_stat *stat_rls_nosync_media; /*!< nbr of media released
                                                  *   with 'nosync'
                                                  */
-    struct pho_stat *stat_nosync_size; /*!< written_size of nosync media */
+    struct pho_stat *stat_rls_nosync_size; /*!< written_size of nosync media */
     struct pho_stat *stat_read_n_media; /*!< requested media in read requests */
     struct pho_stat *stat_write_n_media; /*!< requested media in write requests
                                           */
@@ -233,9 +235,9 @@ static void init_release_container(struct lrs_stats *stats,
 
     n_media_per_release(req_cont);
 
-    pho_stat_incr(stats->stat_release_tosync_media,
+    pho_stat_incr(stats->stat_rls_tosync_media,
         req_cont->params.release.n_tosync_media);
-    pho_stat_incr(stats->stat_release_nosync_media,
+    pho_stat_incr(stats->stat_rls_nosync_media,
         req_cont->params.release.n_nosync_media);
 
     if (req_cont->params.release.n_tosync_media)
@@ -259,8 +261,8 @@ static void init_release_container(struct lrs_stats *stats,
             pho_id_name_set(&tosync_media[tosync_media_index].medium,
                             media->med_id->name, media->med_id->library);
 
-            pho_stat_incr(stats->stat_tosync_size, media->size_written);
-            pho_stat_incr(stats->stat_tosync_extents,
+            pho_stat_incr(stats->stat_rls_tosync_size, media->size_written);
+            pho_stat_incr(stats->stat_rls_tosync_extents,
                           media->nb_extents_written);
 
             tosync_media_index++;
@@ -271,7 +273,7 @@ static void init_release_container(struct lrs_stats *stats,
             pho_id_name_set(&nosync_media[nosync_media_index].medium,
                             media->med_id->name, media->med_id->library);
 
-            pho_stat_incr(stats->stat_nosync_size, media->size_written);
+            pho_stat_incr(stats->stat_rls_nosync_size, media->size_written);
 
             nosync_media_index++;
         }
@@ -1071,23 +1073,24 @@ static int lrs_stats_init(struct lrs_stats *lrs_stats)
                                                   "count", tag_string);
         free(tag_string);
     }
-    lrs_stats->stat_release_tosync_media = pho_stat_create(PHO_STAT_COUNTER,
-                                LRS_STAT_NS, "release_tosync_media_cnt", NULL);
-    lrs_stats->stat_tosync_size = pho_stat_create(PHO_STAT_COUNTER,
-                                LRS_STAT_NS, "release_tosync_size", NULL);
-    lrs_stats->stat_tosync_extents = pho_stat_create(PHO_STAT_COUNTER,
-                                LRS_STAT_NS, "release_tosync_extents", NULL);
-    lrs_stats->stat_release_nosync_media = pho_stat_create(PHO_STAT_COUNTER,
-                                LRS_STAT_NS, "release_nosync_media_cnt", NULL);
-    lrs_stats->stat_nosync_size = pho_stat_create(PHO_STAT_COUNTER,
-                                LRS_STAT_NS, "release_nosync_size", NULL);
+    lrs_stats->stat_rls_tosync_media = pho_stat_create(PHO_STAT_COUNTER,
+                            LRS_STAT_NS, "tosync_media_cnt", "request=RELEASE");
+    lrs_stats->stat_rls_tosync_size = pho_stat_create(PHO_STAT_COUNTER,
+                            LRS_STAT_NS, "tosync_size", "request=RELEASE");
+    lrs_stats->stat_rls_tosync_extents = pho_stat_create(PHO_STAT_COUNTER,
+                            LRS_STAT_NS, "tosync_extents", "request=RELEASE");
+    lrs_stats->stat_rls_nosync_media = pho_stat_create(PHO_STAT_COUNTER,
+                            LRS_STAT_NS, "nosync_media_cnt", "request=RELEASE");
+    lrs_stats->stat_rls_nosync_size = pho_stat_create(PHO_STAT_COUNTER,
+                            LRS_STAT_NS, "nosync_size", "request=RELEASE");
     lrs_stats->stat_read_n_media = pho_stat_create(PHO_STAT_COUNTER,
-                                LRS_STAT_NS, "read_media_reqd", NULL);
+                            LRS_STAT_NS, "media_requested", "request=READ");
     lrs_stats->stat_write_n_media = pho_stat_create(PHO_STAT_COUNTER,
-                                LRS_STAT_NS, "write_media_reqd", NULL);
+                            LRS_STAT_NS, "media_requested", "request=WRITE");
 
     return 0;
 }
+
 
 /** Unregister and free LRS stats */
 static void lrs_stats_destroy(struct lrs_stats *lrs_stats)
@@ -1097,11 +1100,11 @@ static void lrs_stats_destroy(struct lrs_stats *lrs_stats)
     for (i = 0; i < PHO_REQ_COUNT; i++)
         pho_stat_destroy(&lrs_stats->req_stats[i]);
 
-    pho_stat_destroy(&lrs_stats->stat_release_tosync_media);
-    pho_stat_destroy(&lrs_stats->stat_tosync_size);
-    pho_stat_destroy(&lrs_stats->stat_tosync_extents);
-    pho_stat_destroy(&lrs_stats->stat_release_nosync_media);
-    pho_stat_destroy(&lrs_stats->stat_nosync_size);
+    pho_stat_destroy(&lrs_stats->stat_rls_tosync_media);
+    pho_stat_destroy(&lrs_stats->stat_rls_tosync_size);
+    pho_stat_destroy(&lrs_stats->stat_rls_tosync_extents);
+    pho_stat_destroy(&lrs_stats->stat_rls_nosync_media);
+    pho_stat_destroy(&lrs_stats->stat_rls_nosync_size);
     pho_stat_destroy(&lrs_stats->stat_read_n_media);
     pho_stat_destroy(&lrs_stats->stat_write_n_media);
 }

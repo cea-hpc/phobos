@@ -127,13 +127,13 @@ function test_stats_values
         error "3 READ requests expected"
     [ "$(get_value req.count request=RELEASE)" = "6" ] ||
         error "6 release requests expected"
-    [ "$(get_value req.release_tosync_media_cnt)" = "6" ] ||
+    [ "$(get_value req.tosync_media_cnt request=RELEASE)" = "6" ] ||
         error "6 tosync media expected"
-    [ "$(get_value req.release_nosync_media_cnt)" = "4" ] ||
+    [ "$(get_value req.nosync_media_cnt request=RELEASE)" = "4" ] ||
         error "4 nosync media expected"
-    [ "$(get_value req.write_media_reqd)" = "6" ] ||
+    [ "$(get_value req.media_requested request=WRITE)" = "6" ] ||
         error "6 write media required expected"
-    [ "$(get_value req.read_media_reqd)" = "4" ] ||
+    [ "$(get_value req.media_requested request=READ)" = "4" ] ||
         error "4 read media required expected"
 }
 
