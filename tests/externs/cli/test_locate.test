@@ -28,6 +28,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/setup_db.sh
 . $test_dir/test_launch_daemon.sh
 . $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
 . test_locate_common.sh
 
 HALF_SIZE=1024
@@ -167,7 +168,7 @@ function test_locate_update_timestamp_without_lock
     $phobos tape add --type lto5 $tape
     $phobos tape format --unlock $tape
 
-    local oid="oid_locate_timestamp_without_lock"
+    local oid=$(generate_prefix_id)
     $phobos put /etc/hosts $oid ||
         error "Error while putting $oid"
 
@@ -182,7 +183,7 @@ function test_locate_update_timestamp_without_lock
     db_time=$($PSQL -t -c "SELECT last_locate FROM lock WHERE id = '${tape}_legacy';")
     db_time=$(date -d "$db_time" +%s)
 
-    if [ $checkpoint1 -gt $db_time ] || [ $checkpoint2 -lt $db_time ]; then
+    if [ $checkpoint1 -ge $db_time ] || [ $checkpoint2 -le $db_time ]; then
         error "Invalid locate timestamp"
     fi
 
@@ -194,6 +195,35 @@ function test_locate_update_timestamp_without_lock
     if [ $db_time -ne $db_time2 ]; then
         error "Loading tape erased last_locate timestamp"
     fi
+}
+
+function test_last_locate_timestamp
+{
+    local drive=$(get_lto_drives 5 1)
+    $phobos drive add --unlock $drive
+
+    local tapes=( $(get_tapes L5 2 | nodeset -e) )
+    $phobos tape add --type lto5 ${tapes[@]}
+    $phobos tape format --unlock ${tapes[0]}
+
+    local oid=$(generate_prefix_id)
+    $phobos put /etc/hosts $oid ||
+        error "Error while putting $oid"
+
+    waive_lrs
+
+    export PHOBOS_LRS_locate_lock_expirancy=5000
+
+    invoke_lrs
+
+    date_start=$(date +%s)
+    $phobos locate $oid
+    $phobos tape format ${tapes[1]} || error "Format should have succeeded"
+    date_end=$(date +%s)
+    difference=$((date_end - date_start))
+
+    test $difference -ge 5 ||
+        error "Format should have waited for locate expirancy"
 }
 
 function test_locate_compatibility
@@ -461,6 +491,9 @@ if [[ -w /dev/changer ]]; then
 #    TESTS+=("tape_init_setup; \
 #             test_locate_update_timestamp_without_lock; \
 #             tape_cleanup")
+    TESTS+=("tape_init_setup; \
+             test_last_locate_timestamp; \
+             tape_cleanup");
     TESTS+=("tape_init_setup; \
              test_locate_compatibility; \
              tape_cleanup")

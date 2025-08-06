@@ -469,7 +469,7 @@ static void dss_lock_last_locate(void **state)
     assert_return_code(rc, -rc);
 
     rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &lock);
-    assert_int_equal(rc, -rc);
+    assert_return_code(rc, -rc);
     assert_int_not_equal(lock.last_locate.tv_sec, 0);
 
     assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true) == 0);
@@ -478,7 +478,7 @@ static void dss_lock_last_locate(void **state)
     assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1) == 0);
 
     rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &lock);
-    assert_int_equal(rc, -rc);
+    assert_return_code(rc, -rc);
     assert_int_equal(lock.last_locate.tv_sec, 0);
     assert_int_equal(lock.last_locate.tv_usec, 0);
     assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true) == 0);

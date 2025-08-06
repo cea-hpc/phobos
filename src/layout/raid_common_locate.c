@@ -601,7 +601,7 @@ static int reserve_locks(struct dss_handle *dss, GHashTable *hosts,
     }
 
     return lock_extents(dss, hosts, extents, nb_locks_per_split, hostname,
-                      n_data_extents, n_parity_extents);
+                        n_data_extents, n_parity_extents);
 }
 
 int raid_locate(struct dss_handle *dss, struct layout_info *layout,

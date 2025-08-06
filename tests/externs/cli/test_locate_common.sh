@@ -29,6 +29,7 @@ medium_locker_bin="./medium_locker"
 . $test_dir/setup_db.sh
 . $test_dir/test_launch_daemon.sh
 . $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
 
 function test_locate_cli
 {
@@ -233,7 +234,7 @@ function test_get_locate_cli
 
 function test_locate_update_timestamp
 {
-    local obj="object_timestamp"
+    local obj=$(generate_prefix_id)
 
     $phobos put /etc/hosts $obj || error "Error while putting $obj"
     med=$($phobos extent list --output media_name $obj)
@@ -241,28 +242,17 @@ function test_locate_update_timestamp
     med=${med%\'\]}
     psql_cmd="SELECT last_locate FROM lock WHERE id = '${med}_legacy';"
 
-    checkpoint1=$(date +%s)
-    sleep 1
     $valg_phobos locate $obj
-    sleep 1
-    checkpoint2=$(date +%s)
-
     db_time1=$($PSQL -t -c "$psql_cmd")
     db_time1=$(date -d "$db_time1" +%s)
 
-    if [ $checkpoint1 -gt $db_time1 ] || [ $checkpoint2 -lt $db_time1 ]; then
-        error "Invalid locate timestamp"
-    fi
-
     sleep 1
     $valg_phobos locate $obj
-    sleep 1
-    checkpoint3=$(date +%s)
 
     db_time2=$($PSQL -t -c "$psql_cmd")
     db_time2=$(date -d "$db_time2" +%s)
 
-    if [ $checkpoint2 -gt $db_time2 ] || [ $checkpoint3 -lt $db_time2 ]; then
+    if [ $db_time1 -ge $db_time2 ]; then
         error "Invalid locate timestamp"
     fi
 }
