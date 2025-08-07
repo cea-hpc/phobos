@@ -40,6 +40,7 @@
 #include "pho_ldm.h"
 #include "pho_srl_common.h"
 #include "pho_type_utils.h"
+#include "pho_stats.h"
 
 #include <stdatomic.h>
 #include <assert.h>
@@ -56,6 +57,8 @@
 #include <time.h>
 
 #include <jansson.h>
+
+#define SHED_STAT_NS "sched"
 
 static void *lrs_sched_thread(void *sdata);
 
@@ -112,6 +115,17 @@ void format_medium_remove(struct format_media *format_media,
     pthread_mutex_lock(&format_media->mutex);
     g_hash_table_remove(format_media->media, &medium->rsc.id);
     pthread_mutex_unlock(&format_media->mutex);
+}
+
+/** Returns the number of elements contained in the hash table */
+static unsigned int format_media_count(struct format_media *format_media)
+{
+    unsigned int count;
+
+    pthread_mutex_lock(&format_media->mutex);
+    count = g_hash_table_size(format_media->media);
+    pthread_mutex_unlock(&format_media->mutex);
+    return count;
 }
 
 void sched_req_free(void *reqc)
@@ -649,6 +663,36 @@ static int sched_clean_medium_locks(struct lrs_sched *sched)
     return rc;
 }
 
+/** Initialize sched stats */
+static int sched_stats_init(struct lrs_sched *sched)
+{
+    char *stat_tag;
+
+    if (asprintf(&stat_tag, "family=%s", rsc_family2str(sched->family)) == -1)
+        LOG_RETURN(-ENOMEM, "asprintf failed");
+
+    sched->stats.incoming_qsize = pho_stat_create(PHO_STAT_GAUGE, SHED_STAT_NS,
+                                                  "incoming_qsize", stat_tag);
+    sched->stats.retry_qsize = pho_stat_create(PHO_STAT_GAUGE, SHED_STAT_NS,
+                                               "retry_qsize", stat_tag);
+    sched->stats.ongoing_format = pho_stat_create(PHO_STAT_GAUGE, SHED_STAT_NS,
+                                                  "ongoing_format", stat_tag);
+    free(stat_tag);
+    return 0;
+}
+
+/** Unregister and free sched stats */
+static void sched_stats_destroy(struct lrs_sched *sched)
+{
+    pho_stat_destroy(&sched->stats.incoming_qsize);
+    pho_stat_destroy(&sched->stats.retry_qsize);
+    pho_stat_destroy(&sched->stats.ongoing_format);
+    sched->stats.incoming_qsize = NULL;
+    sched->stats.retry_qsize = NULL;
+    sched->stats.ongoing_format = NULL;
+}
+
+
 int sched_init(struct lrs_sched *sched, enum rsc_family family,
                struct tsqueue *resp_queue)
 {
@@ -708,6 +752,10 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
         goto err_sched_fini;
 
     rc = sched_clean_medium_locks(sched);
+    if (rc)
+        goto err_sched_fini;
+
+    rc = sched_stats_init(sched);
     if (rc)
         goto err_sched_fini;
 
@@ -820,6 +868,7 @@ void sched_fini(struct lrs_sched *sched)
     tsqueue_destroy(&sched->retry_queue, sub_request_free_cb);
     format_media_clean(&sched->ongoing_format);
     lrs_cache_cleanup(sched->family);
+    sched_stats_destroy(sched);
 }
 
 bool sched_has_running_devices(struct lrs_sched *sched)
@@ -3061,6 +3110,14 @@ static void *lrs_sched_thread(void *sdata)
 
     while (thread_is_running(thread)) {
         struct timespec wakeup_date;
+
+        /* update queue stats before the queues are emptied */
+        pho_stat_set(sched->stats.incoming_qsize,
+                     tsqueue_get_length(&sched->incoming));
+        pho_stat_set(sched->stats.retry_qsize,
+                     tsqueue_get_length(&sched->retry_queue));
+        pho_stat_set(sched->stats.ongoing_format,
+                     format_media_count(&sched->ongoing_format));
 
         rc = sched_handle_requests(sched);
         if (rc)

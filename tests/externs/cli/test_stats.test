@@ -135,6 +135,8 @@ function test_stats_values
         error "6 write media required expected"
     [ "$(get_value req.media_requested request=READ)" = "4" ] ||
         error "4 read media required expected"
+    [ "$(get_value sched.ongoing_format family=dir)" = "0" ] ||
+        error "no ongoing format expected"
 }
 
 TEST_SETUP=setup

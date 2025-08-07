@@ -73,6 +73,13 @@ struct format_media {
 void format_medium_remove(struct format_media *format_media,
                           struct media_info *medium);
 
+/** lrs_sched exported stats */
+struct sched_stats {
+    struct pho_stat *incoming_qsize;
+    struct pho_stat *retry_qsize;
+    struct pho_stat *ongoing_format;
+};
+
 /**
  * Local Resource Scheduler instance, manages media and local devices for the
  * actual IO to be performed.
@@ -102,6 +109,7 @@ struct lrs_sched {
                                              *  executed by the scheduler
                                              */
     struct io_sched_handle io_sched_hdl;   /**< I/O scheduler handle */
+    struct sched_stats     stats;          /**< exported scheduler stats */
 };
 
 /**

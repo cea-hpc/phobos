@@ -86,6 +86,7 @@ struct lrs_stats {
     struct pho_stat *stat_read_n_media; /*!< requested media in read requests */
     struct pho_stat *stat_write_n_media; /*!< requested media in write requests
                                           */
+    struct pho_stat *response_qsize;
 };
 
 /**
@@ -378,6 +379,10 @@ static int send_responses_from_queue(struct lrs *lrs)
     struct resp_container *respc;
     int rc = 0;
     int rc2;
+
+    /* update stats about response queue before it is emptied */
+    pho_stat_set(lrs->stats.response_qsize,
+                 tsqueue_get_length(&lrs->response_queue));
 
     while ((respc = tsqueue_pop(&lrs->response_queue)) != NULL) {
         rc2 = _send_message(&lrs->comm, respc);
@@ -1087,7 +1092,8 @@ static int lrs_stats_init(struct lrs_stats *lrs_stats)
                             LRS_STAT_NS, "media_requested", "request=READ");
     lrs_stats->stat_write_n_media = pho_stat_create(PHO_STAT_COUNTER,
                             LRS_STAT_NS, "media_requested", "request=WRITE");
-
+    lrs_stats->response_qsize = pho_stat_create(PHO_STAT_GAUGE, LRS_STAT_NS,
+                                                "response_qsize", NULL);
     return 0;
 }
 
@@ -1107,6 +1113,7 @@ static void lrs_stats_destroy(struct lrs_stats *lrs_stats)
     pho_stat_destroy(&lrs_stats->stat_rls_nosync_size);
     pho_stat_destroy(&lrs_stats->stat_read_n_media);
     pho_stat_destroy(&lrs_stats->stat_write_n_media);
+    pho_stat_destroy(&lrs_stats->response_qsize);
 }
 
 /* ****************************************************************************/
