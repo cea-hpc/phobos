@@ -48,9 +48,6 @@ struct pho_stat *pho_stat_create(enum pho_stat_type type,
                                  const char *name,
                                  const char *tags);
 
-/** Release a struct pho_stat */
-void pho_stat_free(struct pho_stat *stat);
-
 /**
  * Increment a metric (counter or gauge).
  *
