@@ -123,11 +123,16 @@ void create_device(struct lrs_dev *dev, char *path, char *model,
     pho_id_name_set(&dev->ld_dss_dev_info->rsc.id, path, "legacy");
     dev->ld_dss_dev_info->path = path;
     rc = lrs_dev_technology(dev, &dev->ld_technology);
+
+    dev_stats_init(dev);
+
     assert_return_code(rc, -rc);
 }
 
 void cleanup_device(struct lrs_dev *dev)
 {
+    dev_stats_destroy(dev);
+
     free(dev->ld_sub_request);
     free((void *)dev->ld_technology);
     free(dev->ld_dss_dev_info);

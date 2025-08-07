@@ -105,12 +105,90 @@ void lrs_dev_hdl_fini(struct lrs_dev_hdl *handle)
     g_ptr_array_unref(handle->ldh_devices);
 }
 
+#define DEV_STATS_NS    "dev"
+
+int dev_stats_init(struct lrs_dev *dev)
+{
+    const struct pho_id *dev_id = lrs_dev_id(dev);
+    char *tags;
+
+    if (asprintf(&tags, "family=%s,device=%s", rsc_family2str(dev_id->family),
+                 dev_id->name) == -1)
+        return -ENOMEM;
+
+    dev->stats.nb_mount = pho_stat_create(PHO_STAT_COUNTER, DEV_STATS_NS,
+                                          "nb_mount", tags);
+    dev->stats.nb_umount = pho_stat_create(PHO_STAT_COUNTER, DEV_STATS_NS,
+                                           "nb_umount", tags);
+    dev->stats.nb_load = pho_stat_create(PHO_STAT_COUNTER, DEV_STATS_NS,
+                                         "nb_load", tags);
+    dev->stats.nb_unload = pho_stat_create(PHO_STAT_COUNTER, DEV_STATS_NS,
+                                           "nb_unload", tags);
+    dev->stats.nb_format = pho_stat_create(PHO_STAT_COUNTER, DEV_STATS_NS,
+                                           "nb_format", tags);
+    dev->stats.requested_sync = pho_stat_create(PHO_STAT_COUNTER, DEV_STATS_NS,
+                                                "requested_sync", tags);
+    dev->stats.effective_sync = pho_stat_create(PHO_STAT_COUNTER, DEV_STATS_NS,
+                                                "effective_sync", tags);
+    dev->stats.mount_errors = pho_stat_create(PHO_STAT_COUNTER, DEV_STATS_NS,
+                                              "mount_errors", tags);
+    dev->stats.umount_errors = pho_stat_create(PHO_STAT_COUNTER, DEV_STATS_NS,
+                                               "umount_error", tags);
+    dev->stats.load_errors = pho_stat_create(PHO_STAT_COUNTER, DEV_STATS_NS,
+                                             "load_errors", tags);
+    dev->stats.unload_errors = pho_stat_create(PHO_STAT_COUNTER, DEV_STATS_NS,
+                                               "unload_errors", tags);
+    dev->stats.format_errors = pho_stat_create(PHO_STAT_COUNTER, DEV_STATS_NS,
+                                               "format_errors", tags);
+    dev->stats.sync_errors = pho_stat_create(PHO_STAT_COUNTER, DEV_STATS_NS,
+                                             "sync_errors", tags);
+    dev->stats.tosync_count = pho_stat_create(PHO_STAT_GAUGE, DEV_STATS_NS,
+                                              "tosync_count", tags);
+    dev->stats.tosync_size = pho_stat_create(PHO_STAT_GAUGE, DEV_STATS_NS,
+                                             "tosync_size", tags);
+    dev->stats.tosync_extents = pho_stat_create(PHO_STAT_GAUGE, DEV_STATS_NS,
+                                                "tosync_extents", tags);
+    dev->stats.total_tosync_size = pho_stat_create(PHO_STAT_COUNTER,
+                                                   DEV_STATS_NS,
+                                                   "total_tosync_size", tags);
+    dev->stats.total_tosync_extents = pho_stat_create(PHO_STAT_COUNTER,
+                                                      DEV_STATS_NS,
+                                                      "total_tosync_extents",
+                                                      tags);
+    free(tags);
+    return 0;
+}
+
+void dev_stats_destroy(struct lrs_dev *dev)
+{
+    pho_stat_destroy(&dev->stats.nb_mount);
+    pho_stat_destroy(&dev->stats.nb_umount);
+    pho_stat_destroy(&dev->stats.nb_load);
+    pho_stat_destroy(&dev->stats.nb_unload);
+    pho_stat_destroy(&dev->stats.nb_format);
+    pho_stat_destroy(&dev->stats.requested_sync);
+    pho_stat_destroy(&dev->stats.effective_sync);
+    pho_stat_destroy(&dev->stats.mount_errors);
+    pho_stat_destroy(&dev->stats.umount_errors);
+    pho_stat_destroy(&dev->stats.load_errors);
+    pho_stat_destroy(&dev->stats.unload_errors);
+    pho_stat_destroy(&dev->stats.format_errors);
+    pho_stat_destroy(&dev->stats.sync_errors);
+    pho_stat_destroy(&dev->stats.tosync_count);
+    pho_stat_destroy(&dev->stats.tosync_size);
+    pho_stat_destroy(&dev->stats.tosync_extents);
+    pho_stat_destroy(&dev->stats.total_tosync_size);
+    pho_stat_destroy(&dev->stats.total_tosync_extents);
+}
+
 static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
                                   struct dev_info *info,
                                   struct lrs_dev **dev,
                                   struct lrs_sched *sched)
 {
     int rc;
+
+    ENTRY;
 
     *dev = xcalloc(1, sizeof(**dev));
 
@@ -148,6 +226,10 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
                            &(*dev)->ld_dss_dev_info->rsc.id,
                            max_health(),
                            &(*dev)->ld_dss_dev_info->health);
+    if (rc)
+        GOTO(err_techno, rc);
+
+    rc = dev_stats_init(*dev);
     if (rc)
         GOTO(err_techno, rc);
 
@@ -211,6 +293,7 @@ static void lrs_dev_info_clean(struct lrs_dev_hdl *handle,
     sub_request_free(dev->ld_sub_request);
     dev_info_free(dev->ld_dss_dev_info, 1);
     dss_fini(&dev->ld_device_thread.dss);
+    dev_stats_destroy(dev);
 
     free(dev);
 }
@@ -551,6 +634,14 @@ bool is_request_tosync_ended(struct req_container *req)
     return true;
 }
 
+static void set_tosync_stats(struct dev_stats *stats,
+                             struct sync_params *sync_params)
+{
+    pho_stat_set(stats->tosync_count, sync_params->tosync_array->len);
+    pho_stat_set(stats->tosync_size, sync_params->tosync_size);
+    pho_stat_set(stats->tosync_extents, sync_params->tosync_nb_extents);
+}
+
 static void clean_tosync_array(struct lrs_dev *dev, int rc)
 {
     GPtrArray *tosync_array = dev->ld_sync_params.tosync_array;
@@ -609,6 +700,10 @@ static void clean_tosync_array(struct lrs_dev *dev, int rc)
     dev->ld_sync_params.oldest_tosync.tv_nsec = 0;
     dev->ld_sync_params.groupings_to_update = false;
     dev->ld_needs_sync = false;
+
+    /* Update statistics */
+    set_tosync_stats(&dev->stats, &dev->ld_sync_params);
+
     MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
@@ -641,6 +736,8 @@ void push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
         !PHO_CFG_GET_BOOL(cfg_lrs, PHO_CFG_LRS, grouping_on_dir, false))
         sync_grouping = NULL;
 
+    pho_stat_incr(dev->stats.requested_sync, 1);
+
     req_tosync = xmalloc(sizeof(*req_tosync));
     req_tosync->reqc = reqc;
     req_tosync->medium_index = medium_index;
@@ -654,6 +751,9 @@ void push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
     sync_params->tosync_nb_extents +=
         reqc->params.release.tosync_media[medium_index].nb_extents_written;
     update_oldest_tosync(&sync_params->oldest_tosync, reqc->received_at);
+
+    /* Update statistics */
+    set_tosync_stats(&dev->stats, sync_params);
 
     /* Set ld_needs_sync to true to avoid waiting until the threshold are
      * exceeded
@@ -725,6 +825,7 @@ static void remove_canceled_sync(struct lrs_dev *dev)
             dev->ld_sync_params.tosync_nb_extents -=
                 tosync_medium->nb_extents_written;
             dev->ld_sync_params.tosync_size -= tosync_medium->written_size;
+
             need_oldest_update = true;
 
             tosync_medium->status = SUB_REQUEST_CANCEL;
@@ -740,6 +841,9 @@ static void remove_canceled_sync(struct lrs_dev *dev)
     if (need_oldest_update)
         update_queue_oldest_tosync(dev);
 
+    /* Update statistics */
+    set_tosync_stats(&dev->stats, &dev->ld_sync_params);
+
     MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
@@ -748,6 +852,7 @@ static void check_needs_sync(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
     struct sync_params *sync_params = &dev->ld_sync_params;
 
     MUTEX_LOCK(&dev->ld_mutex);
+
     dev->ld_needs_sync = sync_params->tosync_array->len > 0 &&
                       (sync_params->tosync_array->len >= handle->sync_nb_req ||
                        is_past(add_timespec(&sync_params->oldest_tosync,
@@ -775,6 +880,8 @@ int medium_sync(struct lrs_dev *dev)
 
     ENTRY;
 
+    pho_stat_incr(dev->stats.effective_sync, 1);
+
     rc = get_io_adapter(media_info->fs.type, &ioa);
     if (rc)
         LOG_RETURN(rc, "No suitable I/O adapter for filesystem type: '%s'",
@@ -788,10 +895,12 @@ int medium_sync(struct lrs_dev *dev)
     emit_log_after_action(dss, &log, PHO_LTFS_SYNC, rc);
 
     pho_debug("sync: medium=%s rc=%d", media_info->rsc.id.name, rc);
-    if (rc)
+    if (rc) {
+        pho_stat_incr(dev->stats.sync_errors, 1);
         LOG_RETURN(rc, "Cannot flush media at: %s", fsroot);
+    }
 
-    return rc;
+    return 0;
 }
 
 /** Update media_info stats and push its new state to the DSS. Called with a
@@ -896,15 +1005,24 @@ static int dev_sync(struct lrs_dev *dev)
     MUTEX_LOCK(&dev->ld_mutex);
 
     /* Do not sync on error as we don't know what happened on the tape. */
-    if (dev->ld_last_client_rc == 0)
+    if (dev->ld_last_client_rc == 0) {
         rc = medium_sync(dev);
-    else
+        if (!rc) {
+            /* Increments statistics */
+            pho_stat_incr(dev->stats.total_tosync_size,
+                          sync_params->tosync_size);
+            pho_stat_incr(dev->stats.total_tosync_extents,
+                          sync_params->tosync_nb_extents);
+        }
+    } else {
         /* this will cause the device thread to stop */
         rc = dev->ld_last_client_rc;
+    }
 
     rc2 = lrs_dev_media_update(dev, sync_params->tosync_size, rc,
                                sync_params->tosync_nb_extents,
                                sync_params->groupings_to_update);
+
     dev->ld_last_client_rc = 0;
 
     MUTEX_UNLOCK(&dev->ld_mutex);
@@ -942,6 +1060,8 @@ int dev_umount(struct lrs_dev *dev)
 
     ENTRY;
 
+    pho_stat_incr(dev->stats.nb_umount, 1);
+
     dss = &dev->ld_device_thread.dss;
     init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
                  &dev->ld_dss_media_info->rsc.id, PHO_LTFS_UMOUNT);
@@ -966,7 +1086,8 @@ int dev_umount(struct lrs_dev *dev)
     rc = ldm_fs_umount(fsa, dev->ld_dev_path, dev->ld_mnt_path, &log.message);
     emit_log_after_action(dss, &log, PHO_LTFS_UMOUNT, rc);
     clean_tosync_array(dev, rc);
-    if (rc)
+    if (rc) {
+        pho_stat_incr(dev->stats.umount_errors, 1);
         LOG_RETURN(rc,
                    "Failed to unmount medium (family '%s', name '%s', library "
                    "'%s') mounted at '%s' on device '%s'",
@@ -974,6 +1095,7 @@ int dev_umount(struct lrs_dev *dev)
                    dev->ld_dss_media_info->rsc.id.name,
                    dev->ld_dss_media_info->rsc.id.library,
                    dev->ld_mnt_path, lrs_dev_name(dev));
+    }
 
     /* update device state and unset mount path */
     MUTEX_LOCK(&dev->ld_mutex);
@@ -1031,6 +1153,8 @@ int dev_unload(struct lrs_dev *dev)
 
     ENTRY;
 
+    pho_stat_incr(dev->stats.nb_unload, 1);
+
     pho_verb("unload: medium (family '%s', name '%s', library '%s') from '%s'",
              rsc_family2str(dev->ld_dss_media_info->rsc.id.family),
              dev->ld_dss_media_info->rsc.id.name,
@@ -1050,7 +1174,8 @@ int dev_unload(struct lrs_dev *dev)
 
     rc = ldm_lib_unload(&lib_hdl, dev->ld_dss_dev_info->rsc.id.name,
                         dev->ld_dss_media_info->rsc.id.name);
-    if (rc != 0)
+    if (rc != 0) {
+        pho_stat_incr(dev->stats.unload_errors, 1);
         /* Set operational failure state on this drive. It is incomplete since
          * the error can originate from a defective tape too...
          *  - consider marking both as failed.
@@ -1058,6 +1183,7 @@ int dev_unload(struct lrs_dev *dev)
          *    exclude from the cool game.
          */
         LOG_GOTO(out_close, rc, "Media unload failed");
+    }
 
     MUTEX_LOCK(&dev->ld_mutex);
     dev->ld_op_status = PHO_DEV_OP_ST_EMPTY;
@@ -1145,6 +1271,8 @@ int dev_load(struct lrs_dev *dev, struct media_info *medium)
 
     ENTRY;
 
+    pho_stat_incr(dev->stats.nb_load, 1);
+
     dev->ld_sub_request->failure_on_medium = false;
     pho_verb("load: medium (family '%s', name '%s', library '%s') into '%s'",
              rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
@@ -1179,7 +1307,6 @@ out_close:
     rc2 = ldm_lib_close(&lib_hdl);
     if (rc2) {
         const struct pho_id *dev_id = lrs_dev_id(dev);
-
         pho_error(rc2,
                   "device (family '%s', name '%s', library '%s') failed to "
                   "close lib handle", rsc_family2str(dev_id->family),
@@ -1189,7 +1316,8 @@ out_close:
          */
         rc = rc ? : rc2;
     }
-
+    if (rc)
+        pho_stat_incr(dev->stats.load_errors, 1);
     return rc;
 }
 
@@ -1204,6 +1332,8 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
 
     ENTRY;
 
+    pho_stat_incr(dev->stats.nb_format, 1);
+
     dss = &dev->ld_device_thread.dss;
     init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id, &medium->rsc.id,
                  PHO_LTFS_FORMAT);
@@ -1215,11 +1345,13 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
     rc = ldm_fs_format(fsa, dev->ld_dev_path, medium->rsc.id.name, &space,
                        &log.message);
     emit_log_after_action(dss, &log, PHO_LTFS_FORMAT, rc);
-    if (rc)
+    if (rc) {
+        pho_stat_incr(dev->stats.format_errors, 1);
         LOG_RETURN(rc,
                    "Cannot format medium (family '%s', name '%s', library "
                    "'%s')", rsc_family2str(medium->rsc.id.family),
                    medium->rsc.id.name, medium->rsc.id.library);
+    }
 
     MUTEX_LOCK(&dev->ld_mutex);
     /* Systematically use the media ID as filesystem label */
@@ -1653,6 +1785,8 @@ int dev_mount(struct lrs_dev *dev)
     const char *id;
     int rc;
 
+    pho_stat_incr(dev->stats.nb_mount, 1);
+
     init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
                  &dev->ld_dss_media_info->rsc.id, PHO_LTFS_MOUNT);
 
@@ -1710,7 +1844,8 @@ int dev_mount(struct lrs_dev *dev)
 
 out_free:
     free(mnt_root);
-
+    if (rc)
+        pho_stat_incr(dev->stats.mount_errors, 1);
     return rc;
 }
 
@@ -2210,6 +2345,8 @@ end_thread:
 static int dev_thread_init(struct lrs_dev *device)
 {
     int rc;
+
+    ENTRY;
 
     pthread_mutex_init(&device->ld_mutex, NULL);
 

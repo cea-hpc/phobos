@@ -35,6 +35,7 @@
 #include "pho_dss.h"
 #include "pho_ldm.h"
 #include "pho_types.h"
+#include "pho_stats.h"
 
 struct lrs_sched;
 struct lrs_dev;
@@ -196,6 +197,28 @@ struct ongoing_grouping {
     int socket_id;   /**< Socket id of the ongoing grouping */
 };
 
+/** exported stats per device */
+struct dev_stats {
+    struct pho_stat *nb_mount;
+    struct pho_stat *nb_umount;
+    struct pho_stat *nb_load;
+    struct pho_stat *nb_unload;
+    struct pho_stat *nb_format;
+    struct pho_stat *requested_sync;
+    struct pho_stat *effective_sync;
+    struct pho_stat *mount_errors;
+    struct pho_stat *umount_errors;
+    struct pho_stat *load_errors;
+    struct pho_stat *unload_errors;
+    struct pho_stat *format_errors;
+    struct pho_stat *sync_errors;
+    struct pho_stat *tosync_count;
+    struct pho_stat *tosync_size;
+    struct pho_stat *tosync_extents;
+    struct pho_stat *total_tosync_size;
+    struct pho_stat *total_tosync_extents;
+};
+
 /**
  * Data specific to the device thread.
  *
@@ -300,6 +323,8 @@ struct lrs_dev {
                                  * used by the fair share dispatch_devices
                                  * algorithm for now.
                                  */
+
+    struct dev_stats    stats; /**< exported device stats */
 };
 
 static inline bool dev_is_failed(struct lrs_dev *dev)
@@ -537,5 +562,9 @@ struct media_info *atomic_dev_medium_get(struct lrs_dev *device);
 ssize_t atomic_dev_medium_phys_space_free(struct lrs_dev *dev);
 
 void fail_release_medium(struct lrs_dev *dev, struct media_info *medium);
+
+int dev_stats_init(struct lrs_dev *dev);
+
+void dev_stats_destroy(struct lrs_dev *dev);
 
 #endif

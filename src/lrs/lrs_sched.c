@@ -687,9 +687,6 @@ static void sched_stats_destroy(struct lrs_sched *sched)
     pho_stat_destroy(&sched->stats.incoming_qsize);
     pho_stat_destroy(&sched->stats.retry_qsize);
     pho_stat_destroy(&sched->stats.ongoing_format);
-    sched->stats.incoming_qsize = NULL;
-    sched->stats.retry_qsize = NULL;
-    sched->stats.ongoing_format = NULL;
 }
 
 
