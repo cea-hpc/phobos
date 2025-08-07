@@ -50,6 +50,13 @@ struct pho_stat *pho_stat_create(enum pho_stat_type type,
                                  const char *tags);
 
 /**
+ * Unregister, release a stat and nil its pointer.
+ *
+ * \param[in] Pointer to the stat pointer to be unregistered.
+ */
+void pho_stat_destroy(struct pho_stat **stat);
+
+/**
  * Increment a metric (counter or gauge).
  *
  * \param[in] stat  Stat created by pho_stat_create().

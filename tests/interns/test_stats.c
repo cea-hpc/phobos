@@ -46,6 +46,8 @@ static void test_int_counter(void **state)
     // increment again
     pho_stat_incr(stat, 42);
     assert_int_equal(pho_stat_get(stat), 47);
+
+    pho_stat_destroy(&stat);
 }
 
 static void test_int_gauge(void **state)
@@ -64,6 +66,8 @@ static void test_int_gauge(void **state)
     // gauges can also be incremented
     pho_stat_incr(stat, 12);
     assert_int_equal(pho_stat_get(stat), 2748);
+
+    pho_stat_destroy(&stat);
 }
 
 /**
@@ -143,6 +147,12 @@ static void test_iterators(void **state)
     assert_ptr_equal(pho_stat_iter_next(iter), stat1);
     assert_ptr_equal(pho_stat_iter_next(iter), NULL);
     pho_stat_iter_close(iter);
+
+    pho_stat_destroy(&stat1);
+    pho_stat_destroy(&stat2);
+    pho_stat_destroy(&stat3);
+    pho_stat_destroy(&stat4);
+    pho_stat_destroy(&stat5);
 }
 
 int main(void)

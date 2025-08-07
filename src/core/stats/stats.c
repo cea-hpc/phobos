@@ -179,6 +179,26 @@ struct pho_stat *pho_stat_create(enum pho_stat_type type,
     return stat;
 }
 
+void pho_stat_destroy(struct pho_stat **pstat)
+{
+    struct pho_stat *stat = *pstat;
+
+    if (!stat)
+        return;
+
+    pthread_rwlock_wrlock(&pho_stat_list_lock);
+    pho_stat_list = g_list_remove(pho_stat_list, stat);
+    pthread_rwlock_unlock(&pho_stat_list_lock);
+
+    free(stat->namespace);
+    free(stat->name);
+    free(stat->full_name);
+    free(stat->tags);
+    free_taglist(&stat->tag_list);
+    free(stat);
+    *pstat = NULL;
+}
+
 /** Increments an integer type metric. */
 void pho_stat_incr(struct pho_stat *stat, uint64_t val)
 {

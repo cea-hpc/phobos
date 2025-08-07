@@ -1056,6 +1056,56 @@ out_free:
     return rc;
 }
 
+/** Initialize and register stats for the LRS */
+static int lrs_stats_init(struct lrs_stats *lrs_stats)
+{
+    int i;
+
+    for (i = 0; i < PHO_REQ_COUNT; i++) {
+        char *tag_string = NULL;
+
+        if (asprintf(&tag_string, "request=%s", req_name[i]) == -1)
+            LOG_RETURN(-ENOMEM, "Failed to allocate string");
+
+        lrs_stats->req_stats[i] = pho_stat_create(PHO_STAT_COUNTER, LRS_STAT_NS,
+                                                  "count", tag_string);
+        free(tag_string);
+    }
+    lrs_stats->stat_release_tosync_media = pho_stat_create(PHO_STAT_COUNTER,
+                                LRS_STAT_NS, "release_tosync_media_cnt", NULL);
+    lrs_stats->stat_tosync_size = pho_stat_create(PHO_STAT_COUNTER,
+                                LRS_STAT_NS, "release_tosync_size", NULL);
+    lrs_stats->stat_tosync_extents = pho_stat_create(PHO_STAT_COUNTER,
+                                LRS_STAT_NS, "release_tosync_extents", NULL);
+    lrs_stats->stat_release_nosync_media = pho_stat_create(PHO_STAT_COUNTER,
+                                LRS_STAT_NS, "release_nosync_media_cnt", NULL);
+    lrs_stats->stat_nosync_size = pho_stat_create(PHO_STAT_COUNTER,
+                                LRS_STAT_NS, "release_nosync_size", NULL);
+    lrs_stats->stat_read_n_media = pho_stat_create(PHO_STAT_COUNTER,
+                                LRS_STAT_NS, "read_media_reqd", NULL);
+    lrs_stats->stat_write_n_media = pho_stat_create(PHO_STAT_COUNTER,
+                                LRS_STAT_NS, "write_media_reqd", NULL);
+
+    return 0;
+}
+
+/** Unregister and free LRS stats */
+static void lrs_stats_destroy(struct lrs_stats *lrs_stats)
+{
+    int i;
+
+    for (i = 0; i < PHO_REQ_COUNT; i++)
+        pho_stat_destroy(&lrs_stats->req_stats[i]);
+
+    pho_stat_destroy(&lrs_stats->stat_release_tosync_media);
+    pho_stat_destroy(&lrs_stats->stat_tosync_size);
+    pho_stat_destroy(&lrs_stats->stat_tosync_extents);
+    pho_stat_destroy(&lrs_stats->stat_release_nosync_media);
+    pho_stat_destroy(&lrs_stats->stat_nosync_size);
+    pho_stat_destroy(&lrs_stats->stat_read_n_media);
+    pho_stat_destroy(&lrs_stats->stat_write_n_media);
+}
+
 /* ****************************************************************************/
 /* LRS main functions *********************************************************/
 /* ****************************************************************************/
@@ -1097,43 +1147,12 @@ static void lrs_fini(struct lrs *lrs)
     if (rc)
         pho_error(rc, "Failed to close the phobosd socket");
 
+    lrs_stats_destroy(&lrs->stats);
+
     tsqueue_destroy(&lrs->response_queue, sched_resp_free_with_cont);
     dss_fini(&lrs->dss);
 
     _delete_lock_file(lrs->lock_file);
-}
-
-/** Initialize and register stats for the LRS */
-static int lrs_stats_init(struct lrs_stats *lrs_stats)
-{
-    int i;
-
-    for (i = 0; i < PHO_REQ_COUNT; i++) {
-        char *tag_string = NULL;
-
-        if (asprintf(&tag_string, "request=%s", req_name[i]) == -1)
-            LOG_RETURN(-ENOMEM, "Failed to allocate string");
-
-        lrs_stats->req_stats[i] = pho_stat_create(PHO_STAT_COUNTER, LRS_STAT_NS,
-                                                  "count", tag_string);
-        free(tag_string);
-    }
-    lrs_stats->stat_release_tosync_media = pho_stat_create(PHO_STAT_COUNTER,
-                                LRS_STAT_NS, "release_tosync_media_cnt", NULL);
-    lrs_stats->stat_tosync_size = pho_stat_create(PHO_STAT_COUNTER,
-                                LRS_STAT_NS, "release_tosync_size", NULL);
-    lrs_stats->stat_tosync_extents = pho_stat_create(PHO_STAT_COUNTER,
-                                LRS_STAT_NS, "release_tosync_extents", NULL);
-    lrs_stats->stat_release_nosync_media = pho_stat_create(PHO_STAT_COUNTER,
-                                LRS_STAT_NS, "release_nosync_media_cnt", NULL);
-    lrs_stats->stat_nosync_size = pho_stat_create(PHO_STAT_COUNTER,
-                                LRS_STAT_NS, "release_nosync_size", NULL);
-    lrs_stats->stat_read_n_media = pho_stat_create(PHO_STAT_COUNTER,
-                                LRS_STAT_NS, "read_media_reqd", NULL);
-    lrs_stats->stat_write_n_media = pho_stat_create(PHO_STAT_COUNTER,
-                                LRS_STAT_NS, "write_media_reqd", NULL);
-
-    return 0;
 }
 
 /**
