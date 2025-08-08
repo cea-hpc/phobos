@@ -40,6 +40,8 @@ static int setup_db_calls(char *action)
 {
     int rc;
 
+    ENTRY;
+
     rc = fork();
     if (rc == 0) {
         /* XXX: to change once DB is unified between tests */
@@ -66,16 +68,22 @@ static int setup(bool setup_db)
     const char *connect_string;
     int rc;
 
+    ENTRY;
+
     rc = pho_cfg_init_local("../phobos.conf");
     if (rc == -ENOENT)
         rc = pho_cfg_init_local("../../phobos.conf");
 
-    if (rc && rc != -EALREADY)
+    if (rc && rc != -EALREADY) {
+        pho_error(rc, "pho_cfg_init_local failed");
         return rc;
+    }
 
     rc = pho_cfg_get_val("dss", "connect_string", &connect_string);
-    if (rc)
+    if (rc) {
+        pho_error(rc, "get dss:connect_string failed");
         return rc;
+    }
 
     setenv("PHOBOS_DSS_connect_string", connect_string, 1);
 
@@ -121,15 +129,21 @@ static int setup_dss_and_tlc_lib(void **state, bool setup_db)
     json_t *json_message;
     int rc;
 
+    ENTRY;
+
     dss_and_tlc_lib = xcalloc(1, sizeof(*dss_and_tlc_lib));
 
     rc = setup(setup_db);
-    if (rc)
-        return rc;
+    if (rc) {
+        pho_error(rc, "setup failed");
+        goto free_libs;
+    }
 
     rc = dss_init(&dss_and_tlc_lib->dss);
-    if (rc)
-        return -1;
+    if (rc) {
+        pho_error(rc, "dss_init failed");
+        goto free_libs;
+    }
 
     strcpy(dss_and_tlc_lib->tlc_lib.name, "legacy");
 
@@ -137,18 +151,24 @@ static int setup_dss_and_tlc_lib(void **state, bool setup_db)
                                  &dss_and_tlc_lib->tlc_lib.lib_devices,
                                  &dss_and_tlc_lib->tlc_lib.nb_lib_device);
     if (rc) {
-        dss_fini(&dss_and_tlc_lib->dss);
-        return -1;
+        pho_error(rc, "Failed to get lib_device configuration");
+        goto fini;
     }
 
     rc = tlc_library_open(&dss_and_tlc_lib->tlc_lib, &json_message);
     if (rc) {
-        dss_fini(&dss_and_tlc_lib->dss);
-        return -1;
+        pho_error(rc, "Failed to open TLC library");
+        goto fini;
     }
 
+    pho_debug("Initialization successful");
     *state = dss_and_tlc_lib;
     return 0;
+fini:
+    dss_fini(&dss_and_tlc_lib->dss);
+free_libs:
+    free(dss_and_tlc_lib);
+    return rc;
 }
 
 int global_setup_dss(void **state)
