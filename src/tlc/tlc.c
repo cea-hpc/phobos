@@ -42,6 +42,7 @@
 #include "pho_dss.h"
 #include "pho_ldm.h"
 #include "pho_srl_tlc.h"
+#include "pho_stats.h"
 #include "pho_types.h"
 #include "pho_type_utils.h"
 #include "scsi_api.h"
@@ -475,6 +476,41 @@ static int process_refresh_request(struct tlc *tlc, pho_tlc_req_t *req,
     return rc;
 }
 
+static int process_stat_request(struct tlc *tlc, pho_tlc_req_t *req,
+                                int client_socket)
+{
+    pho_tlc_resp_t resp;
+    json_t *stats;
+    int rc, rc2;
+
+    stats = pho_stats_dump_json(req->stat->ns,
+                                req->stat->name,
+                                req->stat->tags);
+    if (!stats) {
+        rc = -EINVAL;
+        tlc_build_response_error(&resp, req->id, rc, NULL);
+        LOG_GOTO(send_resp, rc, "Failed to retrieve stats");
+    }
+
+    pho_srl_tlc_response_stat_alloc(&resp);
+    resp.req_id = req->id;
+    resp.stat->stats = json_dumps(stats, 0);
+    json_decref(stats);
+    if (!resp.stat->stats) {
+        rc = -ENOMEM;
+        pho_srl_tlc_response_free(&resp, false);
+        tlc_build_response_error(&resp, req->id, rc, NULL);
+        LOG_GOTO(send_resp, rc, "Failed to dump stats string");
+    }
+
+send_resp:
+    rc2 = tlc_response_send(&resp, client_socket);
+    rc = rc ? : rc2;
+    pho_srl_tlc_response_free(&resp, false);
+    return rc;
+}
+
+
 static int recv_work(struct tlc *tlc)
 {
     struct pho_comm_data *data = NULL;
@@ -527,6 +563,11 @@ static int recv_work(struct tlc *tlc)
 
         if (pho_tlc_request_is_refresh(req)) {
             process_refresh_request(tlc, req, data[i].fd);
+            goto out_request;
+        }
+
+        if (pho_tlc_request_is_stat(req)) {
+            process_stat_request(tlc, req, data[i].fd);
             goto out_request;
         }
 

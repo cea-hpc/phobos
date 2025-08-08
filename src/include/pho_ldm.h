@@ -233,6 +233,8 @@ struct pho_lib_adapter_module_ops {
                       const char *medium_label);
     int (*lib_refresh)(struct lib_handle *lib);
     int (*lib_ping)(struct lib_handle *lib, bool *library_is_up);
+    int (*lib_stats)(struct lib_handle *lib, const char *namespace,
+                     const char *name, const char *tags, char **stats);
 };
 
 struct lib_adapter_module {
@@ -464,6 +466,18 @@ static inline int ldm_lib_ping(struct lib_handle *lib_hdl, bool *library_is_up)
     if (lib_hdl->ld_module->ops->lib_ping == NULL)
         return 0;
     return lib_hdl->ld_module->ops->lib_ping(lib_hdl, library_is_up);
+}
+
+static inline int ldm_lib_stats(struct lib_handle *lib_hdl,
+                                const char *namespace, const char *name,
+                                const char *tags, char **stats)
+{
+    assert(lib_hdl->ld_module != NULL);
+    assert(lib_hdl->ld_module->ops != NULL);
+    if (lib_hdl->ld_module->ops->lib_stats == NULL)
+        return 0;
+    return lib_hdl->ld_module->ops->lib_stats(lib_hdl, namespace, name, tags,
+                                              stats);
 }
 
 /** @}*/

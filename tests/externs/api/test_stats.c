@@ -32,6 +32,7 @@
 int main(int argc, char **argv)
 {
     struct admin_handle adm;
+    char *test_tlc;
     char *output;
     int rc;
 
@@ -69,6 +70,14 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     printf("output=%s\n", output);
     free(output);
+
+    test_tlc = getenv("TEST_TLC_STATS");
+    if (test_tlc != NULL && strcmp(test_tlc, "1") == 0) {
+        if (phobos_admin_stats_tlc("legacy", NULL, NULL, &output))
+            exit(EXIT_FAILURE);
+        printf("output=%s\n", output);
+        free(output);
+    }
 
     phobos_admin_fini(&adm);
 

@@ -1727,6 +1727,38 @@ int phobos_admin_ping_tlc(const char *library, bool *library_is_up)
     return rc;
 }
 
+int phobos_admin_stats_tlc(const char *library, const char *full_name,
+                           const char *tags, char **stats)
+{
+    struct lib_handle lib_hdl;
+    char *namespace, *name;
+    int rc2;
+    int rc;
+
+    ENTRY;
+
+    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl, library);
+    if (rc)
+        return rc;
+
+    parse_full_name(full_name, &namespace, &name);
+
+    rc = ldm_lib_stats(&lib_hdl, namespace, name, tags, stats);
+    if (rc)
+        pho_error(rc, "Failed to query library stats (ns=%s, name=%s, tags=%s)",
+                  namespace, name, tags);
+    rc2 = ldm_lib_close(&lib_hdl);
+    if (rc2)
+        pho_error(rc2, "Failed to close library");
+
+    rc = rc ? : rc2;
+
+    free(namespace);
+    free(name);
+
+    return rc;
+}
+
 /**
  * Construct the extent string for the extent list filter.
  *

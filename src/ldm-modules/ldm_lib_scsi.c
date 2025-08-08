@@ -447,6 +447,50 @@ free_resp:
     return rc;
 }
 
+static int lib_tlc_stats(struct lib_handle *hdl, const char *namespace,
+                         const char *name, const char *tags, char **stats)
+{
+    struct lib_descriptor *lib;
+    pho_tlc_resp_t *resp;
+    pho_tlc_req_t req;
+    int rid = 1;
+    int rc;
+
+    lib = hdl->lh_lib;
+
+    pho_srl_tlc_request_stat_alloc(&req);
+    req.id = rid;
+
+    req.stat->ns = xstrdup_safe(namespace);
+    req.stat->name = xstrdup_safe(name);
+    req.stat->tags = xstrdup_safe(tags);
+
+    rc = tlc_send_recv(&lib->tlc_comm, &req, &resp);
+    pho_srl_tlc_request_free(&req, false);
+    if (rc)
+        LOG_RETURN(rc, "Unable to send/recv stats request to tlc");
+
+    /* check tlc response */
+    if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
+        rc = resp->error->rc;
+        if (resp->error->message)
+            LOG_GOTO(free_resp, rc, "TLC stats failed: '%s'",
+                     resp->error->message);
+        else
+            LOG_GOTO(free_resp, rc, "TLC stats failed");
+    } else if (!(pho_tlc_response_is_stat(resp) && resp->req_id == rid)) {
+        LOG_GOTO(free_resp, rc = -EPROTO,
+                 "TLC answered an unexpected response (id %d) to stats",
+                 resp->req_id);
+    }
+
+    *stats = xstrdup(resp->stat->stats);
+
+free_resp:
+    pho_srl_tlc_response_free(resp, true);
+    return rc;
+}
+
 /** @}*/
 
 /** lib_scsi_adapter exported to upper layers */
@@ -459,6 +503,7 @@ static struct pho_lib_adapter_module_ops LA_SCSI_OPS = {
     .lib_unload       = lib_tlc_unload,
     .lib_refresh      = lib_tlc_refresh,
     .lib_ping         = lib_tlc_ping,
+    .lib_stats        = lib_tlc_stats,
 };
 
 /** Lib adapter module registration entry point */

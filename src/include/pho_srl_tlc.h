@@ -42,6 +42,7 @@ typedef PhoTlcResponse__DriveLookup pho_tlc_resp_drive_lookup_t;
 typedef PhoTlcResponse__Load        pho_tlc_resp_load_t;
 typedef PhoTlcResponse__Unload      pho_tlc_resp_unload_t;
 typedef PhoTlcResponse__Status      pho_tlc_resp_status_t;
+typedef PhoTlcResponse__Stat        pho_tlc_resp_stat_t;
 
 /******************************************************************************/
 /* Macros & constants *********************************************************/
@@ -52,7 +53,7 @@ typedef PhoTlcResponse__Status      pho_tlc_resp_status_t;
  * If the protocol version is greater than 127, need to increase its size
  * to an integer size (4 bytes).
  */
-#define PHO_TLC_PROTOCOL_VERSION    1
+#define PHO_TLC_PROTOCOL_VERSION    2
 
 /**
  * Protocol version size in bytes.
@@ -140,6 +141,20 @@ static inline bool pho_tlc_request_is_refresh(const pho_tlc_req_t *req)
 {
     return (req->has_refresh && req->refresh);
 }
+
+/**
+ * Request stat checker.
+ *
+ * \param[in]       req         Request.
+ *
+ * \return                      true if the request is a stat one,
+ *                              false otherwise.
+ */
+static inline bool pho_tlc_request_is_stat(const pho_tlc_req_t *req)
+{
+    return req->stat != NULL;
+}
+
 
 /**
  * Response ping checker.
@@ -231,6 +246,20 @@ static inline bool pho_tlc_response_is_refresh(const pho_tlc_resp_t *resp)
     return (resp->has_refresh && resp->refresh);
 }
 
+/**
+ * Response stat checker.
+ *
+ * \param[in]   resp   Response.
+ *
+ * \return             true if the response is a stat one,
+ *                     false otherwise.
+ */
+static inline bool pho_tlc_response_is_stat(const pho_tlc_resp_t *resp)
+{
+    return resp->stat != NULL;
+}
+
+
 /******************************************************************************/
 /** Allocators & Deallocators *************************************************/
 /******************************************************************************/
@@ -277,6 +306,13 @@ void pho_srl_tlc_request_status_alloc(pho_tlc_req_t *req);
  * \param[out]      req         Pointer to the refresh data structure.
  */
 void pho_srl_tlc_request_refresh_alloc(pho_tlc_req_t *req);
+
+/**
+ * Allocation of stat request contents.
+ *
+ * \param[out]   req   request
+ */
+void pho_srl_tlc_request_stat_alloc(pho_tlc_req_t *req);
 
 /**
  * Release of request contents.
@@ -328,6 +364,12 @@ void pho_srl_tlc_response_status_alloc(pho_tlc_resp_t *resp);
  * \param[out]      resp        Pointer to the response data structure.
  */
 void pho_srl_tlc_response_refresh_alloc(pho_tlc_resp_t *resp);
+
+/** Allocation of stat response contents.
+ *
+ * \param[out]    resp   Pointer to the response data structure.
+ */
+void pho_srl_tlc_response_stat_alloc(pho_tlc_resp_t *resp);
 
 /**
  * Allocation of error response content.

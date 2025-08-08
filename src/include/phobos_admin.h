@@ -314,6 +314,21 @@ int phobos_admin_ping_lrs(struct admin_handle *adm);
 int phobos_admin_ping_tlc(const char *library, bool *library_is_up);
 
 /**
+ * Retrieve stats from the TLC daemon specified.
+ *
+ * \param[in]  library   TLC library to retrieve stats from.
+ * @param[in]  full_name (optional) Full name of the stat to be retrieved.
+ *                       It can be in the form "namespace" or "namespace.name".
+ * @param[in]  tags      (optional) list of comma-separated key=value to filter
+ *                       the requested stats, e.g. "key1=value1,key2=value2".
+ * @param[in,out] stats  Allocated JSON string containing stats information.
+ *
+ * @return             0 on success, negative error on failure.
+ */
+int phobos_admin_stats_tlc(const char *library, const char *full_name,
+                           const char *tags, char **stats);
+
+/**
  * Retrieve layouts of objects whose IDs match the given name or pattern.
  *
  * The caller must release the list calling phobos_admin_layout_list_free().
@@ -633,7 +648,7 @@ int phobos_admin_notify_media_update(struct admin_handle *adm,
                                      lock_conflict_handler_t on_conflict);
 
 /**
- * Retrieve stats from the local process (either phobosd or tlc).
+ * Retrieve stats from the local phobosd process
  *
  * @param[in]  adm    Valid admin handle
  * @param[in]  full_name (optional) Full name of the stat to be retrieved.

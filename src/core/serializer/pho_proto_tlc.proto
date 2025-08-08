@@ -50,6 +50,13 @@ message PhoTlcRequest {
                                     // building the response
     }
 
+    /** Body of the stats request */
+    message Stat {
+        optional string ns        = 1; // Filter for stats namespace
+        optional string name      = 2; // filter for stat name
+        optional string tags      = 3; // filters on tags
+    }
+
     required uint32 id  = 1;    // Request ID to match its future response.
 
     optional bool ping  = 2;    // Is the request a ping one ?
@@ -58,6 +65,7 @@ message PhoTlcRequest {
     optional Unload unload = 5; // Unload body
     optional Status status = 6; // Status body
     optional bool refresh = 7;  // Is the request a refresh one ?
+    optional Stat stat = 8; // Stat body
 }
 
 /** TLC protocol response, emitted by the TLC. */
@@ -101,6 +109,11 @@ message PhoTlcResponse {
         optional string message = 2;  // JSON message describing the status
     }
 
+    /* Body of the stat response */
+    message Stat {
+        required string stats = 1; // JSON str containing stats.
+    }
+
     required uint32 req_id = 1; // Request ID, to be matched with
                                 // the corresponding request.
 
@@ -111,4 +124,5 @@ message PhoTlcResponse {
     optional Unload unload = 6; // Unload body
     optional Status status = 7; // Status body
     optional bool refresh = 8;  // This response is a successful refresh one
+    optional Stat stat = 9;     // Stat body
 }

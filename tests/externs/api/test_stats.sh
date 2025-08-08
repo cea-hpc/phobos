@@ -33,11 +33,14 @@ function setup
 {
     setup_tables
     invoke_lrs
+    if [ -w /dev/changer ]; then
+        invoke_tlc
+    fi
 }
 
 function cleanup
 {
-    waive_lrs
+    waive_daemons
     drop_tables
 }
 
@@ -45,4 +48,7 @@ trap cleanup EXIT
 drop_tables
 setup
 
+if [ -w /dev/changer ]; then
+   export TEST_TLC_STATS=1
+fi
 $LOG_COMPILER $test_bin

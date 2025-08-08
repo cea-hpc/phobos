@@ -74,6 +74,13 @@ void pho_srl_tlc_request_refresh_alloc(pho_tlc_req_t *req)
     req->refresh = true;
 }
 
+void pho_srl_tlc_request_stat_alloc(pho_tlc_req_t *req)
+{
+    pho_tlc_request__init(req);
+    req->stat = xmalloc(sizeof(*req->stat));
+    pho_tlc_request__stat__init(req->stat);
+}
+
 void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack)
 {
     if (unpack) {
@@ -107,6 +114,14 @@ void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack)
     if (req->status) {
         free(req->status);
         req->status = NULL;
+    }
+
+    if (req->stat) {
+        free(req->stat->ns);
+        free(req->stat->name);
+        free(req->stat->tags);
+        free(req->stat);
+        req->stat = NULL;
     }
 
     req->has_refresh = false;
@@ -155,6 +170,14 @@ void pho_srl_tlc_response_refresh_alloc(pho_tlc_resp_t *resp)
     pho_tlc_response__init(resp);
     resp->has_refresh = true;
     resp->refresh = true;
+}
+
+void pho_srl_tlc_response_stat_alloc(pho_tlc_resp_t *resp)
+{
+    pho_tlc_response__init(resp);
+    resp->stat = xmalloc(sizeof(*resp->stat));
+    pho_tlc_response__stat__init(resp->stat);
+    resp->stat->stats = NULL;
 }
 
 void pho_srl_tlc_response_error_alloc(pho_tlc_resp_t *resp)
@@ -206,6 +229,12 @@ void pho_srl_tlc_response_free(pho_tlc_resp_t *resp, bool unpack)
         free(resp->status->message);
         free(resp->status);
         resp->status = NULL;
+    }
+
+    if (resp->stat) {
+        free(resp->stat->stats);
+        free(resp->stat);
+        resp->stat = NULL;
     }
 
     resp->has_refresh = false;
