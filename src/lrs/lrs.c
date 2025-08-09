@@ -479,6 +479,23 @@ static int update_phys_spc_free(struct dss_handle *dss,
 {
     if (written_size > 0) {
         dss_media_info->stats.phys_spc_free -= written_size;
+        /*
+         * Written size could be overstated, especially when media have
+         * automatic compression.
+         *
+         * This value will be correctly updated at sync with ldm_fs_df input.
+         * Meanwhile, we set 0 instead of an inaccurate negative value.
+         */
+        if (dss_media_info->stats.phys_spc_free < 0) {
+            pho_debug("Update negative phys_spc_free %zd of medium "
+                      "(family '%s', name '%s', library '%s') is set to zero",
+                      dss_media_info->stats.phys_spc_free,
+                      rsc_family2str(dss_media_info->rsc.id.family),
+                      dss_media_info->rsc.id.name,
+                      dss_media_info->rsc.id.library);
+            dss_media_info->stats.phys_spc_free = 0;
+        }
+
         return dss_media_update(dss, dss_media_info, dss_media_info, 1,
                                 PHYS_SPC_FREE);
     }

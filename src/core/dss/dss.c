@@ -468,6 +468,14 @@ int dss_media_update(struct dss_handle *handle, struct media_info *src_list,
             if (NB_OBJ_ADD & fields)
                 medium_info->stats.nb_obj += dst_list[i].stats.nb_obj;
 
+
+            /*
+             * DSS stats values must be positive values even if previous
+             * approximations compute negative values.
+             */
+            if (medium_info->stats.nb_obj < 0)
+                medium_info->stats.nb_obj = 0;
+
             if (LOGC_SPC_USED & fields)
                 medium_info->stats.logc_spc_used =
                     dst_list[i].stats.logc_spc_used;
@@ -476,13 +484,22 @@ int dss_media_update(struct dss_handle *handle, struct media_info *src_list,
                 medium_info->stats.logc_spc_used +=
                     dst_list[i].stats.logc_spc_used;
 
-            if (PHYS_SPC_USED & fields)
+            if (medium_info->stats.logc_spc_used < 0)
+                medium_info->stats.logc_spc_used = 0;
+
+            if (PHYS_SPC_USED & fields) {
                 medium_info->stats.phys_spc_used =
                     dst_list[i].stats.phys_spc_used;
+                if (medium_info->stats.phys_spc_used < 0)
+                    medium_info->stats.phys_spc_used = 0;
+            }
 
-            if (PHYS_SPC_FREE & fields)
+            if (PHYS_SPC_FREE & fields) {
                 medium_info->stats.phys_spc_free =
                     dst_list[i].stats.phys_spc_free;
+                if (medium_info->stats.phys_spc_free < 0)
+                    medium_info->stats.phys_spc_free = 0;
+            }
 
             dst_list[i].stats = medium_info->stats;
             dss_res_free(medium_info, 1);
