@@ -28,6 +28,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/setup_db.sh
 . $test_dir/test_launch_daemon.sh
 . $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
 
 function setup
 {
@@ -329,6 +330,29 @@ function test_load_unload_lock
     $phobos drive unload ${drive}
 }
 
+function test_load_after_locate
+{
+    local tape="$(get_tapes L6 1)"
+    local drive="$(get_lto_drives 6 1)"
+    local oid=$(generate_prefix_id)
+
+    $phobos drive add --unlock ${drive}
+    $phobos tape add -t lto6 ${tape}
+
+    invoke_daemons
+
+    $phobos tape format --unlock ${tape}
+
+    $phobos put /etc/hosts $oid
+
+    $phobos drive unload ${drive}
+
+    $phobos locate $oid
+
+    $phobos drive load ${drive} ${tape} ||
+        error "load a tape early locked should succeed"
+}
+
 function test_unload_put_concurrent
 {
     local NB_PUT=10
@@ -387,5 +411,6 @@ TESTS=(
     "setup; test_load_drive_to_drive; cleanup"
     "setup; test_unload; cleanup"
     "setup; test_load_unload_lock; cleanup_also_lrs"
+    "setup; test_load_after_locate; cleanup_also_lrs"
     "setup; test_unload_put_concurrent; cleanup_also_lrs"
 )

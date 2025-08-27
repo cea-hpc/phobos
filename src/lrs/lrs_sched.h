@@ -386,18 +386,6 @@ int sched_handle_requests(struct lrs_sched *sched);
  */
 int lrs_schedule_work(struct lrs_sched *sched);
 
-/**
- * Acquire device lock if it is not already set.
- *
- * If lock is already set, check hostname and owner.
- * -EALREADY is returned if dev->lock.hostname is not the same as
- *  sched->lock_hostname.
- *  If dev->lock.owner is not the same as sched->lock_owner, the lock is
- *  re-taken from DSS to update the owner.
- */
-int check_and_take_device_lock(struct lrs_sched *sched,
-                               struct dev_info *dev);
-
 int sched_handle_monitor(struct lrs_sched *sched, json_t *status);
 
 typedef int (*device_select_func_t)(size_t required_size,

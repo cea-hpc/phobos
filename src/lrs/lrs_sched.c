@@ -288,29 +288,6 @@ static int check_renew_lock(struct lock_handle *lock_handle, enum dss_type type,
     return check_renew_owner(lock_handle, type, item, lock);
 }
 
-int check_and_take_device_lock(struct lrs_sched *sched,
-                               struct dev_info *dev)
-{
-    int rc;
-
-    if (dev->lock.hostname) {
-        rc = check_renew_lock(&sched->lock_handle, DSS_DEVICE, dev, &dev->lock);
-        if (rc)
-            LOG_RETURN(rc,
-                       "Unable to check and renew lock of one of our devices "
-                       "'%s'", dev->rsc.id.name);
-    } else {
-        rc = take_and_update_lock(&sched->sched_thread.dss, DSS_DEVICE, dev,
-                                  &dev->lock);
-        if (rc)
-            LOG_RETURN(rc,
-                       "Unable to acquire and update lock on device '%s'",
-                       dev->rsc.id.name);
-    }
-
-    return 0;
-}
-
 /**
  * If a lock exists in the medium or in the DSS, check owner and renew it, else
  * take the lock.

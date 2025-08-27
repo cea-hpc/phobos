@@ -2412,41 +2412,6 @@ int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
     return drive_lookup(id->name, id->library, drive_info);
 }
 
-static int check_take_tape_lock(struct dss_handle *dss,
-                                struct media_info *med_res,
-                                const char *hostname, int pid)
-{
-    int rc;
-
-    if (med_res->lock.hostname) {
-        if (strcmp(med_res->lock.hostname, hostname))
-            LOG_RETURN(-EALREADY,
-                       "tape (name '%s', library '%s') is already locked by "
-                       "host '%s', owner/pid '%d', admin host '%s'",
-                       med_res->rsc.id.name, med_res->rsc.id.library,
-                       med_res->lock.hostname, med_res->lock.owner, hostname);
-
-        if (med_res->lock.owner != pid)
-            LOG_RETURN(-EALREADY,
-                       "tape (name '%s', library '%s') is already locked by "
-                       "host '%s', owner/pid '%d', admin host '%s' but "
-                       "owner/pid '%d'",
-                       med_res->rsc.id.name, med_res->rsc.id.library,
-                       med_res->lock.hostname, med_res->lock.owner, hostname,
-                       pid);
-    } else {
-        rc = dss_lock(dss, DSS_MEDIA, med_res, 1);
-        if (rc)
-            LOG_RETURN(rc,
-                       "admin host '%s' owner/pid '%d' failed to lock the "
-                       "tape (name '%s', library '%s')",
-                       hostname, pid, med_res->rsc.id.name,
-                       med_res->rsc.id.library);
-    }
-
-    return 0;
-}
-
 /**
  * To load, a lock is taken on the drive and on the tape to
  * prevent any concurrent move on these resources.
@@ -2515,7 +2480,8 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
                  hostname, pid, dev_res->rsc.id.name, dev_res->rsc.id.library,
                  dev_res->path);
 
-    rc = check_take_tape_lock(&adm->dss, med_res, hostname, pid);
+    rc = dss_check_and_take_lock(&adm->dss, &med_res->rsc.id, &med_res->lock,
+                                 DSS_MEDIA, med_res, hostname, pid);
     if (rc)
         LOG_GOTO(unlock_drive, rc,
                  "Unable to lock the tape (name '%s', library '%s')",
@@ -2543,11 +2509,14 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
     }
 
 unlock_tape:
-    rc2 = dss_unlock(&adm->dss, DSS_MEDIA, med_res, 1, false);
-    if (rc2) {
-        pho_error(rc2, "Unable to unlock tape (name '%s', family '%s')",
-                  med_res->rsc.id.name, med_res->rsc.id.library);
-        rc = rc ? : rc2;
+    /* do not unlock if there was a locate lock before the load operation */
+    if (!med_res->lock.is_early) {
+        rc2 = dss_unlock(&adm->dss, DSS_MEDIA, med_res, 1, false);
+        if (rc2) {
+            pho_error(rc2, "Unable to unlock tape (name '%s', family '%s')",
+                      med_res->rsc.id.name, med_res->rsc.id.library);
+            rc = rc ? : rc2;
+        }
     }
 
 unlock_drive:
@@ -2682,7 +2651,8 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
                  hostname, pid, dev_res->rsc.id.name, dev_res->rsc.id.library,
                  dev_res->path);
 
-    rc = check_take_tape_lock(&adm->dss, med_res, hostname, pid);
+    rc = dss_check_and_take_lock(&adm->dss, &med_res->rsc.id, &med_res->lock,
+                                 DSS_MEDIA, med_res, hostname, pid);
     if (rc)
         LOG_GOTO(unlock_drive, rc,
                  "Unable to lock the tape (name '%s', library '%s')",
