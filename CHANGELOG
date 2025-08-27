@@ -1,5 +1,8 @@
 # CHANGELOG UPDATES
 
+## Next
+ * WARNING: change the `phobos ping [phobosd|tlc]` command to
+   `phobos phobosd ping` and `phobos tlc ping`
 ## 3.1.0
  * limited number of write per grouping: the new "fifo_max_write_per_grouping"
    configuration parameter allows to limit the number of concurrent writes per
