@@ -157,25 +157,12 @@ static void test_fill_put_params(void)
     string_array_free(&xfer.xd_params.put.tags);
 }
 
-static void load_config(char *execution_filename)
+static void load_config(void)
 {
-    char *test_bin, *test_dir, *test_file;
     int rc;
 
-    test_bin = xstrdup(execution_filename);
-    test_dir = dirname(test_bin);
-
-    rc = asprintf(&test_file, "%s/../phobos.conf", test_dir);
-    if (rc == -1) {
-        free(test_bin);
-        free(test_file);
-        exit(EXIT_FAILURE);
-    }
-
-    rc = pho_cfg_init_local(test_file);
+    rc = pho_cfg_init_local("../phobos.conf");
     atexit(pho_cfg_local_fini);
-    free(test_bin);
-    free(test_file);
     if (rc != 0 && rc != -EALREADY)
         exit(EXIT_FAILURE);
 }
@@ -185,7 +172,7 @@ int main(int argc, char **argv)
     pho_context_init();
     atexit(pho_context_fini);
 
-    load_config(argv[0]);
+    load_config();
     test_fill_put_params();
 
     return EXIT_SUCCESS;

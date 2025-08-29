@@ -289,9 +289,6 @@ int main(int argc, char **argv)
         "param3",
     };
     struct csv_test_data td;
-    char *test_file;
-    char *test_bin;
-    char *test_dir;
     int rc;
 
     test_env_initialize();
@@ -337,24 +334,12 @@ int main(int argc, char **argv)
     pho_run_test("Test 4: get variables from config file (before init)", test,
              test_file_items, PHO_TEST_FAILURE);
 
-    test_bin = xstrdup(argv[0]);
-    test_dir = dirname(test_bin);
 
     /* try with bad cfg first */
-    if (asprintf(&test_file, "%s/bad.cfg", test_dir) == -1)
-        exit(EXIT_FAILURE);
     pho_run_test("Test 5: test config parsing (bad syntax)",
-             (pho_unit_test_t)pho_cfg_init_local, test_file, PHO_TEST_FAILURE);
-    free(test_file);
-
-    /* now the right cfg */
-    if (asprintf(&test_file, "%s/test.cfg", test_dir) == -1)
-        exit(EXIT_FAILURE);
+             (pho_unit_test_t)pho_cfg_init_local, "bad.cfg", PHO_TEST_FAILURE);
     pho_run_test("Test 6: test config parsing (right syntax)",
-             (pho_unit_test_t)pho_cfg_init_local, test_file, PHO_TEST_SUCCESS);
-
-    free(test_file);
-    free(test_bin);
+             (pho_unit_test_t)pho_cfg_init_local, "test.cfg", PHO_TEST_SUCCESS);
 
     pho_run_test("Test 7: get variables from config file (after init)",
              test, test_file_items, PHO_TEST_SUCCESS);

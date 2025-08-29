@@ -2,6 +2,8 @@ AUTOMAKE_OPTIONS=subdir-objects
 
 SUBDIRS=serializer .
 
+pkglib_LTLIBRARIES=libpho_core.la
+
 CFG_SRC=cfg/cfg.c cfg/compatibility.c cfg/cfg_copy.c
 COMMON_SRC=common/attrs.c common/common.c common/global_state.c common/log.c \
         common/pho_cache.c common/pho_ref.c common/saj.c common/slist.c \
@@ -20,10 +22,10 @@ SERIALIZER_SRC=serializer/proto_common.pb-c.c serializer/proto_lrs.pb-c.c \
         serializer/srl_tlc.c serializer/pho_proto_common.proto \
         serializer/pho_proto_lrs.proto serializer/pho_proto_tlc.proto
 
-noinst_LTLIBRARIES=libpho_core.la
 
 libpho_core_la_SOURCES=${CFG_SRC} ${COMMON_SRC} ${COMM_SRC} ${DSS_SRC} \
         ${DSS_SUBHEADERS} ${SERIALIZER_SRC}
 libpho_core_la_CFLAGS=${LIBPQ_CFLAGS} ${AM_CFLAGS}
-libpho_core_la_LIBADD=-lini_config -ljansson -lm -luuid ${LIBPQ_LIBS} \
-                      -lprotobuf-c
+libpho_core_la_LDFLAGS=-version-info 0:0:0
+libpho_core_la_LDFLAGS+=-lini_config -ljansson -lm -luuid ${LIBPQ_LIBS} \
+                       -lprotobuf-c
