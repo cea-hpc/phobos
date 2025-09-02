@@ -101,17 +101,35 @@ class MigratorTest(unittest.TestCase):
             if idx == 0:
                 continue
             self.migrator.create_schema(version)
-            process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s',
-                             '-U', 'phobos', '-f', '/tmp/schema_dump',
-                             'phobos_test'])
+            # Add --restrict-key option because since PostgreSQL 13.22, the
+            # pg_dump command appends a `\restrict key` to the dump file. If the
+            # key is not provided, it is generated randomly.
+            process = Popen("psql --version | awk '{print $3}'", shell=True, stdout=PIPE)
+            out_version, _ = process.communicate()
+
+            if float(out_version) >= 13.22:
+                process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s',
+                                 '-U', 'phobos', f'--restrict-key=key{idx}',
+                                 '-f', '/tmp/schema_dump', 'phobos_test'])
+            else:
+                process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s',
+                                 '-U', 'phobos', '-f', '/tmp/schema_dump',
+                                 'phobos_test'])
+
             process.wait()
             self.migrator.drop_tables()
 
             self.migrator.create_schema(ORDERED_SCHEMAS[idx - 1])
             self.migrator.migrate(version)
-            process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s',
-                             '-U', 'phobos', '-f', '/tmp/migrate_dump',
-                             'phobos_test'])
+            if float(out_version) >= 13.22:
+                process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s',
+                                 '-U', 'phobos', f'--restrict-key=key{idx}',
+                                 '-f', '/tmp/migrate_dump', 'phobos_test'])
+            else:
+                process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s',
+                                 '-U', 'phobos', '-f', '/tmp/migrate_dump',
+                                 'phobos_test'])
+
             process.wait()
             self.migrator.drop_tables()
 
@@ -142,6 +160,7 @@ class MigratorTest(unittest.TestCase):
         Popen("pid=$(pgrep phobosd); kill $pid; while kill -0 $pid; \
                do sleep 1; done", shell=True).wait()
         shutil.rmtree('/run/phobosd')
+        os.unlink('oid-file')
 
         self.migrator.drop_tables()
         if not success:
