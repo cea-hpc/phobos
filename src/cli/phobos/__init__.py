@@ -30,14 +30,6 @@ actions.
 
 import sys
 
-# Without this import, a serialization error occurs because an assert
-# inside protoc fails on pho_request__descriptor when trying to send a request
-# from the store to the lrs. The descriptor inside the request differs from the
-# global descriptor, causing the assert to fail. The descriptor inside the
-# request comes from libphobos_admin, whereas the global descriptor comes from
-# libphobos_store. Keep this import until the problem is resolved.
-import phobos.core.admin # pylint: disable=unused-import
-
 from phobos.cli.common import PhobosActionContext
 from phobos.cli.target.copy import CopyOptHandler
 from phobos.cli.target.dir import DirOptHandler
