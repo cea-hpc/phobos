@@ -1160,11 +1160,6 @@ int sched_select_medium(struct io_scheduler *io_sched,
                 /* not locked by myself */
                 continue;
 
-        rc = dss_medium_health(lock_handle->dss, &curr->rsc.id, max_health(),
-                               &curr->health);
-        if (rc)
-            continue;
-
         /* already loaded and in use ? */
         dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,
                                    curr->rsc.id.name, curr->rsc.id.library,
@@ -1224,6 +1219,12 @@ int sched_select_medium(struct io_scheduler *io_sched,
 
     /* Don't rely on existing lock for future use */
     pho_lock_clean(&chosen_media->lock);
+
+
+    rc = dss_medium_health(lock_handle->dss, &chosen_media->rsc.id,
+                           max_health(), &chosen_media->health);
+    if (rc)
+        goto free_res;
 
     *p_media = lrs_medium_insert(chosen_media);
     if (!*p_media)
