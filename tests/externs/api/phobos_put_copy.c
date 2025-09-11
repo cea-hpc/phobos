@@ -19,7 +19,7 @@ int main(int argc, char **argv)
     int fd;
     int rc;
 
-    if (argc != 4) {
+    if (argc != 6) {
         printf("usage: %s input_path object_name copy_name\n", argv[0]);
         exit(EINVAL);
     }
@@ -39,6 +39,7 @@ int main(int argc, char **argv)
         exit(rc);
     }
 
+    /* first object/copy without grouping */
     xfer.xd_op = PHO_XFER_OP_PUT;
     xfer.xd_params.put.family = PHO_RSC_DIR;
     xfer.xd_ntargets = 1;
@@ -54,9 +55,10 @@ int main(int argc, char **argv)
         exit(-rc);
     }
 
-    pho_xfer_clean(&target);
+    pho_xfer_desc_clean(&xfer);
 
     xfer_copy.xd_op = PHO_XFER_OP_COPY;
+    xfer_copy.xd_params.copy = (struct pho_xfer_copy_params){0};
     xfer_copy.xd_params.copy.get.scope = DSS_OBJ_ALIVE;
     xfer_copy.xd_params.copy.put.family = PHO_RSC_DIR;
     xfer_copy.xd_params.copy.put.copy_name = argv[3];
@@ -70,6 +72,51 @@ int main(int argc, char **argv)
         exit(-rc);
     }
 
+    pho_xfer_desc_clean(&xfer_copy);
+
+    /* second object/copy with grouping */
+    rc = lseek(fd, 0, SEEK_SET);
+    if (rc == -1) {
+        rc = errno;
+        printf("Error at lseek: %d, %s .\n", rc, strerror(rc));
+        exit(rc);
+    }
+
+    xfer.xd_op = PHO_XFER_OP_PUT;
+    xfer.xd_params.put.family = PHO_RSC_DIR;
+    xfer.xd_params.put.grouping = argv[5];
+    xfer.xd_ntargets = 1;
+    target.xt_objid = argv[4];
+    target.xt_fd = fd;
+    target.xt_size = statbuf.st_size;
+    xfer.xd_targets = &target;
+
+    phobos_init();
+    rc = phobos_put(&xfer, 1, NULL, NULL);
+    if (rc) {
+        printf("Error at put: %d, %s .\n", -rc, strerror(-rc));
+        exit(-rc);
+    }
+
     pho_xfer_desc_clean(&xfer);
+
+    xfer_copy.xd_op = PHO_XFER_OP_COPY;
+    xfer_copy.xd_params.copy = (struct pho_xfer_copy_params){0};
+    xfer_copy.xd_params.copy.get.scope = DSS_OBJ_ALIVE;
+    xfer_copy.xd_params.copy.put.family = PHO_RSC_DIR;
+    xfer_copy.xd_params.copy.put.copy_name = argv[3];
+    target_copy.xt_objid = argv[4];
+    xfer_copy.xd_ntargets = 1;
+    xfer_copy.xd_targets = &target_copy;
+
+    rc = phobos_copy(&xfer_copy, 1, NULL, NULL);
+    if (rc) {
+        printf("Error at copy: %d, %s .\n", -rc, strerror(-rc));
+        exit(-rc);
+    }
+
+    pho_xfer_desc_clean(&xfer_copy);
+
+    close(fd);
     exit(EXIT_SUCCESS);
 }

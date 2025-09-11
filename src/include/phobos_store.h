@@ -79,7 +79,7 @@ static const char * const xfer_op_names[] = {
     [PHO_XFER_OP_GETMD] = "GETMD",
     [PHO_XFER_OP_DEL]   = "DELETE",
     [PHO_XFER_OP_UNDEL] = "UNDELETE",
-    [PHO_XFER_OP_COPY] = "COPY",
+    [PHO_XFER_OP_COPY]  = "COPY",
 };
 
 static inline const char *xfer_op2str(enum pho_xfer_op op)
@@ -99,7 +99,11 @@ static inline const char *xfer_op2str(enum pho_xfer_op op)
  */
 struct pho_xfer_put_params {
     enum rsc_family  family;      /**< Targeted resource family. */
-    const char      *grouping;    /**< Grouping attached to the new object. */
+    const char      *grouping;    /**< Grouping attached to the new object.
+                                    *  For a new copy of an existing object,
+                                    *  we can't set a new grouping. Grouping
+                                    *  of the pre-existing object is used.
+                                    */
     const char      *library;     /**< Targeted library (If NULL, any available
                                     *  library can be selected.)
                                     */

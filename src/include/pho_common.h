@@ -143,7 +143,7 @@ do {                                                                    \
 #define xstrdup(str)                    XWRAPPER(strdup, str)
 #define xstrndup(str, n)                XWRAPPER(strndup, str, n)
 #define xrealloc(ptr, size)             XWRAPPER(realloc, ptr, size)
-#define xstrdup_safe(str)               ({ str ? xstrdup(str) : NULL; })
+#define xstrdup_safe(str)               ({ (str) ? xstrdup(str) : NULL; })
 
 /* This attribute allows functions redefined in tests to have higher priority
  * when the linker chooses which one to use in the final executable.

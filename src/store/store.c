@@ -1058,6 +1058,11 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
         LOG_RETURN(rc, "Cannot find object for objid:'%s'",
                    xfer->xd_targets->xt_objid);
 
+    /* use existing grouping as default for copy */
+    /* put grouping attribute must not be preset for a copy operation */
+    if (proc->type == PHO_PROC_COPIER)
+        xfer->xd_params.copy.put.grouping = xstrdup_safe(obj->grouping);
+
     rc = get_copy(dss, xfer, obj, &copy);
     if (rc)
         return rc;
@@ -2006,20 +2011,25 @@ clean:
 
 static void xfer_put_param_clean(struct pho_xfer_desc *xfer)
 {
-    struct pho_xfer_put_params *put_params;
+    string_array_free(&xfer->xd_params.put.tags);
+    pho_attrs_free(&xfer->xd_params.put.lyt_params);
+}
 
-    if (xfer->xd_op == PHO_XFER_OP_COPY)
-        put_params = &xfer->xd_params.copy.put;
-    else
-        put_params = &xfer->xd_params.put;
-
-    string_array_free(&put_params->tags);
-    pho_attrs_free(&put_params->lyt_params);
+static void xfer_copy_param_clean(struct pho_xfer_desc *xfer)
+{
+    free((void *)xfer->xd_params.copy.put.grouping);
+    xfer->xd_params.copy.put.grouping = NULL;
+    string_array_free(&xfer->xd_params.copy.put.tags);
+    pho_attrs_free(&xfer->xd_params.copy.put.lyt_params);
 }
 
 static void (*xfer_param_cleaner[PHO_XFER_OP_LAST])(struct pho_xfer_desc *) = {
-    xfer_put_param_clean,
-    NULL,
+    [PHO_XFER_OP_PUT]   = xfer_put_param_clean,
+    [PHO_XFER_OP_GET]   = NULL,
+    [PHO_XFER_OP_GETMD] = NULL,
+    [PHO_XFER_OP_DEL]   = NULL,
+    [PHO_XFER_OP_UNDEL] = NULL,
+    [PHO_XFER_OP_COPY]  = xfer_copy_param_clean,
 };
 
 void pho_xfer_desc_clean(struct pho_xfer_desc *xfer)
@@ -2122,6 +2132,15 @@ int phobos_copy(struct pho_xfer_desc *xfers, size_t n,
         return rc;
 
     for (i = 0; i < n; i++) {
+        if (xfers[i].xd_params.copy.put.grouping) {
+            pho_error(rc = -EINVAL,
+                      "A xfer to create a new copy must not have a grouping "
+                      "put param because the grouping is inherited from the "
+                      "existing object. \"%s\" was set instead of NULL.",
+                      xfers[i].xd_params.put.grouping);
+            return rc;
+        }
+
         xfers[i].xd_op = PHO_XFER_OP_COPY;
         xfers[i].xd_rc = 0;
         for (j = 0; j < xfers[i].xd_ntargets; j++)

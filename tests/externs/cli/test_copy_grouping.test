@@ -1,0 +1,170 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2025 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Test grouping after copy
+#
+
+test_bin_dir=$PWD
+test_bin="$test_bin_dir/phobos_put_copy"
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
+. $test_dir/tape_drive.sh
+
+function setup_dir
+{
+    setup_tables
+
+    export PHOBOS_LRS_families="dir"
+    export PHOBOS_STORE_default_family="dir"
+
+    invoke_lrs
+
+    setup_test_dirs
+    setup_dummy_files 1 1k 1
+
+    dir1="$DIR_TEST_IN/dir1"
+    dir2="$DIR_TEST_IN/dir2"
+    mkdir ${dir1}
+    $phobos dir add ${dir1}
+    $phobos dir format --fs posix --unlock ${dir1}
+    mkdir ${dir2}
+    $phobos dir add ${dir2}
+    $phobos dir format --fs posix --unlock ${dir2}
+}
+
+function cleanup_dir
+{
+    waive_lrs
+
+    cleanup_dummy_files
+    cleanup_test_dirs
+
+    drop_tables
+}
+
+function test_put_copy_dir
+{
+    $valg_phobos put --grouping a_grouping ${FILES[0]} obj ||
+        error "Put should success"
+    $valg_phobos copy create obj copy ||
+        error "Copy should success"
+
+    copy_occurence=$($phobos copy list | grep -c copy)
+    source_occurence=$($phobos copy list | grep -c source)
+    if (( copy_occurence != 1 )); then
+        error "We must have one copy."
+    fi
+
+    if (( source_occurence != 1 )); then
+        error "We must have one source."
+    fi
+
+    grouping_occurence=$($phobos dir list -o groupings | grep -c a_grouping)
+    if (( grouping_occurence != 2 )); then
+        error "We must have two dir with grouping."
+    fi
+}
+
+function setup_tape
+{
+    setup_tables
+
+    export PHOBOS_LRS_families="tape"
+    export PHOBOS_STORE_default_family="tape"
+
+    invoke_daemons
+
+    setup_test_dirs
+    setup_dummy_files 1 1k 1
+
+    TAPES=( $(get_tapes L6 3 | nodeset -e) )
+    DRIVES=( $(get_lto_drives 6 2) )
+
+    $phobos tape add -t LTO6 ${TAPES[0]} ${TAPES[1]}
+    $phobos drive add --unlock ${DRIVES[@]}
+    $phobos tape format --unlock ${TAPES[0]} ${TAPES[1]}
+}
+
+function cleanup_tape
+{
+    waive_daemons
+    drain_all_drives
+
+    cleanup_dummy_files
+    cleanup_test_dirs
+
+    drop_tables
+}
+
+function test_put_copy_tape
+{
+    $valg_phobos put --grouping a_grouping ${FILES[0]} obj ||
+        error "Put should success"
+    $valg_phobos copy create obj copy ||
+        error "Copy should success"
+
+    copy_occurence=$($phobos copy list | grep -c copy)
+    source_occurence=$($phobos copy list | grep -c source)
+    if (( copy_occurence != 1 )); then
+        error "We must have one copy."
+    fi
+
+    if (( source_occurence != 1 )); then
+        error "We must have one source."
+    fi
+
+    grouping_occurence=$($phobos tape list -o groupings | grep -c a_grouping)
+    if (( grouping_occurence != 2 )); then
+        error "We must have two tapes with grouping."
+    fi
+
+    # format third tape to umount one of the previous
+    $phobos tape add -t LTO6 --tags tagged ${TAPES[2]}
+    $phobos tape format --unlock ${TAPES[2]}
+    $phobos put --tags tagged ${FILES[0]} obj_on_third_tape ||
+        error "Tagged put should success"
+
+    # create a third copy and check that the third tape is ignored
+    $valg_phobos copy create obj second_copy ||
+        error "Second copy should success"
+
+    second_copy_occurence=$($phobos copy list | grep -c second_copy)
+    if (( second_copy_occurence != 1 )); then
+        error "We must have one second_copy."
+    fi
+
+    grouping_occurence=$($phobos tape list -o groupings | grep -c a_grouping)
+    if (( grouping_occurence != 2 )); then
+        error "We must have two tapes with grouping even with a third copy."
+    fi
+}
+
+TESTS=(
+    "setup_dir; test_put_copy_dir; cleanup_dir"
+)
+
+if [[ -w /dev/changer ]]; then
+    TESTS+=("setup_tape; test_put_copy_tape; cleanup_tape")
+fi

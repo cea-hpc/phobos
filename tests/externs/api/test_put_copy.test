@@ -67,18 +67,22 @@ function cleanup_dir
 
 function test_put_copy
 {
-    $LOG_COMPILER $test_bin ${FILES[0]} put_copy_obj copy ||
+    $LOG_COMPILER $test_bin ${FILES[0]} obj copy obj_grouping a_grouping ||
         error "Put and copy should success"
 
-    copy_list=$($phobos copy list)
-    copy_occurence=$(echo ${copy_list} | grep -c copy)
-    source_occurence=$(echo ${copy_list} | grep -c source)
-    if (( copy_occurence != 1 )); then
-        error "We must have one copy."
+    copy_occurence=$($phobos copy list | grep -c copy)
+    source_occurence=$($phobos copy list | grep -c source)
+    if (( copy_occurence != 2 )); then
+        error "We must have two copies."
     fi
 
-    if (( source_occurence != 1 )); then
-        error "We must have one source."
+    if (( source_occurence != 2 )); then
+        error "We must have two sources."
+    fi
+
+    grouping_occurence=$($phobos dir list -o groupings | grep -c a_grouping)
+    if (( grouping_occurence != 2 )); then
+        error "We must have two dir with grouping."
     fi
 }
 

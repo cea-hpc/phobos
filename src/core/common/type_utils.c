@@ -195,6 +195,9 @@ struct object_info *object_info_dup(const struct object_info *obj)
     /* timeval deprec_time */
     obj_out->deprec_time = obj->deprec_time;
 
+    /* dup grouping */
+    obj_out->grouping = xstrdup_safe(obj->grouping);
+
     /* success */
     return obj_out;
 }
@@ -207,6 +210,7 @@ void object_info_free(struct object_info *obj)
     free(obj->oid);
     free(obj->uuid);
     free(obj->user_md);
+    free((void *)obj->grouping);
     free(obj);
 }
 
