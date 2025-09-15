@@ -64,7 +64,7 @@ typedef PhoResponse__Error          pho_resp_error_t;
  * If the protocol version is greater than 127, need to increase its size
  * to an integer size (4 bytes).
  */
-#define PHO_PROTOCOL_VERSION      13
+#define PHO_PROTOCOL_VERSION      14
 /**
  * Protocol version size in bytes.
  */

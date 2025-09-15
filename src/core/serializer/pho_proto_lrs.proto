@@ -137,16 +137,21 @@ message PhoRequest {
 
     required uint32 id           = 1; // Request ID to match its future
                                       // response.
+    optional int64 qos           = 2; // Greater means high-priority.
+                                      // QOS is more significant than priority.
+    optional int64 priority      = 3; // Greater means high-priority.
+                                      // Priority will only rank request of the
+                                      // same qos.
 
     // Only exactly one of these fields is expected.
-    optional Write walloc        = 2; // Write allocation body.
-    optional Read ralloc         = 3; // Read allocation body.
-    optional Release release     = 4; // Release body.
-    optional Format format       = 5; // Format body.
-    optional Notify notify       = 6; // Notify body.
-    optional bool ping           = 7; // Is the request a ping request ?
-    optional Monitor monitor     = 8; // Monitor body.
-    optional Configure configure = 9; // Configure body.
+    optional Write walloc        = 4; // Write allocation body.
+    optional Read ralloc         = 5; // Read allocation body.
+    optional Release release     = 6; // Release body.
+    optional Format format       = 7; // Format body.
+    optional Notify notify       = 8; // Notify body.
+    optional bool ping           = 9; // Is the request a ping request ?
+    optional Monitor monitor     = 10; // Monitor body.
+    optional Configure configure = 11; // Configure body.
 }
 
 /** LRS protocol response, emitted by the LRS. */

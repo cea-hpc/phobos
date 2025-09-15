@@ -571,7 +571,6 @@ static void create_request(struct req_container *reqc,
         pho_srl_request_read_alloc(reqc->req, n);
 
         reqc->req->ralloc->n_required = n_required;
-
         params->n_media = n_required;
         params->media = xcalloc(n_required, sizeof(*params->media));
 
