@@ -155,6 +155,7 @@ AC_CONFIG_FILES([Makefile
          src/tlc/Makefile
          src/tlc/scsi/Makefile
          src/daemon/Makefile
+         src/hsm/Makefile
          tests/Makefile
          tests/interns/Makefile
          tests/externs/api/Makefile

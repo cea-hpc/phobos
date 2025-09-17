@@ -17,6 +17,7 @@
    objects.
  * adding creation_time to extent table into DSS. This ctime is inherited from
    the corresponding existing copy creation_time.
+ * New phobos_hsm_sync_dir command
 
 ## 3.1.0
  * limited number of write per grouping: the new "fifo_max_write_per_grouping"

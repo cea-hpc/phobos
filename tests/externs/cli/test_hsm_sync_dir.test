@@ -1,0 +1,101 @@
+#!/bin/bash
+#
+#  All rights reserved (c) 2014-2025 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+
+#
+# Integration test for phobos_hsm_sync_dir
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
+
+set -xe
+
+function setup
+{
+    setup_tables
+
+    export PHOBOS_LRS_families="dir"
+    export PHOBOS_STORE_default_family="dir"
+
+    invoke_lrs
+
+    setup_test_dirs
+    setup_dummy_files 1 1k 1
+
+    dir_other_host="$DIR_TEST_IN/dir_other_host"
+    mkdir ${dir_other_host}
+    $phobos dir add --tags other_host ${dir_other_host}
+    $phobos dir format --unlock --fs posix --unlock ${dir_other_host}
+
+    dir1="$DIR_TEST_IN/dir1"
+    dir2="$DIR_TEST_IN/dir2"
+    mkdir ${dir1}
+    $phobos dir add ${dir1}
+    $phobos dir format --fs posix --unlock ${dir1}
+    mkdir ${dir2}
+    $phobos dir add ${dir2}
+    $phobos dir format --fs posix --unlock ${dir2}
+}
+
+function cleanup
+{
+    waive_lrs
+
+    cleanup_dummy_files
+    cleanup_test_dirs
+
+    drop_tables
+}
+
+function check_hsm_sync_dir()
+{
+    # object to sync
+    $phobos put ${FILES[0]} obj_to_sync
+
+    # object deprecated
+    $phobos put ${FILES[0]} obj_deprecated
+    $phobos delete obj_deprecated
+
+    # object already synced
+    $phobos put ${FILES[0]} obj_synced
+    $phobos copy create obj_synced sync
+
+    # object other copy
+    $phobos put --copy-name other ${FILES[0]} obj_other_copy
+
+    # object other host
+    $phobos put --tags other_host ${FILES[0]} obj_other_host
+    $PSQL << EOF
+UPDATE device SET host = 'other_host' WHERE path = '${dir_other_host}';
+EOF
+
+    # run phobos_hsm_sync_dir
+    $valg_phobos_hsm_sync_dir source sync
+
+    # check only one obj_to_sync is sync
+    sync_occurence=$($phobos copy list | grep -c sync)
+    if (( sync_occurence != 2 )); then
+        error "We must have two sync copies : obj_synced and obj_to_sync"
+    fi
+}
+
+TESTS=("setup; check_hsm_sync_dir; cleanup")

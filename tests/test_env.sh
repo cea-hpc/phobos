@@ -39,6 +39,7 @@ export PYTHONPATH="$PHO_PYTHON_PATH"
 
 lrs_dir="$(readlink -e $test_bin_dir/../src/lrs)"
 tlc_dir="$(readlink -e $test_bin_dir/../src/tlc)"
+hsm_dir="$(readlink -e $test_bin_dir/../src/hsm)"
 tape_lib_certif_dir="$(readlink -e $test_bin_dir/../tape_library_certification)"
 
 # library paths
@@ -68,6 +69,8 @@ valg_phobos="$LOG_COMPILER $phobos"
 
 phobosd="$lrs_dir/phobosd"
 tlc="$tlc_dir/phobos_tlc"
+phobos_hsm_sync_dir="$hsm_dir/phobos_hsm_sync_dir"
+valg_phobos_hsm_sync_dir="$LOG_COMPILER $phobos_hsm_sync_dir"
 
 # utils function
 # display error message and exits

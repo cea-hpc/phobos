@@ -60,6 +60,7 @@ check_SCRIPTS=acceptance.test \
               test_get.test \
               test_group_sync.sh \
               test_grouping.test \
+              test_hsm_sync_dir.test \
               test_import.test \
               test_ldm.sh \
               test_list_sort.test \

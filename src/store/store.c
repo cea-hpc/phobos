@@ -1016,6 +1016,7 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
     /* can't get md for undel without any objid */
     /* TODO: really necessary to create decoder for getmd, del and undel OP ? */
     if (xfer->xd_op != PHO_XFER_OP_UNDEL && xfer->xd_op != PHO_XFER_OP_GET &&
+        xfer->xd_op != PHO_XFER_OP_COPY &&
         (xfer->xd_op != PHO_XFER_OP_DEL &&
          !(xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL))) {
         rc = object_md_get(dss, xfer->xd_targets);

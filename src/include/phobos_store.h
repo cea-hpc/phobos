@@ -184,10 +184,11 @@ union pho_xfer_params {
  * The source/destination semantics of the fields vary
  * depending on the nature of the operation.
  * See below:
- *  - pĥobos_getmd()
+ *  - phobos_getmd()
  *  - phobos_get()
  *  - phobos_put()
  *  - phobos_undelete()
+ *  - phobos_copy()
  */
 struct pho_xfer_desc {
     enum pho_xfer_op        xd_op;       /**< Operation to perform. */
