@@ -133,6 +133,7 @@ struct pho_data_processor {
     struct layout_info *src_layout; /**< Given by layout caller and filled
                                       *  by decoding data processors
                                       */
+    struct timeval src_copy_ctime;  /**< Used to order Read requests */
     struct layout_info *dest_layout;/**< own by encoding data processors */
     size_t io_block_size;           /**< Chunk size used if specified in the
                                       *  configuration

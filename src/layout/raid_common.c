@@ -446,6 +446,13 @@ static void raid_writer_build_allocation_req(struct pho_data_processor *proc,
     req->walloc->no_split = put_params->no_split;
 }
 
+/* The older a ctime is, the higher its priority. */
+static inline int64_t priority_from_ctime(struct timeval copy_ctime)
+{
+   return -((int64_t)copy_ctime.tv_sec * (int64_t)1000000 +
+            (int64_t)copy_ctime.tv_usec);
+}
+
 /** Generate the next read or delete allocation request for this eraser */
 static void raid_reader_eraser_build_allocation_req(
     struct pho_data_processor *proc, pho_req_t *req, enum processor_type type)
@@ -458,6 +465,10 @@ static void raid_reader_eraser_build_allocation_req(
     ENTRY;
 
     pho_srl_request_read_alloc(req, n_extents);
+    req->has_qos = true;
+    req->qos = 0;
+    req->has_priority = true;
+    req->priority = priority_from_ctime(proc->src_copy_ctime);
     req->ralloc->n_required =
         is_eraser(proc) ? n_extents : io_context->n_data_extents;
     req->ralloc->operation =

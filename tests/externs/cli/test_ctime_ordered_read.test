@@ -1,0 +1,115 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2025 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Test that the phobos client sets the priority of a read request from the ctime
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
+
+
+function dir_setup
+{
+    setup_tables
+
+    export PHOBOS_LRS_families="dir"
+    export PHOBOS_STORE_default_family="dir"
+
+    invoke_lrs
+
+    setup_test_dirs
+    setup_dummy_files 1 1k 1
+
+    dir1="$DIR_TEST_IN/dir1"
+    mkdir ${dir1}
+    $phobos dir add ${dir1}
+    $phobos dir format --unlock ${dir1}
+}
+
+function dir_cleanup
+{
+    waive_lrs
+
+    cleanup_dummy_files
+    cleanup_test_dirs
+
+    drop_tables
+}
+
+# This function executes a phobos command but checks that the sent read request
+# has the good priority.
+function phobos_check_read_priority()
+{
+    local priority="$1"
+
+    shift
+
+    (
+        tmp_gdb_script=$(mktemp)
+        trap "rm $tmp_gdb_script" EXIT
+        cat <<EOF > "$tmp_gdb_script"
+set breakpoint pending on
+break send_generated_requests
+commands
+    if (n_reqs > 0)
+        if (requests->ralloc != 0)
+            if (requests->priority != ${priority})
+                echo "ERROR: priority is not set to ${priority}"
+                quit 1
+            end
+        end
+    end
+
+    continue
+end
+run $phobos $*
+EOF
+
+        DEBUGINFOD_URLS="" gdb -batch -x "$tmp_gdb_script" -q python3
+    )
+}
+
+function priority_from_ctime()
+{
+    local ctime="$1"
+    local nb_usec=$(date -d "${ctime}" +"%s%6N")
+
+    echo -${nb_usec}
+}
+
+function test_read_alloc_ctime_set
+{
+    $phobos put ${FILES[0]} obj || error "Put should success"
+
+    copy_ctime=$($phobos copy list -o creation_time)
+    priority=$(priority_from_ctime "${copy_ctime}")
+
+    phobos_check_read_priority ${priority} get obj $DIR_TEST_IN/toto ||
+        error "Get with priority check should success"
+}
+
+# test priority to read alloc on dir
+TESTS=("dir_setup; test_read_alloc_ctime_set; dir_cleanup")

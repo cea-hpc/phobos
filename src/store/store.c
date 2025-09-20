@@ -1078,6 +1078,7 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
         pho_warn("Copy '%s' status for the object '%s' is %s.", copy->copy_name,
                  obj->oid, copy_status2str(copy->copy_status));
 
+    proc->src_copy_ctime = copy->creation_time;
     rc = copy_object_info_into_xfer(obj, xfer->xd_targets);
     object_info_free(obj);
     if (rc)
