@@ -224,6 +224,7 @@ struct copy_info *copy_info_dup(const struct copy_info *copy)
     copy_out->version = copy->version;
     copy_out->copy_name = xstrdup_safe(copy->copy_name);
     copy_out->copy_status = copy->copy_status;
+    copy_out->creation_time = copy->creation_time;
 
     return copy_out;
 }
