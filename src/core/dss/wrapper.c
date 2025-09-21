@@ -946,3 +946,34 @@ int dss_check_and_take_lock(struct dss_handle *handle,
 
     return 0;
 }
+
+int dss_get_extents_order_by_ctime(struct dss_handle *handle,
+                                   const struct dss_filter *filter,
+                                   struct extent **extents, int *count)
+{
+    GString *request = g_string_new(NULL);
+    GString *clause = g_string_new(NULL);
+    int rc = 0;
+
+    if (filter) {
+        rc = clause_filter_convert(handle, clause, filter);
+        if (rc)
+            goto out;
+    }
+
+    g_string_append_printf(request,
+            "SELECT extent_uuid, size, offsetof, medium_family, state, "
+            "medium_id, medium_library, address, hash, info FROM layout "
+            "JOIN extent USING (extent_uuid) JOIN copy USING "
+            "(object_uuid, version, copy_name) %s ORDER BY creation_time;",
+            clause->str != NULL ? clause->str : "");
+
+    rc = dss_execute_generic_get(handle, DSS_EXTENT, request,
+                                 (void **) extents, count);
+
+out:
+    g_string_free(request, true);
+    g_string_free(clause, true);
+
+    return rc;
+}

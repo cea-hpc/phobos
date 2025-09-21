@@ -1231,7 +1231,12 @@ static int _get_extents(struct admin_handle *adm,
     if (rc)
         LOG_RETURN(rc, "Failed to build filter for extent retrieval");
 
-    rc = dss_extent_get(&adm->dss, &filter, extents, count);
+    if (repack)
+        rc = dss_get_extents_order_by_ctime(&adm->dss, &filter, extents,
+                                            count);
+    else
+        rc = dss_extent_get(&adm->dss, &filter, extents, count);
+
     dss_filter_free(&filter);
     if (rc)
         LOG_RETURN(rc,

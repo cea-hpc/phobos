@@ -339,4 +339,18 @@ int dss_check_and_take_lock(struct dss_handle *handle,
                             void *resource,
                             const char *hostname, int pid);
 
+/**
+ * Retrieve extents from DSS order by ctime.
+ *
+ * @param[in]   handle   DSS handle
+ * @param[in]   filter   Assembled DSS filtering criteria
+ * @param[out]  extents  List of retrieved extents
+ * @param[out]  count    Numver of extents in the list
+ *
+ * @return 0 or negative error code
+ */
+int dss_get_extents_order_by_ctime(struct dss_handle *handle,
+                                   const struct dss_filter *filter,
+                                   struct extent **extents, int *count);
+
 #endif
