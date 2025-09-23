@@ -299,6 +299,7 @@ static int layout_from_pg_row(struct dss_handle *handle, void *void_layout,
     }
 
 out:
+    json_decref(root);
     layout->ext_count = count;
     layout->extents = extents;
 
@@ -311,6 +312,8 @@ static void layout_result_free(void *void_layout)
 
     if (!layout)
         return;
+
+    layout_info_free_extents(void_layout);
 
     /* Undo dss_layout_desc_decode */
     free(layout->layout_desc.mod_name);
