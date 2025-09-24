@@ -66,6 +66,21 @@ function cleanup
     drop_tables
 }
 
+function check_hsm_sync_dir_opt()
+{
+    ($valg_phobos_hsm_sync_dir --bad_opt &&
+         error "--bad_opt parsing must fail") || true
+
+    local usage=$($valg_phobos_hsm_sync_dir -h)
+    local usage_long=$($valg_phobos_hsm_sync_dir --help)
+
+    if [[ "$usage" != "$usage_long" ]]; then
+        error "-h and --help must show the same usage"
+    fi
+
+    (echo ${usage} | grep usage) || error "-h must show usage"
+}
+
 function check_hsm_sync_dir()
 {
     # object to sync
@@ -88,6 +103,16 @@ function check_hsm_sync_dir()
 UPDATE device SET host = 'other_host' WHERE path = '${dir_other_host}';
 EOF
 
+    # dry-run phobos_hsm_sync_dir
+    dry_run_log=$($valg_phobos_hsm_sync_dir -d source sync 2>&1)
+    (echo ${dry_run_log} | grep "Syncing" | grep "DRY" | grep obj_to_sync) ||
+        error "dry-run sync must show a sync of obj_t_sync"
+
+    # quiet dry-run phobos_hsm_sync_dir
+    quiet_dry_run_log=$($valg_phobos_hsm_sync_dir -q -d source sync 2>&1)
+    ((echo ${dry_run_log} | grep "Syncing" | grep obj_to_sync) &&
+        error "quiet dry-run sync must not show a sync of obj_t_sync") || true
+
     # run phobos_hsm_sync_dir
     $valg_phobos_hsm_sync_dir source sync
 
@@ -98,4 +123,7 @@ EOF
     fi
 }
 
-TESTS=("setup; check_hsm_sync_dir; cleanup")
+TESTS=(
+    "check_hsm_sync_dir_opt;"
+    "setup; check_hsm_sync_dir; cleanup"
+)

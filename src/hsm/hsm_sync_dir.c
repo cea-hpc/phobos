@@ -38,7 +38,13 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#include "errno.h"
+
+#include <errno.h>
+#include <getopt.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 #include "phobos_store.h"
 
@@ -48,15 +54,88 @@
 #include "pho_types.h"
 #include "pho_type_utils.h"
 
+static void print_usage(void)
+{
+    printf("usage: %s [-h/--help] [-v/--verbose] [-q/--quiet] [-d/--dry-run] "
+           "source_copy_name destination_copy_name\n",
+           program_invocation_short_name);
+}
+
+struct params {
+    const char *source_copy_name;
+    const char *destination_copy_name;
+    bool dry_run;
+    int log_level;
+};
+
+#define DEFAULT_PARAMS {NULL, NULL, false, PHO_LOG_INFO}
+
+static struct params parse_args(int argc, char **argv)
+{
+    static struct option long_options[] = {
+        {"help", no_argument, 0, 'h'},
+        {"verbose", no_argument, 0, 'v'},
+        {"quiet", no_argument, 0, 'q'},
+        {"dry-run", no_argument, 0, 'd'},
+        {0, 0, 0, 0}
+    };
+    struct params params = DEFAULT_PARAMS;
+    int c;
+
+    while ((c = getopt_long(argc, argv, "hvqd", long_options, NULL)) != -1) {
+        switch (c) {
+        case 'h':
+            print_usage();
+            exit(EXIT_SUCCESS);
+        case 'v':
+            ++params.log_level;
+            break;
+        case 'q':
+            --params.log_level;
+            break;
+        case 'd':
+            params.dry_run = true;
+            break;
+        default:
+            print_usage();
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    if (argc - optind != 2) {
+        print_usage();
+        exit(EXIT_FAILURE);
+    }
+
+    params.source_copy_name = argv[optind];
+    params.destination_copy_name = argv[optind + 1];
+
+    if (params.log_level < PHO_LOG_DISABLED)
+        params.log_level = PHO_LOG_DISABLED;
+
+    if (params.log_level > PHO_LOG_DEBUG)
+        params.log_level = PHO_LOG_DEBUG;
+
+    return params;
+}
+
 static void sync_object(const char *oid, const char *object_uuid, int version,
                         const char *source_copy_name,
-                        const char *destination_copy_name)
+                        const char *destination_copy_name, bool dry_run)
 {
-    char *target_uuid = xstrdup(object_uuid);
     struct pho_xfer_target target = {0};
     struct pho_xfer_desc xfer = {0};
+    char *target_uuid;
     int rc;
 
+    pho_info("Syncing object ('%s' oid, '%s' uuid, '%d' version) from copy "
+             "'%s' to copy '%s'%s", oid, object_uuid, version, source_copy_name,
+             destination_copy_name,
+             dry_run ? " (DRY RUN MODE, NO SYNC DONE)" : "");
+    if (dry_run)
+        return;
+
+    target_uuid = xstrdup(object_uuid);
     xfer.xd_op = PHO_XFER_OP_COPY;
     target.xt_objid = xstrdup(oid);
     target.xt_objuuid = target_uuid;
@@ -71,9 +150,6 @@ static void sync_object(const char *oid, const char *object_uuid, int version,
     xfer.xd_params.copy.put.copy_name = destination_copy_name;
     xfer.xd_params.copy.put.grouping = NULL;
 
-    pho_verb("Syncing object ('%s' oid, '%s' uuid, '%d' version) from copy "
-             "'%s' to copy '%s'", oid, object_uuid, version, source_copy_name,
-             destination_copy_name);
     rc = phobos_copy(&xfer, 1, NULL, NULL);
     if (rc)
         pho_warn("Error %d (%s) when syncing object '%s' to copy '%s'",
@@ -87,24 +163,15 @@ static void sync_object(const char *oid, const char *object_uuid, int version,
 int main(int argc, char **argv)
 {
     struct dev_info *dev_list = NULL;
-    const char *destination_copy_name;
-    const char *source_copy_name;
     const char *hostname = NULL;
     struct dss_filter filter;
     struct dss_handle dss;
+    struct params params;
     int dev_count = 0;
     int rc;
     int i;
 
-    if (argc < 3) {
-        pho_error(-EINVAL,
-                  "usage: %s source_copy_name destination_copy_name",
-                  argv[0]);
-        return -EINVAL;
-    }
-
-    source_copy_name = argv[1];
-    destination_copy_name = argv[2];
+    params = parse_args(argc, argv);
 
     rc = phobos_init();
     if (rc)
@@ -116,6 +183,8 @@ int main(int argc, char **argv)
         phobos_fini();
         return rc;
     }
+
+    pho_log_level_set(params.log_level);
 
     rc = dss_init(&dss);
     if (rc) {
@@ -199,7 +268,7 @@ int main(int argc, char **argv)
                                   "  {\"DSS::LYT::extent_uuid\": \"%s\"},"
                                   "  {\"DSS::LYT::copy_name\": \"%s\"}"
                                   "]}",
-                                  extent_list[j].uuid, source_copy_name);
+                                  extent_list[j].uuid, params.source_copy_name);
             if (rc)
                 continue;
 
@@ -223,7 +292,7 @@ int main(int argc, char **argv)
                                       "]}",
                                       layout_list[k].uuid,
                                       layout_list[k].version,
-                                      destination_copy_name);
+                                      params.destination_copy_name);
                 if (rc)
                     continue;
 
@@ -255,8 +324,8 @@ int main(int argc, char **argv)
 
                 if (object_count)
                     sync_object(object_list[0].oid, layout_list[k].uuid,
-                                layout_list[k].version, source_copy_name,
-                                destination_copy_name);
+                                layout_list[k].version, params.source_copy_name,
+                                params.destination_copy_name, params.dry_run);
 
                 dss_res_free(object_list, object_count);
             }
