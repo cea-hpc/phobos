@@ -33,13 +33,15 @@ function setup
 {
     setup_tables
 
-    export PHOBOS_LRS_families="dir"
-    export PHOBOS_STORE_default_family="dir"
-
-    invoke_lrs
-
     setup_test_dirs
     setup_dummy_files 1 1k 1
+
+    export PHOBOS_LRS_families="dir"
+    export PHOBOS_STORE_default_family="dir"
+    export PHOBOS_HSM_synced_ctime_path="${DIR_TEST}/hsm_synced_ctime"
+    rm -f ${PHOBOS_HSM_synced_ctime_path}
+
+    invoke_lrs
 
     dir_other_host="$DIR_TEST_IN/dir_other_host"
     mkdir ${dir_other_host}
@@ -49,11 +51,9 @@ function setup
     dir1="$DIR_TEST_IN/dir1"
     dir2="$DIR_TEST_IN/dir2"
     mkdir ${dir1}
-    $phobos dir add ${dir1}
-    $phobos dir format --fs posix --unlock ${dir1}
     mkdir ${dir2}
-    $phobos dir add ${dir2}
-    $phobos dir format --fs posix --unlock ${dir2}
+    $phobos dir add --tags this-host ${dir1} ${dir2}
+    $phobos dir format --fs posix --unlock ${dir1} ${dir2}
 }
 
 function cleanup
@@ -84,14 +84,14 @@ function check_hsm_sync_dir_opt()
 function check_hsm_sync_dir()
 {
     # object to sync
-    $phobos put ${FILES[0]} obj_to_sync
+    $phobos put --tags this-host ${FILES[0]} obj_to_sync
 
     # object deprecated
-    $phobos put ${FILES[0]} obj_deprecated
+    $phobos put --tags this-host ${FILES[0]} obj_deprecated
     $phobos delete obj_deprecated
 
     # object already synced
-    $phobos put ${FILES[0]} obj_synced
+    $phobos put --tags this-host ${FILES[0]} obj_synced
     $phobos copy create obj_synced sync
 
     # object other copy
@@ -110,10 +110,11 @@ EOF
 
     # quiet dry-run phobos_hsm_sync_dir
     quiet_dry_run_log=$($valg_phobos_hsm_sync_dir -q -d source sync 2>&1)
-    ((echo ${dry_run_log} | grep "Syncing" | grep obj_to_sync) &&
-        error "quiet dry-run sync must not show a sync of obj_t_sync") || true
+    ((echo ${quiet_dry_run_log} | grep "Syncing" | grep obj_to_sync) &&
+        error "quiet dry-run sync must not show a sync of obj_to_sync") || true
 
-    # run phobos_hsm_sync_dir
+    # run phobos_hsm_sync_dir with no synced ctime file
+    rm -f ${PHOBOS_HSM_synced_ctime_path}
     $valg_phobos_hsm_sync_dir source sync
 
     # check only one obj_to_sync is sync
@@ -121,6 +122,24 @@ EOF
     if (( sync_occurence != 2 )); then
         error "We must have two sync copies : obj_synced and obj_to_sync"
     fi
+
+    # run phobos_hsm_sync_dir with no new file
+    no_new_object_log=$($valg_phobos_hsm_sync_dir source sync 2>&1)
+    ((echo ${no_new_object_log} | grep "Syncing") &&
+        error "sync without any new object must not show any sync") || true
+
+    # run phobos_hsm_sync_dir with a synced ctime file and a new object
+    $phobos put --tags this-host ${FILES[0]} new_obj_to_sync
+    new_object_log=$($valg_phobos_hsm_sync_dir source sync 2>&1)
+    (echo ${new_object_log} | grep "Syncing" | grep new_obj_to_sync) ||
+        error "sync must show a sync of new_obj_to_sync"
+
+    # run phobos_hsm_sync_dir with a synced ctime that exclude an old object
+    $phobos put --tags this-host ${FILES[0]} old_object
+    date +"%Y-%m-%d %H:%M:%S.%6N" > ${PHOBOS_HSM_synced_ctime_path}
+    old_object_log=$($valg_phobos_hsm_sync_dir source sync 2>&1)
+    ((echo ${old_object_log} | grep "Syncing") &&
+        error "sync without only an old object must not show any sync") || true
 }
 
 TESTS=(

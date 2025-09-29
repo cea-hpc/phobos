@@ -197,6 +197,7 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::EXT::md5", "hash->>'md5'"},
     {"DSS::EXT::xxh128", "hash->>'xxh128'"},
     {"DSS::EXT::info", "info"},
+    {"DSS::EXT::creation_time", "creation_time"},
     /* Media related fields */
     {"DSS::MDA::family", "family"},
     {"DSS::MDA::model", "model"},

@@ -44,15 +44,107 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "phobos_store.h"
 
+#include "pho_cfg.h"
 #include "pho_common.h"
 #include "pho_dss.h"
 #include "pho_ldm.h"
 #include "pho_types.h"
 #include "pho_type_utils.h"
+
+/** List of HSM configuration parameters */
+enum pho_cfg_params_hsm {
+    /* File path to store the already sync copy ctime */
+    PHO_CFG_HSM_synced_ctime_path,
+
+    /* Delimiters, update when modifying options */
+    PHO_CFG_HSM_FIRST = PHO_CFG_HSM_synced_ctime_path,
+    PHO_CFG_HSM_LAST  = PHO_CFG_HSM_synced_ctime_path,
+};
+
+/** Definition and default values of HSM configuration parameters */
+const struct pho_config_item cfg_hsm[] = {
+    [PHO_CFG_HSM_synced_ctime_path] = {
+        .section = "hsm",
+        .name    = "synced_ctime_path",
+        .value   = "/var/lib/phobos/hsm_synced_ctime",
+    },
+};
+
+#define SYNCED_CTIME_STRING_LENGTH 26
+
+/** Open synced ctime file in a+ mode and set synced_time
+ *
+ *  The synced ctime file must contains a 'date +"%Y-%m-%d %H:%M:%S.%6N"' value,
+ *  of format "YYYY-mm-dd HH:MM:SS.uuuuuu".
+ *  example: ""2025-09-26 18:17:07.548048", always 26 characters
+ */
+static int set_synced_ctime(struct timeval *synced_ctime,
+                            const char **synced_ctime_path)
+{
+    char synced_ctime_string[SYNCED_CTIME_STRING_LENGTH + 1] = {0};
+    FILE *synced_ctime_stream;
+    struct stat statbuf;
+    size_t nb_char_read;
+    int rc = 0;
+
+    *synced_ctime_path = PHO_CFG_GET(cfg_hsm, PHO_CFG_HSM, synced_ctime_path);
+    if (!*synced_ctime_path)
+        LOG_RETURN(-EINVAL,
+                   "Unable to get synced_ctime_path, check all extents");
+
+    rc = stat(*synced_ctime_path, &statbuf);
+    if (rc) {
+        rc = -errno;
+        if (rc == -ENOENT) {
+            pho_warn("Sync-ctime file '%s' does not exist, setting the last "
+                     "synced time to the default 1970/01/01",
+                     *synced_ctime_path);
+            synced_ctime->tv_sec = 1;
+            synced_ctime->tv_usec = 0;
+            return 0;
+        } else {
+            LOG_RETURN(rc, "Unable to stat synced ctime file %s",
+                       *synced_ctime_path);
+        }
+    }
+
+    synced_ctime_stream = fopen(*synced_ctime_path, "r");
+    if (!synced_ctime_stream)
+        LOG_RETURN(rc = -errno,
+                   "Error when opening synced ctime file %s to load",
+                   *synced_ctime_path);
+
+    nb_char_read = fread(synced_ctime_string, sizeof(char),
+                         SYNCED_CTIME_STRING_LENGTH, synced_ctime_stream);
+    if (ferror(synced_ctime_stream))
+        LOG_GOTO(error_close, rc = -errno,
+                 "Error when reading synced ctime in file %s",
+                 *synced_ctime_path);
+
+    if (nb_char_read != SYNCED_CTIME_STRING_LENGTH)
+        LOG_GOTO(error_close, rc = -EINVAL,
+                 "%s must contain a synced ctime of at least %d characters, "
+                 "with the \"YYYY-mm-dd HH:MM:SS.uuuuuu\" format of the "
+                 "'date +\"%%Y-%%m-%%d %%H:%%M:%%S.%%6N\"' command",
+                 *synced_ctime_path, SYNCED_CTIME_STRING_LENGTH);
+
+    rc = str2timeval(synced_ctime_string, synced_ctime);
+    if (rc)
+        LOG_GOTO(error_close, rc,
+                 "Error when parsing synced ctime from file %s, %s is not "
+                 "consistent with the \"YYYY-mm-dd HH:MM:SS.uuuuuu\" format of "
+                 "the 'date +\"%%Y-%%m-%%d %%H:%%M:%%S.%%6N\"' command",
+                 *synced_ctime_path, synced_ctime_string);
+
+error_close:
+    fclose(synced_ctime_stream);
+    return rc;
+}
 
 static void print_usage(void)
 {
@@ -160,8 +252,43 @@ static void sync_object(const char *oid, const char *object_uuid, int version,
     free(target_uuid);
 }
 
+static void update_synced_ctime(const char *synced_ctime_path,
+                                const char *synced_ctime_string)
+{
+    FILE *synced_ctime_stream;
+    size_t nb_char_write;
+
+    synced_ctime_stream = fopen(synced_ctime_path, "w");
+    if (!synced_ctime_stream) {
+        pho_error(-errno, "Error when opening synced ctime file %s to update",
+                 synced_ctime_path);
+        return;
+    }
+
+    nb_char_write = fwrite(synced_ctime_string, sizeof(char),
+                           SYNCED_CTIME_STRING_LENGTH, synced_ctime_stream);
+    if (ferror(synced_ctime_stream))
+        LOG_GOTO(end, -errno,
+                 "Error when writing synced ctime %s in file %s",
+                 synced_ctime_string, synced_ctime_path);
+
+    if (nb_char_write != SYNCED_CTIME_STRING_LENGTH)
+        LOG_GOTO(end, -EINVAL,
+                 "Error when writing synced ctime %s in file %s, "
+                 "%zu written characters instead of %d",
+                 synced_ctime_string, synced_ctime_path, nb_char_write,
+                 SYNCED_CTIME_STRING_LENGTH);
+end:
+    fclose(synced_ctime_stream);
+}
+
 int main(int argc, char **argv)
 {
+    char synced_ctime_string[SYNCED_CTIME_STRING_LENGTH + 1] = {0};
+    char tosync_ctime_string[SYNCED_CTIME_STRING_LENGTH + 1] = {0};
+    const char *synced_ctime_path = NULL;
+    struct timeval synced_ctime = {0};
+    struct timeval tosync_ctime = {0};
     struct dev_info *dev_list = NULL;
     const char *hostname = NULL;
     struct dss_filter filter;
@@ -178,25 +305,34 @@ int main(int argc, char **argv)
         return rc;
 
     rc = pho_cfg_init_local(NULL);
-    if (rc && rc != -EALREADY) {
-        pho_error(rc, "Cannot init access to local config parameters");
-        phobos_fini();
-        return rc;
-    }
+    if (rc && rc != -EALREADY)
+        LOG_GOTO(fini_end, rc, "Cannot init access to local config parameters");
 
     pho_log_level_set(params.log_level);
 
     rc = dss_init(&dss);
-    if (rc) {
-        pho_cfg_local_fini();
-        phobos_fini();
-        return rc;
-    }
+    if (rc)
+        goto cfg_end;
+
+    /* Setting time window */
+    rc = set_synced_ctime(&synced_ctime, &synced_ctime_path);
+    if (rc)
+        goto dss_end;
+
+    timeval2str(&synced_ctime, synced_ctime_string);
+
+    rc = gettimeofday(&tosync_ctime, NULL);
+    if (rc)
+        LOG_GOTO(dss_end, rc = -errno, "Error when getting current time");
+
+    timeval2str(&tosync_ctime, tosync_ctime_string);
+    pho_info("Checking new object copies from %s to %s",
+             synced_ctime_string, tosync_ctime_string);
 
     /* only target local unlocked dir */
     hostname = get_hostname();
     if (!hostname)
-        GOTO(end, rc = -errno);
+        GOTO(dss_end, rc = -errno);
 
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
@@ -207,12 +343,12 @@ int main(int argc, char **argv)
                           hostname, rsc_family2str(PHO_RSC_DIR),
                           rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED));
     if (rc)
-        goto end;
+        goto dss_end;
 
     rc = dss_device_get(&dss, &filter, &dev_list, &dev_count, NULL);
     dss_filter_free(&filter);
     if (rc)
-        goto end;
+        goto dss_end;
 
     /* target extent for each device dir */
     for (i = 0; i < dev_count; i++) {
@@ -243,12 +379,17 @@ int main(int argc, char **argv)
                               "  {\"DSS::EXT::medium_family\": \"%s\"},"
                               "  {\"DSS::EXT::medium_id\": \"%s\"},"
                               "  {\"DSS::EXT::medium_library\": \"%s\"},"
-                              "  {\"DSS::EXT::state\": \"%s\"}"
+                              "  {\"DSS::EXT::state\": \"%s\"},"
+                              "  {\"$GTE\": "
+                              "    {\"DSS::EXT::creation_time\": \"%s\"}},"
+                              "  {\"$LTE\": "
+                              "    {\"DSS::EXT::creation_time\": \"%s\"}}"
                               "]}",
                               rsc_family2str(PHO_RSC_DIR),
                               drv_info.ldi_medium_id.name,
                               dev_list[i].rsc.id.library,
-                              extent_state2str(PHO_EXT_ST_SYNC));
+                              extent_state2str(PHO_EXT_ST_SYNC),
+                              synced_ctime_string, tosync_ctime_string);
         if (rc)
             goto close_lib_hdl;
 
@@ -284,6 +425,29 @@ int main(int argc, char **argv)
                 int object_count;
                 int copy_count;
 
+                /* check source copy window time */
+                rc = dss_filter_build(&filter,
+                                      "{\"$AND\": ["
+                                      "  {\"DSS::COPY::object_uuid\": \"%s\"},"
+                                      "  {\"DSS::COPY::version\": \"%d\"},"
+                                      "  {\"DSS::COPY::copy_name\": \"%s\"}"
+                                      "]}",
+                                      layout_list[k].uuid,
+                                      layout_list[k].version,
+                                      params.source_copy_name);
+                if (rc)
+                    continue;
+
+                rc = dss_copy_get(&dss, &filter, &copy_list, &copy_count, NULL);
+                dss_filter_free(&filter);
+                if (rc)
+                    continue;
+
+                dss_res_free(copy_list, copy_count);
+                if (!copy_count)
+                    continue;
+
+                /* check that no destination copy exists */
                 rc = dss_filter_build(&filter,
                                       "{\"$AND\": ["
                                       "  {\"DSS::COPY::object_uuid\": \"%s\"},"
@@ -341,9 +505,16 @@ close_lib_hdl:
     }
 
     dss_res_free(dev_list, dev_count);
-end:
+
+    /* update synced ctime */
+    if (!params.dry_run)
+        update_synced_ctime(synced_ctime_path, tosync_ctime_string);
+
+dss_end:
     dss_fini(&dss);
+cfg_end:
     pho_cfg_local_fini();
+fini_end:
     phobos_fini();
     return rc;
 }

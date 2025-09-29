@@ -67,7 +67,7 @@ The syntax is: {<combo>: [<criteria0>, <criteria1>, ...]}
 {"$AND": [
   {"DSS::MDA::family": PHO_DEV_TAPE},
   {"DSS::MDA::adm_status": PHO_RSC_ADM_ST_UNLOCKED},
-  {"$GTE": {"DSS::MDA::vol_free: 10737418240}},
+  {"$GTE": {"DSS::MDA::vol_free": 10737418240}},
   {"DSS::MDA::lock": ""},
   {"$NOR": [
     {"DSS::MDA::fs_status": PHO_FS_STATUS_BLANK},
