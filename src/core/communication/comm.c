@@ -933,12 +933,14 @@ err:
     if (idx_data != *nb_data) {
         struct pho_comm_data *ndata;
 
-        ndata = realloc(*data, idx_data * sizeof(**data));
-        if (idx_data && !ndata)
-            pho_warn("Message pool realloc failed");
-        else
-            *data = ndata;
+        if (idx_data == 0) {
+            free(*data);
+            ndata = NULL;
+        } else {
+            ndata = xrealloc(*data, idx_data * sizeof(**data));
+        }
 
+        *data = ndata;
         *nb_data = idx_data;
     }
 
