@@ -1,3 +1,4 @@
+#include "pho_cfg.h"
 #include "pho_common.h"
 
 #include <pthread.h>
