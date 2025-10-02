@@ -22,6 +22,7 @@
 /**
  * \brief  LRS Grouped Read I/O Scheduler: group read request per medium.
  */
+#include "io_sched.h"
 #include "lrs_sched.h"
 #include "lrs_utils.h"
 #include "pho_cfg.h"
@@ -798,6 +799,89 @@ static int allocate_queue_if_loaded(struct io_scheduler *io_sched,
     return 0;
 }
 
+/**
+ * Compare two queue elems using the qos and priority of their request.
+ *
+ * A request with a lower QOS is lower.
+ * If two requests has the same QOS, the one with the lowest priority will be
+ * the lowest.
+ *
+ * This internal function is to order the queue. Lower here means from the queue
+ * order.
+ *
+ * This function is used as a parameter of the g_queue_insert_sorted function.
+ */
+static gint qos_priority_request_compare(gconstpointer _queue_elem_a,
+                                         gconstpointer _queue_elem_b,
+                                         gpointer user_data)
+{
+    struct queue_element *queue_elem_a = (struct queue_element *)_queue_elem_a;
+    struct queue_element *queue_elem_b = (struct queue_element *)_queue_elem_b;
+    pho_req_t *req_a = queue_elem_a->reqc->req;
+    pho_req_t *req_b = queue_elem_b->reqc->req;
+
+    if (req_a->qos < req_b->qos)
+        return -1;
+    else if (req_a->qos > req_b->qos)
+        return 1;
+
+    if (req_a->priority < req_b->priority)
+        return -1;
+    else if (req_a->priority > req_b->priority)
+        return 1;
+
+    return 0;
+}
+
+static inline bool cfg_ordered_grouped_read(enum rsc_family family)
+{
+    struct pho_config_item cfg_ordered_item =
+        cfg_io_sched[PHO_IO_SCHED_ordered_grouped_read];
+    static bool already_set[PHO_RSC_LAST] = {false};
+    static bool res[PHO_RSC_LAST];
+    const char *value;
+    char *section;
+    int rc;
+
+    if (already_set[family])
+        return res[family];
+
+    res[family] = cfg_ordered_item.value;
+
+    rc = io_sched_cfg_section_name(family, &section);
+    if (rc)
+        return res[family];
+
+    rc = pho_cfg_get_val(section, cfg_ordered_item.name, &value);
+    if (rc)
+        goto free_section;
+
+    if (!strcmp(value, "true"))
+        res[family] = true;
+    else if (!strcmp(value, "false"))
+        res[family] = false;
+    else
+        pho_warn("ordered_grouped_read value must be \"true\" or \"false\", "
+                 "and not \"%s\", the default value \"%s\" is taken instead",
+                 value, cfg_ordered_item.value ? "true" : "false");
+
+    already_set[family] = true;
+
+free_section:
+    free(section);
+    return res[family];
+}
+
+static inline void queue_insert(struct request_queue *queue,
+                                struct queue_element *elem)
+{
+    if (cfg_ordered_grouped_read(queue->medium_id.family))
+        g_queue_insert_sorted(queue->queue, elem, qos_priority_request_compare,
+                              NULL);
+    else
+        g_queue_push_head(queue->queue, elem);
+}
+
 static int insert_request_in_medium_queue(struct io_scheduler *io_sched,
                                           struct queue_element *elem,
                                           size_t index)
@@ -818,7 +902,7 @@ static int insert_request_in_medium_queue(struct io_scheduler *io_sched,
         allocate_queue_if_loaded(io_sched, queue);
     }
 
-    g_queue_push_head(queue->queue, elem);
+    queue_insert(queue, elem);
     elem->queue = queue;
 
     return 0;
@@ -982,8 +1066,7 @@ static int grouped_requeue(struct io_scheduler *io_sched,
             elem->pair->free = g_list_concat(elem->pair->free,
                                              elem->pair->used);
             elem->pair->used = NULL;
-
-            g_queue_push_head(queue->queue, elem);
+            queue_insert(queue, elem);
         }
     }
 

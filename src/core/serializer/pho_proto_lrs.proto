@@ -138,7 +138,9 @@ message PhoRequest {
     required uint32 id           = 1; // Request ID to match its future
                                       // response.
     optional int64 qos           = 2; // Greater means high-priority.
-                                      // QOS is more significant than priority.
+                                      // QOS is more important than priority.
+                                      // We first consider QOS to order request,
+                                      // and then priority.
     optional int64 priority      = 3; // Greater means high-priority.
                                       // Priority will only rank request of the
                                       // same qos.

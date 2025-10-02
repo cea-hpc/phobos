@@ -56,6 +56,11 @@ struct pho_config_item cfg_io_sched[] = {
         .name    = "dispatch_algo",
         .value   = "none",
     },
+    [PHO_IO_SCHED_ordered_grouped_read] = {
+        .section = "io_sched",
+        .name    = "ordered_grouped_read",
+        .value   = "true",
+    },
 };
 
 static int io_sched_init(struct io_sched_handle *io_sched_hdl)

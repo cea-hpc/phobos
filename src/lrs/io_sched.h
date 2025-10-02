@@ -50,6 +50,7 @@ enum pho_cfg_params_io_sched {
     PHO_IO_SCHED_write_algo,
     PHO_IO_SCHED_format_algo,
     PHO_IO_SCHED_dispatch_algo,
+    PHO_IO_SCHED_ordered_grouped_read,
 
     PHO_IO_SCHED_LAST
 };

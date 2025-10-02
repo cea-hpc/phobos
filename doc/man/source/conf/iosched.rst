@@ -164,6 +164,27 @@ the same medium. Each request is pushed into the queue of every medium it
 requires. If a medium is already loaded in a device, the request is immediately
 placed in that device's queue.
 
+The **grouped_read** algorithm orders by default its queues conforming to each
+request QOS (Quality Of Service) and priority. The QOS of all read requests is
+currently set to 0 and the priority is reversely set to the creation time of the
+corresponding object copy. By default, medium per medium, the **grouped_read**
+algorithm will first schedule the requests of the older object copies. This
+scheduling heuristic aims to order the extent reading in the same order as they
+were written. This feature may improve performance on tape but may have no
+impact on directories. One could disable this ranking and use a basic fifo order
+by setting to false the **ordered_grouped_read** option of the corresponding
+**[io_sched_dir]** or **[io_sched_tape]** config section.
+
+Example:
+
+.. code:: ini
+
+    [io_sched_dir]
+    ordered_grouped_read = false
+
+    [io_sched_tape]
+    ordered_grouped_read = true
+
 *fair_share*
 ------------
 

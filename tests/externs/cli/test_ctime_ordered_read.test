@@ -37,6 +37,7 @@ function dir_setup
 
     export PHOBOS_LRS_families="dir"
     export PHOBOS_STORE_default_family="dir"
+    export PHOBOS_IO_SCHED_DIR_read_algo="grouped_read"
 
     invoke_lrs
 
@@ -111,5 +112,78 @@ function test_read_alloc_ctime_set
         error "Get with priority check should success"
 }
 
+function phobos_delayed_dev_release()
+{
+    (
+        tmp_gdb_script=$(mktemp)
+        trap "rm $tmp_gdb_script" EXIT
+        cat <<EOF > "$tmp_gdb_script"
+set breakpoint pending on
+break complete_and_transfer_release
+commands
+shell sleep 5
+continue
+end
+run $phobos $*
+EOF
+
+        DEBUGINFOD_URLS="" gdb -batch -x "$tmp_gdb_script" -q python3
+    )
+}
+
+function test_ordered_grouped_read
+{
+    $phobos put ${FILES[0]} obj1
+    $phobos put ${FILES[0]} obj2
+    $phobos put ${FILES[0]} obj3
+    $phobos put ${FILES[0]} obj4
+    export PHOBOS_IO_SCHED_DIR_ordered_grouped_read="true"
+    phobos_delayed_dev_release put ${FILES[0]} obj-to-wait &
+    local pid0=$!
+    sleep 1
+    $phobos get obj3 ${DIR_TEST_OUT}/obj3 &
+    local pid3=$!
+    $phobos get obj4 ${DIR_TEST_OUT}/obj4 &
+    local pid4=$!
+    $phobos get obj1 ${DIR_TEST_OUT}/obj1 &
+    local pid1=$!
+    $phobos get obj2 ${DIR_TEST_OUT}/obj2 &
+    local pid2=$!
+
+    wait $pid0
+    wait $pid1
+    wait $pid2
+    wait $pid3
+    wait $pid4
+
+    if [[ "$(stat -c %y ${DIR_TEST_OUT}/obj1)" > \
+          "$(stat -c %y ${DIR_TEST_OUT}/obj2)" ]]; then
+        error "Gotten obj1 must be older than obj2"
+    fi
+    if [[ "$(stat -c %y ${DIR_TEST_OUT}/obj1)" > \
+          "$(stat -c %y ${DIR_TEST_OUT}/obj3)" ]]; then
+        error "Gotten obj1 must be older than obj3"
+    fi
+    if [[ "$(stat -c %y ${DIR_TEST_OUT}/obj1)" > \
+          "$(stat -c %y ${DIR_TEST_OUT}/obj4)" ]]; then
+        error "Gotten obj1 must be older than obj4"
+    fi
+
+    if [[ "$(stat -c %y ${DIR_TEST_OUT}/obj2)" > \
+          "$(stat -c %y ${DIR_TEST_OUT}/obj3)" ]]; then
+        error "Gotten obj2 must be older than obj3"
+    fi
+    if [[ "$(stat -c %y ${DIR_TEST_OUT}/obj2)" > \
+          "$(stat -c %y ${DIR_TEST_OUT}/obj4)" ]]; then
+        error "Gotten obj2 must be older than obj4"
+    fi
+
+    if [[ "$(stat -c %y ${DIR_TEST_OUT}/obj3)" > \
+          "$(stat -c %y ${DIR_TEST_OUT}/obj4)" ]]; then
+        error "Gotten obj3 must be older than obj4"
+    fi
+}
+
 # test priority to read alloc on dir
 TESTS=("dir_setup; test_read_alloc_ctime_set; dir_cleanup")
+TESTS+=("dir_setup; test_ordered_grouped_read; dir_cleanup")
