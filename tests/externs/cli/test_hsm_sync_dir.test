@@ -113,6 +113,14 @@ EOF
     ((echo ${quiet_dry_run_log} | grep "Syncing" | grep obj_to_sync) &&
         error "quiet dry-run sync must not show a sync of obj_to_sync") || true
 
+    # run phobos_hsm_sync_dir with no synced ctime file but a large delay
+    rm -f ${PHOBOS_HSM_synced_ctime_path}
+    export PHOBOS_HSM_sync_delay_second="36000"
+    no_synced_file_large_delay_log=$($valg_phobos_hsm_sync_dir source sync 2>&1)
+    ((echo ${no_synced_file_large_delay_log} | grep "Syncing") &&
+        error "no synced and a large delay must not show any sync") || true
+    unset PHOBOS_HSM_sync_delay_second
+
     # run phobos_hsm_sync_dir with no synced ctime file
     rm -f ${PHOBOS_HSM_synced_ctime_path}
     $valg_phobos_hsm_sync_dir source sync
@@ -128,8 +136,16 @@ EOF
     ((echo ${no_new_object_log} | grep "Syncing") &&
         error "sync without any new object must not show any sync") || true
 
-    # run phobos_hsm_sync_dir with a synced ctime file and a new object
+    # run phobos_hsm_sync_dir with a synced ctime file but a large delay
+    sleep 5
     $phobos put --tags this-host ${FILES[0]} new_obj_to_sync
+    export PHOBOS_HSM_sync_delay_second="5"
+    synced_file_large_delay_log=$($valg_phobos_hsm_sync_dir source sync 2>&1)
+    ((echo ${synced_file_large_delay_log} | grep "Syncing") &&
+        error "synced and a large delay must not show any sync") || true
+    unset PHOBOS_HSM_sync_delay_second
+
+    # run phobos_hsm_sync_dir with a synced ctime file and a new object
     new_object_log=$($valg_phobos_hsm_sync_dir source sync 2>&1)
     (echo ${new_object_log} | grep "Syncing" | grep new_obj_to_sync) ||
         error "sync must show a sync of new_obj_to_sync"

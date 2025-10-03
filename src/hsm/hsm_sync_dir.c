@@ -60,10 +60,11 @@
 enum pho_cfg_params_hsm {
     /* File path to store the already sync copy ctime */
     PHO_CFG_HSM_synced_ctime_path,
+    PHO_CFG_HSM_sync_delay_second,
 
     /* Delimiters, update when modifying options */
     PHO_CFG_HSM_FIRST = PHO_CFG_HSM_synced_ctime_path,
-    PHO_CFG_HSM_LAST  = PHO_CFG_HSM_synced_ctime_path,
+    PHO_CFG_HSM_LAST  = PHO_CFG_HSM_sync_delay_second,
 };
 
 /** Definition and default values of HSM configuration parameters */
@@ -72,6 +73,11 @@ const struct pho_config_item cfg_hsm[] = {
         .section = "hsm",
         .name    = "synced_ctime_path",
         .value   = "/var/lib/phobos/hsm_synced_ctime",
+    },
+    [PHO_CFG_HSM_sync_delay_second] = {
+        .section = "hsm",
+        .name    = "sync_delay_second",
+        .value   = "0",
     },
 };
 
@@ -144,6 +150,32 @@ static int set_synced_ctime(struct timeval *synced_ctime,
 error_close:
     fclose(synced_ctime_stream);
     return rc;
+}
+
+static int set_tosync_ctime(struct timeval *tosync_ctime)
+{
+    int sync_delay_second;
+    int rc;
+
+    rc = gettimeofday(tosync_ctime, NULL);
+    if (rc)
+        LOG_RETURN(rc = -errno, "Error when getting current time");
+
+    sync_delay_second = PHO_CFG_GET_INT(cfg_hsm, PHO_CFG_HSM, sync_delay_second,
+                                        0);
+
+    if (sync_delay_second < 0)
+        LOG_RETURN(-EINVAL,
+                   "hsm sync_delay_second config value can not be negative, %d",
+                   sync_delay_second);
+
+    if (sync_delay_second > tosync_ctime->tv_sec)
+        LOG_RETURN(-EINVAL,
+                   "hsm sync_delay_second %d can not be greater than current "
+                   "time %ld", sync_delay_second, tosync_ctime->tv_sec);
+
+    tosync_ctime->tv_sec -= sync_delay_second;
+    return 0;
 }
 
 static void print_usage(void)
@@ -320,12 +352,18 @@ int main(int argc, char **argv)
         goto dss_end;
 
     timeval2str(&synced_ctime, synced_ctime_string);
-
-    rc = gettimeofday(&tosync_ctime, NULL);
+    rc = set_tosync_ctime(&tosync_ctime);
     if (rc)
-        LOG_GOTO(dss_end, rc = -errno, "Error when getting current time");
+        goto dss_end;
 
     timeval2str(&tosync_ctime, tosync_ctime_string);
+    if (tosync_ctime.tv_sec < synced_ctime.tv_sec ||
+        (tosync_ctime.tv_sec == synced_ctime.tv_sec &&
+            tosync_ctime.tv_usec < synced_ctime.tv_usec))
+        LOG_GOTO(dss_end, -EINVAL,
+                 "Empty window time, synced_ctime '%s' is older than "
+                 "tosync_ctime '%s'", synced_ctime_string, tosync_ctime_string);
+
     pho_info("Checking new object copies from %s to %s",
              synced_ctime_string, tosync_ctime_string);
 
