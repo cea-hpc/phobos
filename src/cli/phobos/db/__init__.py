@@ -51,7 +51,7 @@ def get_sql_script(schema_version, script_name):
     with open(script_path) as script_file:
         return script_file.read()
 
-def size_update_3_to_3_2(object_table): # pylint: disable=line-too-long
+def size_update_3_0_to_3_2(object_table): # pylint: disable=line-too-long
     """Return the size update SQL query for the given object_table"""
     return f"""
         WITH first_copy AS (
@@ -112,7 +112,7 @@ class Migrator: # pylint: disable=too-many-public-methods
             "2.0": ("2.1", self.convert_2_0_to_2_1),
             "2.1": ("2.2", self.convert_2_1_to_2_2),
             "2.2": ("3.0", self.convert_2_2_to_3),
-            "3.0": ("3.2", self.convert_3_to_3_2),
+            "3.0": ("3.2", self.convert_3_0_to_3_2),
         }
 
         self.reachable_versions = set(
@@ -698,7 +698,7 @@ class Migrator: # pylint: disable=too-many-public-methods
             self.convert_schema_2_1_to_2_2()
 
     def convert_schema_2_2_to_3(self):
-        """DB schema changes: create copy table"""
+        """DB schema changes from v2.2 to v3.0: create copy table"""
         default_copy_name = cfg.get_default_copy_name()
         cur = self.conn.cursor()
         cur.execute(f"""
@@ -767,12 +767,12 @@ class Migrator: # pylint: disable=too-many-public-methods
         with self.connect():
             self.convert_schema_2_2_to_3()
 
-    def convert_schema_3_to_3_2(self):
+    def convert_schema_3_0_to_3_2(self):
         """DB schema changes: append last_locate timestamp to lock,
-           size to object and deprecated object"""
+           size to object and deprecated object, ctime to extent"""
         cur = self.conn.cursor()
-        migration_object = size_update_3_to_3_2("object")
-        migration_depr = size_update_3_to_3_2("deprecated_object")
+        migration_object = size_update_3_0_to_3_2("object")
+        migration_depr = size_update_3_0_to_3_2("deprecated_object")
         cur.execute(f"""
             -- update lock table
             ALTER TABLE lock ADD last_locate timestamp DEFAULT NULL;
@@ -784,16 +784,22 @@ class Migrator: # pylint: disable=too-many-public-methods
             {migration_object}
             {migration_depr}
 
+            -- update extent table
+            ALTER TABLE extent ADD creation_time timestamp DEFAULT now();
+            UPDATE extent SET creation_time = c.creation_time FROM
+                (copy JOIN layout USING (object_uuid, version, copy_name)) c
+                    WHERE extent.extent_uuid = c.extent_uuid;
+
             -- update current schema version
             UPDATE schema_info SET version = '3.2';
         """)
         self.conn.commit()
         cur.close()
 
-    def convert_3_to_3_2(self):
+    def convert_3_0_to_3_2(self):
         """Convert DB from v3.0 to v3.2"""
         with self.connect():
-            self.convert_schema_3_to_3_2()
+            self.convert_schema_3_0_to_3_2()
 
     def migrate(self, target_version=None):
         """Convert DB schema up to a given phobos version"""

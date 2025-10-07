@@ -965,7 +965,8 @@ int dss_get_extents_order_by_ctime(struct dss_handle *handle,
             "SELECT extent_uuid, size, offsetof, medium_family, state, "
             "medium_id, medium_library, address, hash, info FROM layout "
             "JOIN extent USING (extent_uuid) JOIN copy USING "
-            "(object_uuid, version, copy_name) %s ORDER BY creation_time;",
+            "(object_uuid, version, copy_name) %s "
+            "ORDER BY copy.creation_time;",
             clause->str != NULL ? clause->str : "");
 
     rc = dss_execute_generic_get(handle, DSS_EXTENT, request,

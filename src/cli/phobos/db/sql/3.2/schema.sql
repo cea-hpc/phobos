@@ -102,6 +102,7 @@ CREATE TABLE extent(
     info            jsonb,
     offsetof        bigint, -- the name 'offset' is a reserved keyword
     medium_library  varchar(255) NOT NULL,
+    creation_time   timestamp DEFAULT now(),
 
     PRIMARY KEY (extent_uuid)
 );
