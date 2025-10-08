@@ -55,6 +55,8 @@ of Phobos.
 
 .. include:: conf/tlc.rst
 
+.. include:: conf/hsm.rst
+
 Alternative configuration specification
 =======================================
 

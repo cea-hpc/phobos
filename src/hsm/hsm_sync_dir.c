@@ -181,7 +181,19 @@ static int set_tosync_ctime(struct timeval *tosync_ctime)
 static void print_usage(void)
 {
     printf("usage: %s [-h/--help] [-v/--verbose] [-q/--quiet] [-d/--dry-run] "
-           "source_copy_name destination_copy_name\n",
+           "source_copy_name destination_copy_name\n"
+           "\n"
+           "This command creates a new copy `destination_copy_name` "
+           "replicating the data referenced by `source_copy_name`. The source "
+           "copy must have data on directories to be copied, and the "
+           "directories must be owned the local host.\n"
+           "\n"
+           "Only the source copies with a creation time younger than the last "
+           "synced time recorded into the 'synced_timed_path' file and older "
+           "than 'now - sync_delay_second' are replicated to destination "
+           "copies.\n"
+           "'synced_timed_path' and 'sync_delay_second' can be set from the "
+           "phobos configuration.\n",
            program_invocation_short_name);
 }
 
