@@ -44,7 +44,8 @@ static int full_layout_select_query(GString **conditions, int n_conditions,
                     "  'offsetof', offsetof, 'fam', medium_family,"
                     "  'state', state, 'media', medium_id,"
                     "  'library', medium_library, 'addr', address,"
-                    "  'hash', hash, 'info', info, 'lyt_index', layout_index"
+                    "  'hash', hash, 'info', info, 'lyt_index', layout_index,"
+                    "  'creation_time', creation_time"
                     " ) ORDER BY layout_index)"
                     " FROM extent"
                     " RIGHT JOIN ("
@@ -180,6 +181,17 @@ static int layout_extents_decode(struct extent **extents, int *count,
 
         pho_json_raw_to_attrs(&result[i].info,
                               json_object_get(child, "info"));
+
+        tmp = json_dict2tmp_str(child, "creation_time");
+        if (!tmp)
+            LOG_GOTO(out_decref, rc = -EINVAL,
+                     "Missing attribute 'creation_time'");
+
+        rc = json_agg_str2timeval(tmp, &result[i].creation_time);
+        if (rc)
+            LOG_GOTO(out_decref, rc,
+                     "Error when getting timeval from json attribute "
+                     "'creation_time' '%s'", tmp);
     }
 
     *extents = result;

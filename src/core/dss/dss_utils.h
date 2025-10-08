@@ -38,6 +38,9 @@
 #include "pho_types.h"
 #include "pho_dss.h"
 
+#define INSERT_OBJECT (1 << 0)
+#define INSERT_FULL_OBJECT (1 << 1)
+
 /**
  * Escape a string for use in a database query.
  *

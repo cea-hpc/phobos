@@ -1596,7 +1596,7 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
             break;
         }
 
-        rc = dss_extent_insert(&adm->dss, &ext_new, 1);
+        rc = dss_extent_insert(&adm->dss, &ext_new, 1, DSS_SET_INSERT);
         if (rc) {
             pho_error(rc, "Failed to add extent '%s' information in DSS",
                       ext_res[i].uuid);

@@ -406,7 +406,8 @@ void str2string_array(const char *str, struct string_array *string_array)
     free(parse_str);
 }
 
-int str2timeval(const char *tv_str, struct timeval *tv)
+static int any_str2timeval(const char *format, const char *tv_str,
+                           struct timeval *tv)
 {
     struct tm tmp_tm = {0};
     char *usec_ptr;
@@ -418,10 +419,11 @@ int str2timeval(const char *tv_str, struct timeval *tv)
         return 0;
     }
 
-    usec_ptr = strptime(tv_str, "%Y-%m-%d %T", &tmp_tm);
+    usec_ptr = strptime(tv_str, format, &tmp_tm);
     if (!usec_ptr)
         LOG_RETURN(-EINVAL, "Object timestamp '%s' is not well formatted",
                    tv_str);
+
     tv->tv_sec = mktime(&tmp_tm);
     tv->tv_usec = 0;
     if (*usec_ptr == '.') {
@@ -431,6 +433,16 @@ int str2timeval(const char *tv_str, struct timeval *tv)
     }
 
     return 0;
+}
+
+int str2timeval(const char *tv_str, struct timeval *tv)
+{
+    return any_str2timeval("%Y-%m-%d %T", tv_str, tv);
+}
+
+int json_agg_str2timeval(const char *tv_str, struct timeval *tv)
+{
+    return any_str2timeval("%Y-%m-%dT%T", tv_str, tv);
 }
 
 void timeval2str(const struct timeval *tv, char *tv_str)

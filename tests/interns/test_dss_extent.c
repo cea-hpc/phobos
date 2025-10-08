@@ -40,6 +40,8 @@ static struct extent EXT = {
     .address.buff = "blablabla",
     .with_xxh128 = false,
     .with_md5 = false,
+    .creation_time.tv_sec = 0,
+    .creation_time.tv_usec = 0,
 };
 
 static int de_simple_setup(void **state)
@@ -48,7 +50,7 @@ static int de_simple_setup(void **state)
     int rc;
 
     /* insert the extent */
-    rc = dss_extent_insert(handle, &EXT, 1);
+    rc = dss_extent_insert(handle, &EXT, 1, DSS_SET_INSERT);
     if (rc)
         return -1;
 

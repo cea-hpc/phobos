@@ -29,6 +29,7 @@
 #include <openssl/evp.h>
 #include <stdbool.h>
 #include <string.h>
+#include <sys/time.h>
 #include <unistd.h>
 #ifdef HAVE_XXH128
 #include <xxhash.h>
@@ -1220,6 +1221,17 @@ static void raid_writer_split_close(struct pho_data_processor *proc, int *rc)
             if (rc2) {
                 i++;
                 *rc = rc2;
+                break;
+            }
+
+            rc2 = gettimeofday(&io_context->write.extents[i].creation_time,
+                               NULL);
+            if (rc2) {
+                i++;
+                *rc = rc2;
+                pho_error(*rc,
+                          "raid: unable to get ctime of extent %d for '%s'", i,
+                          proc->xfer->xd_targets[target].xt_objid);
                 break;
             }
 

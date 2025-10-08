@@ -35,8 +35,11 @@ test_dir=$(dirname $(readlink -e $0))
 
 function dir_setup
 {
-    dir1="$(mktemp -d /tmp/test.pho.XXXX)"
-    dir2="$(mktemp -d /tmp/test.pho.XXXX)"
+    setup_test_dirs
+    dir1="${DIR_TEST_IN}/dir1"
+    dir2="${DIR_TEST_IN}/dir2"
+    mkdir ${dir1}
+    mkdir ${dir2}
     $phobos dir add -T first_dir $dir1
     $phobos dir format --fs posix --unlock $dir1
     $phobos dir add -T second_dir $dir2
@@ -53,13 +56,13 @@ function setup
     else
         invoke_lrs
     fi
+
     dir_setup
+    setup_dummy_files 3 1k 1
 }
 
 function cleanup
 {
-    drop_tables
-    rm -rf $dir1 $dir2
     if [[ -w /dev/changer ]]; then
         waive_daemons
         waive_tlc_bis
@@ -67,6 +70,10 @@ function cleanup
     else
         waive_lrs
     fi
+
+    cleanup_dummy_files
+    cleanup_test_dirs
+    drop_tables
 }
 
 function list_error
@@ -83,7 +90,7 @@ function list_error
 
 function test_extent_list_degroup
 {
-    $phobos put --family dir --lyt-params repl_count=2 /etc/hosts degroup-oid ||
+    $phobos put --family dir --lyt-params repl_count=2 ${FILES[0]} degroup-oid ||
         error "Object should be put"
 
     cmd_list="$valg_phobos extent list --degroup -o address,media_name"
@@ -108,13 +115,13 @@ function test_extent_list_degroup
 
 function test_extent_list_pattern
 {
-    $phobos put --family dir -T first_dir /etc/hosts oid1 ||
+    $phobos put --family dir -T first_dir ${FILES[0]} oid1 ||
         error "Object should be put"
-    $phobos put --family dir -T second_dir /etc/hosts oid2 ||
+    $phobos put --family dir -T second_dir ${FILES[0]} oid2 ||
         error "Object should be put"
-    $phobos put --family dir -T first_dir /etc/hosts blob ||
+    $phobos put --family dir -T first_dir ${FILES[0]} blob ||
         error "Object should be put"
-    $phobos put --family dir -T second_dir /etc/hosts lorem ||
+    $phobos put --family dir -T second_dir ${FILES[0]} lorem ||
         error "Object should be put"
 
     contents=("oid1;oid1"
@@ -185,18 +192,15 @@ function test_extent_list_tapes_lib() {
 }
 
 function test_extent_list_dirs_lib() {
-    setup_test_dirs
+    mkdir $DIR_TEST_IN/lib1
+    mkdir $DIR_TEST_IN/lib2
+    $phobos dir add --unlock $DIR_TEST_IN/lib1 --library lib1
+    $phobos dir add --unlock $DIR_TEST_IN/lib2 --library lib2
+    $phobos dir format $DIR_TEST_IN/lib1 --library lib1
+    $phobos dir format $DIR_TEST_IN/lib2 --library lib2
 
-    $phobos dir add --unlock $DIR_TEST_IN --library lib1
-    $phobos dir add --unlock $DIR_TEST_OUT --library lib2
-    $phobos dir format $DIR_TEST_IN --library lib1
-    $phobos dir format $DIR_TEST_OUT --library lib2
-
-    touch /tmp/extent1
-    touch /tmp/extent2
-
-    $phobos put -f dir /tmp/extent1 extent1
-    $phobos put -f dir /tmp/extent2 extent2
+    $phobos put -f dir --library lib1 ${FILES[0]} extent1
+    $phobos put -f dir --library lib2 ${FILES[0]} extent2
 
     output=$($phobos extent list --library lib1)
     echo "$output" | grep "extent1" && ! echo "$output" | grep "extent2"
@@ -204,16 +208,13 @@ function test_extent_list_dirs_lib() {
     output=$($phobos extent list --library lib2)
     echo "$output" | grep "extent2" && ! echo "$output" | grep "extent1"
 
-    output=$($phobos extent list --library lib1 -n $DIR_TEST_IN)
+    output=$($phobos extent list --library lib1 -n $DIR_TEST_IN/lib1)
     echo "$output" | grep "extent1" && ! echo "$output" | grep "extent2"
-
-    cleanup_test_dirs
-    rm /tmp/extent1 /tmp/extent2
 }
 
 function test_extent_list_copy_name() {
-    $phobos put -f dir -c source /etc/hosts bob
-    $phobos put -f dir -c cache-copy /etc/hosts alice
+    $phobos put -f dir -c source ${FILES[0]} bob
+    $phobos put -f dir -c cache-copy ${FILES[0]} alice
 
     local output=$($valg_phobos extent list --copy-name cache-copy)
     local count=$(echo "$output" | wc -l)
@@ -233,8 +234,8 @@ function test_extent_list_copy_name() {
 }
 
 function test_extent_list_orphan() {
-    $phobos put -f dir /etc/hosts oid1-orphan
-    $phobos put -f dir /etc/hosts oid2-orphan
+    $phobos put -f dir ${FILES[0]} oid1-orphan
+    $phobos put -f dir ${FILES[0]} oid2-orphan
 
     local output=$($valg_phobos extent list -f csv -o oid,state --orphan |
                    tail -n +2 | wc -l)
@@ -261,12 +262,111 @@ EOF
     fi
 }
 
+function test_extent_list_ctime()
+{
+    # new object
+    $phobos put -f dir ${FILES[0]} obj_ctime
+
+    # list extent ctime of one object with only one extent
+    extent_ctime=$($phobos extent list -o creation_time obj_ctime |
+                   cut -f2 -d\')
+    extent_ctime_seconde=$(date +"%s" --date="${extent_ctime}")
+    extent_media_name=$($phobos extent list -o media_name obj_ctime |
+                        cut -f 2 -d \')
+    extent_path="${extent_media_name}"\
+"/$($phobos extent list -o address obj_ctime | cut -f 2 -d \')"
+    extent_ctime_on_dir=$(stat ${extent_path} | grep Change | cut -d' ' -f2- |
+                          cut -d' ' -f-2)
+    extent_ctime_on_dir_seconde=$(date +"%s" --date="${extent_ctime_on_dir}")
+    if (( (extent_ctime_on_dir_seconde - 2) > extent_ctime_seconde ||
+          (extent_ctime_on_dir_seconde + 2) < extent_ctime_seconde )); then
+        error "Listed extent creation_time %{extent_ctime_seconde} differs" \
+              "from more than 1 second of the extent file creation time"
+    fi
+
+    # new object on two dirs with two extents
+    $phobos put -f dir -P repl_count=2 ${FILES[0]} obj_ctime_bis
+
+    # extent ctime grouped listing
+    extent_ctime_1=$($phobos extent list -o creation_time obj_ctime_bis |
+                     cut -f2 -d\')
+    extent_ctime_1_seconde=$(date +"%s" --date="${extent_ctime_1}")
+    extent_ctime_2=$($phobos extent list -o creation_time obj_ctime_bis |
+                     cut -f4 -d\')
+    extent_ctime_2_seconde=$(date +"%s" --date="${extent_ctime_2}")
+    extent_media_name_1=$($phobos extent list -o media_name obj_ctime_bis |
+                          cut -f 2 -d \')
+    extent_path_1="${extent_media_name_1}"\
+"/$($phobos extent list -o address obj_ctime_bis | cut -f 2 -d \')"
+    extent_ctime_on_dir_1=$(stat ${extent_path_1} | grep Change |
+                            cut -d' ' -f2- | cut -d' ' -f-2)
+    extent_ctime_on_dir_1_seconde=$(date +"%s" \
+                                    --date="${extent_ctime_on_dir_1}")
+    if (( (extent_ctime_on_dir_1_seconde - 2) > extent_ctime_1_seconde ||
+          (extent_ctime_on_dir_1_seconde + 2) < extent_ctime_1_seconde )); then
+        error "Listed extent 1 creation_time %{extent_ctime_seconde} differs" \
+              "from more than 1 second of the extent file creation time"
+    fi
+
+    extent_media_name_2=$($phobos extent list -o media_name obj_ctime_bis |
+                          cut -f 4 -d \')
+    extent_path_2="${extent_media_name_2}"\
+"/$($phobos extent list -o address obj_ctime_bis | cut -f 4 -d \')"
+    extent_ctime_on_dir_2=$(stat ${extent_path_2} | grep Change |
+                            cut -d' ' -f2- | cut -d' ' -f-2)
+    extent_ctime_on_dir_2_seconde=$(date +"%s" \
+                                    --date="${extent_ctime_on_dir_2}")
+    if (( (extent_ctime_on_dir_2_seconde - 2) > extent_ctime_2_seconde ||
+          (extent_ctime_on_dir_2_seconde + 2) < extent_ctime_2_seconde )); then
+        error "Listed extent 2 creation_time %{extent_ctime_seconde} differs" \
+              "from more than 2 second of the extent file creation time"
+    fi
+
+    # extent ctime degroup listing
+    extent_ctime_1=$($phobos extent list --degroup -o creation_time \
+                     obj_ctime_bis | head -n 1 | cut -f2 -d\')
+    extent_ctime_1_seconde=$(date +"%s" --date="${extent_ctime_1}")
+    extent_ctime_2=$($phobos extent list --degroup -o creation_time \
+                     obj_ctime_bis | tail -n 1 | cut -f2 -d\')
+    extent_ctime_2_seconde=$(date +"%s" --date="${extent_ctime_2}")
+    extent_media_name_1=$($phobos extent list --degroup -o media_name \
+                          obj_ctime_bis | head -n 1 | cut -f 2 -d \')
+    extent_path_1="${extent_media_name_1}"\
+"/$($phobos extent list --degroup -o address obj_ctime_bis | head -n 1 |
+cut -f 2 -d \')"
+    extent_ctime_on_dir_1=$(stat ${extent_path_1} | grep Change |
+                            cut -d' ' -f2- | cut -d' ' -f-2)
+    extent_ctime_on_dir_1_seconde=$(date +"%s" \
+                                    --date="${extent_ctime_on_dir_1}")
+    if (( (extent_ctime_on_dir_1_seconde - 2) > extent_ctime_1_seconde ||
+          (extent_ctime_on_dir_1_seconde + 2) < extent_ctime_1_seconde )); then
+        error "Degroup listed extent 1 creation_time %{extent_ctime_seconde}"
+              "differs from more than 1 second of the extent file creation time"
+    fi
+
+    extent_media_name_2=$($phobos extent list --degroup -o media_name \
+                          obj_ctime_bis | tail -n 1 | cut -f 2 -d \')
+    extent_path_2="${extent_media_name_2}"\
+"/$($phobos extent list --degroup -o address obj_ctime_bis | tail -n 1 |
+cut -f 2 -d \')"
+    extent_ctime_on_dir_2=$(stat ${extent_path_2} | grep Change |
+                            cut -d' ' -f2- | cut -d' ' -f-2)
+    extent_ctime_on_dir_2_seconde=$(date +"%s" \
+                                    --date="${extent_ctime_on_dir_2}")
+    if (( (extent_ctime_on_dir_2_seconde - 2) > extent_ctime_2_seconde ||
+          (extent_ctime_on_dir_2_seconde + 2) < extent_ctime_2_seconde )); then
+        error "Degroup listed extent 2 creation_time %{extent_ctime_seconde}"
+              "differs from more than 1 second of the extent file creation time"
+    fi
+}
+
 TEST_SETUP=setup
 TESTS=("test_extent_list_degroup"
        "test_extent_list_pattern"
        "test_extent_list_copy_name"
        "test_extent_list_dirs_lib"
-       "test_extent_list_orphan")
+       "test_extent_list_orphan"
+       "test_extent_list_ctime")
 
 if [[ -w /dev/changer ]]; then
     TESTS+=("test_extent_list_tapes_lib")

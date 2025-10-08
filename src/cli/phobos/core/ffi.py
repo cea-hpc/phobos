@@ -798,7 +798,8 @@ class ExtentInfo(Structure): # pylint: disable=too-few-public-methods
         ('xxh128', c_ubyte * 16),
         ('with_md5', c_bool),
         ('md5', c_ubyte * MD5_BYTE_LENGTH),
-        ('info', PhoAttrs)
+        ('info', PhoAttrs),
+        ('creation_time', Timeval),
     ]
 
 class ModuleDesc(Structure): # pylint: disable=too-few-public-methods
@@ -848,6 +849,8 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
             'md5': None,
             'library': None,
             'copy_name': None,
+            'creation_time':
+                (lambda seq_t: str([Timeval.to_string(t) for t in seq_t])),
         }
 
     def get_sort_fields(self): # pylint: disable=no-self-use
@@ -946,6 +949,11 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     def layout(self):
         """Wrapper to get object layout."""
         return self.layout_desc.mod_name
+
+    @property
+    def creation_time(self):
+        """Wrapper to get extent creation time"""
+        return [self.extents[i].creation_time for i in range(self.ext_count)]
 
 class PhoLogRec(Structure):
     """Single log record."""

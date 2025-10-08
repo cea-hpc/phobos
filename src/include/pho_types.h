@@ -412,6 +412,8 @@ struct extent {
                                     /**< MD5 checksum */
     /** Extra attributes specific to the layout which wrote the extent */
     struct pho_attrs    info;
+    struct timeval      creation_time;
+                                    /**< extent creation time */
 };
 
 /**

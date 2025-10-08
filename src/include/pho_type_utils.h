@@ -159,6 +159,16 @@ void str2string_array(const char *str, struct string_array *string_array);
 int str2timeval(const char *tv_str, struct timeval *tv);
 
 /**
+ * Convert a string of the form "YYYY-mm-ddTHH:MM:SS.uuuuuu" into a
+ * timeval structure
+ *
+ * @param[in]     tv_str the string to extract the time from
+ * @param[in,out] tv     the extracted time, must be pre-allocated
+ * @return               0 on success, -EINVAL on error
+ */
+int json_agg_str2timeval(const char *tv_str, struct timeval *tv);
+
+/**
  * Convert a timeval structure into a string of the form
  * "YYYY-mm-dd HH:MM:SS.uuuuuu"
  *

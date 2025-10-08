@@ -128,10 +128,13 @@ enum dss_set_action {
     DSS_SET_INVAL  = -1,
     DSS_SET_INSERT =  0,
     DSS_SET_FULL_INSERT, /** A full insert is an insert which overrides
-                           *  the default values when adding a row. In the case
-                           *  of an object, it means adding a preexisting object
-                           *  with a particular uuid and version, not the
-                           *  default DSS values.
+                           *  the default values when adding a row.
+                           *  In the case of an object, it means adding a
+                           *  preexisting object with a particular uuid and
+                           *  version, not the default DSS values.
+                           *  In the case of an extent, it means setting a
+                           *  provided creation time instead of the default
+                           *  "now" DSS value.
                            */
     DSS_SET_UPDATE,
     DSS_SET_DELETE,
@@ -473,7 +476,7 @@ int dss_media_delete(struct dss_handle *handle, struct media_info *media_list,
  * @return 0 on success, negated errno on failure
  */
 int dss_extent_insert(struct dss_handle *handle, struct extent *extents,
-                      int extent_count);
+                      int extent_count, enum dss_set_action action);
 
 /**
  * Update information for one or many extents in DSS.

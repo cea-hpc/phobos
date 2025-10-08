@@ -300,7 +300,7 @@ static int _add_extent_to_dss(struct dss_handle *dss,
     lyt_insert->extents = extent_to_insert;
     lyt_insert->ext_count = 1;
 
-    rc = dss_extent_insert(dss, extent_to_insert, 1);
+    rc = dss_extent_insert(dss, extent_to_insert, 1, DSS_SET_FULL_INSERT);
     if (rc)
         LOG_GOTO(lyt_info_get_free, rc,
                  "Failed to insert extent '%s'", extent_to_insert->uuid);
@@ -501,8 +501,9 @@ objects_free:
  */
 static int _import_file_to_dss(struct admin_handle *adm, int fd,
                                char *rootpath, char *filename, off_t fsize,
-                               int height, struct pho_id med_id,
-                               size_t *size_written, long long *nb_new_obj)
+                               struct timespec f_ctime, int height,
+                               struct pho_id med_id, size_t *size_written,
+                               long long *nb_new_obj)
 {
     struct object_info obj_to_insert = {0};
     struct extent ext_to_insert = {0};
@@ -552,6 +553,8 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
     ext_to_insert.address = PHO_BUFF_NULL;
     ext_to_insert.address.buff = xstrdup(rootpath);
     ext_to_insert.state = PHO_EXT_ST_SYNC;
+    ext_to_insert.creation_time.tv_sec = f_ctime.tv_sec;
+    ext_to_insert.creation_time.tv_usec = f_ctime.tv_nsec / 1000;
 
     copy_to_insert.copy_name = lyt_to_insert.copy_name;
     copy_to_insert.object_uuid = obj_to_insert.uuid;
@@ -595,7 +598,8 @@ static int _explore_from_path_aux(struct admin_handle *adm,
                                   char *root_path, char *address, int height,
                                   struct pho_id med_id,
                                   int (*func)(struct admin_handle *, int,
-                                              char *, char *, off_t, int,
+                                              char *, char *, off_t,
+                                              struct timespec, int,
                                               struct pho_id, size_t *,
                                               long long *),
                                   size_t *size_written, long long *nb_new_obj)
@@ -655,7 +659,8 @@ static int _explore_from_path_aux(struct admin_handle *adm,
                                    med_id, (*func), size_written, nb_new_obj);
         else {
             rc = (func)(adm, fd, address_buf, entry->d_name, stat_buf.st_size,
-                        height, med_id, size_written, nb_new_obj);
+                        stat_buf.st_ctim, height, med_id, size_written,
+                        nb_new_obj);
             if (rc)
                 pho_error(rc, "Could not extract information from the file,"
                           "rc:%d", rc);
@@ -700,7 +705,8 @@ free_dirent:
 static int explore_from_path(struct admin_handle *adm, char *root_path,
                              struct pho_id med_id,
                              int (*func)(struct admin_handle *, int, char *,
-                                         char *, off_t, int, struct pho_id,
+                                         char *, off_t, struct timespec,
+                                         int, struct pho_id,
                                          size_t *, long long *),
                              size_t *size_written, long long *nb_new_obj)
 {

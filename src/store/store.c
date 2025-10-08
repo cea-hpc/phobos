@@ -1196,7 +1196,8 @@ static int store_end_encoder_xfer(struct phobos_handle *pho,
 
         pho_debug("Saving layout for objid:'%s'", xfer->xd_targets[i].xt_objid);
         rc = dss_extent_insert(&pho->dss, encoder->dest_layout[i].extents,
-                               encoder->dest_layout[i].ext_count);
+                               encoder->dest_layout[i].ext_count,
+                               DSS_SET_FULL_INSERT);
         if (rc)
             LOG_RETURN(rc, "Error while saving extents for objid: '%s'",
                        xfer->xd_targets[i].xt_objid);

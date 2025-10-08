@@ -29,9 +29,6 @@
 
 #include "resources.h"
 
-#define INSERT_OBJECT (1 << 0)
-#define INSERT_FULL_OBJECT (1 << 1)
-
 /**
  * The "object" operations structure.
  * Implements every function of the structure.

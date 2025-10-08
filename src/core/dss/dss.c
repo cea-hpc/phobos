@@ -596,10 +596,15 @@ int dss_extent_get(struct dss_handle *handle, const struct dss_filter *filter,
 }
 
 int dss_extent_insert(struct dss_handle *handle, struct extent *extents,
-                   int extent_count)
+                   int extent_count, enum dss_set_action action)
 {
+    if (action != DSS_SET_INSERT && action != DSS_SET_FULL_INSERT)
+        LOG_RETURN(-ENOTSUP,
+                   "Only actions available for extent insert are normal insert "
+                   "and full insert");
+
     return dss_generic_set(handle, DSS_EXTENT, (void *)extents, extent_count,
-                           DSS_SET_INSERT);
+                           action);
 }
 
 int dss_extent_update(struct dss_handle *handle, struct extent *src_extents,
