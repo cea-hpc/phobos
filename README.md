@@ -111,9 +111,31 @@ sudo -u postgres phobos_db setup_db -s
 ```
 
 ## First steps
-### Launching phobosd
-To use phobos, a daemon called phobosd needs to be launched. It mainly manages
+
+To use Phobos, you must start a daemon called `phobosd`, which mainly manages
 the drive/media allocation and sets up resources to read or write your data.
+One must be started on each node that may access drives/media.
+
+Moreover, if you want to use tapes in your system, you must start another daemon
+called `phobos_tlc` (Tape Library Controller) before the `phobosd`. You must
+start one `phobos_tlc` per tape library. Each `phobos_tlc` daemon must be
+started on a node that has an access to manage the corresponding tape library.
+`phobos_tlc` needs to be launched before any `phobosd` that will use this tape
+library.
+
+### Launching phobos_tlc
+
+On the node that has access to the tape library management device, you must
+set the `lib_device` option of the corresponding `tlc` configuration section
+into /etc/phobos.conf . (The default of the installed template is `/dev/changer`
+for the default `legacy` tape library.)
+
+To launch/stop the daemon:
+```
+# systemctl start/stop phobos_tlc
+```
+
+### Launching phobosd
 
 To launch/stop the daemon:
 ```
