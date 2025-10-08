@@ -50,7 +50,7 @@ Initialize postgresql directories:
 ```
 
 Edit `/var/lib/pgsql/9.4/data/pg_hba.conf` to authorize access from phobos host
-(localhost in this example):
+(localhost in this example, change it if your network is a different one):
 ```
 # "local" is for Unix domain socket connections only
 local   all             all                                     trust
@@ -59,6 +59,10 @@ host    all             all             127.0.0.1/32            md5
 # IPv6 local connections:
 host    all             all             ::1/128                 md5
 ```
+
+If your phobos host is on an other node than your postgresql server, you must
+change the `listen_adresses` option of the `/var/lib/pgsql/data/postgresql.conf`
+from `localhost` to the good one matching your needs.
 
 Start the database server:
 ```
