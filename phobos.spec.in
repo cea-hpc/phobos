@@ -171,6 +171,7 @@ mkdir -p %{buildroot}/%{_sharedstatedir}/phobos
 %{_sbindir}/phobos_tlc
 %{_unitdir}/phobos_tlc.service
 %{_sbindir}/phobos_hsm_sync_dir
+%{_sbindir}/phobos_hsm_release_dir
 %{_mandir}/man1/*
 
 %config(noreplace) %{_sysconfdir}/phobos.conf

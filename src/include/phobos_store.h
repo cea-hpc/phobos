@@ -155,7 +155,7 @@ struct pho_xfer_get_params {
  * hard deleted.
  */
 struct pho_xfer_del_params {
-    char *copy_name;           /**< Copy name [out] */
+    char *copy_name;           /**< Copy name input PHO_XFER_COPY_HARD_DEL */
     enum dss_obj_scope scope;  /**< Scope of the object to delete
                                  *  (alive, deprecated, ...).
                                  */

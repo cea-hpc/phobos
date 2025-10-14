@@ -71,6 +71,8 @@ phobosd="$lrs_dir/phobosd"
 tlc="$tlc_dir/phobos_tlc"
 phobos_hsm_sync_dir="$hsm_dir/phobos_hsm_sync_dir"
 valg_phobos_hsm_sync_dir="$LOG_COMPILER $phobos_hsm_sync_dir"
+phobos_hsm_release_dir="$hsm_dir/phobos_hsm_release_dir"
+valg_phobos_hsm_release_dir="$LOG_COMPILER $phobos_hsm_release_dir"
 
 # utils function
 # display error message and exits

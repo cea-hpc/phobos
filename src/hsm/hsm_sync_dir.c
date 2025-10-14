@@ -444,7 +444,6 @@ int main(int argc, char **argv)
         if (rc)
             goto close_lib_hdl;
 
-
         sort.attr = dss_fields_pub2implem("DSS::EXT::creation_time");
         sort.psql_sort = true;
 

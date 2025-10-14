@@ -5,11 +5,19 @@ This section explains how to configure the HSM commands. These commands allow
 copying and moving objects between storage tier to achieve hierarchical storage
 management.
 
-For example, phobos_hsm_sync_dir creates a new destination copy for each
+The phobos_hsm_sync_dir command creates a new destination copy for each
 object that has a source copy with extents on dirs owned by the host which
 is running the command. This command only takes into account the extents
 that are into a time window beginning from the last time the command was called
-to the current time minus a delay.
+(from **synced_time_path**) to the current time minus a **sync_delay_second**.
+
+The phobos_hsm_release_dir command deletes copies of objects on the local dirs.
+If the fill rate of one local dir is above the **release_higher_threshold**,
+the phobos_hsm_release_dir command deletes copies of object with extents on this
+dir to decrease the fill rate under the **release_lower_threshold**. To be
+deleted, a "to release" copy must have an existing backend copy. The older
+copies are deleted first. "To release" copies with a creation time younger than
+"current_time - **release_delay_second**" are not deleted.
 
 *Recording and using the last synced time*
 ------------------------------------------
@@ -58,3 +66,55 @@ Example:
 
     [hsm]
     sync_delay_second = 3600
+
+*Release delay*
+-----------------
+
+The **release_delay_second** parameter defines the minimum delay in second
+between the creation time of a copy and its deletion by a release.
+
+If this parameter is not specified, Phobos defaults to the 0 value and all
+recent objects could be released.
+
+Example:
+
+.. code:: ini
+
+    [hsm]
+    release_delay_second = 1800
+
+*dir_release_higher_threshold*
+--------------------------------
+
+The dir_release_higher_threshold parameter is the limit to start to release
+copies on a dir. This parameter must be a percentage, a positive integer value
+between 1 and 100. dir_release_higher_threshold must be strictly higher than
+dir_release_lower_threshold. A value of 100 means that no release purge will
+never happens.
+
+If this parameter is not specified, Phobos defaults to the 95 value.
+
+Example:
+
+.. code:: ini
+
+    [hsm]
+    dir_release_higher_threshold = 95
+
+*dir_release_lower_threshold*
+-------------------------------
+
+The dir_release_lower_threshold parameter is the limit to achieve when a release
+is started on a dir. This parameter must be a percentage, a positive integer
+value between 0 and 99. dir_release_lower_threshold must be strictly lower than
+dir_release_higher_threshold. A value of 0 means that if a release purge starts,
+every selectable copy will be deleted.
+
+If this parameter is not specified, Phobos defaults to the 80 value.
+
+Example:
+
+.. code:: ini
+
+    [hsm]
+    dir_release_higher_threshold = 80

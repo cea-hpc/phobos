@@ -1,0 +1,221 @@
+#!/bin/bash
+#
+#  All rights reserved (c) 2014-2025 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+
+#
+# Integration test for phobos_hsm_release_dir
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
+
+set -xe
+
+function setup
+{
+    setup_tables
+
+    setup_test_dirs
+    setup_dummy_files 1 1k 100k
+
+    export PHOBOS_LRS_families="dir"
+    export PHOBOS_STORE_default_family="dir"
+
+    invoke_lrs
+
+    dir_other_host="$DIR_TEST_IN/dir_other_host"
+    mkdir ${dir_other_host}
+    $phobos dir add --tags other_host ${dir_other_host}
+    $phobos dir format --unlock --fs posix --unlock ${dir_other_host}
+
+    dir_to_release_1G=$(make_tmp_fs 1G)
+    $phobos dir add --tags to_release ${dir_to_release_1G}
+    $phobos dir format --fs posix --unlock ${dir_to_release_1G}
+
+    sync_dir="$DIR_TEST_IN/dir_to_sync"
+    mkdir ${sync_dir}
+    $phobos dir add --tags for_sync ${sync_dir}
+    $phobos dir format --fs posix --unlock ${sync_dir}
+}
+
+function cleanup
+{
+    waive_lrs
+
+    cleanup_dummy_files
+    cleanup_tmp_fs ${dir_to_release_1G}
+    cleanup_test_dirs
+
+    drop_tables
+}
+
+function check_hsm_release_dir_opt()
+{
+    ($valg_phobos_hsm_release_dir --bad_opt &&
+         error "--bad_opt parsing must fail") || true
+
+    local usage=$($valg_phobos_hsm_release_dir -h)
+    local usage_long=$($valg_phobos_hsm_release_dir --help)
+
+    if [[ "$usage" != "$usage_long" ]]; then
+        error "-h and --help must show the same usage"
+    fi
+
+    (echo ${usage} | grep usage) || error "-h must show usage"
+}
+
+function check_copy()
+{
+    local oid=$1
+    local expected_copies=("${@:2}")
+
+    local copies=()
+    for copy in `$phobos copy list -d ${oid}`; do
+        copies+=(${copy})
+    done
+
+    if [[ "${#copies[@]}" != "${#expected_copies[@]}" ]]; then
+        error "For oid '$oid', we expected copies '${expected_copies[@]}'" \
+              "whereas we get '${copies[@]}'"
+    fi
+
+    if [[ "${#copies[@]}" == 0 ]]; then
+        return 0
+    fi
+
+    for i in `seq 0 $(( ${#copies[@]} - 1 ))`; do
+        local found="false"
+
+        for j in `seq 0 $(( ${#expected_copies[@]} - 1 ))`; do
+            if [[ "${copies[${i}]}" == "${expected_copies[${j}]}" ]]; then
+                found="true"
+                break
+            fi
+        done
+
+        if [[ "${found}" != "true" ]]; then
+            error "For oid '$oid', we expected copies '${expected_copies[@]}'" \
+                  "whereas we get '${copies[@]}'"
+        fi
+    done
+
+    for i in `seq 0 $(( ${#expected_copies[@]} - 1 ))`; do
+        local found="false"
+
+        for j in `seq 0 $(( ${#copies[@]} - 1 ))`; do
+            if [[ "${expected_copies[${i}]}" == "${copies[${j}]}" ]]; then
+                found="true"
+                break
+            fi
+        done
+
+        if [[ "${found}" != "true" ]]; then
+            error "For oid '$oid', we expected copies '${expected_copies[@]}'" \
+                  "whereas we get '${copies[@]}'"
+        fi
+    done
+}
+
+function check_hsm_release_dir()
+{
+    # object to release
+    $phobos put --tags to_release --copy-name copy_to_release ${FILES[0]} to_release
+    $phobos copy create --tags for_sync to_release copy_synced
+
+    # deprecated object to release
+    $phobos put --tags to_release --copy-name copy_to_release ${FILES[0]} deprec_to_release
+    $phobos copy create --tags for_sync deprec_to_release copy_synced
+    $phobos delete deprec_to_release
+
+    # last candidate object to release
+    $phobos put --tags to_release --copy-name copy_to_release ${FILES[0]} last_to_release
+    $phobos copy create --tags for_sync last_to_release copy_synced
+
+    # object not synced
+    $phobos put --tags to_release --copy-name copy_to_release ${FILES[0]} not_synced
+
+    # object on a dir of an other host
+    $phobos put --tags other_host --copy-name copy_to_release ${FILES[0]} other_host
+    $phobos copy create --tags for_sync other_host copy_synced
+    $PSQL << EOF
+UPDATE device SET host = 'other_host' WHERE path = '${dir_other_host}';
+EOF
+
+    # object other copy
+    $phobos put --tags to_release --copy-name other ${FILES[0]} other_copy
+    $phobos copy create --tags for_sync other_copy copy_synced
+
+    sleep 2
+    date_to_release=$(date +%s)
+    sleep 2
+
+    # object too young to be released
+    $phobos put --tags to_release --copy-name copy_to_release ${FILES[0]} too_young
+    $phobos copy create --tags for_sync too_young copy_synced
+
+    # We have 6 extents of 100M each on the dir_to_release_1G : current fill
+    # rate is 60% .
+
+    # dry-run phobos_hsm_release_dir with a too high threshold
+    export PHOBOS_HSM_dir_release_higher_threshold="99"
+    dry_run_log=$($valg_phobos_hsm_release_dir -d copy_to_release copy_synced 2>&1)
+    (echo ${dry_run_log} | grep "Deleting") &&
+        error "Too high threshold dry-run must not show any release"
+
+    # dry-run phobos_hsm_release_dir
+    export PHOBOS_HSM_dir_release_higher_threshold="1"
+    export PHOBOS_HSM_dir_release_lower_threshold="0"
+    dry_run_log=$($valg_phobos_hsm_release_dir -d copy_to_release copy_synced 2>&1)
+    (echo ${dry_run_log} | grep "Deleting" | grep "DRY") ||
+        error "dry-run must show a release"
+
+    # run phobos_hsm_release_dir
+
+    # 4 extents are candidates to be released : to_release, deprec_to_release,
+    # last_to_release, too_young
+    #
+    # 2 extents can not be released : not_synced and other_copy
+    # We exclude too_young from the release with the release_delay_second condition.
+    # We exclude the last_to_release with the dir_release_lower_threshold
+    # condition.
+
+    current=$(date +%s)
+    ((release_delay_second = current - date_to_release))
+    export PHOBOS_HSM_release_delay_second="${release_delay_second}"
+    export PHOBOS_HSM_dir_release_higher_threshold="55"
+    export PHOBOS_HSM_dir_release_lower_threshold="45"
+    run_log=$($valg_phobos_hsm_release_dir copy_to_release copy_synced 2>&1)
+
+    # released
+    check_copy to_release copy_synced
+    check_copy deprec_to_release copy_synced
+    # not released
+    check_copy last_to_release copy_to_release copy_synced
+    check_copy not_synced copy_to_release
+    check_copy other_host copy_to_release copy_synced
+    check_copy other_copy other copy_synced
+    check_copy too_young copy_to_release copy_synced
+}
+
+TESTS=(
+    "check_hsm_release_dir_opt;"
+    "setup; check_hsm_release_dir; cleanup"
+)
