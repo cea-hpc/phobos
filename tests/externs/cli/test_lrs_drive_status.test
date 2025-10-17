@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -19,25 +19,16 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-set -xe
-
-if [[ ! -w /dev/changer ]]; then
-    exit 77 # special value to mark test as 'skipped'
-fi
-
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../tape_drive.sh
-. $test_dir/../../test_launch_daemon.sh
-lrs_simple_client="$test_dir/lrs_simple_client"
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+lrs_simple_client="$test_dir/externs/cli/lrs_simple_client"
 
-function test_drive_status_no_daemon()
-{
-    $phobos drive status &&
-        error "LRS is required for drive status" ||
-        true
-}
+################################################################################
+#                                    SETUP                                     #
+################################################################################
 
 function setup()
 {
@@ -50,6 +41,15 @@ function cleanup()
     waive_daemons
     drop_tables
     drain_all_drives
+}
+
+function test_drive_status_no_daemon()
+{
+    setup_tables
+
+    $phobos drive status &&
+        error "LRS is required for drive status" ||
+        true
 }
 
 function st2sg()
@@ -94,16 +94,40 @@ function test_drive_status_with_ongoing_io()
     $lrs_simple_client release 1 $release_medium_name tape
 }
 
-trap cleanup EXIT
+function mount_failure_cmd()
+{
+    echo "bash -c \"exit 1\""
+}
 
-test_drive_status_no_daemon
+function test_drive_status_adm_status()
+{
+    local drives=($(get_lto_drives 6 2))
+    local tape=$(get_tapes L6 1)
 
-drain_all_drives
-setup
+    export PHOBOS_LRS_max_health=1
+    export PHOBOS_LTFS_cmd_mount=$(mount_failure_cmd)
 
-test_drive_status
+    setup_tables
+    invoke_daemons
 
-cleanup
-setup
+    $phobos drive add ${drives[@]}
+    $phobos drive unlock ${drives[0]}
 
-test_drive_status_with_ongoing_io
+    $phobos tape add --type lto6 $tape
+    $phobos tape format --unlock $tape
+
+    $phobos put /etc/hosts oid && error "Put should have failed"
+    $phobos drive unlock ${drives[1]}
+
+    $valg_phobos drive status | grep ${drives[0]} | grep "failed"
+    $valg_phobos drive status | grep ${drives[1]} | grep "unlocked"
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Drives required for this test"
+fi
+
+TESTS=("test_drive_status_no_daemon; cleanup"
+       "setup; test_drive_status; cleanup"
+       "setup; test_drive_status_with_ongoing_io; cleanup"
+       "test_drive_status_adm_status; cleanup")

@@ -2927,6 +2927,8 @@ static void sched_fetch_device_status(struct lrs_dev *device,
                          device->ld_sys_dev_state.lds_serial);
     _json_object_set_str(device_status, "currently_dedicated_to",
                          device_request_type2str(device, request_type));
+    _json_object_set_str(device_status, "adm_status",
+                   rsc_adm_status2str(device->ld_dss_dev_info->rsc.adm_status));
 
     integer = json_integer(device->ld_lib_dev_info.ldi_addr.lia_addr -
                            device->ld_lib_dev_info.ldi_first_addr);

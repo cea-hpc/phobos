@@ -1074,6 +1074,7 @@ class DriveStatus(CLIManagedResourceMixin): #pylint: disable=too-many-instance-a
         self.media = values.get("media", "")
         self.ongoing_io = values.get("ongoing_io", "")
         self.currently_dedicated_to = values.get("currently_dedicated_to", "")
+        self.adm_status = values.get("adm_status")
 
     def get_display_fields(self, max_width=None):
         """Return a dict of available fields and optional display formatters."""
@@ -1087,4 +1088,5 @@ class DriveStatus(CLIManagedResourceMixin): #pylint: disable=too-many-instance-a
             'media': None,
             'ongoing_io': None,
             'currently_dedicated_to': None,
+            'adm_status': None,
         }

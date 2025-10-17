@@ -66,7 +66,7 @@ check_SCRIPTS=acceptance.test \
               test_lock_clean.sh \
               test_logs.test \
               test_lrs.test \
-              test_lrs_drive_status.sh \
+              test_lrs_drive_status.test \
               test_lrs_scheduling.test \
               test_media.test \
               test_media_delete.test \
