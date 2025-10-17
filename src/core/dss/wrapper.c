@@ -777,7 +777,7 @@ int dss_lazy_find_copy(struct dss_handle *handle, const char *uuid,
     }
 
     rc = get_cfg_preferred_order(&preferred_order, &count);
-    if (rc)
+    if (rc != 0 && rc != -ENODATA)
         return rc;
 
     for (i = 0; i < count; ++i) {

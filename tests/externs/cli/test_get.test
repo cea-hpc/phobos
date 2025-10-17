@@ -31,10 +31,9 @@ test_dir=$(dirname $(readlink -e $0))
 
 function dir_setup()
 {
-    export DIRS=(
-          $(mktemp -d /tmp/test.pho.XXXX)
-          $(mktemp -d /tmp/test.pho.XXXX)
-          )
+    export DIRS=("$DIR_TEST_IN/tmp1" "$DIR_TEST_IN/tmp2")
+    mkdir ${DIRS[@]}
+
     $phobos dir add ${DIRS[@]}
     $phobos dir format --fs posix --unlock ${DIRS[@]}
 }
@@ -43,15 +42,15 @@ function setup()
 {
     setup_tables
     invoke_lrs
+    setup_test_dirs
     dir_setup
 }
 
 function cleanup()
 {
     waive_lrs
+    cleanup_test_dirs
     drop_tables
-    rm -rf ${DIRS[@]}
-    rm -f /tmp/out
 }
 
 function test_get()
@@ -60,28 +59,32 @@ function test_get()
 
     local uuid=$($phobos object list --output uuid oid1)
 
-    $valg_phobos get oid1 /tmp/out || error "Get operation failed"
-    rm /tmp/out
+    $valg_phobos get oid1 $DIR_TEST_OUT/out || error "Get operation failed"
+    rm $DIR_TEST_OUT/out
 
-    $valg_phobos get --version 1 oid1 /tmp/out || error "Get operation failed"
-    rm /tmp/out
+    $valg_phobos get --version 1 oid1 $DIR_TEST_OUT/out ||
+        error "Get operation failed"
+    rm $DIR_TEST_OUT/out
 
-    $valg_phobos get --uuid $uuid oid1 /tmp/out || error "Get operation failed"
-    rm /tmp/out
+    $valg_phobos get --uuid $uuid oid1 $DIR_TEST_OUT/out ||
+        error "Get operation failed"
+    rm $DIR_TEST_OUT/out
 
-    $valg_phobos get --version 1 --uuid $uuid oid1 /tmp/out \
+    $valg_phobos get --version 1 --uuid $uuid oid1 $DIR_TEST_OUT/out \
         || error "Get operation failed"
-    rm /tmp/out
+    rm $DIR_TEST_OUT/out
 
     $phobos delete oid1
 
-    $valg_phobos get oid1 /tmp/out \
+    $valg_phobos get oid1 $DIR_TEST_OUT/out \
         && error "Get operation should have failed" || true
-    $valg_phobos get --version 1 oid1 /tmp/out || error "Get operation failed"
-    rm /tmp/out
+    $valg_phobos get --version 1 oid1 $DIR_TEST_OUT/out ||
+        error "Get operation failed"
+    rm $DIR_TEST_OUT/out
 
-    $valg_phobos get --uuid $uuid oid1 /tmp/out || error "Get operation failed"
-    rm /tmp/out
+    $valg_phobos get --uuid $uuid oid1 $DIR_TEST_OUT/out ||
+        error "Get operation failed"
+    rm $DIR_TEST_OUT/out
 }
 
 function test_creation_and_access_times()
@@ -121,8 +124,8 @@ function test_creation_and_access_times()
 
     sleep 1
     $phobos copy list oid-time -d -o all
-    $valg_phobos get --uuid $uuid --version 1 oid-time /tmp/out
-    rm /tmp/out
+    $valg_phobos get --uuid $uuid --version 1 oid-time $DIR_TEST_OUT/out
+    rm $DIR_TEST_OUT/out
     $phobos copy list oid-time -d -o all
 
     local atm=$($phobos copy list oid-time --deprecated-only --version 1 \
@@ -143,8 +146,8 @@ function test_creation_and_access_times()
     [ $atm3 -eq $atm ] \
         || error "Access time of 3rd version was updated, only 1st should be"
 
-    $valg_phobos get oid-time /tmp/out
-    rm /tmp/out
+    $valg_phobos get oid-time $DIR_TEST_OUT/out
+    rm $DIR_TEST_OUT/out
 
     atm=$($phobos copy list oid-time --deprecated-only --version 1 \
           --output access_time)
@@ -164,8 +167,8 @@ function test_creation_and_access_times()
         || error "Access time of 3rd version was not updated"
     atm3=$atm
 
-    $valg_phobos get --uuid $uuid --version 2 oid-time /tmp/out
-    rm /tmp/out
+    $valg_phobos get --uuid $uuid --version 2 oid-time $DIR_TEST_OUT/out
+    rm $DIR_TEST_OUT/out
 
     atm=$($phobos copy list oid-time --deprecated-only --version 1 \
           --output access_time)
@@ -202,25 +205,25 @@ function test_creation_and_access_times()
 
 function test_errors()
 {
-    $valg_phobos get oid2 /tmp/out \
+    $valg_phobos get oid2 $DIR_TEST_OUT/out \
         && error "Get operation should fail on invalid oid" || true
 
-    $valg_phobos get --uuid fake_uuid oid1 /tmp/out \
+    $valg_phobos get --uuid fake_uuid oid1 $DIR_TEST_OUT/out \
         && error "Get operation should fail on invalid uuid" || true
 
     $phobos put --family dir /etc/hosts oid1
-    $valg_phobos get --version 5 oid1 /tmp/out \
+    $valg_phobos get --version 5 oid1 $DIR_TEST_OUT/out \
         && error "Get operation should fail on invalid version" || true
 
     $phobos delete oid1
-    $valg_phobos get --version 5 oid1 /tmp/out \
+    $valg_phobos get --version 5 oid1 $DIR_TEST_OUT/out \
         && error "Get operation should fail on invalid version" || true
 
     $PSQL << EOF
 UPDATE copy SET copy_status = 'incomplete' WHERE
     object_uuid = (SELECT object_uuid FROM object WHERE oid = 'oid1');
 EOF
-    $valg_phobos get oid1 /tmp/out &&
+    $valg_phobos get oid1 $DIR_TEST_OUT/out &&
         error "Incomplete status of default copy should have failed the test" ||
             true
 }
@@ -232,82 +235,96 @@ function test_get_copy_name()
 
     $phobos put -f dir --copy-name blob --tags copy_dir1 /etc/hosts oid-copy
 
-    $valg_phobos get --copy-name source oid-copy /tmp/out &&
+    $valg_phobos get --copy-name source oid-copy $DIR_TEST_OUT/out &&
         error "Get operation should have failed"
 
-    $valg_phobos get --copy-name blob oid-copy /tmp/out ||
+    $valg_phobos get --copy-name blob oid-copy $DIR_TEST_OUT/out ||
         error "Get operation should have succeed"
 
-    rm /tmp/out
+    rm $DIR_TEST_OUT/out
 
     $phobos copy create -f dir --copy-name blob --tags copy_dir2 oid-copy toto
 
     # Lock the media of the copy blob.
     $phobos dir lock ${DIRS[0]}
-    $valg_phobos get --copy-name blob oid-copy /tmp/out &&
+    $valg_phobos get --copy-name blob oid-copy $DIR_TEST_OUT/out &&
         error "Get operation should have failed"
-    $valg_phobos get --copy-name toto oid-copy /tmp/out ||
+    $valg_phobos get --copy-name toto oid-copy $DIR_TEST_OUT/out ||
         error "Get operation should have succeed"
-    rm /tmp/out
+    rm $DIR_TEST_OUT/out
 
     # Lock the media of the copy toto.
     $phobos dir unlock ${DIRS[0]}
     $phobos dir lock ${DIRS[1]}
-    $valg_phobos get --copy-name toto oid-copy /tmp/out &&
+    $valg_phobos get --copy-name toto oid-copy $DIR_TEST_OUT/out &&
         error "Get operation should have failed"
-    $valg_phobos get --copy-name blob oid-copy /tmp/out ||
+    $valg_phobos get --copy-name blob oid-copy $DIR_TEST_OUT/out ||
         error "Get operation should have succeed"
-    rm /tmp/out
+    rm $DIR_TEST_OUT/out
 
     # Copy preferred order at rank 1 among 1
-    PHOBOS_COPY_get_preferred_order="toto" $valg_phobos get oid-copy /tmp/out &&
-        error "Get operation should have failed"
-    PHOBOS_COPY_get_preferred_order="blob" $valg_phobos get oid-copy /tmp/out ||
-        error "Get operation should have succeed"
-    rm /tmp/out
+    PHOBOS_COPY_get_preferred_order="toto" $valg_phobos get oid-copy \
+        $DIR_TEST_OUT/out && error "Get operation should have failed"
+    PHOBOS_COPY_get_preferred_order="blob" $valg_phobos get oid-copy \
+        $DIR_TEST_OUT/out || error "Get operation should have succeed"
+    rm $DIR_TEST_OUT/out
     $phobos dir unlock ${DIRS[1]}
     $phobos dir lock ${DIRS[0]}
-    PHOBOS_COPY_get_preferred_order="blob" $valg_phobos get oid-copy /tmp/out &&
-        error "Get operation should have failed"
-    PHOBOS_COPY_get_preferred_order="toto" $valg_phobos get oid-copy /tmp/out ||
-        error "Get operation should have succeed"
-    rm /tmp/out
+    PHOBOS_COPY_get_preferred_order="blob" $valg_phobos get oid-copy \
+        $DIR_TEST_OUT/out && error "Get operation should have failed"
+    PHOBOS_COPY_get_preferred_order="toto" $valg_phobos get oid-copy \
+        $DIR_TEST_OUT/out || error "Get operation should have succeed"
+    rm $DIR_TEST_OUT/out
 
     # Copy preferred order at rank 1 among 2
     PHOBOS_COPY_get_preferred_order="blob,toto" \
-        $valg_phobos get oid-copy /tmp/out &&
+        $valg_phobos get oid-copy $DIR_TEST_OUT/out &&
         error "Get operation should have failed"
     PHOBOS_COPY_get_preferred_order="toto,blob" \
-        $valg_phobos get oid-copy /tmp/out ||
+        $valg_phobos get oid-copy $DIR_TEST_OUT/out ||
         error "Get operation should have succeed"
-    rm /tmp/out
+    rm $DIR_TEST_OUT/out
     $phobos dir unlock ${DIRS[0]}
     $phobos dir lock ${DIRS[1]}
     PHOBOS_COPY_get_preferred_order="toto,blob" \
-        $valg_phobos get oid-copy /tmp/out &&
+        $valg_phobos get oid-copy $DIR_TEST_OUT/out &&
         error "Get operation should have failed"
     PHOBOS_COPY_get_preferred_order="blob,toto" \
-        $valg_phobos get oid-copy /tmp/out ||
+        $valg_phobos get oid-copy $DIR_TEST_OUT/out ||
         error "Get operation should have succeed"
-    rm /tmp/out
+    rm $DIR_TEST_OUT/out
 
     # Copy preferred order at rank 2 among 2
     PHOBOS_COPY_get_preferred_order="toto,astral" \
-        $valg_phobos get oid-copy /tmp/out &&
+        $valg_phobos get oid-copy $DIR_TEST_OUT/out &&
         error "Get operation should have failed"
     PHOBOS_COPY_get_preferred_order="blob,astral" \
-        $valg_phobos get oid-copy /tmp/out ||
+        $valg_phobos get oid-copy $DIR_TEST_OUT/out ||
         error "Get operation should have succeed"
-    rm /tmp/out
+    rm $DIR_TEST_OUT/out
     $phobos dir unlock ${DIRS[1]}
     $phobos dir lock ${DIRS[0]}
     PHOBOS_COPY_get_preferred_order="blob,astral" \
-        $valg_phobos get oid-copy /tmp/out &&
+        $valg_phobos get oid-copy $DIR_TEST_OUT/out &&
         error "Get operation should have failed"
     PHOBOS_COPY_get_preferred_order="toto,astral" \
-        $valg_phobos get oid-copy /tmp/out ||
+        $valg_phobos get oid-copy $DIR_TEST_OUT/out ||
         error "Get operation should have succeed"
-    rm /tmp/out
+    rm $DIR_TEST_OUT/out
+}
+
+function test_get_without_get_preferred_order()
+{
+    $phobos put -f dir /etc/hosts oid-without
+
+    cp $test_dir/phobos.conf $DIR_TEST_OUT/phobos_bis.conf
+    sed -i 's/get_preferred_order/#get_preferred_order/' \
+        $DIR_TEST_OUT/phobos_bis.conf
+
+    $valg_phobos -c $DIR_TEST_OUT/phobos_bis.conf get oid-without \
+        $DIR_TEST_OUT/out || error "Get operation should have succeed"
+
+    rm -f $DIR_TEST_OUT/out $DIR_TEST_OUT/phobos_bis.conf
 }
 
 TESTS=("setup; \
@@ -315,4 +332,5 @@ TESTS=("setup; \
             test_creation_and_access_times; \
             test_errors; \
             test_get_copy_name; \
+            test_get_without_get_preferred_order; \
         cleanup")
