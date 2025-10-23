@@ -210,6 +210,22 @@ function test_object_list_deprecated_only
     fi
 }
 
+function test_object_list_size
+{
+    $phobos put -f dir /etc/hosts oid1
+    $phobos put -f dir --overwrite /etc/hosts oid1
+
+    local res=$($valg_phobos object list --output size)
+    if [[ "$res" != "0" ]]; then
+        error "Invalid size retrieved for living object, expected '0', got '$res'"
+    fi
+
+    local res=$($valg_phobos object list --deprecated-only --output size)
+    if [[ "$res" != "0" ]]; then
+        error "Invalid size retrieved for deprecated object, expected '0', got '$res'"
+    fi
+}
+
 TESTS=("setup_object_md; \
             test_object_list_pattern; \
             test_object_list_max_width; \
@@ -217,4 +233,5 @@ TESTS=("setup_object_md; \
        "setup; test_object_list_version; cleanup"
        "setup; test_object_list_uuid; cleanup"
        "setup; test_object_list_deprecated; cleanup"
-       "setup; test_object_list_deprecated_only; cleanup")
+       "setup; test_object_list_deprecated_only; cleanup"
+       "setup; test_object_list_size; cleanup")

@@ -43,12 +43,13 @@ static int object_insert_query(PGconn *conn, void *void_object, int item_cnt,
 {
     if (fields & INSERT_OBJECT)
         g_string_append(request,
-                        "INSERT INTO object (oid, user_md, _grouping) VALUES ");
+                        "INSERT INTO object (oid, user_md, _grouping, size) "
+                        "VALUES ");
     else
         g_string_append(
             request,
             "INSERT INTO object (oid, object_uuid, version, user_md,"
-            " _grouping) VALUES "
+            " _grouping, size) VALUES "
         );
 
     for (int i = 0; i < item_cnt; ++i) {
@@ -56,25 +57,27 @@ static int object_insert_query(PGconn *conn, void *void_object, int item_cnt,
 
         if (fields & INSERT_OBJECT) {
             if (object->grouping)
-                g_string_append_printf(request, "('%s', '%s', '%s')",
+                g_string_append_printf(request, "('%s', '%s', '%s', '%ld')",
                                        object->oid, object->user_md,
-                                       object->grouping);
+                                       object->grouping, object->size);
             else
-                g_string_append_printf(request, "('%s', '%s', NULL)",
-                                       object->oid, object->user_md);
+                g_string_append_printf(request, "('%s', '%s', NULL, '%ld')",
+                                       object->oid, object->user_md,
+                                       object->size);
         } else {
             if (object->grouping)
                 g_string_append_printf(request,
-                                       "('%s', '%s', %d, '%s', '%s')",
+                                       "('%s', '%s', %d, '%s', '%s', '%ld')",
                                        object->oid, object->uuid,
                                        object->version, object->user_md,
-                                       object->grouping);
+                                       object->grouping, object->size);
 
             else
                 g_string_append_printf(request,
-                                       "('%s', '%s', %d, '%s', NULL)",
+                                       "('%s', '%s', %d, '%s', NULL, '%ld')",
                                        object->oid, object->uuid,
-                                       object->version, object->user_md);
+                                       object->version, object->user_md,
+                                       object->size);
         }
 
         if (i < item_cnt - 1)
@@ -129,7 +132,7 @@ static int object_select_query(GString **conditions, int n_conditions,
 {
     g_string_append(request,
                     "SELECT oid, object_uuid, version, user_md, creation_time,"
-                    "_grouping FROM object");
+                    "_grouping, size FROM object");
 
     if (n_conditions == 1)
         g_string_append(request, conditions[0]->str);
@@ -171,6 +174,7 @@ static int object_from_pg_row(struct dss_handle *handle, void *void_object,
     object->deprec_time.tv_usec = 0;
     rc = str2timeval(get_str_value(res, row_num, 4), &object->creation_time);
     object->grouping = get_str_value(res, row_num, 5);
+    object->size = atoll(PQgetvalue(res, row_num, 6));
 
     return rc;
 }

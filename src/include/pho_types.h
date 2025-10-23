@@ -584,6 +584,7 @@ struct object_info {
     struct timeval creation_time;
     struct timeval deprec_time;
     const char *grouping;
+    ssize_t size;
 };
 
 /**

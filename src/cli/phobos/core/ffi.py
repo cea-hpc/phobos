@@ -641,6 +641,7 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
         ('creation_time', Timeval),
         ('deprec_time', Timeval),
         ('_grouping', c_char_p),
+        ('size', c_ssize_t),
     ]
 
     def get_display_fields(self, max_width):
@@ -653,6 +654,7 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
             'user_md': (lambda obj, width=max_width: truncate_user_md(obj,
                                                                       width)),
             'grouping': None,
+            'size': None,
         }
 
     @property
@@ -711,6 +713,7 @@ class DeprecatedObjectInfo(ObjectInfo):
             'creation_time': Timeval.to_string,
             'deprec_time': Timeval.to_string,
             'grouping': None,
+            'size': None,
         }
 
 class CopyInfo(Structure, CLIManagedResourceMixin):
