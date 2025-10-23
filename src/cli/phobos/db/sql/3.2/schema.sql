@@ -70,6 +70,7 @@ CREATE TABLE object(
     -- grouping word is already used by psql as a function
     -- _grouping will be replaced by groupings in the future if we want
     -- to manage more than one grouping per object
+    size            bigint DEFAULT -1,
 
     PRIMARY KEY (oid)
 );
@@ -85,6 +86,7 @@ CREATE TABLE deprecated_object(
     -- grouping word is already used by psql as a function
     -- _grouping will be replaced by groupings in the future if we want
     -- to manage more than one grouping per object
+    size            bigint DEFAULT -1,
 
     PRIMARY KEY (object_uuid, version)
 );

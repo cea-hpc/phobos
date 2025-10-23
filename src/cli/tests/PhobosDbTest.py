@@ -361,5 +361,72 @@ class MigratorTest(unittest.TestCase):
         )
         self.migrator.drop_tables()
 
+    def test_3_to_3_2(self):
+        """Test migration between 3.0 and 3.2"""
+        self.migrator.create_schema("3.0")
+
+        self.migrator.execute("""
+            INSERT INTO object (oid, object_uuid, version)
+                VALUES ('blob', '4757e720-651e-4daa-8bb0-45a86b231a34', 2);
+
+            INSERT INTO deprecated_object (oid, object_uuid, version)
+                VALUES ('blob', '4757e720-651e-4daa-8bb0-45a86b231a34', 1);
+
+            INSERT INTO copy (object_uuid, version, copy_name, lyt_info)
+                VALUES ('4757e720-651e-4daa-8bb0-45a86b231a34', 1, 'source',
+                        '{"name": "raid1", "attrs": {"raid1.repl_count": "2"},
+                          "major": 0, "minor": 2}'),
+                       ('4757e720-651e-4daa-8bb0-45a86b231a34', 2, 'source',
+                        '{"name": "raid4", "major": 0, "minor": 1}');
+
+            INSERT INTO layout (object_uuid, version, extent_uuid, layout_index, copy_name) VALUES
+                ('4757e720-651e-4daa-8bb0-45a86b231a34', 1, '0780c865-ba1d-4677-b22c-84e7fdfc6925', 0, 'source'),
+                ('4757e720-651e-4daa-8bb0-45a86b231a34', 1, 'a27b8867-eda9-411a-9435-74ddd284faa2', 1, 'source'),
+                ('4757e720-651e-4daa-8bb0-45a86b231a34', 1, 'c0be5ee0-202b-404f-80d2-ade630910825', 2, 'source'),
+                ('4757e720-651e-4daa-8bb0-45a86b231a34', 1, '6a17a9cc-d5db-401a-82d6-220d0113ea34', 3, 'source'),
+                ('4757e720-651e-4daa-8bb0-45a86b231a34', 1, 'ed97f05f-c5b7-4bd4-b021-ae3271bd15d1', 4, 'source'),
+                ('4757e720-651e-4daa-8bb0-45a86b231a34', 1, '826283ca-289d-42dd-a156-c429ac11181e', 5, 'source'),
+                ('4757e720-651e-4daa-8bb0-45a86b231a34', 2, '5c1df00f-38c3-4198-94f3-624143671e48', 0, 'source'),
+                ('4757e720-651e-4daa-8bb0-45a86b231a34', 2, 'bc886ddb-6ffb-4d39-8180-f3cd70736847', 1, 'source'),
+                ('4757e720-651e-4daa-8bb0-45a86b231a34', 2, '2b7f9624-eabe-4a81-a3a5-13499cb765f4', 2, 'source'),
+                ('4757e720-651e-4daa-8bb0-45a86b231a34', 2, '5d184974-700c-4bc5-9528-a720c37b74f5', 3, 'source'),
+                ('4757e720-651e-4daa-8bb0-45a86b231a34', 2, '8f0cf40c-a73a-45c0-b14f-b16457e1c9b8', 4, 'source'),
+                ('4757e720-651e-4daa-8bb0-45a86b231a34', 2, 'b3daba00-d068-49bc-b35d-668e09afb5d3', 5, 'source');
+
+            INSERT INTO extent (extent_uuid, size, medium_library) VALUES
+                ('0780c865-ba1d-4677-b22c-84e7fdfc6925', 931840, 'legacy'),
+                ('a27b8867-eda9-411a-9435-74ddd284faa2', 931840, 'legacy'),
+                ('c0be5ee0-202b-404f-80d2-ade630910825', 931840, 'legacy'),
+                ('6a17a9cc-d5db-401a-82d6-220d0113ea34', 931840, 'legacy'),
+                ('ed97f05f-c5b7-4bd4-b021-ae3271bd15d1', 876320, 'legacy'),
+                ('826283ca-289d-42dd-a156-c429ac11181e', 876320, 'legacy'),
+                ('5c1df00f-38c3-4198-94f3-624143671e48', 931840, 'legacy'),
+                ('bc886ddb-6ffb-4d39-8180-f3cd70736847', 931840, 'legacy'),
+                ('2b7f9624-eabe-4a81-a3a5-13499cb765f4', 931840, 'legacy'),
+                ('5d184974-700c-4bc5-9528-a720c37b74f5', 438160, 'legacy'),
+                ('8f0cf40c-a73a-45c0-b14f-b16457e1c9b8', 438160, 'legacy'),
+                ('b3daba00-d068-49bc-b35d-668e09afb5d3', 438160, 'legacy')
+        """)
+
+        self.migrator.migrate("3.2")
+        self.assertEqual(self.migrator.schema_version(), "3.2")
+        self.assertEqual(
+            self.migrator.execute("""
+                SELECT oid, size FROM object;
+            """, output=True),
+            [
+                ('blob', 2740000)
+            ]
+        )
+        self.assertEqual(
+            self.migrator.execute("""
+                SELECT oid, size FROM deprecated_object;
+            """, output=True),
+            [
+                ('blob', 2740000)
+            ]
+        )
+        self.migrator.drop_tables()
+
 if __name__ == '__main__':
     unittest.main(buffer=True)

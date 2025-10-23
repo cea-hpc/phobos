@@ -51,6 +51,46 @@ def get_sql_script(schema_version, script_name):
     with open(script_path) as script_file:
         return script_file.read()
 
+def size_update_3_to_3_2(object_table): # pylint: disable=line-too-long
+    """Return the size update SQL query for the given object_table"""
+    return f"""
+        WITH first_copy AS (
+            SELECT DISTINCT ON (object_uuid, version)
+                object_uuid,
+                version,
+                copy_name,
+                lyt_info
+            FROM copy
+            ORDER BY object_uuid, version, copy_status DESC, copy_name
+        ),
+        object_sizes AS (
+            SELECT
+                o.object_uuid,
+                o.version,
+                SUM(e.size) AS total_size
+            FROM {object_table} o
+            INNER JOIN first_copy fc ON o.object_uuid = fc.object_uuid
+                AND o.version = fc.version
+            INNER JOIN layout l ON fc.object_uuid = l.object_uuid
+                AND fc.version = l.version
+                AND fc.copy_name = l.copy_name
+                AND (
+                    ((fc.lyt_info->>'name') = 'raid1'
+                     AND l.layout_index % (fc.lyt_info->'attrs'->>'raid1.repl_count')::integer = 0)
+                    OR
+                    ((fc.lyt_info->>'name') = 'raid4'
+                     AND l.layout_index % 3 != 2)
+                )
+            INNER JOIN extent e ON l.extent_uuid = e.extent_uuid
+            GROUP BY o.object_uuid, o.version
+        )
+        UPDATE {object_table} o
+        SET size = os.total_size
+        FROM object_sizes os
+        WHERE o.object_uuid = os.object_uuid
+            AND o.version = os.version;
+    """
+
 
 class Migrator: # pylint: disable=too-many-public-methods
     """StrToInt JSONB conversion engine"""
@@ -728,11 +768,21 @@ class Migrator: # pylint: disable=too-many-public-methods
             self.convert_schema_2_2_to_3()
 
     def convert_schema_3_to_3_2(self):
-        """DB schema changes: append last_locate timestamp to lock"""
+        """DB schema changes: append last_locate timestamp to lock,
+           size to object and deprecated object"""
         cur = self.conn.cursor()
+        migration_object = size_update_3_to_3_2("object")
+        migration_depr = size_update_3_to_3_2("deprecated_object")
         cur.execute(f"""
             -- update lock table
             ALTER TABLE lock ADD last_locate timestamp DEFAULT NULL;
+
+            -- update object and deprecated object table
+            ALTER TABLE object ADD size bigint DEFAULT -1;
+            ALTER TABLE deprecated_object ADD size bigint DEFAULT -1;
+
+            {migration_object}
+            {migration_depr}
 
             -- update current schema version
             UPDATE schema_info SET version = '3.2';

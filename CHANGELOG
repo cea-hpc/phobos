@@ -13,6 +13,8 @@
    and macros to check the current version is higher than a given one
  * We manage a last locate timestamp and the corresponding delay in the LRS to
    prevent after locate resource starvation.
+ * Added object size to object table in DSS. Same field is added to deprecated
+   objects.
 
 ## 3.1.0
  * limited number of write per grouping: the new "fifo_max_write_per_grouping"
