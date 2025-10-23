@@ -25,6 +25,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
 . $test_dir/setup_db.sh
 . $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
 
 function setup
 {
@@ -43,6 +44,7 @@ function cleanup
     drop_tables
 
     rm -rf $DIR
+    cleanup_dummy_files
 }
 
 function setup_object_md
@@ -212,17 +214,24 @@ function test_object_list_deprecated_only
 
 function test_object_list_size
 {
-    $phobos put -f dir /etc/hosts oid1
+    local file="$(mktemp)"
+
+    echo "blob" > $file
+
+    local etc_hosts_size="$(stat -c %s /etc/hosts)"
+    local file_size="$(stat -c %s $file)"
+
+    $phobos put -f dir $file oid1
     $phobos put -f dir --overwrite /etc/hosts oid1
 
     local res=$($valg_phobos object list --output size)
-    if [[ "$res" != "0" ]]; then
-        error "Invalid size retrieved for living object, expected '0', got '$res'"
+    if [[ "$res" != "$etc_hosts_size" ]]; then
+        error "Invalid size retrieved for living object, expected '$etc_hosts_size', got '$res'"
     fi
 
-    local res=$($valg_phobos object list --deprecated-only --output size)
-    if [[ "$res" != "0" ]]; then
-        error "Invalid size retrieved for deprecated object, expected '0', got '$res'"
+    res=$($valg_phobos object list --deprecated-only --output size)
+    if [[ "$res" != "$file_size" ]]; then
+        error "Invalid size retrieved for deprecated object, expected '$file_size', got '$res'"
     fi
 }
 

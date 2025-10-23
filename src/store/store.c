@@ -511,6 +511,7 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
     obj.oid = xfer->xt_objid;
     obj.user_md = md_repr->str;
     obj.grouping = grouping;
+    obj.size = xfer->xt_size;
 
     rc = dss_lock(dss, DSS_OBJECT, &obj, 1);
     if (rc)
@@ -567,6 +568,7 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
         save_obj_res_grouping = obj_res->grouping;
         obj_res->grouping = grouping;
         ++obj_res->version;
+        obj_res->size = xfer->xt_size;
         if (!pho_attrs_is_empty(&xfer->xt_attrs))
             obj_res->user_md = md_repr->str;
 
