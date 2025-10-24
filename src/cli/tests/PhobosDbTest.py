@@ -28,8 +28,8 @@ import os
 import shutil
 from subprocess import Popen, PIPE
 import tempfile
-import unittest
 import time
+import unittest
 
 from phobos.db import Migrator, ORDERED_SCHEMAS, CURRENT_SCHEMA_VERSION, \
                       AVAIL_SCHEMAS, FUTURE_SCHEMAS
@@ -104,7 +104,8 @@ class MigratorTest(unittest.TestCase):
             # Add --restrict-key option because since PostgreSQL 13.22, the
             # pg_dump command appends a `\restrict key` to the dump file. If the
             # key is not provided, it is generated randomly.
-            process = Popen("psql --version | awk '{print $3}'", shell=True, stdout=PIPE)
+            process = Popen("psql --version | awk '{print $3}'",
+                            shell=True, stdout=PIPE)
             out_version, _ = process.communicate()
 
             if float(out_version) >= 13.22:

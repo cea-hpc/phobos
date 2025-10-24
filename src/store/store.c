@@ -1060,6 +1060,14 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
         LOG_RETURN(rc, "Cannot find object for objid:'%s'",
                    xfer->xd_targets->xt_objid);
 
+    /* This object size set is necessary for non-put commands because we can
+     * only handle one target at a time. However for the put command, it is
+     * mostly useless, as we may have multiple targets in a single call, each
+     * with their own object sizes. The actual object sizes are thus properly
+     * handled later down the "put" line.
+     */
+    proc->object_size = obj->size;
+
     /* use existing grouping as default for copy */
     /* put grouping attribute must not be preset for a copy operation */
     if (proc->type == PHO_PROC_COPIER)

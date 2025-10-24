@@ -853,6 +853,7 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
                                       struct object_info *obj_info)
 {
     const char *tmp_extent_offset;
+    const char *tmp_object_size;
     const char *tmp_object_uuid;
     const char *tmp_layout_name;
     const char *tmp_user_md;
@@ -860,6 +861,7 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
     struct module_desc mod;
     const char *tmp_copy;
     struct pho_attrs md;
+    int object_size;
     char *filename;
     char *tmp_uuid;
     char *tmp_oid;
@@ -905,6 +907,17 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
     if (rc)
         LOG_GOTO(free_oid_uuid, rc,
                  "Failed to read extended attributes of file '%s'", filename);
+
+    tmp_object_size = pho_attr_get(&md, PHO_EA_OBJECT_SIZE_NAME);
+    if (tmp_object_size == NULL)
+        LOG_GOTO(free_oid_uuid, rc = -EINVAL,
+                 "Failed to retrieve object size of file '%s'", filename);
+
+    object_size = str2int64(tmp_object_size);
+    if (object_size < 0)
+        LOG_GOTO(free_oid_uuid, rc = -EINVAL,
+                 "Invalid object size found on '%s': '%d'",
+                 filename, object_size);
 
     tmp_version = pho_attr_get(&md, PHO_EA_VERSION_NAME);
     if (tmp_version == NULL)
@@ -953,6 +966,8 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
                      "Failed to retrieve copy name of file '%s'",
                      filename);
     }
+
+    obj_info->size = object_size;
 
     lyt_info->version = version;
     obj_info->version = version;

@@ -202,6 +202,8 @@ struct object_info *object_info_dup(const struct object_info *obj)
     /* dup grouping */
     obj_out->grouping = xstrdup_safe(obj->grouping);
 
+    obj_out->size = obj->size;
+
     /* success */
     return obj_out;
 }

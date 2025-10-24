@@ -310,6 +310,7 @@ function test_get_copy_name()
     PHOBOS_COPY_get_preferred_order="toto,astral" \
         $valg_phobos get oid-copy $DIR_TEST_OUT/out ||
         error "Get operation should have succeed"
+    $phobos dir unlock ${DIRS[0]}
     rm $DIR_TEST_OUT/out
 }
 

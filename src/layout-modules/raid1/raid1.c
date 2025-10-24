@@ -389,7 +389,6 @@ static int layout_raid1_decode(struct pho_data_processor *decoder)
     struct raid_io_context *io_context;
     unsigned int repl_count;
     int rc;
-    int i;
 
     ENTRY;
 
@@ -425,14 +424,7 @@ static int layout_raid1_decode(struct pho_data_processor *decoder)
         return rc;
     }
 
-    io_context->read.to_read = 0;
-    decoder->object_size = 0;
-    for (i = 0; i < decoder->src_layout->ext_count / repl_count; i++) {
-        struct extent *extent = &decoder->src_layout->extents[i * repl_count];
-
-        io_context->read.to_read += extent->size;
-        decoder->object_size += extent->size;
-    }
+    io_context->read.to_read = decoder->object_size;
 
     /* Empty GET does not need any IO */
     if (decoder->object_size == 0)

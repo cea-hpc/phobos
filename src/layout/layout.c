@@ -130,8 +130,17 @@ static int build_layout_writer(struct pho_data_processor *encoder,
     encoder->dest_layout = xcalloc(encoder->xfer->xd_ntargets,
                                    sizeof(*encoder->dest_layout));
 
-    /* set first object size */
-    if (encoder->xfer->xd_ntargets > 0)
+    /* Set the first object size, except for copy processors, because of two
+     * reasons:
+     *  - the object size has been set earlier during the processor's
+     *  initialization
+     *  - `xfer->xd_targets[0].xt_size` most likely has an invalid value (0 or
+     *  -1 for instance) because since we copy data, we use the
+     *  object/copy/layout/extents information available in the database, and
+     *  thus this value doesn't have to be set by the caller and should be
+     *  ignored.
+     */
+    if (encoder->type != PHO_PROC_COPIER && encoder->xfer->xd_ntargets > 0)
         encoder->object_size = xfer->xd_targets[0].xt_size;
 
     for (i = 0; i < encoder->xfer->xd_ntargets; i++) {
@@ -172,7 +181,8 @@ int layout_encoder(struct pho_data_processor *encoder,
 };
 
 static int build_layout_reader(struct pho_data_processor *decoder,
-                   struct pho_xfer_desc *xfer, struct layout_info *layout)
+                               struct pho_xfer_desc *xfer,
+                               struct layout_info *layout)
 {
     char layout_name[NAME_MAX];
     struct layout_module *mod;

@@ -187,7 +187,6 @@ static int layout_raid4_decode(struct pho_data_processor *decoder)
 {
     struct raid_io_context *io_context;
     int rc;
-    int i;
 
     ENTRY;
 
@@ -220,13 +219,7 @@ static int layout_raid4_decode(struct pho_data_processor *decoder)
                    "raid4 Xor layout extents count (%d) is not a multiple of 3",
                    decoder->src_layout->ext_count);
 
-    io_context->read.to_read = 0;
-    decoder->object_size = 0;
-    for (i = 0; i < decoder->src_layout->ext_count; i = i + 3) {
-        io_context->read.to_read += decoder->src_layout->extents[i].size;
-        decoder->object_size += decoder->src_layout->extents[i].size;
-        decoder->object_size += decoder->src_layout->extents[i + 1].size;
-    }
+    io_context->read.to_read = decoder->object_size;
 
     /* Empty GET does not need any IO */
     if (decoder->object_size == 0)

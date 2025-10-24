@@ -293,8 +293,8 @@ function test_dedup_repack_setup
 
     size=$(stat --printf="%s" /etc/hosts)
     $PSQL << EOF
-INSERT INTO object(oid, user_md)
-  VALUES ('oid-3', '{}');
+INSERT INTO object(oid, user_md, size)
+  VALUES ('oid-3', '{}', $size);
 
 INSERT INTO copy(object_uuid, version, copy_name, lyt_info, copy_status) VALUES
     ((SELECT object_uuid FROM object WHERE oid='oid-3'), 1, 'source',

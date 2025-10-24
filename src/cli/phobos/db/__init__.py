@@ -321,7 +321,7 @@ class Migrator: # pylint: disable=too-many-public-methods
             UPDATE extent
                 SET lyt_info = json_build_object(
                                 'name', 'raid1',
-                                'attrs', json_build_object('repl_count', '1'),
+                                'attrs', json_build_object('raid1.repl_count', '1'),
                                 'major', 0,
                                 'minor', 2
                                )::jsonb
