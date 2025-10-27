@@ -8,6 +8,9 @@
  * lrs: make some fields of the lrs_dev and pho_resource structures atomic to
    prevent data races between a scheduler thread and a device thread using these
    structures.
+ * Added macros to get the version Phobos from the API (major, minor and patch)
+   and macros to check the current version is higher than a given one
+
 ## 3.1.0
  * limited number of write per grouping: the new "fifo_max_write_per_grouping"
    configuration parameter allows to limit the number of concurrent writes per

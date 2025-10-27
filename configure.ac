@@ -4,11 +4,24 @@
 
 AC_PREREQ(2.59)
 
-AC_INIT([phobos], [3.1.0], [st-hpc@cea.fr])
-PHOBOS_RELEASE="1"
+m4_define([PHOBOS_VERSION_MAJOR], [3])
+m4_define([PHOBOS_VERSION_MINOR], [1])
+m4_define([PHOBOS_VERSION_PATCH], [0])
+m4_define([PHOBOS_VERSION_RELEASE], [0])
 
-AC_DEFINE_UNQUOTED(PHOBOS_RELEASE, "$PHOBOS_RELEASE", [release info])
+m4_define([PHOBOS_VERSION],
+          [PHOBOS_VERSION_MAJOR.PHOBOS_VERSION_MINOR.PHOBOS_VERSION_PATCH])
+AC_INIT([phobos], [PHOBOS_VERSION], [st-hpc@cea.fr])
+
+AC_DEFINE_UNQUOTED(PHOBOS_MAJOR, PHOBOS_VERSION_MAJOR,
+                   [Phobos major version number])
+AC_DEFINE_UNQUOTED(PHOBOS_MINOR, PHOBOS_VERSION_MINOR,
+                   [Phobos minor version number])
+AC_DEFINE_UNQUOTED(PHOBOS_PATCH, PHOBOS_VERSION_PATCH,
+                   [Phobos patch version number])
+AC_DEFINE_UNQUOTED(PHOBOS_RELEASE, PHOBOS_VERSION_RELEASE, [release info])
 AC_SUBST(PHOBOS_RELEASE)
+
 
 AC_CONFIG_AUX_DIR([autotools])
 AC_CONFIG_MACRO_DIR([autotools/m4])

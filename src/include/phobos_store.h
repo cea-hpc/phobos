@@ -25,6 +25,19 @@
 #ifndef _PHO_STORE_H
 #define _PHO_STORE_H
 
+#define __PHOBOS_MAJOR__ PHOBOS_MAJOR
+#define __PHOBOS_MINOR__ PHOBOS_MINOR
+#define __PHOBOS_PATCH__ PHOBOS_PATCH
+
+#define __PHOBOS_PREREQ(maj, min) \
+    (__PHOBOS_MAJOR__ > (maj) || \
+    (__PHOBOS_MAJOR__ == (maj) && __PHOBOS_MINOR__ >= (min)))
+
+#define __PHOBOS_PREREQ_PATCH(maj, min, patch) \
+    (__PHOBOS_PREREQ((maj), (min)) || \
+    (__PHOBOS_MAJOR__ == (maj) && __PHOBOS_MINOR__ == (min) && \
+        __PHOBOS_PATCH__ >= (patch)))
+
 #include "pho_attrs.h"
 #include "pho_types.h"
 #include "pho_dss.h"

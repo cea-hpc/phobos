@@ -35,6 +35,7 @@
 
 #include <cmocka.h>
 
+#include "phobos_store.h"
 #include "pho_test_utils.h"
 #include "pho_common.h"
 
@@ -193,6 +194,14 @@ static void hashtable_foreach_failure(void **state)
     g_hash_table_destroy(ht);
 }
 
+static void check_phobos_version(void **state)
+{
+    assert_true(__PHOBOS_PREREQ(2, 2));
+    assert_false(__PHOBOS_PREREQ(777, 42));
+    assert_true(__PHOBOS_PREREQ_PATCH(2, 2, 63));
+    assert_false(__PHOBOS_PREREQ_PATCH(777, 42, -2));
+}
+
 int main(int argc, char **argv)
 {
     const struct CMUnitTest test_common[] = {
@@ -203,6 +212,8 @@ int main(int argc, char **argv)
 
         cmocka_unit_test(hashtable_foreach_success),
         cmocka_unit_test(hashtable_foreach_failure),
+
+        cmocka_unit_test(check_phobos_version),
     };
 
     test_env_initialize();
