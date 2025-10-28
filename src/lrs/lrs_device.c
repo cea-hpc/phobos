@@ -495,7 +495,12 @@ static int dev_wait_for_signal(struct lrs_dev *dev)
     struct timespec time;
     int rc;
 
+    /* Need a mutex because the lrs main thread can update the
+     * ls_sync_params.oldest_tosync value
+     */
+    MUTEX_LOCK(&dev->ld_mutex);
     rc = compute_wakeup_date(dev, &time);
+    MUTEX_UNLOCK(&dev->ld_mutex);
     if (rc)
         return rc;
 
@@ -2091,8 +2096,6 @@ static void dev_thread_end(struct lrs_dev *device)
         free(device->ld_ongoing_grouping.grouping);
         device->ld_ongoing_grouping.grouping = NULL;
     }
-
-    MUTEX_UNLOCK(&device->ld_mutex);
 }
 
 static int dev_perform_sync(struct lrs_dev *device, struct thread_info *thread)
