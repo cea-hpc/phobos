@@ -189,9 +189,9 @@ static void test_put_retry(struct pho_xfer_desc *xfer, struct dev_info *dev,
 
     /* First lock the only available device and media */
     _dss_lock(&wait_unlock_args.dss, DSS_DEVICE, dev, 1, LOCK_OWNER, getpid(),
-              false);
+              false, NULL);
     _dss_lock(&wait_unlock_args.dss, DSS_MEDIA, media, 1, LOCK_OWNER, getpid(),
-              false);
+              false, NULL);
 
     /* In another thread, sleep for some time and unlock the device */
     assert(pthread_create(&wait_unlock_thread, NULL, wait_unlock_device,

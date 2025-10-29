@@ -188,13 +188,15 @@ static int check_dev_info(const struct lrs_dev *dev)
 /**
  * Lock the corresponding item into the global DSS and update the local lock
  *
- * @param[in]       dss     DSS handle
- * @param[in]       type    DSS type of the item
- * @param[in]       item    item to lock
- * @param[in, out]  lock    already allocated lock to update
+ * @param[in]       dss          DSS handle
+ * @param[in]       type         DSS type of the item
+ * @param[in]       item         item to lock
+ * @param[in]       last_locate  early locate timestamp
+ * @param[in, out]  lock         already allocated lock to update
  */
 static int take_and_update_lock(struct dss_handle *dss, enum dss_type type,
-                                void *item, struct pho_lock *lock)
+                                void *item, struct timeval *last_locate,
+                                struct pho_lock *lock)
 {
     int rc2;
     int rc;
@@ -206,7 +208,12 @@ static int take_and_update_lock(struct dss_handle *dss, enum dss_type type,
              type == DSS_MEDIA ?
              ((struct media_info *)item)->rsc.id.name :
              "???");
-    rc = dss_lock(dss, type, item, 1);
+
+    if (last_locate)
+        rc = dss_lock_with_last_locate(dss, type, item, 1, last_locate);
+    else
+        rc = dss_lock(dss, type, item, 1);
+
     if (rc)
         pho_error(rc, "Unable to get lock on item for refresh");
 
@@ -261,7 +268,7 @@ static int check_renew_owner(struct lock_handle *lock_handle,
 
         /* get the lock again */
         rc = take_and_update_lock(lock_handle->dss, type, item,
-                                  lock);
+                                  &lock->last_locate, lock);
         if (rc)
             LOG_RETURN(rc, "Unable to get and refresh lock");
     }
@@ -318,7 +325,7 @@ static int ensure_medium_lock(struct lock_handle *lock_handle,
         rc = check_renew_lock(lock_handle, DSS_MEDIA, medium, &medium->lock);
     } else {
     /* Try to take lock */
-        rc = take_and_update_lock(lock_handle->dss, DSS_MEDIA, medium,
+        rc = take_and_update_lock(lock_handle->dss, DSS_MEDIA, medium, NULL,
                                   &medium->lock);
     }
 
@@ -470,7 +477,7 @@ int sched_fill_dev_info(struct lrs_sched *sched, struct lib_handle *lib_hdl,
         /* get lock for loaded media */
         if (!dev->ld_dss_media_info->lock.hostname) {
             rc = take_and_update_lock(&sched->sched_thread.dss, DSS_MEDIA,
-                                      dev->ld_dss_media_info,
+                                      dev->ld_dss_media_info, NULL,
                                       &dev->ld_dss_media_info->lock);
             if (rc) {
                 const struct pho_id *med_id = lrs_dev_med_id(dev);

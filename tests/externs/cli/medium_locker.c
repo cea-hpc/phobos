@@ -114,7 +114,7 @@ int main(int argc, char **argv)
                  "Conversion error occurred: %d\n", errno);
 
     if (!strcmp(argv[1], "lock"))
-        rc = _dss_lock(dss, DSS_MEDIA, medium, cnt, argv[4], pid, false);
+        rc = _dss_lock(dss, DSS_MEDIA, medium, cnt, argv[4], pid, false, NULL);
     else
         rc = _dss_unlock(dss, DSS_MEDIA, medium, cnt, argv[4], pid);
 

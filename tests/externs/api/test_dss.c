@@ -463,7 +463,7 @@ int main(int argc, char **argv)
         }
 
         rc = _dss_lock(dss_handle, type, item_list, item_cnt, lock_hostname,
-                       lock_owner, false);
+                       lock_owner, false, NULL);
         if (rc) {
             pho_error(rc, "_dss_lock failed");
             exit(EXIT_FAILURE);

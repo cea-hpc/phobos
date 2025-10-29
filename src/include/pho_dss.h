@@ -838,6 +838,28 @@ int dss_lock_hostname(struct dss_handle *handle, enum dss_type type,
                       const char *hostname);
 
 /**
+ * Take lock and set its last_locate field, only used if an early lock was
+ * previously taken for those items.
+ *
+ * If any lock cannot be taken, then the ones that already are will be
+ * forcefully unlocked, and the function will not try to lock any other
+ * resource (all-or-nothing policy).
+ *
+ * @param[in]   handle          DSS handle.
+ * @param[in]   type            Type of the resources to lock.
+ * @param[in]   item_list       List of resources to lock.
+ * @param[in]   item_cnt        Number of resources to lock.
+ * @param[in]   last_locate     Last early lock timestamp.
+ *
+ * @return                      0 on success,
+ *                             -EEXIST if one of the targeted locks already
+ *                              exists.
+ */
+int dss_lock_with_last_locate(struct dss_handle *handle, enum dss_type type,
+                              const void *item_list, int item_cnt,
+                              struct timeval *last_locate);
+
+/**
  * Refresh lock timestamps.
  *
  * The function will attempt to refresh as many locks as possible. Should any

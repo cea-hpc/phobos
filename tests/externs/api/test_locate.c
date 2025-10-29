@@ -238,7 +238,7 @@ static void lock_medium(struct phobos_locate_state *pl_state,
 
     /* simulate lock on medium */
     rc = _dss_lock(pl_state->dss, DSS_MEDIA, *medium, *cnt, hostname, 1337,
-                   true);
+                   true, NULL);
     assert_return_code(rc, -rc);
 }
 
