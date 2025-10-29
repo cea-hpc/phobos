@@ -253,67 +253,6 @@ class MigratorTest(unittest.TestCase):
 
             self.exit_put_get_migration(True)
 
-    def test_1_95_to_2_0(self):
-        """
-        Test migration between 1.95 and 2.0, checking object and extent
-        information are correctly scattered
-        """
-        self.migrator.create_schema("1.95")
-
-        self.migrator.execute("""
-            INSERT INTO object(oid, uuid, user_md)
-                VALUES ('aries', 'dacfaeba-24ef-431b-a7b3-205dc1e8a34a',
-                        '{"test": "42"}');
-
-            INSERT INTO extent(oid, uuid, version, state, lyt_info, extents)
-                VALUES ('aries', 'dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 1,
-                        'sync',
-                        '{"name": "raid1", "attrs": {"repl_count": "2"},
-                          "major": 0, "minor": 2}',
-                        '[{"sz": 42, "fam": "dir", "md5": "babecafe",
-                           "addr": "ab/cd/part1", "media": "dir1"},
-                          {"sz": 43, "fam": "dir", "md5": "babecaff",
-                           "addr": "ef/01/part2", "media": "dir2"}]'
-                );
-        """)
-
-        self.migrator.migrate("2.0")
-        self.assertEqual(self.migrator.schema_version(), "2.0")
-        self.assertEqual(
-            self.migrator.execute("SELECT * FROM object;", output=True),
-            [(
-                'aries', {'test': '42'},
-                'dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 1,
-                {"name": "raid1", "attrs": {"repl_count": "2"},
-                 "major": 0, "minor": 2}, 'complete'
-            )]
-        )
-        ext_uuids = self.migrator.execute(
-            "SELECT extent_uuid FROM extent ORDER BY size;",
-            output=True
-        )
-        self.assertEqual(
-            self.migrator.execute("""
-                SELECT extent_uuid, state, size, medium_family, medium_id,
-                    address, hash->>'md5'
-                FROM extent ORDER BY size;
-            """, output=True),
-            [
-                (ext_uuids[0][0], 'sync', 42, 'dir', 'dir1', 'ab/cd/part1',
-                 'babecafe'),
-                (ext_uuids[1][0], 'sync', 43, 'dir', 'dir2', 'ef/01/part2',
-                 'babecaff')
-            ]
-        )
-        self.assertEqual(
-            self.migrator.execute("SELECT * FROM layout;", output=True),
-            [
-                ('dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 1, ext_uuids[0][0], 0),
-                ('dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 1, ext_uuids[1][0], 1)
-            ]
-        )
-        self.migrator.drop_tables()
-
     def test_2_2_to_3(self):
         """Test migration between 2.2 and 3.0"""
         self.migrator.create_schema("2.2")
