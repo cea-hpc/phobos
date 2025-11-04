@@ -5,6 +5,9 @@
    `phobos phobosd ping` and `phobos tlc ping`
  * store: existing object grouping is now taken into account when creating a
    copy
+ * lrs: make some fields of the lrs_dev and pho_resource structures atomic to
+   prevent data races between a scheduler thread and a device thread using these
+   structures.
 ## 3.1.0
  * limited number of write per grouping: the new "fifo_max_write_per_grouping"
    configuration parameter allows to limit the number of concurrent writes per

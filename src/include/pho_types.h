@@ -378,9 +378,14 @@ static inline enum rsc_adm_status str2rsc_adm_status(const char *str)
 
 /** Resource */
 struct pho_resource {
-    struct pho_id       id;         /**< Resource identifier. */
-    char               *model;      /**< Resource model (if applicable). */
-    enum rsc_adm_status adm_status; /**< Administrative status */
+    struct pho_id       id;              /**< Resource identifier. */
+    char               *model;           /**< Resource model (if applicable). */
+
+    /* We set this enum to atomic because there can be a data race between a
+     * scheduler thread and a device thread using this structure.
+     */
+    _Atomic enum rsc_adm_status adm_status;
+                                        /**< Administrative status */
 };
 
 /** describe a piece of data in a layout */

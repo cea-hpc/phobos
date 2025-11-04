@@ -28,6 +28,7 @@
 #include <glib.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 
 #include "lrs_thread.h"
 
@@ -249,7 +250,7 @@ struct lrs_dev {
                                                   */
     struct ldm_dev_state ld_sys_dev_state;      /**< device info from system */
 
-    enum dev_op_status   ld_op_status;          /**< operational status of the
+    _Atomic enum dev_op_status   ld_op_status;  /**< operational status of the
                                                   * device
                                                   */
     char                 ld_dev_path[PATH_MAX]; /**< path to the device */
@@ -259,12 +260,12 @@ struct lrs_dev {
                                                   * filesystem
                                                   */
     struct sub_request  *ld_sub_request;        /**< sub request to handle */
-    bool                 ld_ongoing_scheduled;  /**< one I/O is going to be
+    atomic_bool          ld_ongoing_scheduled;  /**< one I/O is going to be
                                                   *  scheduled
                                                   */
-    bool                 ld_ongoing_io;         /**< one I/O is ongoing */
+    atomic_bool          ld_ongoing_io;         /**< one I/O is ongoing */
     struct ongoing_grouping ld_ongoing_grouping; /**< track on going grouping */
-    bool                 ld_needs_sync;         /**< medium needs to be sync */
+    atomic_bool          ld_needs_sync;         /**< medium needs to be sync */
     struct thread_info   ld_device_thread;      /**< thread handling the actions
                                                   * executed on the device
                                                   */

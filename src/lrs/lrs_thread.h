@@ -57,7 +57,7 @@ struct thread_info {
     pthread_cond_t     signal;         /**< Used to signal the thread
                                          *  when new work is available.
                                          */
-    enum thread_state  state;          /**< Thread status. */
+    _Atomic enum thread_state  state;  /**< Thread status. */
     int                status;         /**< Return status at the end of
                                          *  the execution.
                                          */
