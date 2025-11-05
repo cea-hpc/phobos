@@ -174,14 +174,14 @@ function test_locate_update_timestamp_without_lock
 
     $phobos drive unload $drive
 
-    checkpoint1=$(date +%s)
+    local checkpoint1=$(date +%s)
     sleep 1
     $phobos locate $oid
     sleep 1
-    checkpoint2=$(date +%s)
+    local checkpoint2=$(date +%s)
 
-    db_time=$($PSQL -t -c "SELECT last_locate FROM lock WHERE id = '${tape}_legacy';")
-    db_time=$(date -d "$db_time" +%s)
+    local db_time=$($PSQL -t -c "SELECT last_locate FROM lock WHERE id = '${tape}_legacy';")
+    local db_time=$(date -d "$db_time" +%s)
 
     if [ $checkpoint1 -ge $db_time ] || [ $checkpoint2 -le $db_time ]; then
         error "Invalid locate timestamp"
@@ -189,8 +189,8 @@ function test_locate_update_timestamp_without_lock
 
     $phobos drive load $drive $tape
 
-    db_time2=$($PSQL -t -c "SELECT last_locate FROM lock WHERE id = '${tape}_legacy';")
-    db_time2=$(date -d "$db_time2" +%s)
+    local db_time2=$($PSQL -t -c "SELECT last_locate FROM lock WHERE id = '${tape}_legacy';")
+    local db_time2=$(date -d "$db_time2" +%s)
 
     if [ $db_time -ne $db_time2 ]; then
         error "Loading tape erased last_locate timestamp"
@@ -216,11 +216,11 @@ function test_last_locate_timestamp
 
     invoke_lrs
 
-    date_start=$(date +%s)
+    local date_start=$(date +%s)
     $phobos locate $oid
     $phobos tape format ${tapes[1]} || error "Format should have succeeded"
-    date_end=$(date +%s)
-    difference=$((date_end - date_start))
+    local date_end=$(date +%s)
+    local difference=$((date_end - date_start))
 
     test $difference -ge 5 ||
         error "Format should have waited for locate expirancy"

@@ -87,7 +87,7 @@ const struct pho_config_item cfg_lrs[] = {
     [PHO_CFG_LRS_locate_lock_expirancy] = {
         .section = "lrs",
         .name    = "locate_lock_expirancy",
-        .value   = "300000",
+        .value   = "0",
     },
 };
 

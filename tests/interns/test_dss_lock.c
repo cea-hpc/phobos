@@ -504,11 +504,16 @@ static void dss_lock_update_last_locate(void **state)
     rc = dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true);
     assert_return_code(rc, -rc);
 
-    assert(dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &lock) == 0);
-    assert(tv.tv_sec < lock.last_locate.tv_sec ||
-           (tv.tv_sec == lock.last_locate.tv_sec &&
-            tv.tv_usec < lock.last_locate.tv_usec));
-    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true) == 0);
+    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &lock);
+    assert_return_code(rc, -rc);
+
+    assert_true(tv.tv_sec < lock.last_locate.tv_sec ||
+                (tv.tv_sec == lock.last_locate.tv_sec &&
+                 tv.tv_usec < lock.last_locate.tv_usec));
+
+    rc = dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true);
+    assert_return_code(rc, -rc);
+
     pho_lock_clean(&lock);
 }
 
