@@ -1,23 +1,33 @@
 # CHANGELOG UPDATES
 
-## Next
+## 3.2.0
  * WARNING: the db schema moves from 3.0 to 3.2 and a migration is needed
  * WARNING: change the `phobos ping [phobosd|tlc]` command to
    `phobos phobosd ping` and `phobos tlc ping`
- * store: existing object grouping is now taken into account when creating a
-   copy
- * lrs: make some fields of the lrs_dev and pho_resource structures atomic to
-   prevent data races between a scheduler thread and a device thread using these
-   structures.
- * Added macros to get the version Phobos from the API (major, minor and patch)
-   and macros to check the current version is higher than a given one
+ * New phobos_hsm_sync_dir command to copy objects from local dir to other
+   media
+ * ctime ordered grouped read
+ * ctime ordered repack
  * We manage a last locate timestamp and the corresponding delay in the LRS to
    prevent after locate resource starvation.
  * Added object size to object table in DSS. Same field is added to deprecated
    objects.
  * adding creation_time to extent table into DSS. This ctime is inherited from
    the corresponding existing copy creation_time.
- * New phobos_hsm_sync_dir command
+ * store: existing object grouping is now taken into account when creating a
+   copy
+ * fix management of extent and object registration on partial release failure
+ * prevent negative physical space free update
+ * scale orphan extent detection at repack
+ * lrs: make some fields of the lrs_dev and pho_resource structures atomic to
+   prevent data races between a scheduler thread and a device thread using these
+   structures.
+ * sched gets new medium health only on the chosen medium
+ * add 'adm_status' to phobos drive status output
+ * make global 'phobos_context' thread-safe
+ * make 'libpho_core' a shared library
+ * Added macros to get the version Phobos from the API (major, minor and patch)
+   and macros to check the current version is higher than a given one
 
 ## 3.1.0
  * limited number of write per grouping: the new "fifo_max_write_per_grouping"
