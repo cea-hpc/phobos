@@ -327,12 +327,12 @@ static int extent_from_pg_row(struct dss_handle *handle, void *void_extent,
     if (rc)
         return rc;
 
-    rc = pho_json_to_attrs(&extent->info, PQgetvalue(res, row_num, 8));
+    rc = pho_json_to_attrs(&extent->info, PQgetvalue(res, row_num, 9));
     if (rc)
         LOG_RETURN(rc, "Failed to parse json data for extra attrs: %s",
                    json_error.text);
 
-    rc = str2timeval(get_str_value(res, row_num, 9), &extent->creation_time);
+    rc = str2timeval(get_str_value(res, row_num, 10), &extent->creation_time);
 
     return 0;
 }
