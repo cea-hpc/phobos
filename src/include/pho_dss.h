@@ -884,6 +884,27 @@ int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
                      const void *item_list, int item_cnt, bool locate);
 
 /**
+ * Refresh lock owner.
+ *
+ * The function will attempt to refresh as many locks as possible. Should any
+ * refresh fail, the first error code obtained will be returned after
+ * attempting to refresh all other locks (as-much-as-possible policy).
+ *
+ * If the lock does not exist, one is created.
+ *
+ * @param[in]  handle           DSS handle.
+ * @param[in]  type             Type of the resources's lock to refresh.
+ * @param[in]  item_list        List of resources's lock to refresh.
+ * @param[in]  item_cnt         Number of resources's lock to refresh.
+ *
+ * @return                      0 on success,
+ *                             -EEXIST if one of the targeted locks exist
+ *                                     and cannot be updated.
+ */
+int dss_lock_take_ownership(struct dss_handle *handle, enum dss_type type,
+                            const void *item_list, int item_cnt);
+
+/**
  * Release locks.
  *
  * If \p force_unlock is true, the lock's hostname and owner are not matched

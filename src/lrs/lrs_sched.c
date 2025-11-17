@@ -223,10 +223,7 @@ static int take_and_update_lock(struct dss_handle *dss, enum dss_type type,
              ((struct media_info *)item)->rsc.id.name :
              "???");
 
-    if (last_locate)
-        rc = dss_lock_locate(dss, type, item, 1);
-    else
-        rc = dss_lock(dss, type, item, 1);
+    rc = dss_lock_take_ownership(dss, type, item, 1);
 
     if (rc)
         pho_error(rc, "Unable to get lock on item for refresh");
@@ -265,20 +262,6 @@ static int check_renew_owner(struct lock_handle *lock_handle,
         pho_warn("'%s' is already locked by owner %d, owner %d will "
                  "take ownership of this device",
                  dss_type_names[type], lock->owner, lock_handle->lock_owner);
-
-        /**
-         * Unlocking here is dangerous if there is another process than the
-         * LRS on the same node that also acquires locks. If it becomes the case
-         * we have to warn and return an error and we must not take the
-         * ownership of this resource again.
-         */
-        /* unlock previous owner */
-        rc = dss_unlock(lock_handle->dss, type, item, 1, true);
-        if (rc)
-            LOG_RETURN(rc,
-                       "Unable to clear previous lock (hostname: %s, owner "
-                       " %d) on item",
-                       lock->hostname, lock->owner);
 
         /* get the lock again */
         rc = take_and_update_lock(lock_handle->dss, type, item,

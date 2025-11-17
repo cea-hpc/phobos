@@ -536,6 +536,19 @@ int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
                              locate, false);
 }
 
+int dss_lock_take_ownership(struct dss_handle *handle, enum dss_type type,
+                            const void *item_list, int item_cnt)
+{
+    const char *hostname;
+    int pid;
+
+    if (fill_host_owner(&hostname, &pid))
+        LOG_RETURN(-EINVAL, "Couldn't retrieve hostname");
+
+    return _dss_lock_refresh(handle, type, item_list, item_cnt, hostname, pid,
+                             false, true);
+}
+
 int _dss_unlock(struct dss_handle *handle, enum dss_type type,
                 const void *item_list, int item_cnt, const char *lock_hostname,
                 int lock_owner)
