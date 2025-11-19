@@ -440,10 +440,12 @@ function test_repack_order_ctime
     # Make 'alt' medium not empty to prevent its selection for repack
     $phobos put -T alt /etc/hosts oid5
 
-    local obj_uuid=$($phobos object list -o uuid oid-repack-1)
+    local extent_uuid1=$($phobos extent list --degroup -o ext_uuid oid-repack-1)
+    extent_uuid1=${extent_uuid1//[\[\]\']}
     $PSQL << EOF
-UPDATE copy SET creation_time = now() WHERE object_uuid='$obj_uuid';
+UPDATE extent SET creation_time = now() WHERE extent_uuid='${extent_uuid1}';
 EOF
+
     $valg_phobos $family repack $medium_origin
 
     local mount_point=$($phobos drive status -o mount_path | tail -n1)

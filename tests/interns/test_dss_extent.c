@@ -67,7 +67,7 @@ static void de_simple_ok(void **state)
     int rc;
 
     /* retrieve the extent */
-    rc = dss_extent_get(handle, NULL, &ext_res, &ext_cnt);
+    rc = dss_extent_get(handle, NULL, &ext_res, &ext_cnt, NULL);
     assert_return_code(rc, -rc);
     assert_int_equal(ext_cnt, 1);
     assert_int_equal(ext_res->state, PHO_EXT_ST_PENDING);
@@ -90,7 +90,7 @@ static void de_simple_ok(void **state)
     dss_res_free(ext_res, ext_cnt);
 
     /* retrieve and verify the information */
-    rc = dss_extent_get(handle, NULL, &ext_res, &ext_cnt);
+    rc = dss_extent_get(handle, NULL, &ext_res, &ext_cnt, NULL);
     assert_return_code(rc, -rc);
     assert_int_equal(ext_cnt, 1);
     assert_int_equal(ext_res->state, PHO_EXT_ST_SYNC);

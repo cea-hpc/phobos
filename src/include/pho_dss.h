@@ -500,11 +500,13 @@ int dss_extent_update(struct dss_handle *handle, struct extent *src_extents,
  * @param[out] extents       list of retrieved items to be freed
  *                           w/ dss_res_free()
  * @param[out] extent_count  number of items retrieved in the list
+ * @param[in]  sort          sort filter
  *
  * @return 0 on success, negated errno on failure
  */
 int dss_extent_get(struct dss_handle *handle, const struct dss_filter *filter,
-                   struct extent **extents, int *extent_count);
+                   struct extent **extents, int *extent_count,
+                   struct dss_sort *sort);
 
 /**
  * Delete information for one or many extent in DSS.

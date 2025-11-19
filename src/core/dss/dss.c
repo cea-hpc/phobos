@@ -588,11 +588,12 @@ int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
  */
 
 int dss_extent_get(struct dss_handle *handle, const struct dss_filter *filter,
-                   struct extent **extents, int *extent_count)
+                   struct extent **extents, int *extent_count,
+                   struct dss_sort *sort)
 {
     return dss_generic_get(handle, DSS_EXTENT,
                            (const struct dss_filter*[]) {filter, NULL}, 1,
-                           (void **)extents, extent_count, NULL);
+                           (void **)extents, extent_count, sort);
 }
 
 int dss_extent_insert(struct dss_handle *handle, struct extent *extents,

@@ -403,6 +403,7 @@ int main(int argc, char **argv)
     /* target extent for each device dir */
     for (i = 0; i < dev_count; i++) {
         struct lib_drv_info drv_info;
+        struct dss_sort sort = {0};
         struct extent *extent_list;
         struct lib_handle lib_hdl;
         int extent_count;
@@ -443,7 +444,11 @@ int main(int argc, char **argv)
         if (rc)
             goto close_lib_hdl;
 
-        rc = dss_extent_get(&dss, &filter, &extent_list, &extent_count);
+
+        sort.attr = dss_fields_pub2implem("DSS::EXT::creation_time");
+        sort.psql_sort = true;
+
+        rc = dss_extent_get(&dss, &filter, &extent_list, &extent_count, &sort);
         dss_filter_free(&filter);
         if (rc)
             goto close_lib_hdl;

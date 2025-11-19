@@ -1231,11 +1231,15 @@ static int _get_extents(struct admin_handle *adm,
     if (rc)
         LOG_RETURN(rc, "Failed to build filter for extent retrieval");
 
-    if (repack)
-        rc = dss_get_extents_order_by_ctime(&adm->dss, &filter, extents,
-                                            count);
-    else
-        rc = dss_extent_get(&adm->dss, &filter, extents, count);
+    if (repack) {
+        struct dss_sort sort = {0};
+
+        sort.attr = dss_fields_pub2implem("DSS::EXT::creation_time");
+        sort.psql_sort = true;
+        rc = dss_extent_get(&adm->dss, &filter, extents, count, &sort);
+    } else {
+        rc = dss_extent_get(&adm->dss, &filter, extents, count, NULL);
+    }
 
     dss_filter_free(&filter);
     if (rc)
@@ -1449,7 +1453,7 @@ static int _clean_database_following_format(struct admin_handle *adm,
     if (rc)
         LOG_RETURN(rc, "Failed to build orphan extents retrieval filter");
 
-    rc = dss_extent_get(&adm->dss, &filter, &extents, &count);
+    rc = dss_extent_get(&adm->dss, &filter, &extents, &count, NULL);
     dss_filter_free(&filter);
     if (rc)
         LOG_GOTO(free_ext, rc,

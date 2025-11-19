@@ -1,5 +1,9 @@
 # CHANGELOG UPDATES
 
+## Next
+ * Add sort option to dss_extent_get, and delete dss_get_extents_order_by_ctime
+   funtion
+
 ## 3.2.0
  * WARNING: the db schema moves from 3.0 to 3.2 and a migration is needed
  * WARNING: change the `phobos ping [phobosd|tlc]` command to
