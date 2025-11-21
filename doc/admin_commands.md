@@ -214,7 +214,7 @@ phobos tape add --tags class1,project2 --type LTO8 [073000-073099]L8
 phobos tape update --tags class2 [073000-073099]L8
 
 # Clear tags
-phobos dir update --tags '' [073000-073099]L8
+phobos tape update --tags '' [073000-073099]L8
 ```
 
 Media can be listed following their tags:
