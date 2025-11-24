@@ -212,6 +212,9 @@ primary node.
 To prevent these issues, you can either:
  * use `pgbouncer`, a connection pooler for PSQL, as detailed in this
 [wiki entry](https://github.com/EnterpriseDB/repmgr/blob/master/doc/repmgrd-node-fencing.md)
+ * use `pgcat`, a "nextgen" PostgreSQL pooler and proxy (like PgBouncer) with
+support for sharding, load balancing, failover and mirroring.
+[wiki entry](https://github.com/postgresml/pgcat)
  * or you can setup an entry proxy that the users will target for all their
 PSQL commands, alongside a probe to regularly check on the cluster's status.
 Then, if the primary node changes, you can redirect the proxy to that new node.
