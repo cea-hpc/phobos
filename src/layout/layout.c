@@ -48,13 +48,14 @@ int data_processor_read_into_buff(struct pho_data_processor *proc,
                                   struct pho_io_descr *reader_iod, size_t size)
 {
     ssize_t read_size;
+    int rc;
 
     read_size = ioa_read(reader_iod->iod_ioa, reader_iod,
                          proc->buff.buff +
                              (proc->reader_offset - proc->buffer_offset), size);
 
     if (read_size < 0)
-        LOG_RETURN(read_size,
+        LOG_GOTO(out_err, rc = read_size,
                    "reading %zu bytes fails in data processor at offset "
                    "%zu", size, proc->reader_offset);
 
@@ -62,12 +63,54 @@ int data_processor_read_into_buff(struct pho_data_processor *proc,
     reader_iod->iod_size += read_size;
 
     if (read_size < size)
-        LOG_RETURN(-EIO,
+        LOG_GOTO(out_err, rc = -EIO,
                    "data processor reader expected %zu bytes to read and get "
                    "only %zd bytes, at offset %zu",
                    size, read_size, proc->reader_offset);
 
     return 0;
+
+out_err:
+    if (proc->xfer->xd_rc == 0)
+        proc->xfer->xd_rc = rc;
+
+    proc->xfer->xd_targets[proc->current_target].xt_rc = rc;
+
+    return rc;
+}
+
+int data_processor_write_from_buff(struct pho_data_processor *proc,
+                                   struct pho_io_descr *writer_iod,
+                                   size_t size, off_t offset)
+{
+    ssize_t written_size;
+    const char *start;
+    int rc;
+
+    start = proc->buff.buff +
+        (proc->writer_offset - proc->buffer_offset) +
+        offset;
+    written_size = ioa_write(writer_iod->iod_ioa, writer_iod, start, size);
+
+    if (written_size < 0)
+        LOG_GOTO(out_err, rc = written_size,
+                   "write of %zu bytes fails in data processor at offset "
+                   "%zu", size, proc->reader_offset);
+
+    /* We let the caller update writer_offset here since the writer may manage
+     * multiple I/O descriptors that will share this offset.
+     */
+    writer_iod->iod_size += written_size;
+
+    return 0;
+
+out_err:
+    if (proc->xfer->xd_rc == 0)
+        proc->xfer->xd_rc = rc;
+
+    proc->xfer->xd_targets[proc->current_target].xt_rc = rc;
+
+    return rc;
 }
 
 static int build_layout_name(const char *layout_name, char *path, size_t len)

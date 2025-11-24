@@ -954,6 +954,7 @@ int raid_reader_processor_step(struct pho_data_processor *proc,
                                size_t *n_reqs)
 {
     struct raid_io_context *io_context = proc->private_reader;
+    bool stop_io = false;
     bool need_new_alloc;
     bool need_release;
     bool split_ended;
@@ -988,6 +989,12 @@ int raid_reader_processor_step(struct pho_data_processor *proc,
             goto release;
     }
 
+    if (proc->xfer->xd_targets[proc->current_target].xt_rc != 0) {
+        stop_io = true;
+        rc = proc->xfer->xd_targets[proc->current_target].xt_rc;
+        goto release;
+    }
+
     /* read */
     if (!proc->buff.size)
         return 0;
@@ -1001,6 +1008,9 @@ int raid_reader_processor_step(struct pho_data_processor *proc,
     if (split_ended)
         rc = raid_reader_split_fini(proc);
 
+    if (rc && !proc->xfer->xd_targets[proc->current_target].xt_rc)
+        proc->xfer->xd_targets[proc->current_target].xt_rc = rc;
+
 release:
     need_release = rc || split_ended;
     need_new_alloc = !rc && split_ended &&
@@ -1012,14 +1022,14 @@ release:
             *reqs = xcalloc(1, sizeof(**reqs));
     }
 
-    if (rc || split_ended) {
+    if (need_release) {
         pho_srl_request_release_alloc(*reqs + *n_reqs,
                                       io_context->read.resp->ralloc->n_media,
                                       true);
         for (i = 0; i < io_context->read.resp->ralloc->n_media; i++) {
             rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
                        io_context->read.resp->ralloc->media[i]->med_id);
-            (*reqs)[*n_reqs].release->media[i]->rc = rc;
+            (*reqs)[*n_reqs].release->media[i]->rc = stop_io ? 0 : rc;
             (*reqs)[*n_reqs].release->media[i]->to_sync = false;
         }
 
@@ -1364,7 +1374,8 @@ static int raid_writer_handle_release_resp(struct pho_data_processor *encoder,
 
 static void complete_and_transfer_release(struct pho_data_processor *proc,
                                           int rc, pho_req_t **reqs,
-                                          size_t *n_reqs)
+                                          size_t *n_reqs,
+                                          bool stop_io)
 {
     pho_req_release_t *release_req = proc->writer_release_alloc->release;
     int i;
@@ -1372,8 +1383,8 @@ static void complete_and_transfer_release(struct pho_data_processor *proc,
     ENTRY;
 
     for (i = 0; i < proc->write_resp->walloc->n_media; i++) {
-        release_req->media[i]->rc = rc;
-        if (rc) {
+        release_req->media[i]->rc = stop_io ? 0 : rc;
+        if (rc || stop_io) {
             release_req->media[i]->to_sync = false;
         } else {
             release_req->media[i]->to_sync = true;
@@ -1404,6 +1415,7 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
     bool need_new_alloc = false;
     bool target_ended = false;
     bool split_ended = false;
+    bool stop_io = false;
     int rc = 0;
     int i;
 
@@ -1429,12 +1441,10 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
     if (resp && pho_response_is_error(resp)) {
         proc->xfer->xd_rc = resp->error->rc;
         proc->done = true;
-
         LOG_GOTO(set_target_rc, rc = proc->xfer->xd_rc,
                  "%s %d received error %s to last request",
                  processor_type2str(proc), resp->req_id,
                  pho_srl_error_kind_str(resp->error));
-
     }
 
     /* manage release */
@@ -1467,6 +1477,12 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
 
         if (rc)
             goto check_for_release;
+    }
+
+    if (proc->xfer->xd_targets[proc->current_target].xt_rc != 0) {
+        stop_io = true;
+        rc = proc->xfer->xd_targets[proc->current_target].xt_rc;
+        goto check_for_release;
     }
 
     /* write */
@@ -1514,7 +1530,7 @@ check_for_release:
                                             proc->write_resp);
 
     if (need_full_release || need_partial_release)
-        complete_and_transfer_release(proc, rc, reqs, n_reqs);
+        complete_and_transfer_release(proc, rc, reqs, n_reqs, stop_io);
 
     if (need_partial_release)
         (*reqs)[*n_reqs - 1].release->partial = true;

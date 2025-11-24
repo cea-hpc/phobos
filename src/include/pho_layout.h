@@ -188,7 +188,22 @@ struct pho_data_processor {
  * @return 0 on success, -errno on error.
  */
 int data_processor_read_into_buff(struct pho_data_processor *proc,
-                                  struct pho_io_descr *reader_iod, size_t size);
+                                  struct pho_io_descr *reader_iod,
+                                  size_t size);
+
+/**
+ * The data processor writer put data into iod from the buffer
+ *
+ * @param[in,out] proc          Data processor
+ * @param[in,out] writer_iod    IO descriptor given by the writer
+ * @param[in]     size          Number of bytes to write
+ * @param[in]     offset        Offset from the current position
+ *
+ * @return 0 on success, -errno on error.
+ */
+int data_processor_write_from_buff(struct pho_data_processor *proc,
+                                   struct pho_io_descr *writer_iod,
+                                   size_t size, off_t offset);
 
 /**
  * Check if the data processor is of type encoder.

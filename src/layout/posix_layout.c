@@ -53,6 +53,9 @@ static int posix_reader_step(struct pho_data_processor *proc, pho_resp_t *resp,
         return 0;
     }
 
+    if (proc->xfer->xd_targets[proc->current_target].xt_rc != 0)
+        return proc->xfer->xd_targets[proc->current_target].xt_rc;
+
     /* limit read : object -> buffer */
     to_read = min(proc->object_size - proc->reader_offset,
                   proc->buff.size -
@@ -161,10 +164,10 @@ static int posix_writer_step(struct pho_data_processor *proc, pho_resp_t *resp,
         return 0;
     }
 
-    rc = ioa_write(posix_writer->iod_ioa, posix_writer,
-                   proc->buff.buff +
-                       (proc->writer_offset - proc->buffer_offset),
-                   to_write);
+    if (proc->xfer->xd_targets[proc->current_target].xt_rc != 0)
+        return proc->xfer->xd_targets[proc->current_target].xt_rc;
+
+    rc = data_processor_write_from_buff(proc, posix_writer, to_write, 0);
     if (rc)
         LOG_RETURN(rc,
                    "Error when writting %zu bytes with posix writer at offset "

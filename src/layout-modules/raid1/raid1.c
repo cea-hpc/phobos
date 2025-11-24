@@ -199,7 +199,7 @@ static int raid1_write_from_buff(struct pho_data_processor *proc)
                    proc->reader_offset - proc->writer_offset);
 
     for (i = 0; i < repl_count; ++i) {
-        rc = ioa_write(iods[i].iod_ioa, &iods[i], buff_start, to_write);
+        rc = data_processor_write_from_buff(proc, &iods[i], to_write, 0);
         if (rc)
             LOG_RETURN(rc,
                        "RAID1 write: unable to write %zu bytes in replica %d "

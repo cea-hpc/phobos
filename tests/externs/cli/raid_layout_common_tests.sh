@@ -49,7 +49,7 @@ function make_file()
 
     dd if=/dev/urandom of="$file" bs=$size count=1
     if (( ODD_FILE_SIZE )); then
-        echo -n 1 >> "$file" # Make the file with an even size
+        echo -n 1 >> "$file" # Make the file with an odd size
     fi
 
     echo "$file"
@@ -812,3 +812,4 @@ if  [[ -w /dev/changer ]]; then
          cleanup_tape"
     )
 fi
+

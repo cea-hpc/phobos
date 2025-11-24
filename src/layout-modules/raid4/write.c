@@ -102,8 +102,8 @@ int raid4_write_from_buff(struct pho_data_processor *proc)
                                 io_context->current_split_chunk_size);
 
         /* write the data extent 0 */
-        rc = ioa_write(iods[0].iod_ioa, &iods[0], buff_start,
-                       to_write_extent_0);
+        rc = data_processor_write_from_buff(proc, &iods[0], to_write_extent_0,
+                                            0);
         if (rc)
             LOG_RETURN(rc,
                        "raid4 unable to write %zu bytes in data extent 0 at "
@@ -126,8 +126,8 @@ int raid4_write_from_buff(struct pho_data_processor *proc)
                                 io_context->current_split_chunk_size);
 
         /* write the data extent 1 */
-        rc = ioa_write(iods[1].iod_ioa, &iods[1],
-                       buff_start + to_write_extent_0, to_write_extent_1);
+        rc = data_processor_write_from_buff(proc, &iods[1], to_write_extent_1,
+                                            0);
         if (rc)
             LOG_RETURN(rc,
                        "raid4 unable to write %zu bytes in data extent 0 at "
@@ -164,8 +164,14 @@ int raid4_write_from_buff(struct pho_data_processor *proc)
                      to_write_extent_0);
 
         /* write the parity extent */
-        rc = ioa_write(iods[2].iod_ioa, &iods[2],
-                       buff_start + to_write_extent_0, to_write_extent_0);
+        rc = data_processor_write_from_buff(
+            proc, &iods[2], to_write_extent_0,
+            /* The XOR is computed inplace at buff_start + to_write_extent_0.
+             * Since we wrote to_write_extent_0 + to_write_extent_1 bytes,
+             * we need to move back to_write_extent_1 bytes to find the XOR.
+             */
+            -to_write_extent_1
+        );
         if (rc)
             LOG_RETURN(rc,
                        "raid4 unable to write %zu bytes in parity extent at "

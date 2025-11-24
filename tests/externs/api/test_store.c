@@ -82,6 +82,26 @@ static void duplicate_tags(char **argv, char ***tags, int size)
     *tags = tmp;
 }
 
+static int try_parse_size(const char *arg, ssize_t *size)
+{
+    int64_t value;
+
+    *size = -1;
+
+    if (access(arg, R_OK) == 0)
+        /* argument is a file, not a size */
+        return 0;
+
+    errno = 0;
+    value = str2int64(arg);
+    if (value < 0)
+        return errno ? -errno : -EINVAL;
+
+    *size = value;
+
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     struct pho_attrs attrs = {0};
@@ -91,7 +111,8 @@ int main(int argc, char **argv)
     test_env_initialize();
 
     if (argc < 3) {
-        fprintf(stderr, "usage: %s put <file> <...>\n", argv[0]);
+        // FIXME I don't think put supports multiple files...
+        fprintf(stderr, "usage: %s put [<size>] <file> <...>\n", argv[0]);
         fprintf(stderr, "       %s mput <file> <...>\n", argv[0]);
         fprintf(stderr, "       %s tag-put <file> <tag> <...>\n", argv[0]);
         fprintf(stderr, "       %s get <id> <dest>\n", argv[0]);
@@ -104,16 +125,26 @@ int main(int argc, char **argv)
     if (!strcmp(argv[1], "put")) {
         struct pho_xfer_target target = {0};
         struct pho_xfer_desc xfer = {0};
+        int first_file = 2;
+        ssize_t size;
         char *path;
+        int rc2;
 
-        path = realpath(argv[2], NULL);
+        rc2 = try_parse_size(argv[2], &size);
+        if (rc2 != 0)
+            goto out_attrs;
+
+        if (size != -1)
+            first_file++;
+
+        path = realpath(argv[first_file], NULL);
         if (path == NULL) {
             rc = errno;
             goto out_attrs;
         }
 
         xfer.xd_targets = &target;
-        rc = xfer_desc_open_path(&xfer, argv[2], PHO_XFER_OP_PUT, 0);
+        rc = xfer_desc_open_path(&xfer, argv[first_file], PHO_XFER_OP_PUT, 0);
         if (rc < 0) {
             free(path);
             goto out_attrs;
@@ -122,10 +153,13 @@ int main(int argc, char **argv)
         xfer.xd_params.put.family = PHO_RSC_INVAL;
         xfer.xd_targets->xt_objid = concat(path, "_put");
         xfer.xd_targets->xt_attrs = attrs;
+        if (size != -1)
+            xfer.xd_targets->xt_size = size;
 
+        pho_log_level_set(PHO_LOG_DEBUG);
         rc = phobos_put(&xfer, 1, NULL, NULL);
         if (rc)
-            pho_error(rc, "PUT '%s' failed", argv[2]);
+            pho_error(rc, "PUT '%s' failed", argv[first_file]);
 
         cleanup(&xfer, path);
         goto out;

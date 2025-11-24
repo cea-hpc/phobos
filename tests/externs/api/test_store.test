@@ -29,6 +29,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
 . $test_dir/setup_db.sh
 . $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
 
 ################################################################################
 #                                    SETUP                                     #
@@ -133,6 +134,72 @@ function test_check_put() # verb, source_file
     done
 
     true
+}
+
+function test_truncated_file()
+{
+    local file=$(mktemp)
+    local size
+    local rc
+
+    export PHOBOS_STORE_default_family="dir"
+    export PHOBOS_STORE_default_layout="$1"
+
+    trap "rm $file" EXIT
+    dd if=/dev/urandom of="$file" bs=16kiB count=64
+    size=$(stat -c "%s" "$file")
+
+    set +e
+    $LOG_COMPILER $test_bin put $(( size * 2)) /etc/hosts
+    rc=$?
+    set -e
+
+    (( rc != 0 )) ||
+        error "Put with size different from actual file size should fail"
+
+    $phobos dir list -o adm_status | grep failed &&
+        error "Medium should not be set to failed after a read error on input file"
+
+    return 0
+}
+
+function test_failed_get_setup()
+{
+    export PHOBOS_STORE_default_family="dir"
+    export PHOBOS_STORE_default_layout="$1"
+
+    FILE=$(mktemp)
+    FS=$(make_tmp_fs 1M)
+    OID=$(basename "$FILE")
+
+    dd if=/dev/urandom of="$FILE" bs=1M count=2 iflag=fullblock
+
+    $phobos put "$FILE" "$OID"
+}
+
+function test_failed_get_cleanup()
+{
+    cleanup_tmp_fs "$FS"
+    rm "$FILE"
+}
+
+function test_failed_get()
+{
+    local rc
+
+    # This must fail since $OID is 2M and $FS can contain only 1M
+    set +e
+    $phobos get "$OID" "$FS/out"
+    rc=$?
+    set -e
+
+    (( rc != 0 )) ||
+        error "get without enough space in destination must fail"
+
+    $phobos dir list -o adm_status | grep failed &&
+        error "Medium should not be set to failed after a write error on output file"
+
+    return 0
 }
 
 ################################################################################
@@ -247,7 +314,13 @@ function setup_raid1_3
 TEST_SETUP=setup
 TEST_CLEANUP=cleanup
 
-TESTS=("setup_base; test_routine; noop"
-       "setup_raid1; test_routine; noop"
-       "setup_raid1_1; test_routine; noop"
-       "setup_raid1_3; test_routine; noop")
+TESTS=(
+    "setup_base; test_routine; noop"
+    "setup_raid1; test_routine; noop"
+    "setup_raid1_1; test_routine; noop"
+    "setup_raid1_3; test_routine; noop"
+    "test_truncated_file raid1"
+    "test_truncated_file raid4"
+    "test_failed_get_setup raid1; test_failed_get; test_failed_get_cleanup"
+    "test_failed_get_setup raid4; test_failed_get; test_failed_get_cleanup"
+)

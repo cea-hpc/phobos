@@ -308,7 +308,7 @@ static int first_data_processor_call(struct pho_data_processor *proc,
         if (rc)
             return rc;
 
-        assert(n_reqs == 0); /* an encoder writer generates no request */
+        assert(n_reqs == 0); /* a decoder writer generates no request */
         /* init reader */
         rc = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
     } else if (is_eraser(proc)) {
@@ -410,10 +410,14 @@ static int processor_communicate(struct pho_data_processor *proc,
     /* no more io needed after a completed write step */
     while (!rc && !writer_done) {
         /* try read first */
-        if (!reader_done && proc->reader_offset == proc->writer_offset &&
-            !proc->object_size == 0) {
+        if ((!reader_done && proc->reader_offset == proc->writer_offset &&
+            proc->object_size != 0) ||
+            /* on error we need to call the reader one last time to generate
+             * release requests.
+             */
+            rc) {
             rc = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
-            if (n_reqs) {
+            if (rc || n_reqs) {
                 rc = send_generated_requests(proc, comm, enc_id, requests,
                                              n_reqs, rc);
                 requests = NULL;
@@ -422,7 +426,7 @@ static int processor_communicate(struct pho_data_processor *proc,
             }
         }
 
-        /* only one posix writing is enough for decoder after a read step */
+        /* only one write is enough for decoder after a read step */
         if (!rc && reader_done && is_decoder(proc)) {
             rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
             assert(n_reqs == 0);
@@ -430,13 +434,33 @@ static int processor_communicate(struct pho_data_processor *proc,
         }
 
         /* then try following write */
-        if (!rc && (proc->reader_offset > proc->writer_offset ||
-                proc->object_size == 0)) {
+        if (proc->reader_offset > proc->writer_offset ||
+            proc->object_size == 0 ||
+            /* on error we need to call the writer one last time to generate
+             * release requests.
+             */
+            rc) {
             rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
-            if (n_reqs) {
+            if (rc || n_reqs) {
                 /* no more io needed after a completed write step */
-                return send_generated_requests(proc, comm, enc_id, requests,
-                                               n_reqs, rc);
+                int rc2 = send_generated_requests(proc, comm, enc_id, requests,
+                                                  n_reqs, rc);
+                if (rc == 0 && rc2 != 0)
+                    LOG_RETURN(rc2, "failed to send requests to phobosd");
+
+                if (!rc)
+                    return 0;
+
+                /* writer's step function failed, call reader's step one last
+                 * time in case something needs to be released.
+                 */
+                n_reqs = 0;
+                rc2 = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
+                if (n_reqs)
+                    return send_generated_requests(proc, comm, enc_id,
+                                                   requests, n_reqs, rc);
+
+                return rc2;
             }
         }
     }
@@ -1298,6 +1322,9 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     pho->ended_xfers[xfer_idx] = true;
     pho->n_ended_xfers++;
     proc->done = true;
+
+    if (xfer->xd_rc == 0 && rc != 0)
+        xfer->xd_rc = rc;
 
     /* If a part of the put suceeded, the objects, copies and extents that were
      * written should be properly updated and kept in the database, so don't
