@@ -96,7 +96,7 @@ static int set_synced_ctime(struct timeval *synced_ctime,
     FILE *synced_ctime_stream;
     struct stat statbuf;
     size_t nb_char_read;
-    int rc = 0;
+    int rc;
 
     *synced_ctime_path = PHO_CFG_GET(cfg_hsm, PHO_CFG_HSM, synced_ctime_path);
     if (!*synced_ctime_path)
@@ -255,9 +255,9 @@ static struct params parse_args(int argc, char **argv)
     return params;
 }
 
-static void sync_object(const char *oid, const char *object_uuid, int version,
-                        const char *source_copy_name,
-                        const char *destination_copy_name, bool dry_run)
+static int sync_object(const char *oid, const char *object_uuid, int version,
+                       const char *source_copy_name,
+                       const char *destination_copy_name, bool dry_run)
 {
     struct pho_xfer_target target = {0};
     struct pho_xfer_desc xfer = {0};
@@ -269,7 +269,7 @@ static void sync_object(const char *oid, const char *object_uuid, int version,
              destination_copy_name,
              dry_run ? " (DRY RUN MODE, NO SYNC DONE)" : "");
     if (dry_run)
-        return;
+        return 0;
 
     target_uuid = xstrdup(object_uuid);
     xfer.xd_op = PHO_XFER_OP_COPY;
@@ -294,36 +294,38 @@ static void sync_object(const char *oid, const char *object_uuid, int version,
     pho_xfer_desc_clean(&xfer);
     free(target.xt_objid);
     free(target_uuid);
+    return rc;
 }
 
-static void update_synced_ctime(const char *synced_ctime_path,
-                                const char *synced_ctime_string)
+static int update_synced_ctime(const char *synced_ctime_path,
+                               const char *synced_ctime_string)
 {
     FILE *synced_ctime_stream;
     size_t nb_char_write;
+    int rc = 0;
 
     synced_ctime_stream = fopen(synced_ctime_path, "w");
-    if (!synced_ctime_stream) {
-        pho_error(-errno, "Error when opening synced ctime file %s to update",
-                 synced_ctime_path);
-        return;
-    }
+    if (!synced_ctime_stream)
+        LOG_RETURN(rc = -errno,
+                   "Error when opening synced ctime file %s to update",
+                   synced_ctime_path);
 
     nb_char_write = fwrite(synced_ctime_string, sizeof(char),
                            SYNCED_CTIME_STRING_LENGTH, synced_ctime_stream);
     if (ferror(synced_ctime_stream))
-        LOG_GOTO(end, -errno,
+        LOG_GOTO(end, rc = -errno,
                  "Error when writing synced ctime %s in file %s",
                  synced_ctime_string, synced_ctime_path);
 
     if (nb_char_write != SYNCED_CTIME_STRING_LENGTH)
-        LOG_GOTO(end, -EINVAL,
+        LOG_GOTO(end, rc = -EINVAL,
                  "Error when writing synced ctime %s in file %s, "
                  "%zu written characters instead of %d",
                  synced_ctime_string, synced_ctime_path, nb_char_write,
                  SYNCED_CTIME_STRING_LENGTH);
 end:
     fclose(synced_ctime_stream);
+    return rc;
 }
 
 int main(int argc, char **argv)
@@ -336,13 +338,17 @@ int main(int argc, char **argv)
     struct dev_info *dev_list = NULL;
     const char *hostname = NULL;
     struct dss_filter filter;
+    bool update_sync = true;
     struct dss_handle dss;
     struct params params;
     int dev_count = 0;
-    int rc;
+    int rc, rc2;
     int i;
 
     params = parse_args(argc, argv);
+
+    if (params.dry_run)
+        update_sync = false;
 
     rc = phobos_init();
     if (rc)
@@ -372,7 +378,7 @@ int main(int argc, char **argv)
     if (tosync_ctime.tv_sec < synced_ctime.tv_sec ||
         (tosync_ctime.tv_sec == synced_ctime.tv_sec &&
             tosync_ctime.tv_usec < synced_ctime.tv_usec))
-        LOG_GOTO(dss_end, -EINVAL,
+        LOG_GOTO(dss_end, rc = -EINVAL,
                  "Empty window time, synced_ctime '%s' is older than "
                  "tosync_ctime '%s'", synced_ctime_string, tosync_ctime_string);
 
@@ -409,48 +415,62 @@ int main(int argc, char **argv)
         int extent_count;
         int j;
 
-        rc = get_lib_adapter(PHO_LIB_DUMMY, &lib_hdl.ld_module);
-        if (rc) {
-            pho_error(rc, "Failed to get dir library adapter");
+        rc2 = get_lib_adapter(PHO_LIB_DUMMY, &lib_hdl.ld_module);
+        if (rc2) {
+            pho_error(rc2, "Failed to get dir library adapter");
+            update_sync = false;
+            rc = rc ? : rc2;
             continue;
         }
 
-        rc = ldm_lib_open(&lib_hdl, dev_list[i].rsc.id.library);
-        if (rc) {
-            pho_error(rc, "Failed to load dir library handle");
+        rc2 = ldm_lib_open(&lib_hdl, dev_list[i].rsc.id.library);
+        if (rc2) {
+            pho_error(rc2, "Failed to load dir library handle");
+            update_sync = false;
+            rc = rc ? : rc2;
             continue;
         }
 
-        rc = ldm_lib_drive_lookup(&lib_hdl, dev_list[i].rsc.id.name, &drv_info);
-        if (rc)
+        rc2 = ldm_lib_drive_lookup(&lib_hdl, dev_list[i].rsc.id.name,
+                                   &drv_info);
+        if (rc2) {
+            update_sync = false;
+            rc = rc ? : rc2;
             continue;
+        }
 
-        rc = dss_filter_build(&filter,
-                              "{\"$AND\": ["
-                              "  {\"DSS::EXT::medium_family\": \"%s\"},"
-                              "  {\"DSS::EXT::medium_id\": \"%s\"},"
-                              "  {\"DSS::EXT::medium_library\": \"%s\"},"
-                              "  {\"DSS::EXT::state\": \"%s\"},"
-                              "  {\"$GTE\": "
-                              "    {\"DSS::EXT::creation_time\": \"%s\"}},"
-                              "  {\"$LTE\": "
-                              "    {\"DSS::EXT::creation_time\": \"%s\"}}"
-                              "]}",
-                              rsc_family2str(PHO_RSC_DIR),
-                              drv_info.ldi_medium_id.name,
-                              dev_list[i].rsc.id.library,
-                              extent_state2str(PHO_EXT_ST_SYNC),
-                              synced_ctime_string, tosync_ctime_string);
-        if (rc)
+        rc2 = dss_filter_build(&filter,
+                               "{\"$AND\": ["
+                               "  {\"DSS::EXT::medium_family\": \"%s\"},"
+                               "  {\"DSS::EXT::medium_id\": \"%s\"},"
+                               "  {\"DSS::EXT::medium_library\": \"%s\"},"
+                               "  {\"DSS::EXT::state\": \"%s\"},"
+                               "  {\"$GTE\": "
+                               "    {\"DSS::EXT::creation_time\": \"%s\"}},"
+                               "  {\"$LTE\": "
+                               "    {\"DSS::EXT::creation_time\": \"%s\"}}"
+                               "]}",
+                               rsc_family2str(PHO_RSC_DIR),
+                               drv_info.ldi_medium_id.name,
+                               dev_list[i].rsc.id.library,
+                               extent_state2str(PHO_EXT_ST_SYNC),
+                               synced_ctime_string, tosync_ctime_string);
+        if (rc2) {
+            update_sync = false;
+            rc = rc ? : rc2;
             goto close_lib_hdl;
+        }
 
         sort.attr = dss_fields_pub2implem("DSS::EXT::creation_time");
         sort.psql_sort = true;
 
-        rc = dss_extent_get(&dss, &filter, &extent_list, &extent_count, &sort);
+        rc2 = dss_extent_get(&dss, &filter, &extent_list, &extent_count, &sort);
         dss_filter_free(&filter);
-        if (rc)
+        if (rc2) {
+            update_sync = false;
+            rc = rc ? : rc2;
             goto close_lib_hdl;
+        }
 
         /* check source copy */
         for (j = 0; j < extent_count; j++) {
@@ -458,19 +478,26 @@ int main(int argc, char **argv)
             int layout_count;
             int k;
 
-            rc = dss_filter_build(&filter,
-                                  "{\"$AND\": ["
-                                  "  {\"DSS::LYT::extent_uuid\": \"%s\"},"
-                                  "  {\"DSS::LYT::copy_name\": \"%s\"}"
-                                  "]}",
-                                  extent_list[j].uuid, params.source_copy_name);
-            if (rc)
+            rc2 = dss_filter_build(&filter,
+                                   "{\"$AND\": ["
+                                   "  {\"DSS::LYT::extent_uuid\": \"%s\"},"
+                                   "  {\"DSS::LYT::copy_name\": \"%s\"}"
+                                   "]}",
+                                   extent_list[j].uuid,
+                                   params.source_copy_name);
+            if (rc2) {
+                update_sync = false;
+                rc = rc ? : rc2;
                 continue;
+            }
 
-            rc = dss_layout_get(&dss, &filter, &layout_list, &layout_count);
+            rc2 = dss_layout_get(&dss, &filter, &layout_list, &layout_count);
             dss_filter_free(&filter);
-            if (rc)
+            if (rc2) {
+                update_sync = false;
+                rc = rc ? : rc2;
                 continue;
+            }
 
             /* check destination copy */
             for (k = 0; k < layout_count; k++) {
@@ -480,70 +507,96 @@ int main(int argc, char **argv)
                 int copy_count;
 
                 /* check source copy window time */
-                rc = dss_filter_build(&filter,
-                                      "{\"$AND\": ["
-                                      "  {\"DSS::COPY::object_uuid\": \"%s\"},"
-                                      "  {\"DSS::COPY::version\": \"%d\"},"
-                                      "  {\"DSS::COPY::copy_name\": \"%s\"}"
-                                      "]}",
-                                      layout_list[k].uuid,
-                                      layout_list[k].version,
-                                      params.source_copy_name);
-                if (rc)
+                rc2 = dss_filter_build(&filter,
+                                       "{\"$AND\": ["
+                                       "  {\"DSS::COPY::object_uuid\": \"%s\"},"
+                                       "  {\"DSS::COPY::version\": \"%d\"},"
+                                       "  {\"DSS::COPY::copy_name\": \"%s\"}"
+                                       "]}",
+                                       layout_list[k].uuid,
+                                       layout_list[k].version,
+                                       params.source_copy_name);
+                if (rc2) {
+                    update_sync = false;
+                    rc = rc ? : rc2;
                     continue;
+                }
 
                 rc = dss_copy_get(&dss, &filter, &copy_list, &copy_count, NULL);
                 dss_filter_free(&filter);
-                if (rc)
+                if (rc2) {
+                    update_sync = false;
+                    rc = rc ? : rc2;
                     continue;
+                }
 
                 dss_res_free(copy_list, copy_count);
                 if (!copy_count)
                     continue;
 
                 /* check that no destination copy exists */
-                rc = dss_filter_build(&filter,
-                                      "{\"$AND\": ["
-                                      "  {\"DSS::COPY::object_uuid\": \"%s\"},"
-                                      "  {\"DSS::COPY::version\": \"%d\"},"
-                                      "  {\"DSS::COPY::copy_name\": \"%s\"}"
-                                      "]}",
-                                      layout_list[k].uuid,
-                                      layout_list[k].version,
-                                      params.destination_copy_name);
-                if (rc)
+                rc2 = dss_filter_build(&filter,
+                                       "{\"$AND\": ["
+                                       "  {\"DSS::COPY::object_uuid\": \"%s\"},"
+                                       "  {\"DSS::COPY::version\": \"%d\"},"
+                                       "  {\"DSS::COPY::copy_name\": \"%s\"}"
+                                       "]}",
+                                       layout_list[k].uuid,
+                                       layout_list[k].version,
+                                       params.destination_copy_name);
+                if (rc2) {
+                    update_sync = false;
+                    rc = rc ? : rc2;
                     continue;
+                }
 
-                rc = dss_copy_get(&dss, &filter, &copy_list, &copy_count, NULL);
+                rc2 = dss_copy_get(&dss, &filter, &copy_list, &copy_count,
+                                   NULL);
                 dss_filter_free(&filter);
-                if (rc)
+                if (rc2) {
+                    update_sync = false;
+                    rc = rc ? : rc2;
                     continue;
+                }
 
                 dss_res_free(copy_list, copy_count);
                 if (copy_count)
                     continue;
 
                 /* check object is a living one and get oid */
-                rc = dss_filter_build(&filter,
+                rc2 = dss_filter_build(&filter,
                                       "{\"$AND\": ["
                                       "  {\"DSS::OBJ::uuid\": \"%s\"},"
                                       "  {\"DSS::OBJ::version\": \"%d\"}"
                                       "]}",
                                       layout_list[k].uuid,
                                       layout_list[k].version);
-                if (rc)
+                if (rc2) {
+                    update_sync = false;
+                    rc = rc ? : rc2;
                     continue;
+                }
 
-                rc = dss_object_get(&dss, &filter, &object_list, &object_count,
+                rc2 = dss_object_get(&dss, &filter, &object_list, &object_count,
                                     NULL);
                 dss_filter_free(&filter);
-                if (rc)
+                if (rc2) {
+                    update_sync = false;
+                    rc = rc ? : rc2;
                     continue;
+                }
 
-                if (object_count)
-                    sync_object(object_list[0].oid, layout_list[k].uuid,
-                                layout_list[k].version, params.source_copy_name,
-                                params.destination_copy_name, params.dry_run);
+                if (object_count) {
+                    rc2 = sync_object(object_list[0].oid, layout_list[k].uuid,
+                                      layout_list[k].version,
+                                      params.source_copy_name,
+                                      params.destination_copy_name,
+                                      params.dry_run);
+                    if (rc2) {
+                        update_sync = false;
+                        rc = rc ? : rc2;
+                    }
+                }
 
                 dss_res_free(object_list, object_count);
             }
@@ -553,16 +606,22 @@ int main(int argc, char **argv)
 
         dss_res_free(extent_list, extent_count);
 close_lib_hdl:
-        rc = ldm_lib_close(&lib_hdl);
-        if (rc)
-            pho_error(rc, "Failed to close dir library handle");
+        rc2 = ldm_lib_close(&lib_hdl);
+        if (rc2) {
+            pho_error(rc2, "Failed to close dir library handle");
+            update_sync = false;
+            rc = rc ? : rc2;
+        }
     }
 
     dss_res_free(dev_list, dev_count);
 
     /* update synced ctime */
-    if (!params.dry_run)
-        update_synced_ctime(synced_ctime_path, tosync_ctime_string);
+    if (update_sync) {
+        rc2 = update_synced_ctime(synced_ctime_path, tosync_ctime_string);
+        if (rc2)
+            rc = rc ? : rc2;
+    }
 
 dss_end:
     dss_fini(&dss);

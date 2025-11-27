@@ -124,6 +124,9 @@ EOF
     # run phobos_hsm_sync_dir with no synced ctime file
     rm -f ${PHOBOS_HSM_synced_ctime_path}
     $valg_phobos_hsm_sync_dir source sync
+    if [ ! -f "${PHOBOS_HSM_synced_ctime_path}" ]; then
+        error "synced_ctime_file must be created"
+    fi
 
     # check only one obj_to_sync is sync
     sync_occurence=$($phobos copy list | grep -c sync)
@@ -158,7 +161,26 @@ EOF
         error "sync without only an old object must not show any sync") || true
 }
 
+function no_synced_time_on_error()
+{
+    # object to sync
+    $phobos put --tags this-host ${FILES[0]} obj_to_sync
+
+    # delete extent to
+    local extent_addr=$($phobos extent list -o address obj_to_sync | tr -d \ \'[])
+    local extent_dir=$($phobos extent list -o media_name obj_to_sync | tr -d \ \'[])
+    rm -f ${extent_dir}/${extent_addr}
+
+    # run phobos_hsm_sync_dir with no synced ctime file
+    rm -f ${PHOBOS_HSM_synced_ctime_path}
+    $valg_phobos_hsm_sync_dir source sync || true
+    if [ -f "${PHOBOS_HSM_synced_ctime_path}" ]; then
+        error "synced_ctime_file must not be created on error"
+    fi
+}
+
 TESTS=(
     "check_hsm_sync_dir_opt;"
     "setup; check_hsm_sync_dir; cleanup"
+    "setup; no_synced_time_on_error; cleanup"
 )
