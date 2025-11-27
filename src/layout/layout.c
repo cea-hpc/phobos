@@ -386,7 +386,7 @@ int layout_get_specific_attrs(struct pho_io_descr *iod,
                                         &layout->layout_desc.mod_attrs);
 }
 
-int layout_reconstruct(struct layout_info lyt, struct copy_info *copy)
+int layout_get_availability(struct layout_info lyt, struct copy_info *copy)
 {
     char layout_name[NAME_MAX];
     struct layout_module *mod;
@@ -403,7 +403,7 @@ int layout_reconstruct(struct layout_info lyt, struct copy_info *copy)
     if (rc)
         return rc;
 
-    return mod->ops->reconstruct(lyt, copy);
+    return mod->ops->get_availability(lyt, copy);
 }
 
 void layout_destroy(struct pho_data_processor *proc)

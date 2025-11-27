@@ -2151,9 +2151,10 @@ int phobos_admin_media_import(struct admin_handle *adm,
     }
 
     for (int i = 0; i < cpy_cnt; i++) {
-        rc2 = reconstruct_copy(adm, &copy[i]);
+        rc2 = update_copy_availability(adm, &copy[i]);
         if (rc2) {
-            pho_error(rc2, "Failed to reconstruct copy '%s', skipping it",
+            pho_error(rc2,
+                      "Failed to update copy availability '%s', skipping it",
                       copy[i].copy_name);
             rc = rc ? : rc2;
         }

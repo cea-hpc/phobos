@@ -42,14 +42,14 @@ int import_medium(struct admin_handle *adm, struct media_info *medium,
                   bool check_hash);
 
 /**
- * Reconstructs a copy, which means updating its copy_status
+ * Update the copy_status of a copy
  * to either "incomplete", "readable" or "complete".
  *
- * @param[in]   adm         Admin handle,
- * @param[in]   copy        copy to reconstruct,
+ * @param[in]   adm         Admin handle
+ * @param[in]   copy        Copy to update
  *
  * @return 0 on success, -errno on failure.
  */
-int reconstruct_copy(struct admin_handle *adm, struct copy_info *copy);
+int update_copy_availability(struct admin_handle *adm, struct copy_info *copy);
 
 #endif

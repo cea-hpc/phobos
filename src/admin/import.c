@@ -822,7 +822,7 @@ request_free:
     return rc;
 }
 
-int reconstruct_copy(struct admin_handle *adm, struct copy_info *copy)
+int update_copy_availability(struct admin_handle *adm, struct copy_info *copy)
 {
     struct dss_filter filter;
     struct layout_info *lyt;
@@ -852,7 +852,7 @@ int reconstruct_copy(struct admin_handle *adm, struct copy_info *copy)
         goto end;
     }
 
-    rc = layout_reconstruct(lyt[0], copy);
+    rc = layout_get_availability(lyt[0], copy);
 
 end:
     dss_res_free(lyt, lyt_cnt);

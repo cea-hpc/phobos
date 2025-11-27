@@ -260,8 +260,8 @@ static int layout_raid4_locate(struct dss_handle *dss,
     return raid_locate(dss, layout, 2, 1, focus_host, hostname, nb_new_lock);
 }
 
-static int layout_raid4_reconstruct(struct layout_info layout,
-                                    struct copy_info *copy)
+static int layout_raid4_get_availability(struct layout_info layout,
+                                         struct copy_info *copy)
 {
     ssize_t split_sizes[3] = {0};
     ssize_t extent_sizes = 0;
@@ -329,7 +329,7 @@ static const struct pho_layout_module_ops LAYOUT_RAID4_OPS = {
     .erase = layout_raid4_erase,
     .locate = layout_raid4_locate,
     .get_specific_attrs = NULL,
-    .reconstruct = layout_raid4_reconstruct,
+    .get_availability = layout_raid4_get_availability,
 };
 
 /** Layout module registration entry point */

@@ -100,7 +100,7 @@ int delete_media_and_extents(struct admin_handle *handle,
                 goto free_layout;
             }
 
-            rc2 = reconstruct_copy(handle, &copy);
+            rc2 = update_copy_availability(handle, &copy);
             if (rc2)
                 pho_error(rc2,
                           "Failed to update copy '%s' of object '%s'",

@@ -480,8 +480,8 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
                        nb_new_locks);
 }
 
-static int layout_raid1_reconstruct(struct layout_info lyt,
-                                    struct copy_info *copy)
+static int layout_raid1_get_availability(struct layout_info lyt,
+                                         struct copy_info *copy)
 {
     ssize_t extent_sizes = 0;
     ssize_t replica_size = 0;
@@ -496,7 +496,7 @@ static int layout_raid1_reconstruct(struct layout_info lyt,
     rc = raid1_repl_count(&lyt, &repl_cnt);
     if (rc)
         LOG_RETURN(rc,
-                   "Failed to get replica count for reconstruction of object '%s'",
+                   "Failed to get replica count of object '%s'",
                    lyt.oid);
 
     ext_cnt = lyt.ext_count;
@@ -515,6 +515,9 @@ static int layout_raid1_reconstruct(struct layout_info lyt,
 
     if (extent_sizes == repl_cnt * object_size)
         copy->copy_status = PHO_COPY_STATUS_COMPLETE;
+    // Not correct, if the first replica lost some bytes but the other one has
+    // all bytes, the object is readable, just not by the first replica
+    // XXX: do we want to manage this? or do we consider this can not happen?
     else if (replica_size == object_size)
         copy->copy_status = PHO_COPY_STATUS_READABLE;
     else
@@ -576,7 +579,7 @@ static const struct pho_layout_module_ops LAYOUT_RAID1_OPS = {
     .erase = layout_raid1_erase,
     .locate = layout_raid1_locate,
     .get_specific_attrs = layout_raid1_get_specific_attrs,
-    .reconstruct = layout_raid1_reconstruct,
+    .get_availability = layout_raid1_get_availability,
 };
 
 /** Layout module registration entry point */
