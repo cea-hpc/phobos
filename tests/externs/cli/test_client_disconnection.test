@@ -109,7 +109,7 @@ function tape_cleanup
 }
 
 # Execute a phobos command but quit without ending after having get the booking
-function phobos_broken_client()
+function writer_quit_after_recv_alloc
 {
     (
         tmp_gdb_script=$(mktemp)
@@ -127,9 +127,9 @@ EOF
     )
 }
 
-function test_client_disconnection
+function test_client_disconnection_after_recv_alloc
 {
-    phobos_broken_client put --layout raid1 --lyt-params repl_count=1 /etc/hosts oid1 &
+    writer_quit_after_recv_alloc put --layout raid1 --lyt-params repl_count=1 /etc/hosts oid1 &
     local pid1=$!
     wait $pid1
     $phobos put --layout raid1 --lyt-params repl_count=1 /etc/hosts oid2 ||
@@ -141,12 +141,31 @@ function test_client_disconnection
     fi
 }
 
-function test_client_disconnection_dir
+# Execute a phobos command but quit without ending after sending alloc request
+function writer_quit_after_sending_alloc
 {
-    phobos_broken_client put --family dir --layout raid1 --lyt-params repl_count=1 /etc/hosts oid1 &
+    (
+        tmp_gdb_script=$(mktemp)
+        trap "rm $tmp_gdb_script" EXIT
+        cat <<EOF > "$tmp_gdb_script"
+set breakpoint pending on
+break store_dispatch_loop
+commands
+quit
+end
+run $phobos $*
+EOF
+
+        DEBUGINFOD_URLS="" gdb -batch -x "$tmp_gdb_script" -q python3
+    )
+}
+
+function test_client_disconnection_after_sending_alloc
+{
+    writer_quit_after_sending_alloc put --layout raid1 --lyt-params repl_count=1 /etc/hosts oid1 &
     local pid1=$!
     wait $pid1
-    $phobos put --family dir --layout raid1 --lyt-params repl_count=1 /etc/hosts oid2 ||
+    $phobos put --layout raid1 --lyt-params repl_count=1 /etc/hosts oid2 ||
         error "Object oid2 should be put even if first client failed"
 
     oids="$($phobos extent list -o oid)"
@@ -158,10 +177,11 @@ function test_client_disconnection_dir
 TEST_SETUP=env_setup
 TEST_CLEANUP=env_cleanup
 
-# test locate on dir
-TESTS=("dir_setup; test_client_disconnection; dir_cleanup")
+TESTS=("dir_setup; test_client_disconnection_after_recv_alloc; dir_cleanup")
+TESTS+=("dir_setup; test_client_disconnection_after_sending_alloc; dir_cleanup")
 
 
 if [[ -w /dev/changer ]]; then
-    TESTS+=("tape_setup; test_client_disconnection; tape_cleanup")
+    TESTS+=("tape_setup; test_client_disconnection_after_recv_alloc; tape_cleanup")
+    TESTS+=("tape_setup; test_client_disconnection_after_sending_alloc; tape_cleanup")
 fi
