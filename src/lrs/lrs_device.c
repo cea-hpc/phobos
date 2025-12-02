@@ -341,10 +341,8 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
     if (rc)
         goto free_list;
 
-    rc = dss_check_and_take_lock(&sched->sched_thread.dss, &dev_list->rsc.id,
-                                 &dev_list->lock, DSS_DEVICE, dev_list,
-                                 sched->lock_handle.lock_hostname,
-                                 sched->lock_handle.lock_owner);
+    rc = dss_lock_take_ownership(&sched->sched_thread.dss, DSS_DEVICE, dev_list,
+                                 dev_count);
     if (rc)
         lrs_dev_hdl_del(handle, handle->ldh_devices->len, rc, sched);
 
@@ -474,12 +472,8 @@ int lrs_dev_hdl_load(struct lrs_sched *sched, struct lrs_dev_hdl *handle)
             continue;
         }
 
-        rc2 = dss_check_and_take_lock(&sched->sched_thread.dss,
-                                      &dev_list[i].rsc.id,
-                                      &dev_list[i].lock, DSS_DEVICE,
-                                      &dev_list[i],
-                                      sched->lock_handle.lock_hostname,
-                                      sched->lock_handle.lock_owner);
+        rc2 = dss_lock_take_ownership(&sched->sched_thread.dss,
+                                      DSS_DEVICE, &dev_list[i], 1);
         if (rc2) {
             lrs_dev_hdl_del(handle, handle->ldh_devices->len - 1, rc2, sched);
             rc = rc ? : rc2;

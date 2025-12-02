@@ -261,6 +261,14 @@ static int basic_refresh(struct dss_handle *handle, enum dss_type lock_type,
                            WHERE_ID
                         ";",
                         dss_type_names[lock_type], lock_id);
+    else if (lock_flags & WEAK_LOCK)
+        g_string_printf(request,
+                        "UPDATE lock "
+                        "  SET is_early = TRUE "
+                           WHERE_ID
+                        "        AND owner = %d AND hostname = '%s'"
+                        ";",
+                        dss_type_names[lock_type], lock_id, owner, hostname);
     else
         g_string_printf(request,
                         "UPDATE lock "
@@ -484,7 +492,7 @@ int dss_lock_hostname(struct dss_handle *handle, enum dss_type type,
 int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
                       const void *item_list, int item_cnt,
                       const char *lock_hostname, int lock_owner,
-                      bool locate, bool take_possession)
+                      bool locate, bool take_possession, bool set_weak)
 {
     PGconn *conn = handle->dh_conn;
     int lock_flags = 0;
@@ -504,6 +512,8 @@ int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
         lock_flags |= LOCATE_LOCK;
     if (take_possession)
         lock_flags |= POSSESS_LOCK;
+    if (set_weak)
+        lock_flags |= WEAK_LOCK;
 
     for (i = 0; i < item_cnt; ++i) {
         int rc2;
@@ -533,7 +543,7 @@ int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
         LOG_RETURN(-EINVAL, "Couldn't retrieve hostname");
 
     return _dss_lock_refresh(handle, type, item_list, item_cnt, hostname, pid,
-                             locate, false);
+                             locate, false, false);
 }
 
 int dss_lock_take_ownership(struct dss_handle *handle, enum dss_type type,
@@ -546,7 +556,20 @@ int dss_lock_take_ownership(struct dss_handle *handle, enum dss_type type,
         LOG_RETURN(-EINVAL, "Couldn't retrieve hostname");
 
     return _dss_lock_refresh(handle, type, item_list, item_cnt, hostname, pid,
-                             false, true);
+                             false, true, false);
+}
+
+int dss_lock_set_weak(struct dss_handle *handle, enum dss_type type,
+                      const void *item_list, int item_cnt)
+{
+    const char *hostname;
+    int pid;
+
+    if (fill_host_owner(&hostname, &pid))
+        LOG_RETURN(-EINVAL, "Couldn't retrieve hostname");
+
+    return _dss_lock_refresh(handle, type, item_list, item_cnt, hostname, pid,
+                             false, false, true);
 }
 
 int _dss_unlock(struct dss_handle *handle, enum dss_type type,

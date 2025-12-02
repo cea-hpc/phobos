@@ -170,7 +170,7 @@ static void dss_refresh_bad_owner(void **state)
     assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1) == 0);
 
     rc = _dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
-                           BAD_LOCK_OWNER, 1337, false, false);
+                           BAD_LOCK_OWNER, 1337, false, false, false);
     assert_int_equal(rc, -ENOLCK);
 
     assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true) == 0);
@@ -197,6 +197,28 @@ static void dss_refresh_early_other_pid(void **state)
     assert(dss_lock_take_ownership(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1) == 0);
     rc = dss_lock_take_ownership(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1);
     assert_int_equal(rc, -ENOLCK);
+
+    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true) == 0);
+    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1, true) == 0);
+}
+
+static void dss_refresh_set_weak(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    const char *hostname;
+    int rc;
+
+    hostname = get_hostname();
+    assert(hostname != NULL);
+
+    assert(_dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                     hostname, 0, false, false) == 0);
+    assert(_dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1,
+                     hostname, getpid(), false, false) == 0);
+
+    rc = dss_lock_set_weak(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1);
+    assert_int_equal(rc, -ENOLCK);
+    assert(dss_lock_set_weak(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1) == 0);
 
     assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true) == 0);
     assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1, true) == 0);
@@ -528,6 +550,7 @@ int main(void)
         cmocka_unit_test(dss_refresh_not_exists),
         cmocka_unit_test(dss_refresh_bad_owner),
         cmocka_unit_test(dss_refresh_early_other_pid),
+        cmocka_unit_test(dss_refresh_set_weak),
         cmocka_unit_test(dss_unlock_not_exists),
         cmocka_unit_test(dss_unlock_bad_owner),
         cmocka_unit_test(dss_unlock_early_other_pid),

@@ -2543,8 +2543,7 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
                  hostname, pid, dev_res->rsc.id.name, dev_res->rsc.id.library,
                  dev_res->path);
 
-    rc = dss_check_and_take_lock(&adm->dss, &med_res->rsc.id, &med_res->lock,
-                                 DSS_MEDIA, med_res, hostname, pid);
+    rc = dss_lock_take_ownership(&adm->dss, DSS_MEDIA, med_res, 1);
     if (rc)
         LOG_GOTO(unlock_drive, rc,
                  "Unable to lock the tape (name '%s', library '%s')",
@@ -2572,15 +2571,12 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
     }
 
 unlock_tape:
-    /* do not unlock if there was a locate lock before the load operation */
-    if (!med_res->lock.is_early) {
-        rc2 = dss_unlock(&adm->dss, DSS_MEDIA, med_res, 1, false);
-        if (rc2) {
-            pho_error(rc2, "Unable to unlock tape (name '%s', family '%s')",
+    rc2 = dss_lock_set_weak(&adm->dss, DSS_MEDIA, med_res, 1);
+    if (rc2) {
+            pho_error(rc2, "Unable to weaken lock (name '%s', family '%s')",
                       med_res->rsc.id.name, med_res->rsc.id.library);
             rc = rc ? : rc2;
         }
-    }
 
 unlock_drive:
     rc2 = dss_unlock(&adm->dss, DSS_DEVICE, dev_res, 1, false);
@@ -2714,8 +2710,7 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
                  hostname, pid, dev_res->rsc.id.name, dev_res->rsc.id.library,
                  dev_res->path);
 
-    rc = dss_check_and_take_lock(&adm->dss, &med_res->rsc.id, &med_res->lock,
-                                 DSS_MEDIA, med_res, hostname, pid);
+    rc = dss_lock_take_ownership(&adm->dss, DSS_MEDIA, med_res, 1);
     if (rc)
         LOG_GOTO(unlock_drive, rc,
                  "Unable to lock the tape (name '%s', library '%s')",
