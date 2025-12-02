@@ -44,6 +44,23 @@ Example:
     [lrs]
     fifo_max_write_per_grouping = 7
 
+*grouping_on_dir*
+-----------------
+
+The parameter **grouping_on_dir** defines if we consider using a grouping to
+choose a dir or not. Value should be either "true" or "false". Default is
+"false". If the value is not "true" or "false", the default value "false" is
+set.
+
+If **grouping_on_dir** is set to "false", no grouping will be set on any dir.
+
+Example:
+
+.. code:: ini
+
+    [lrs]
+    grouping_on_dir = true
+
 *lock_file*
 -----------
 

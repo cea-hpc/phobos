@@ -1,6 +1,7 @@
 # CHANGELOG UPDATES
 
 ## Next
+ * Add grouping_on_dir configuration parameter to disengage dir from grouping
  * Add sort option to dss_extent_get, and delete dss_get_extents_order_by_ctime
    funtion
  * Add tape lost management

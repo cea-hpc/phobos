@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-#  All rights reserved (c) 2014-2024 CEA/DAM.
+#  All rights reserved (c) 2014-2025 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -30,19 +30,15 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/tape_drive.sh
 . $test_dir/utils_generation.sh
 
-################################################################################
-#                                    SETUP                                     #
-################################################################################
-
-function setup()
+##############
+# DIR GROUPING
+##############
+function setup_grouping_dir()
 {
     setup_tables
     export PHOBOS_DIR_dir_full_threshold=50
-    if [[ -w /dev/changer ]]; then
-        invoke_daemons
-    else
-        invoke_lrs
-    fi
+    export PHOBOS_LRS_grouping_on_dir="true"
+    invoke_lrs
 
     DIR1=$(make_tmp_fs 300M)
 
@@ -55,14 +51,8 @@ function setup()
     setup_dummy_files 1 1M 100
 }
 
-function cleanup() {
-    if [[ -w /dev/changer ]]; then
-        waive_daemons
-        drain_all_drives
-    else
-        waive_lrs
-    fi
-
+function cleanup_grouping_dir() {
+    waive_lrs
     drop_tables
     cleanup_tmp_fs ${DIR1}
     cleanup_tmp_fs ${DIR2}
@@ -126,6 +116,78 @@ function test_grouping_dir () {
         error "dir object grouping ter must be 'my_group' instead of" \
               "'${obj_grouping}'"
     fi
+}
+
+#######################
+# OPTIONAL DIR GROUPING
+#######################
+function setup_grouping_on_dir_option
+{
+    setup_tables
+
+    setup_test_dirs
+    setup_dummy_files 1 1k 1
+
+    export PHOBOS_LRS_families="dir"
+    export PHOBOS_STORE_default_family="dir"
+    export PHOBOS_LRS_grouping_on_dir="true"
+
+    invoke_lrs
+
+    dir_option="$DIR_TEST_IN/dir_option"
+    mkdir ${dir_option}
+    $phobos dir add ${dir_option}
+    $phobos dir format --fs posix --unlock ${dir_option}
+}
+
+function cleanup_grouping_on_dir_option
+{
+    waive_lrs
+
+    cleanup_dummy_files
+    cleanup_test_dirs
+
+    drop_tables
+}
+
+function grouping_on_dir_option()
+{
+    $valg_phobos put --grouping group1 ${FILES[0]} obj1
+
+    local dir_option_groupings=$($phobos dir list -o groupings ${dir_option})
+    if [[ "${dir_option_groupings}" != "['group1']" ]]; then
+        error "Only group1 must be added to dir1 groupings"
+    fi
+
+    # grouping_on_dir == false => no new grouping added to dir
+    waive_lrs
+    # Back to default: grouping_on_dir == false
+    unset PHOBOS_LRS_grouping_on_dir
+    invoke_lrs
+    $valg_phobos put --grouping group2 ${FILES[0]} obj2
+
+    dir_option_groupings=$($phobos dir list -o groupings ${dir_option})
+    if [[ "${dir_option_groupings}" != "['group1']" ]]; then
+        error "With grouping_on_dir to false, dir1 groupings must be unchanged"
+    fi
+}
+
+###############
+# TAPE GROUPING
+###############
+function setup_grouping_tape()
+{
+    setup_tables
+    invoke_daemons
+    setup_dummy_files 1 1M 100
+}
+
+function cleanup_grouping_tape() {
+    waive_daemons
+    drain_all_drives
+
+    drop_tables
+    cleanup_dummy_files 1
 }
 
 function test_grouping_tape () {
@@ -209,11 +271,8 @@ function test_grouping_tape () {
     fi
 }
 
-TEST_SETUP=setup
-
-TESTS=("test_grouping_dir")
+TESTS=("setup_grouping_dir; test_grouping_dir; cleanup_grouping_dir")
+TESTS+=("setup_grouping_on_dir_option; grouping_on_dir_option; cleanup_grouping_on_dir_option")
 if [[ -w /dev/changer ]]; then
-    TESTS+=("test_grouping_tape")
+    TESTS+=("setup_grouping_tape; test_grouping_tape; cleanup_grouping_tape")
 fi
-
-TEST_CLEANUP=cleanup

@@ -637,6 +637,10 @@ void push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
 
     ENTRY;
 
+    if (dev->ld_dss_dev_info->rsc.id.family == PHO_RSC_DIR &&
+        !PHO_CFG_GET_BOOL(cfg_lrs, PHO_CFG_LRS, grouping_on_dir, false))
+        sync_grouping = NULL;
+
     req_tosync = xmalloc(sizeof(*req_tosync));
     req_tosync->reqc = reqc;
     req_tosync->medium_index = medium_index;

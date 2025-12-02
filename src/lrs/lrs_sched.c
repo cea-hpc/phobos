@@ -983,6 +983,10 @@ static int medium_in_devices(const struct media_info *medium,
  * @param[out] p_media       Selected medium
  * @param[in]  required_size Size of the extent to be written.
  * @param[in]  family        Medium family from which getting the medium
+ * @param[in]  library       Requested library for the medium. (NULL if no
+ *                           library is requested)
+ * @param[in]  grouping      Requested grouping for the medium. (NULL if no
+ *                           grouping is requested)
  * @param[in]  tags          Tags used to filter candidate media, the
  *                           selected medium must have all the specified tags.
  * @param[in]  reqc          Current write alloc request container
@@ -990,7 +994,7 @@ static int medium_in_devices(const struct media_info *medium,
  * @param[in]  not_alloc     Index to ignore in \p reqc allocated media (can
  *                           be set to n_med or more if every already allocated
  *                           media should be taken into account)
- * @param[out] need_new_grouping Set to true if a grouping is asked and no
+ * @param[out] need_new_grouping Set to true if a grouping is requested and no
  *                               available medium can be found, else, set to
  *                               false
  */

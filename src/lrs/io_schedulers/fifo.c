@@ -363,6 +363,10 @@ static int find_write_device(struct io_scheduler *io_sched,
     size_t size;
     int rc;
 
+    if ((enum rsc_family)wreq->family == PHO_RSC_DIR &&
+        !PHO_CFG_GET_BOOL(cfg_lrs, PHO_CFG_LRS, grouping_on_dir, false))
+        targeted_grouping = NULL;
+
     /* Are we retrying to find a new device to an already chosen medium? */
     if (*medium)
         goto find_device;

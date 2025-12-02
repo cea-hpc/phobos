@@ -33,6 +33,7 @@ test_dir=$(dirname $(readlink -e $0))
 
 function setup()
 {
+    export PHOBOS_LRS_grouping_on_dir="true"
     setup_tables
     if [[ -w /dev/changer ]]; then
         invoke_daemons

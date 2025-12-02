@@ -39,6 +39,7 @@ function setup_dir
 
     export PHOBOS_LRS_families="dir"
     export PHOBOS_STORE_default_family="dir"
+    export PHOBOS_LRS_grouping_on_dir="true"
 
     invoke_lrs
 
