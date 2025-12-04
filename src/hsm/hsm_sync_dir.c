@@ -56,6 +56,183 @@
 #include "pho_types.h"
 #include "pho_type_utils.h"
 
+static int sync_object(const char *oid, const char *object_uuid, int version,
+                       const char *source_copy_name,
+                       const char *destination_copy_name, bool dry_run)
+{
+    struct pho_xfer_target target = {0};
+    struct pho_xfer_desc xfer = {0};
+    char *target_uuid;
+    int rc;
+
+    pho_info("Syncing object ('%s' oid, '%s' uuid, '%d' version) from copy "
+             "'%s' to copy '%s'%s", oid, object_uuid, version, source_copy_name,
+             destination_copy_name,
+             dry_run ? " (DRY RUN MODE, NO SYNC DONE)" : "");
+    if (dry_run)
+        return 0;
+
+    target_uuid = xstrdup(object_uuid);
+    xfer.xd_op = PHO_XFER_OP_COPY;
+    target.xt_objid = xstrdup(oid);
+    target.xt_objuuid = target_uuid;
+    target.xt_version = version;
+    xfer.xd_ntargets = 1;
+    xfer.xd_targets = &target;
+    xfer.xd_params.copy.get.copy_name = source_copy_name;
+    /* only sync alive object */
+    xfer.xd_params.copy.get.scope = DSS_OBJ_ALIVE;
+    /* destination family is given by destination_copy_name profile */
+    xfer.xd_params.copy.put.family = PHO_RSC_INVAL;
+    xfer.xd_params.copy.put.copy_name = destination_copy_name;
+    xfer.xd_params.copy.put.grouping = NULL;
+
+    rc = phobos_copy(&xfer, 1, NULL, NULL);
+    if (rc)
+        pho_warn("Error %d (%s) when syncing object '%s' to copy '%s'",
+                 -rc, strerror(-rc), oid, destination_copy_name);
+
+    pho_xfer_desc_clean(&xfer);
+    free(target.xt_objid);
+    free(target_uuid);
+    return rc;
+}
+
+struct params {
+    const char *source_copy_name;
+    const char *destination_copy_name;
+    bool dry_run;
+    int log_level;
+    bool grouping;
+};
+
+struct object_to_sync {
+    char *oid;
+    char *uuid;
+    int version;
+};
+
+/* a GDestroyNotify function to clean an object_to_sync */
+static void free_object_to_sync(gpointer data)
+{
+    struct object_to_sync *ots = data;
+
+    free(ots->oid);
+    free(ots->uuid);
+    free(ots);
+}
+
+/* A GHashFunc for object_to_sync */
+static guint hash_object_to_sync(gconstpointer key)
+{
+    const struct object_to_sync *ots = key;
+
+    return g_str_hash(ots->oid) ^ g_str_hash(ots->uuid) ^
+           g_int_hash(&ots->version);
+}
+
+/* A GEqualFunc for object_to_sync */
+static gboolean equal_object_to_sync(gconstpointer a, gconstpointer b)
+{
+    const struct object_to_sync *ots_a = a;
+    const struct object_to_sync *ots_b = b;
+
+    return g_str_equal(ots_a->oid, ots_b->oid) &&
+           g_str_equal(ots_a->uuid, ots_b->uuid) &&
+           ots_a->version == ots_b->version;
+
+}
+
+struct sync_params {
+    int rc;
+    struct params *params;
+};
+
+static void sync_object_to_sync(gpointer data, gpointer user_data)
+{
+    struct object_to_sync *ots = data;
+    struct sync_params *sp = user_data;
+    int rc;
+
+    rc = sync_object(ots->oid, ots->uuid, ots->version,
+                     sp->params->source_copy_name,
+                     sp->params->destination_copy_name, sp->params->dry_run);
+    if (rc && !sp->rc)
+        sp->rc = rc;
+}
+
+#define NO_GROUPING "NGRP"
+
+/* object to sync are grouped per "grouping" */
+struct grouping_to_sync {
+    char *grouping;
+    GQueue *object_to_sync_queue; /* Queue of object_to_sync (also stored into
+                                   * object_to_sync_hashtable to detect
+                                   * duplicate), head is the object with the
+                                   * older 'source_copy_name' copy ctime
+                                   */
+    GHashTable *object_to_sync_hashtable; /* Hashtable of object_to_sync (also
+                                           * stored into object_to_sync_queue
+                                           * to track ctime order), hashed per
+                                           * (oid, uuid, version)
+                                           * object_to_sync are owned and freed
+                                           * by the unref of
+                                           * object_to_sync_hashtable.
+                                           */
+};
+
+/* a GDestroyNotify function to clean a grouping_to_sync */
+static void free_grouping_to_sync(gpointer data)
+{
+    struct grouping_to_sync *gts = data;
+
+    free(gts->grouping);
+    g_queue_free(gts->object_to_sync_queue);
+    g_hash_table_unref(gts->object_to_sync_hashtable);
+    free(gts);
+}
+
+/* A GFunc to sync a grouping_to_sync */
+static void sync_grouping(gpointer data, gpointer params)
+{
+    struct grouping_to_sync *gts = data;
+
+    g_queue_foreach(gts->object_to_sync_queue, sync_object_to_sync, params);
+}
+
+static void add_object_to_sync(const char *grouping, const char *oid,
+                               const char *uuid, int version,
+                               GQueue *grouping_queue,
+                               GHashTable *grouping_hashtable)
+{
+    struct grouping_to_sync *gts = g_hash_table_lookup(grouping_hashtable,
+                                                       grouping);
+    struct object_to_sync *ots;
+
+    if (!gts) {
+        gts = xmalloc(sizeof(*gts));
+
+        gts->grouping = xstrdup(grouping);
+        gts->object_to_sync_queue = g_queue_new();
+        gts->object_to_sync_hashtable =
+            g_hash_table_new_full(hash_object_to_sync, equal_object_to_sync,
+                                  NULL, free_object_to_sync);
+        g_queue_push_tail(grouping_queue, gts);
+        g_hash_table_insert(grouping_hashtable, gts->grouping, gts);
+    }
+
+    ots = xmalloc(sizeof(*ots));
+    ots->oid = xstrdup(oid);
+    ots->uuid = xstrdup(uuid);
+    ots->version = version;
+    if (!g_hash_table_lookup(gts->object_to_sync_hashtable, ots)) {
+        g_queue_push_tail(gts->object_to_sync_queue, ots);
+        g_hash_table_add(gts->object_to_sync_hashtable, ots);
+    } else {
+        free_object_to_sync(ots);
+    }
+}
+
 /** List of HSM configuration parameters */
 enum pho_cfg_params_hsm {
     /* File path to store the already sync copy ctime */
@@ -181,7 +358,7 @@ static int set_tosync_ctime(struct timeval *tosync_ctime)
 static void print_usage(void)
 {
     printf("usage: %s [-h/--help] [-v/--verbose] [-q/--quiet] [-d/--dry-run] "
-           "source_copy_name destination_copy_name\n"
+           "[-g/--grouping] source_copy_name destination_copy_name\n"
            "\n"
            "This command creates a new copy `destination_copy_name` "
            "replicating the data referenced by `source_copy_name`. The source "
@@ -193,16 +370,13 @@ static void print_usage(void)
            "than 'now - sync_delay_second' are replicated to destination "
            "copies.\n"
            "'synced_timed_path' and 'sync_delay_second' can be set from the "
-           "phobos configuration.\n",
+           "phobos configuration.\n"
+           "\n"
+           "If the '-g/--grouping' option is set, sync are grouped per "
+           "grouping (Warning: with this option, the first sync starts only "
+           "when all the objects to sync had been listed from the DSS.).\n",
            program_invocation_short_name);
 }
-
-struct params {
-    const char *source_copy_name;
-    const char *destination_copy_name;
-    bool dry_run;
-    int log_level;
-};
 
 #define DEFAULT_PARAMS {NULL, NULL, false, PHO_LOG_INFO}
 
@@ -213,12 +387,13 @@ static struct params parse_args(int argc, char **argv)
         {"verbose", no_argument, 0, 'v'},
         {"quiet", no_argument, 0, 'q'},
         {"dry-run", no_argument, 0, 'd'},
+        {"grouping", no_argument, 0, 'g'},
         {0, 0, 0, 0}
     };
     struct params params = DEFAULT_PARAMS;
     int c;
 
-    while ((c = getopt_long(argc, argv, "hvqd", long_options, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "hvqdg", long_options, NULL)) != -1) {
         switch (c) {
         case 'h':
             print_usage();
@@ -231,6 +406,9 @@ static struct params parse_args(int argc, char **argv)
             break;
         case 'd':
             params.dry_run = true;
+            break;
+        case 'g':
+            params.grouping = true;
             break;
         default:
             print_usage();
@@ -253,48 +431,6 @@ static struct params parse_args(int argc, char **argv)
         params.log_level = PHO_LOG_DEBUG;
 
     return params;
-}
-
-static int sync_object(const char *oid, const char *object_uuid, int version,
-                       const char *source_copy_name,
-                       const char *destination_copy_name, bool dry_run)
-{
-    struct pho_xfer_target target = {0};
-    struct pho_xfer_desc xfer = {0};
-    char *target_uuid;
-    int rc;
-
-    pho_info("Syncing object ('%s' oid, '%s' uuid, '%d' version) from copy "
-             "'%s' to copy '%s'%s", oid, object_uuid, version, source_copy_name,
-             destination_copy_name,
-             dry_run ? " (DRY RUN MODE, NO SYNC DONE)" : "");
-    if (dry_run)
-        return 0;
-
-    target_uuid = xstrdup(object_uuid);
-    xfer.xd_op = PHO_XFER_OP_COPY;
-    target.xt_objid = xstrdup(oid);
-    target.xt_objuuid = target_uuid;
-    target.xt_version = version;
-    xfer.xd_ntargets = 1;
-    xfer.xd_targets = &target;
-    xfer.xd_params.copy.get.copy_name = source_copy_name;
-    /* only sync alive object */
-    xfer.xd_params.copy.get.scope = DSS_OBJ_ALIVE;
-    /* destination family is given by destination_copy_name profile */
-    xfer.xd_params.copy.put.family = PHO_RSC_INVAL;
-    xfer.xd_params.copy.put.copy_name = destination_copy_name;
-    xfer.xd_params.copy.put.grouping = NULL;
-
-    rc = phobos_copy(&xfer, 1, NULL, NULL);
-    if (rc)
-        pho_warn("Error %d (%s) when syncing object '%s' to copy '%s'",
-                 -rc, strerror(-rc), oid, destination_copy_name);
-
-    pho_xfer_desc_clean(&xfer);
-    free(target.xt_objid);
-    free(target_uuid);
-    return rc;
 }
 
 static int update_synced_ctime(const char *synced_ctime_path,
@@ -330,6 +466,16 @@ end:
 
 int main(int argc, char **argv)
 {
+    /* Hashtable of grouping_to_sync (also stored into grouping_queue to track
+     * ctime order), hashed per grouping
+     * grouping_to_sync are owned and freed by the unref of grouping_hashtable.
+     */
+    GHashTable *grouping_hashtable = NULL;
+    /* Queue of grouping_to_sync (also stored into grouping_hashtable to detect
+     * duplicate), head is the grouping with the older 'source_copy_name' copy
+     * ctime
+     */
+    GQueue *grouping_queue = NULL;
     char synced_ctime_string[SYNCED_CTIME_STRING_LENGTH + 1] = {0};
     char tosync_ctime_string[SYNCED_CTIME_STRING_LENGTH + 1] = {0};
     const char *synced_ctime_path = NULL;
@@ -405,6 +551,12 @@ int main(int argc, char **argv)
     dss_filter_free(&filter);
     if (rc)
         goto dss_end;
+
+    if (params.grouping) {
+        grouping_queue = g_queue_new();
+        grouping_hashtable = g_hash_table_new_full(g_str_hash, g_str_equal,
+                                                   NULL, free_grouping_to_sync);
+    }
 
     /* target extent for each device dir */
     for (i = 0; i < dev_count; i++) {
@@ -587,14 +739,23 @@ int main(int argc, char **argv)
                 }
 
                 if (object_count) {
-                    rc2 = sync_object(object_list[0].oid, layout_list[k].uuid,
-                                      layout_list[k].version,
-                                      params.source_copy_name,
-                                      params.destination_copy_name,
-                                      params.dry_run);
-                    if (rc2) {
-                        update_sync = false;
-                        rc = rc ? : rc2;
+                    if (!params.grouping) {
+                        rc2 = sync_object(object_list[0].oid,
+                                          layout_list[k].uuid,
+                                          layout_list[k].version,
+                                          params.source_copy_name,
+                                          params.destination_copy_name,
+                                          params.dry_run);
+                        if (rc2) {
+                            update_sync = false;
+                            rc = rc ? : rc2;
+                        }
+                    } else {
+                        add_object_to_sync(
+                            object_list[0].grouping ? : NO_GROUPING,
+                            object_list[0].oid, layout_list[k].uuid,
+                            layout_list[k].version, grouping_queue,
+                            grouping_hashtable);
                     }
                 }
 
@@ -616,6 +777,17 @@ close_lib_hdl:
 
     dss_res_free(dev_list, dev_count);
 
+    /* do grouped sync */
+    if (params.grouping) {
+        struct sync_params sp = {0, &params};
+
+        g_queue_foreach(grouping_queue, sync_grouping, &sp);
+        if (sp.rc) {
+            update_sync = false;
+            rc = rc ? : sp.rc;
+        }
+    }
+
     /* update synced ctime */
     if (update_sync) {
         rc2 = update_synced_ctime(synced_ctime_path, tosync_ctime_string);
@@ -624,6 +796,11 @@ close_lib_hdl:
     }
 
 dss_end:
+    if (params.grouping) {
+        g_queue_free(grouping_queue);
+        g_hash_table_unref(grouping_hashtable);
+    }
+
     dss_fini(&dss);
 cfg_end:
     pho_cfg_local_fini();

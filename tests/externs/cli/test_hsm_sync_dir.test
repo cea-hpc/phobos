@@ -52,7 +52,8 @@ function setup
     dir2="$DIR_TEST_IN/dir2"
     mkdir ${dir1}
     mkdir ${dir2}
-    $phobos dir add --tags this-host ${dir1} ${dir2}
+    $phobos dir add --tags this-host,dir1 ${dir1}
+    $phobos dir add --tags this-host,dir2 ${dir2}
     $phobos dir format --fs posix --unlock ${dir1} ${dir2}
 }
 
@@ -179,8 +180,41 @@ function no_synced_time_on_error()
     fi
 }
 
+function grouping_sync()
+{
+    # put in order on dir1 with default copy_name:
+    # a_1, b_1, no_grp, b_2, a_2
+    $phobos put --grouping a --tags dir1 ${FILES[0]} a_1
+    $phobos put --grouping b --tags dir1 ${FILES[0]} b_1
+    $phobos put --tags dir1 ${FILES[0]} no_grp
+    $phobos put --grouping b --tags dir1 ${FILES[0]} b_2
+    $phobos put --grouping a --tags dir1 ${FILES[0]} a_2
+
+    # sync we must get in order:
+    # a_1, a_2, b_1, b_2, no_grp
+    $valg_phobos_hsm_sync_dir --grouping source sync
+
+    # check order
+    t_a_1=$($phobos copy list --copy-name sync -o creation_time a_1)
+    t_a_2=$($phobos copy list --copy-name sync -o creation_time a_2)
+    t_b_1=$($phobos copy list --copy-name sync -o creation_time b_1)
+    t_b_2=$($phobos copy list --copy-name sync -o creation_time b_2)
+    t_no_grp=$($phobos copy list --copy-name sync -o creation_time no_grp)
+
+    if [[ ${t_a_1} > ${t_a_2} ]]; then
+        error "a_1 sync copy must be older than a_2 one"
+    elif [[ ${t_a_2} > ${t_b_1} ]]; then
+        error "a_2 sync copy must be older than b_1 one"
+    elif [[ ${t_b_1} > ${t_b_2} ]]; then
+        error "b_1 sync copy must be older than b_2 one"
+    elif [[ ${t_b_2} > ${t_no_grp} ]]; then
+        error "b_2 sync copy must be older than no_grp one"
+    fi
+}
+
 TESTS=(
     "check_hsm_sync_dir_opt;"
     "setup; check_hsm_sync_dir; cleanup"
     "setup; no_synced_time_on_error; cleanup"
+    "setup; grouping_sync; cleanup"
 )
