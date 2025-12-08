@@ -588,7 +588,7 @@ class DeviceAddTest(BasicExecutionTest):
     def test_dir_add_missing(self):
         """Adding a non-existent directory should raise an error."""
         self.pho_execute(['-v', 'dir', 'add', '/tmp/nonexistentfileAA'],
-                         code=errno.EINVAL)
+                         code=errno.ENOENT)
         self.pho_execute(['-v', 'drive', 'add', '/dev/IMBtape0 /dev/IBMtape1'],
                          code=errno.ENOENT)
 
@@ -608,7 +608,7 @@ class DeviceAddTest(BasicExecutionTest):
 
         self.pho_execute(['-v', 'dir', 'add', file1.name, '/tmp/notfileAA',
                           file2.name],
-                         code=errno.EINVAL)
+                         code=errno.ENOENT)
         output, _ = self.pho_execute_capture(['dir', 'list'])
         self.assertIn(file1.name, output)
         self.assertNotIn('/tmp/notfileAA', output)

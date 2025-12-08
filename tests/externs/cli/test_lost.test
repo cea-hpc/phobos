@@ -1,0 +1,427 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2025 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for deletion of media and associated extents
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/tape_drive.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
+
+function start_daemons
+{
+    if [ "$TEST_FAMILY" == "dir" ]; then
+        invoke_lrs
+    else
+        invoke_daemons
+    fi
+}
+
+function stop_daemons
+{
+    if [ "$TEST_FAMILY" == "dir" ]; then
+        waive_lrs
+    else
+        waive_daemons
+    fi
+}
+
+function setup_dir
+{
+    setup_tables
+    invoke_lrs
+
+    setup_test_dirs
+
+    export TEST_FAMILY="dir"
+}
+
+function setup_tape
+{
+    setup_tables
+    invoke_daemons
+
+    drives="$(get_lto_drives 6 3)"
+    $phobos drive add --unlock $drives
+
+    export TEST_FAMILY="tape"
+}
+
+function cleanup_dir
+{
+    waive_lrs
+    cleanup_test_dirs
+    drop_tables
+}
+
+function cleanup_tape
+{
+    waive_daemons
+    drop_tables
+    drain_all_drives
+}
+
+function check_remaining
+{
+    local expected_media_count=$1
+    local expected_complete=$2
+    local expected_readable=$3
+    local expected_incomplete=$4
+    local expected_extent_count=$5
+
+    local dir_count="$($phobos $TEST_FAMILY list | wc -l)"
+    ((dir_count == $expected_media_count)) ||
+        error "$expected_media_count $TEST_FAMILY should remain"
+
+    # We need the space before the complete because "*complete*" matches
+    # with "incomplete"...
+    local copy_count="$($phobos copy list -o all | grep " complete" | wc -l)"
+    ((copy_count == $expected_complete)) ||
+        error "$expected_complete copies should remain complete"
+
+    copy_count="$($phobos copy list -o all | grep readable | wc -l)"
+    ((copy_count == $expected_readable)) ||
+        error "$expected_readable copies should be readable"
+
+    copy_count="$($phobos copy list -o all | grep incomplete | wc -l)"
+    ((copy_count == $expected_incomplete)) ||
+        error "$expected_incomplete copies should be incomplete"
+
+    local extent_count="$($phobos extent list --degroup | wc -l)"
+    ((extent_count == $expected_extent_count)) ||
+        error "$expected_extent_count extents should remain"
+}
+
+function check_get_success
+{
+    local oid="$1"
+    local file="$2"
+
+    mkdir -p "$(dirname /tmp/$oid)"
+    $phobos get $oid /tmp/$oid ||
+        error "Get on '$oid' should have succeeded"
+
+    diff /tmp/$oid $file
+    rm /tmp/$oid
+}
+
+function check_get_failure
+{
+    local oid="$1"
+
+    mkdir -p "$(dirname /tmp/$oid)"
+    $phobos get $oid /tmp/$oid &&
+        error "Get on '$oid' should have failed"
+
+    return 0
+}
+
+function test_simple
+{
+    local prefix=$(generate_prefix_id)
+    local oid=${prefix}_id
+    local media_type=""
+    local media
+
+    if [ "$TEST_FAMILY" == "dir" ]; then
+        media=("$DIR_TEST_IN/tmp1" "$DIR_TEST_IN/tmp2" "$DIR_TEST_IN/tmp3")
+
+        mkdir ${media[@]}
+    else
+        media=( $(get_tapes L6 3 | nodeset -e) )
+    fi
+
+    if [[ "${TEST_FAMILY}" == "tape" ]]; then
+        media_type="-t lto6"
+    fi
+
+    $phobos $TEST_FAMILY add ${media_type} --tags "first" ${media[0]}
+    $phobos $TEST_FAMILY add ${media_type} --tags "second" ${media[1]}
+    $phobos $TEST_FAMILY add ${media_type} --tags "third" ${media[2]}
+    $phobos $TEST_FAMILY format --unlock ${media[@]}
+
+    $phobos put --family $TEST_FAMILY --tags "first" /etc/hosts $oid.0 ||
+        error "Object $oid.0 should be put"
+    $phobos put --family $TEST_FAMILY --tags "second" /etc/hosts $oid.1 ||
+        error "Object $oid.1 should be put"
+    $phobos put --family $TEST_FAMILY --tags "third" /etc/hosts $oid.2 ||
+        error "Object $oid.2 should be put"
+
+    stop_daemons
+
+    $valg_phobos $TEST_FAMILY delete --lost ${media[0]} ||
+        error "Deletion of ${media[0]} should have succeeded"
+
+    check_remaining 2 2 0 1 2
+    start_daemons
+    check_get_failure $oid.0
+    stop_daemons
+
+    $valg_phobos $TEST_FAMILY delete --lost ${media[1]} ${media[2]} ||
+        error "Deletion of ${media[1]} and ${media[2]} should have succeeded"
+
+    check_remaining 0 0 0 3 0
+
+    start_daemons
+    check_get_failure $oid.0
+    check_get_failure $oid.1
+    check_get_failure $oid.2
+    stop_daemons
+
+    return 0
+}
+
+function test_layout_raid1
+{
+    local prefix=$(generate_prefix_id)
+    local oid=${prefix}_id
+    local media_type=""
+    local media
+
+    if [ "$TEST_FAMILY" == "dir" ]; then
+        media=("$DIR_TEST_IN/tmp1" "$DIR_TEST_IN/tmp2")
+
+        mkdir ${media[@]}
+    else
+        media=( $(get_tapes L6 2 | nodeset -e) )
+    fi
+
+    if [[ "${TEST_FAMILY}" == "tape" ]]; then
+        media_type="-t lto6"
+    fi
+
+    $phobos $TEST_FAMILY add ${media_type} --tags "first" ${media[0]}
+    $phobos $TEST_FAMILY add ${media_type} --tags "second" ${media[1]}
+    $phobos $TEST_FAMILY format --unlock ${media[@]}
+
+    $phobos put --family $TEST_FAMILY --layout raid1 \
+        --lyt-params "repl_count=2" /etc/hosts $oid.0 ||
+        error "Object $oid.0 should be put"
+    $phobos put --family $TEST_FAMILY --tags "second" /etc/hosts $oid.1 ||
+        error "Object $oid.1 should be put"
+
+    stop_daemons
+
+    $valg_phobos $TEST_FAMILY delete --lost ${media[0]} ||
+        error "Deletion of ${media[0]} should have succeeded"
+
+    check_remaining 1 1 1 0 2
+
+    start_daemons
+
+    check_get_success $oid.0 /etc/hosts
+    check_get_success $oid.1 /etc/hosts
+    stop_daemons
+
+    $valg_phobos $TEST_FAMILY delete --lost ${media[1]} ||
+        error "Deletion of ${media[1]} should have succeeded"
+
+    check_remaining 0 0 0 2 0
+
+    start_daemons
+    check_get_failure $oid.0
+    check_get_failure $oid.1
+    stop_daemons
+
+    return 0
+}
+
+function test_layout_raid4
+{
+    local file="$1"
+
+    local prefix=$(generate_prefix_id)
+    local oid=${prefix}_id
+    local media_type=""
+    local media
+
+    if [ "$TEST_FAMILY" == "dir" ]; then
+        media=("$DIR_TEST_IN/tmp1" "$DIR_TEST_IN/tmp2" "$DIR_TEST_IN/tmp3")
+
+        mkdir ${media[@]}
+    else
+        media=( $(get_tapes L6 3 | nodeset -e) )
+    fi
+
+    if [[ "${TEST_FAMILY}" == "tape" ]]; then
+        media_type="-t lto6"
+    fi
+
+    $phobos $TEST_FAMILY add ${media_type} ${media[@]}
+    $phobos $TEST_FAMILY format --unlock ${media[@]}
+
+    $phobos put --family $TEST_FAMILY --layout raid4 $file $oid ||
+        error "Object $oid should be put"
+
+    stop_daemons
+
+    $valg_phobos $TEST_FAMILY delete --lost ${media[1]} ||
+        error "Deletion of ${media[1]} should have succeeded"
+
+    check_remaining 2 0 1 0 2
+
+    start_daemons
+    check_get_success $oid $file
+    stop_daemons
+
+    $valg_phobos $TEST_FAMILY delete --lost ${media[0]} ||
+        error "Deletion of ${media[0]} should have succeeded"
+
+    check_remaining 1 0 0 1 1
+
+    start_daemons
+    check_get_failure $oid
+    stop_daemons
+
+    $valg_phobos $TEST_FAMILY delete --lost ${media[2]} ||
+        error "Deletion of ${media[2]} should have succeeded"
+
+    check_remaining 0 0 0 1 0
+
+    start_daemons
+    check_get_failure $oid
+    stop_daemons
+
+    return 0
+}
+
+function test_layout_raid4_even
+{
+    local file="$DIR_TEST_IN/test_raid4_even"
+
+    touch $file
+    dd if=/dev/zero of=$file count=1 bs=1024
+
+    test_layout_raid4 $file
+}
+
+function test_layout_raid4_odd
+{
+    local file="$DIR_TEST_IN/test_raid4_odd"
+
+    touch $file
+    dd if=/dev/zero of=$file count=1 bs=1025
+
+    test_layout_raid4 $file
+}
+
+function test_with_import
+{
+    local prefix=$(generate_prefix_id)
+    local oid=${prefix}_id
+    local media_type=""
+    local media
+
+    if [ "$TEST_FAMILY" == "dir" ]; then
+        media=("$DIR_TEST_IN/tmp1" "$DIR_TEST_IN/tmp2")
+
+        mkdir ${media[@]}
+    else
+        media=( $(get_tapes L6 2 | nodeset -e) )
+    fi
+
+    if [[ "${TEST_FAMILY}" == "tape" ]]; then
+        media_type="-t lto6"
+    fi
+
+    $phobos $TEST_FAMILY add ${media_type} --tags "first" ${media[0]}
+    $phobos $TEST_FAMILY add ${media_type} --tags "second" ${media[1]}
+    $phobos $TEST_FAMILY format --unlock ${media[@]}
+
+    $phobos put --family $TEST_FAMILY --layout raid1 \
+        --lyt-params "repl_count=2" /etc/hosts $oid.0 ||
+        error "Object $oid.0 should be put"
+    $phobos put --family $TEST_FAMILY --tags "second" /etc/hosts $oid.1 ||
+        error "Object $oid.1 should be put"
+
+    if [[ "${TEST_FAMILY}" == "tape" ]]; then
+        for drive in ${drives}; do
+            $phobos drive unload ${drive}
+        done
+    fi
+
+    stop_daemons
+
+    $valg_phobos $TEST_FAMILY delete --lost ${media[0]} ||
+        error "Deletion of ${media[0]} should have succeeded"
+
+    check_remaining 1 1 1 0 2
+
+    start_daemons
+
+    check_get_success $oid.0 /etc/hosts
+    check_get_success $oid.1 /etc/hosts
+
+    $phobos $TEST_FAMILY import ${media_type} --unlock ${media[0]} ||
+        error "Import of ${media[0]} should have succeeded"
+
+    check_remaining 2 2 0 0 3
+
+    check_get_success $oid.0 /etc/hosts
+    check_get_success $oid.1 /etc/hosts
+
+    if [[ "${TEST_FAMILY}" == "tape" ]]; then
+        for drive in ${drives}; do
+            $phobos drive unload ${drive}
+        done
+    fi
+
+    stop_daemons
+
+    $valg_phobos $TEST_FAMILY delete --lost ${media[0]} ${media[1]} ||
+        error "Deletion of ${media[0]} and ${media[1]} should have succeeded"
+
+    check_remaining 0 0 0 2 0
+
+    start_daemons
+
+    check_get_failure $oid.0
+    check_get_failure $oid.1
+
+    $phobos $TEST_FAMILY import ${media_type} --unlock ${media[1]} ||
+        error "Import of ${media[1]} should have succeeded"
+
+    check_remaining 1 1 1 0 2
+
+    check_get_success $oid.0 /etc/hosts
+    check_get_success $oid.1 /etc/hosts
+}
+
+TESTS=(
+    "setup_dir; test_simple; cleanup_dir"
+    "setup_dir; test_layout_raid1; cleanup_dir"
+    "setup_dir; test_layout_raid4_even; cleanup_dir"
+    "setup_dir; test_layout_raid4_odd; cleanup_dir"
+    "setup_dir; test_with_import; cleanup_dir"
+)
+
+if  [[ -w /dev/changer ]]; then
+    TESTS+=("setup_tape; test_simple; cleanup_tape"
+            "setup_tape; test_layout_raid1; cleanup_tape"
+            "setup_tape; test_layout_raid4_even; cleanup_tape"
+            "setup_tape; test_layout_raid4_odd; cleanup_tape"
+            "setup_tape; test_with_import; cleanup_tape"
+        )
+fi

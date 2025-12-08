@@ -7,7 +7,7 @@ RUN dnf install -y 'dnf-command(config-manager)'
 RUN dnf config-manager --set-enabled crb
 RUN dnf install epel-release -y
 
-RUN dnf -y install python3-devel postgresql-devel glib2-devel jansson-devel libattr-devel libini_config-devel openssl-devel sg3_utils-devel protobuf-c-devel systemd autoconf automake libtool make openssl-devel xxhash-devel libcmocka-devel postgresql-server postgresql-contrib glib2 jansson libini_config openssl attr libattr python3 python3-PyYAML python3-clustershell python3-psycopg2 python3-tabulate python3-argcomplete protobuf protobuf-c xxhash-libs libuuid libuuid-devel gcc gdb valgrind vim git bc procps diffutils xxhash rpm-build jq kmod sudo python3-sphinx
+RUN dnf -y install python3-devel postgresql-devel glib2-devel jansson-devel libattr-devel libini_config-devel openssl-devel sg3_utils-devel protobuf-c-devel systemd autoconf automake libtool make openssl-devel xxhash-devel libcmocka-devel postgresql-server postgresql-contrib glib2 jansson libini_config openssl attr libattr python3 python3-PyYAML python3-clustershell python3-psycopg2 python3-tabulate python3-argcomplete protobuf protobuf-c xxhash-libs libuuid libuuid-devel gcc gdb valgrind vim git bc procps diffutils xxhash rpm-build jq kmod sudo python3-sphinx ctags
 
 RUN mkdir -p /var/run/postgresql
 RUN chown -R postgres: /var/run/postgresql

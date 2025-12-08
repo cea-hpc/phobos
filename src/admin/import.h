@@ -24,6 +24,8 @@
 #ifndef _PHO_ADMIN_IMPORT_H
 #define _PHO_ADMIN_IMPORT_H
 
+#include "phobos_admin.h"
+
 #include "pho_srl_lrs.h"
 
 /**

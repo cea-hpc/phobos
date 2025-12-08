@@ -48,7 +48,7 @@ gen-proto.stamp
 *.pb-c.h
 /src/cli/build/
 /src/lrs/phobosd
-/src/tlc/tlc
+/src/tlc/phobos_tlc
 /tape_library_certification/phobos_tape_library_test
-doc/man/build/doctrees/
+doc/man/build/
 gen-man.stamp

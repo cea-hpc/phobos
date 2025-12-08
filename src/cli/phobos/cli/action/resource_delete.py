@@ -30,12 +30,17 @@ class ResourceDeleteOptHandler(ActionOptHandler):
     descr = 'remove resource(s) from the system'
     epilog = "Resources are only removed from the database, and so will not "\
              "be available through Phobos anymore. No other operations are "\
-             "executed."
+             "executed. For media, the resource cannot be removed if it "\
+             "contains extents, unless the '--lost' flag is used."
 
     @classmethod
     def add_options(cls, parser):
         super(ResourceDeleteOptHandler, cls).add_options(parser)
         parser.add_argument('--library',
                             help="Library containing deleted resources")
+        parser.add_argument('-l', '--lost', action='store_true',
+                            help="remove all extents associated with the "
+                                 "medium from the database and update the "
+                                 "objects and copies accordingly")
         parser.add_argument('res', nargs='+', help='Resource(s) to remove')
         parser.set_defaults(verb=cls.label)

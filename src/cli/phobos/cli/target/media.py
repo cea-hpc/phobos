@@ -252,12 +252,14 @@ class MediaOptHandler(BaseResourceOptHandler):
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
-    def del_medium(self, adm, family, resources, library):
+    def del_medium(self, adm, family, #pylint: disable=too-many-arguments
+                   resources, library, lost):
         """Delete medium method"""
 
     def delete_medium_and_device(self):
         """Delete a medium and device at once"""
         resources = self.params.get('res')
+        lost = self.params.get('lost')
         set_library(self)
         valid_count = 0
         rc = 0
@@ -270,7 +272,8 @@ class MediaOptHandler(BaseResourceOptHandler):
                         rc = adm.device_delete(self.family, [path],
                                                self.library)
                         device_is_del = True
-                        self.del_medium(adm, self.family, [path], self.library)
+                        self.del_medium(adm, self.family, [path], self.library,
+                                        lost)
                         valid_count += 1
                     except EnvironmentError as err:
                         self.logger.error(env_error_format(err))

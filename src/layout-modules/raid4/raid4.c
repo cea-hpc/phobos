@@ -211,14 +211,6 @@ static int layout_raid4_decode(struct pho_data_processor *decoder)
     if (rc)
         return rc;
 
-    /* Size is the sum of the extent sizes, decoder->src_layout->wr_size is not
-     * positioned properly by the dss
-     */
-    if (decoder->src_layout->ext_count % 3 != 0)
-        LOG_RETURN(-EINVAL,
-                   "raid4 Xor layout extents count (%d) is not a multiple of 3",
-                   decoder->src_layout->ext_count);
-
     io_context->read.to_read = decoder->object_size;
 
     /* Empty GET does not need any IO */
@@ -268,13 +260,76 @@ static int layout_raid4_locate(struct dss_handle *dss,
     return raid_locate(dss, layout, 2, 1, focus_host, hostname, nb_new_lock);
 }
 
+static int layout_raid4_reconstruct(struct layout_info layout,
+                                    struct copy_info *copy)
+{
+    ssize_t split_sizes[3] = {0};
+    ssize_t extent_sizes = 0;
+    struct extent *extents;
+    int extent_count;
+    int object_size;
+    int odd;
+
+    extent_count = layout.ext_count;
+    extents = layout.extents;
+
+    object_size = get_object_size_from_layout(&layout);
+    if (object_size < 0)
+        LOG_RETURN(-EINVAL,
+                   "Invalid object size for reconstruction of object '%s': '%d'",
+                   layout.oid, object_size);
+
+    for (int i = 0; i < extent_count; i++) {
+        int index = (extents[i].layout_idx % 3);
+
+        split_sizes[index] += extents[i].size;
+        extent_sizes += extents[i].size;
+    }
+
+    /**
+     * If object_size is even, then:
+     * size(first half) = size(second half) = size(xor) = object_size / 2
+     *
+     * So a copy is considered complete if the combined size of all extents is
+     * equal to (3 * object_size) / 2.
+     *
+     * If object_size is odd, then:
+     * size(first half) = size(xor) = (object_size + 1) / 2
+     * size(second half) = (object_size - 1) / 2
+     *
+     * So a copy is considered complete if the combined size of all extents is
+     * equal to:
+     * (2 * (object_size + 1) + object_size - 1) / 2 = (3 * object_size + 1) / 2
+     *
+     * All in all, a copy is considered complete if the combined size of all
+     * extents is equal to (3 * object_size + (object_size % 2)) / 2.
+     *
+     * Similarly, a copy is considered readable if size of the first half or the
+     * second half + the size of the xor is equal to the object size, or the
+     * size of the first half + the size of the xor is equal to the object size
+     * + 1.
+     */
+    odd = (object_size % 2);
+
+    if (extent_sizes == ((3 * object_size + odd) / 2))
+        copy->copy_status = PHO_COPY_STATUS_COMPLETE;
+    else if (split_sizes[0] + split_sizes[1] == object_size ||
+             split_sizes[0] + split_sizes[2] == object_size + odd ||
+             split_sizes[1] + split_sizes[2] == object_size)
+        copy->copy_status = PHO_COPY_STATUS_READABLE;
+    else
+        copy->copy_status = PHO_COPY_STATUS_INCOMPLETE;
+
+    return 0;
+}
+
 static const struct pho_layout_module_ops LAYOUT_RAID4_OPS = {
     .encode = layout_raid4_encode,
     .decode = layout_raid4_decode,
     .erase = layout_raid4_erase,
     .locate = layout_raid4_locate,
     .get_specific_attrs = NULL,
-    .reconstruct = NULL,
+    .reconstruct = layout_raid4_reconstruct,
 };
 
 /** Layout module registration entry point */

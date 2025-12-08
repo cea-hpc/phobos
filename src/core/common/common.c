@@ -280,7 +280,7 @@ int _normalize_path(char *path)
 
     norm_ptr = realpath(path, norm_path);
     if (norm_ptr == NULL)
-        LOG_RETURN(-EINVAL, "Failed to normalize path '%s'", path);
+        LOG_RETURN(-errno, "Failed to normalize path '%s'", path);
 
     norm_path[PATH_MAX - 1] = '\0';
     len_path = strlen(norm_path);

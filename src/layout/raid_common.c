@@ -63,7 +63,6 @@ static void free_extent_address_buff(void *void_extent)
     free(extent->address.buff);
 }
 
-
 int raid_encoder_init(struct pho_data_processor *encoder,
                       const struct module_desc *module,
                       const struct pho_proc_ops *enc_ops,
@@ -1827,4 +1826,23 @@ log_err:
     LOG_RETURN(-EINVAL,
                "Hash mismatch: the data in the extent %s/%s has been corrupted",
                extent->media.name, extent->address.buff);
+}
+
+int get_object_size_from_layout(struct layout_info *layout)
+{
+    const char *buffer;
+    int object_size;
+
+    buffer = pho_attr_get(&layout->layout_desc.mod_attrs,
+                          PHO_EA_OBJECT_SIZE_NAME);
+    if (buffer == NULL)
+        LOG_RETURN(-EINVAL, "Failed to get object size of object '%s'",
+                   layout->oid);
+
+    object_size = str2int64(buffer);
+    if (object_size < 0)
+        LOG_RETURN(-EINVAL, "Failed to convert '%s' to size for object '%s'",
+                   layout->oid, buffer);
+
+    return object_size;
 }

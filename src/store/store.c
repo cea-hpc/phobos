@@ -1079,14 +1079,15 @@ static int init_enc_or_dec(struct pho_data_processor *proc,
         return rc;
 
     if (copy->copy_status == PHO_COPY_STATUS_INCOMPLETE) {
+        pho_error(rc = -EINVAL,
+                  "Status of copy '%s' for the object '%s' is incomplete, cannot be read",
+                  copy->copy_name, obj->oid);
         copy_info_free(copy);
-        LOG_RETURN(rc = -ENOENT, "Status of copy '%s' for the object '%s' is "
-                  "incomplete, cannot be reconstructed", copy->copy_name,
-                  obj->oid);
+        return rc;
     }
 
     if (copy->copy_status != PHO_COPY_STATUS_COMPLETE)
-        pho_warn("Copy '%s' status for the object '%s' is %s.", copy->copy_name,
+        pho_warn("Copy '%s' status for the object '%s' is %s", copy->copy_name,
                  obj->oid, copy_status2str(copy->copy_status));
 
     proc->src_copy_ctime = copy->creation_time;

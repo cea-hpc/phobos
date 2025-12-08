@@ -192,9 +192,17 @@ static int layout_delete_query(void *void_layout, int item_cnt,
         g_string_append_printf(request,
                                "DELETE FROM layout"
                                " WHERE object_uuid = '%s'"
-                               "  AND version = '%d' AND copy_name = '%s';",
+                               "  AND version = '%d' AND copy_name = '%s'%s",
                                layout->uuid, layout->version,
-                               layout->copy_name);
+                               layout->copy_name,
+                               layout->ext_count ? " AND (" : "");
+
+        for (int j = 0; j < layout->ext_count; j++)
+            g_string_append_printf(request, "extent_uuid = '%s'%s",
+                                   layout->extents[j].uuid,
+                                   j + 1 < layout->ext_count ? " OR " : "");
+
+        g_string_append_printf(request, "%s;", layout->ext_count ? ")" : "");
     }
 
     return 0;

@@ -96,8 +96,9 @@ class RadosPoolOptHandler(MediaOptHandler):
                               nb_dev_to_add - nb_dev_added, nb_dev_to_add)
             sys.exit(abs(rc))
 
-    def del_medium(self, adm, family, resources, library):
-        adm.medium_delete(family, resources, library)
+    def del_medium(self, adm, family, resources, library, lost):
+        #pylint: disable=too-many-arguments
+        adm.medium_delete(family, resources, library, lost)
 
     def exec_delete(self):
         """

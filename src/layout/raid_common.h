@@ -231,4 +231,6 @@ int extent_hash_compare(struct extent_hash *hash, struct extent *extent);
 struct pho_ext_loc make_ext_location(struct pho_data_processor *proc, size_t i,
                                      int idx, enum processor_type type);
 
+int get_object_size_from_layout(struct layout_info *layout);
+
 #endif

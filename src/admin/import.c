@@ -629,7 +629,8 @@ static int _explore_from_path_aux(struct admin_handle *adm,
         char *path;
         int fd;
 
-        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))
+        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..") ||
+            !strcmp(entry->d_name, ".phobos_dir_label"))
             continue;
 
         rc = asprintf(&path, "%s/%s", root_path, entry->d_name);

@@ -29,6 +29,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <glib.h>
+#include <math.h>
 #include <openssl/evp.h>
 #include <string.h>
 #include <unistd.h>
@@ -397,11 +398,6 @@ static int layout_raid1_decode(struct pho_data_processor *decoder)
         LOG_RETURN(rc,
                    "Invalid replica count from layout to build raid1 decoder");
 
-    if (decoder->src_layout->ext_count % repl_count != 0)
-        LOG_RETURN(-EINVAL, "layout extents count (%d) is not a multiple "
-                   "of replica count (%u)",
-                   decoder->src_layout->ext_count, repl_count);
-
     io_context = xcalloc(1, sizeof(*io_context));
     decoder->private_reader = io_context;
     io_context->name = PLUGIN_NAME;
@@ -491,13 +487,12 @@ static int layout_raid1_reconstruct(struct layout_info lyt,
     ssize_t replica_size = 0;
     struct extent *extents;
     unsigned int repl_cnt;
-    const char *buffer;
-    int obj_size;
+    int object_size;
     int ext_cnt;
     int rc;
     int i;
 
-    // Recover repl_count and obj_size
+    // Recover repl_count and object_size
     rc = raid1_repl_count(&lyt, &repl_cnt);
     if (rc)
         LOG_RETURN(rc,
@@ -507,17 +502,9 @@ static int layout_raid1_reconstruct(struct layout_info lyt,
     ext_cnt = lyt.ext_count;
     extents = lyt.extents;
 
-    buffer = pho_attr_get(&lyt.layout_desc.mod_attrs, PHO_EA_OBJECT_SIZE_NAME);
-    if (buffer == NULL)
-        LOG_RETURN(-EINVAL,
-                   "Failed to get object size for reconstruction of object '%s'",
-                   lyt.oid);
-
-    obj_size = str2int64(buffer);
-    if (obj_size < 0)
-        LOG_RETURN(-EINVAL,
-                   "Invalid object size for reconstruction of object '%s': '%d'",
-                   lyt.oid, obj_size);
+    object_size = get_object_size_from_layout(&lyt);
+    if (object_size < 0)
+        return object_size;
 
     for (i = 0; i < ext_cnt; i++) {
         if (replica_size == extents[i].offset)
@@ -526,9 +513,9 @@ static int layout_raid1_reconstruct(struct layout_info lyt,
         extent_sizes += extents[i].size;
     }
 
-    if (extent_sizes == repl_cnt * obj_size)
+    if (extent_sizes == repl_cnt * object_size)
         copy->copy_status = PHO_COPY_STATUS_COMPLETE;
-    else if (replica_size == obj_size)
+    else if (replica_size == object_size)
         copy->copy_status = PHO_COPY_STATUS_READABLE;
     else
         copy->copy_status = PHO_COPY_STATUS_INCOMPLETE;

@@ -30,6 +30,7 @@ from phobos.cli.common.utils import (setaccess_epilog, uncase_fstype)
 from phobos.cli.target.media import (MediaAddOptHandler, MediaListOptHandler,
                                      MediaLocateOptHandler, MediaOptHandler,
                                      MediaRenameOptHandler,
+                                     MediaImportOptHandler,
                                      MediaSetAccessOptHandler,
                                      MediaUpdateOptHandler)
 from phobos.core.const import fs_type2str, PHO_RSC_DIR # pylint: disable=no-name-in-module
@@ -54,6 +55,19 @@ class DirSetAccessOptHandler(MediaSetAccessOptHandler):
     epilog = setaccess_epilog("dir")
 
 
+class DirImportOptHandler(MediaImportOptHandler):
+    """Specific version of the 'import' command for directories"""
+    descr = "import existing dir"
+
+    @classmethod
+    def add_options(cls, parser):
+        super(DirImportOptHandler, cls).add_options(parser)
+        parser.add_argument('--fs', default="POSIX",
+                            choices=list(map(fs_type2str, FSType)),
+                            type=uncase_fstype(list(map(fs_type2str, FSType))),
+                            help='Filesystem type (default: POSIX)')
+
+
 class DirOptHandler(MediaOptHandler):
     """Directory-related options and actions."""
     label = 'dir'
@@ -62,6 +76,7 @@ class DirOptHandler(MediaOptHandler):
     verbs = [
         DirFormatOptHandler,
         DirSetAccessOptHandler,
+        DirImportOptHandler,
         LockOptHandler,
         MediaAddOptHandler,
         MediaListOptHandler,
@@ -83,8 +98,9 @@ class DirOptHandler(MediaOptHandler):
         """
         exec_add_dir_rados(self, PHO_RSC_DIR)
 
-    def del_medium(self, adm, family, resources, library):
-        adm.medium_delete(family, resources, library)
+    def del_medium(self, adm, family, resources, library, lost):
+        #pylint: disable=too-many-arguments
+        adm.medium_delete(family, resources, library, lost)
 
     def exec_delete(self):
         """

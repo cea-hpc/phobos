@@ -200,9 +200,9 @@ static void paml_ok_free(void **state)
 
     (void) state;
 
-    /* -ENODEV on free dir */
+    /* -ENOENT on free dir */
     rc = phobos_admin_medium_locate(adm, &dir_free_medium, &hostname);
-    assert_int_equal(rc, -EINVAL);
+    assert_int_equal(rc, -ENOENT);
 
     /* NULL on free tape */
     rc = phobos_admin_medium_locate(adm, &tape_free_medium, &hostname);

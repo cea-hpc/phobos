@@ -21,6 +21,7 @@
 Phobos exec CLI utilities
 """
 
+from os import EX_USAGE
 import sys
 
 from phobos.cli.common import env_error_format
@@ -58,6 +59,11 @@ def exec_delete_dir_rados(obj, family):
 def exec_delete_medium_device(obj, dss_type):
     """Remove media or devices."""
     resources = obj.params.get('res')
+    lost = obj.params.get('lost')
+    if lost and dss_type != DSS_MEDIA:
+        obj.logger.error("Only a medium can be declared lost")
+        sys.exit(EX_USAGE)
+
     set_library(obj)
 
     try:
@@ -65,7 +71,8 @@ def exec_delete_medium_device(obj, dss_type):
             if dss_type == DSS_MEDIA:
                 num_deleted, num2delete = adm.medium_delete(obj.family,
                                                             resources,
-                                                            obj.library)
+                                                            obj.library,
+                                                            lost)
             elif dss_type == DSS_DEVICE:
                 num_deleted, num2delete = adm.device_delete(obj.family,
                                                             resources,
