@@ -286,55 +286,48 @@ static int send_generated_requests(struct pho_data_processor *proc,
     return rc;
 }
 
-static int first_data_processor_call(struct pho_data_processor *proc,
-                                     struct pho_comm_info *comm, int enc_id)
+/**
+ * Execute layout step and send new generated requests
+ */
+static int step_and_send_requests(
+    int (*layout_step)(struct pho_data_processor *proc, pho_resp_t *resp,
+                       pho_req_t **requests, size_t *n_reqs),
+    struct pho_comm_info *comm, int enc_id, struct pho_data_processor *proc,
+    pho_resp_t *resp, size_t *n_generated_reqs)
 {
     pho_req_t *requests = NULL;
     size_t n_reqs = 0;
+    int rc;
+
+    rc = layout_step(proc, resp, &requests, &n_reqs);
+    if (n_generated_reqs)
+        *n_generated_reqs = n_reqs;
+
+    rc = send_generated_requests(proc, comm, enc_id, requests, n_reqs, rc);
+
+    return rc;
+}
+
+static int first_data_processor_call(struct pho_data_processor *proc,
+                                     struct pho_comm_info *comm, int enc_id)
+{
     int rc = 0;
 
-    if (is_encoder(proc)) {
+    if (!is_eraser(proc)) {
         /* init reader */
-        rc = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
+        rc = step_and_send_requests(proc->reader_ops->step, comm, enc_id, proc,
+                                    NULL, NULL);
         if (rc)
             return rc;
 
-        assert(n_reqs == 0); /* an encoder reader generates no request */
         /* init writer */
-        rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
-    } else if (is_decoder(proc)) {
-        /* init writer */
-        rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
-        if (rc)
-            return rc;
-
-        assert(n_reqs == 0); /* a decoder writer generates no request */
-        /* init reader */
-        rc = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
-    } else if (is_eraser(proc)) {
-        /* init eraser */
-        rc = proc->eraser_ops->step(proc, NULL, &requests, &n_reqs);
+        return step_and_send_requests(proc->writer_ops->step, comm, enc_id,
+                                      proc, NULL, NULL);
     } else {
-        /* copier */
-        /* init reader */
-        rc = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
-        if (rc)
-            return rc;
-
-        assert(n_reqs == 1);
-        rc = send_generated_requests(proc, comm, enc_id, requests, n_reqs, 0);
-        if (rc)
-            return rc;
-
-        /* init writer */
-        rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
+        /* init eraser */
+        return step_and_send_requests(proc->eraser_ops->step, comm, enc_id,
+                                      proc, NULL, NULL);
     }
-
-    if (rc)
-        return rc;
-
-    assert(n_reqs == 1);
-    return send_generated_requests(proc, comm, enc_id, requests, n_reqs, 0);
 }
 
 /**
@@ -356,7 +349,6 @@ static int processor_communicate(struct pho_data_processor *proc,
 {
     bool writer_done = false;
     bool reader_done = false;
-    pho_req_t *requests = NULL;
     size_t n_reqs = 0;
     int response_kind;
     int rc = 0;
@@ -368,26 +360,24 @@ static int processor_communicate(struct pho_data_processor *proc,
         LOG_RETURN(-EPROTO, "Unable to get response kind to chose processor");
 
     if (is_eraser(proc)) {
-        rc = proc->eraser_ops->step(proc, resp, &requests, &n_reqs);
         /* an eraser needs no io */
-        return send_generated_requests(proc, comm, enc_id, requests, n_reqs,
-                                       rc);
+        return step_and_send_requests(proc->eraser_ops->step, comm, enc_id,
+                                      proc, resp, NULL);
     } else if (response_kind == PHO_REQUEST_KIND__RQ_WRITE ||
                response_kind == PHO_REQUEST_KIND__RQ_RELEASE_WRITE) {
-        rc = proc->writer_ops->step(proc, resp, &requests, &n_reqs);
+        rc = step_and_send_requests(proc->writer_ops->step, comm, enc_id, proc,
+                                    resp, &n_reqs);
         if (n_reqs)
             writer_done = true;
     } else {
         assert(response_kind == PHO_REQUEST_KIND__RQ_READ ||
                response_kind == PHO_REQUEST_KIND__RQ_RELEASE_READ);
-        rc = proc->reader_ops->step(proc, resp, &requests, &n_reqs);
+        rc = step_and_send_requests(proc->reader_ops->step, comm, enc_id, proc,
+                                    resp, &n_reqs);
         if (n_reqs)
             reader_done = true;
     }
 
-    rc = send_generated_requests(proc, comm, enc_id, requests, n_reqs, rc);
-    requests = NULL;
-    n_reqs = 0;
     if (rc)
         return rc;
 
@@ -416,22 +406,16 @@ static int processor_communicate(struct pho_data_processor *proc,
              * release requests.
              */
             rc) {
-            rc = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
-            if (rc || n_reqs) {
-                rc = send_generated_requests(proc, comm, enc_id, requests,
-                                             n_reqs, rc);
-                requests = NULL;
-                n_reqs = 0;
+            rc = step_and_send_requests(proc->reader_ops->step, comm, enc_id,
+                                        proc, NULL, &n_reqs);
+            if (rc || n_reqs)
                 reader_done = true;
-            }
         }
 
         /* only one write is enough for decoder after a read step */
-        if (!rc && reader_done && is_decoder(proc)) {
-            rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
-            assert(n_reqs == 0);
-            return rc;
-        }
+        if (!rc && reader_done && is_decoder(proc))
+            return step_and_send_requests(proc->writer_ops->step, comm, enc_id,
+                                          proc, NULL, NULL);
 
         /* then try following write */
         if (proc->reader_offset > proc->writer_offset ||
@@ -440,28 +424,18 @@ static int processor_communicate(struct pho_data_processor *proc,
              * release requests.
              */
             rc) {
-            rc = proc->writer_ops->step(proc, NULL, &requests, &n_reqs);
-            if (rc || n_reqs) {
+            rc = step_and_send_requests(proc->writer_ops->step, comm, enc_id,
+                                        proc, NULL, &n_reqs);
+            if (!rc && n_reqs)
                 /* no more io needed after a completed write step */
-                int rc2 = send_generated_requests(proc, comm, enc_id, requests,
-                                                  n_reqs, rc);
-                if (rc == 0 && rc2 != 0)
-                    LOG_RETURN(rc2, "failed to send requests to phobosd");
+                return 0;
 
-                if (!rc)
-                    return 0;
-
+            if (rc)
                 /* writer's step function failed, call reader's step one last
                  * time in case something needs to be released.
                  */
-                n_reqs = 0;
-                rc2 = proc->reader_ops->step(proc, NULL, &requests, &n_reqs);
-                if (n_reqs)
-                    return send_generated_requests(proc, comm, enc_id,
-                                                   requests, n_reqs, rc);
-
-                return rc2;
-            }
+                return step_and_send_requests(proc->reader_ops->step, comm,
+                                              enc_id, proc, NULL, NULL);
         }
     }
 

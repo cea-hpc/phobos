@@ -961,8 +961,6 @@ int raid_reader_processor_step(struct pho_data_processor *proc,
     int rc;
     int i;
 
-    *n_reqs = 0;
-
     /* manage error */
     if (resp && pho_response_is_error(resp)) {
         proc->xfer->xd_rc = resp->error->rc;
@@ -1420,8 +1418,6 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
     int i;
 
     ENTRY;
-
-    *n_reqs = 0;
 
     /* first init step from the data processor: return first allocation */
     if (!resp && !proc->buff.size) {
