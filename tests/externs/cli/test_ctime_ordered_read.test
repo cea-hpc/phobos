@@ -48,6 +48,8 @@ function dir_setup
     mkdir ${dir1}
     $phobos dir add ${dir1}
     $phobos dir format --unlock ${dir1}
+
+    flag_file="$DIR_TEST_IN/ready"
 }
 
 function dir_cleanup
@@ -121,6 +123,7 @@ function phobos_delayed_dev_release()
 set breakpoint pending on
 break complete_and_transfer_release
 commands
+shell touch ${flag_file}
 shell sleep 5
 continue
 end
@@ -138,9 +141,15 @@ function test_ordered_grouped_read
     $phobos put ${FILES[0]} obj3
     $phobos put ${FILES[0]} obj4
     export PHOBOS_IO_SCHED_DIR_ordered_grouped_read="true"
+    rm -f ${flag_file}
     phobos_delayed_dev_release put ${FILES[0]} obj-to-wait &
     local pid0=$!
-    sleep 1
+    while [ ! -f ${flag_file} ]; do
+        sleep 1
+    done
+
+    rm ${flag_file}
+
     $phobos get obj3 ${DIR_TEST_OUT}/obj3 &
     local pid3=$!
     $phobos get obj4 ${DIR_TEST_OUT}/obj4 &
