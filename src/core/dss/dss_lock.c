@@ -214,7 +214,7 @@ static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
 
     g_string_printf(request,
                     "INSERT INTO lock "
-                    "  (type, id, is_early, owner, hostname, last_locate) "
+                    "  (type, id, is_weak, owner, hostname, last_locate) "
                     "  VALUES ('%s'::lock_type, '%s', %s, %d, '%s', %s)"
                     ";",
                     dss_type_names[lock_type], lock_id,
@@ -243,14 +243,14 @@ static int basic_refresh(struct dss_handle *handle, enum dss_type lock_type,
     if (lock_flags & POSSESS_LOCK)
         g_string_printf(request,
                         "INSERT INTO lock AS l "
-                        "  (type, id, is_early, owner, hostname) "
+                        "  (type, id, is_weak, owner, hostname) "
                         "  VALUES('%s'::lock_type, '%s', FALSE, %d, '%s') "
                         "  ON CONFLICT (type, id) "
                         "    DO UPDATE "
                         "      SET timestamp = now(), "
                         "        owner = EXCLUDED.owner, "
-                        "        is_early = FALSE "
-                        "      WHERE l.is_early = TRUE AND "
+                        "        is_weak = FALSE "
+                        "      WHERE l.is_weak = TRUE AND "
                         "        l.hostname = EXCLUDED.hostname "
                         ";",
                         dss_type_names[lock_type], lock_id, owner, hostname);
@@ -264,7 +264,7 @@ static int basic_refresh(struct dss_handle *handle, enum dss_type lock_type,
     else if (lock_flags & WEAK_LOCK)
         g_string_printf(request,
                         "UPDATE lock "
-                        "  SET is_early = TRUE "
+                        "  SET is_weak = TRUE "
                            WHERE_ID
                         "        AND owner = %d AND hostname = '%s'"
                         ";",
@@ -313,7 +313,7 @@ static int basic_unlock(struct dss_handle *handle, enum dss_type lock_type,
                         "DELETE FROM lock "
                            WHERE_ID
                         "  AND ((owner = %d AND hostname = '%s') "
-                        "       OR is_early = TRUE)"
+                        "       OR is_weak = TRUE)"
                         ";",
                         dss_type_names[lock_type], lock_id,
                         owner, hostname);
@@ -343,7 +343,7 @@ static int basic_status(struct dss_handle *handle, enum dss_type lock_type,
     int rc;
 
     g_string_printf(request,
-                    "SELECT hostname, owner, timestamp, last_locate, is_early "
+                    "SELECT hostname, owner, timestamp, last_locate, is_weak "
                     "  FROM lock "
                        WHERE_ID
                     ";",
@@ -404,7 +404,7 @@ static int dss_lock_rollback(struct dss_handle *handle, enum dss_type type,
 
 int _dss_lock(struct dss_handle *handle, enum dss_type type,
               const void *item_list, int item_cnt, const char *lock_hostname,
-              int lock_pid, bool is_early, bool is_locate)
+              int lock_pid, bool is_weak, bool is_locate)
 {
     PGconn *conn = handle->dh_conn;
     int lock_flags = 0;
@@ -420,7 +420,7 @@ int _dss_lock(struct dss_handle *handle, enum dss_type type,
     if (rc)
         LOG_GOTO(cleanup, rc, "Ids list build failed");
 
-    if (is_early)
+    if (is_weak)
         lock_flags |= WEAK_LOCK;
     if (is_locate)
         lock_flags |= LOCATE_LOCK;

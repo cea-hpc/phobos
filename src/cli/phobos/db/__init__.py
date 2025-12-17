@@ -33,7 +33,7 @@ from phobos.core.ffi import (LIBPHOBOS, ResourceFamily)
 
 ORDERED_SCHEMAS = [
     "1.1", "1.2", "1.91", "1.92", "1.93", "1.95",
-    "2.0", "2.1", "2.2", "3.0", "3.2",
+    "2.0", "2.1", "2.2", "3.0", "3.2", "3.3",
 ]
 
 FUTURE_SCHEMAS = []
@@ -113,6 +113,7 @@ class Migrator: # pylint: disable=too-many-public-methods
             "2.1": ("2.2", self.convert_2_1_to_2_2),
             "2.2": ("3.0", self.convert_2_2_to_3),
             "3.0": ("3.2", self.convert_3_0_to_3_2),
+            "3.2": ("3.3", self.convert_3_2_to_3_3),
         }
 
         self.reachable_versions = set(
@@ -800,6 +801,24 @@ class Migrator: # pylint: disable=too-many-public-methods
         """Convert DB from v3.0 to v3.2"""
         with self.connect():
             self.convert_schema_3_0_to_3_2()
+
+    def convert_schema_3_2_to_3_3(self):
+        """DB schema changes: change column name in table lock"""
+        cur = self.conn.cursor()
+        cur.execute("""
+            -- update lock table
+            ALTER TABLE lock RENAME COLUMN is_early TO is_weak;
+
+            -- update current schema version
+            UPDATE schema_info SET version = '3.3';
+        """)
+        self.conn.commit()
+        cur.close()
+
+    def convert_3_2_to_3_3(self):
+        """Convert DB from v3.2 to v3.3"""
+        with self.connect():
+            self.convert_schema_3_2_to_3_3()
 
     def migrate(self, target_version=None):
         """Convert DB schema up to a given phobos version"""

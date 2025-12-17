@@ -914,7 +914,7 @@ int dss_check_and_take_lock(struct dss_handle *handle,
                        PHO_ID(*id), lock->hostname, lock->owner, hostname);
 
         if (lock->owner != pid) {
-            if (!lock->is_early)
+            if (!lock->is_weak)
                 LOG_RETURN(-EALREADY,
                            "resource "FMT_PHO_ID" is already locked by "
                            "host '%s', owner/pid '%d' but current process "

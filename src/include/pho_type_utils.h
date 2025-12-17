@@ -50,7 +50,7 @@ gboolean g_pho_id_equal(gconstpointer p_pho_id_1, gconstpointer p_pho_id_2);
 /** initialize a pho_lock structure */
 void init_pho_lock(struct pho_lock *lock, char *hostname, int owner,
                    struct timeval *lock_timestamp, struct timeval *last_locate,
-                   bool is_early);
+                   bool is_weak);
 
 /** copy a pho_lock structure */
 void pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src);
