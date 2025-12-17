@@ -267,7 +267,7 @@ static int dml_ok_lock_setup(void **state)
 
     /* lock medium */
     if (_dss_lock(dss, DSS_MEDIA, &medium_info, 1, HOSTNAME, 12345, false,
-                  NULL))
+                  false))
         return -1;
 
     return 0;

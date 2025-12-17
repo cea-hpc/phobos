@@ -83,7 +83,7 @@ static void dss_lock_exists(void **state)
     assert_int_equal(rc, -EEXIST);
 
     rc = _dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, OTHER_LOCK_OWNER,
-                   1337, false, NULL);
+                   1337, false, false);
     assert_int_equal(rc, -EEXIST);
 
     assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true) == 0);
@@ -186,9 +186,9 @@ static void dss_refresh_early_other_pid(void **state)
     assert(hostname != NULL);
 
     assert(_dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
-                     hostname, 0, true, NULL) == 0);
+                     hostname, 0, true, false) == 0);
     assert(_dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1,
-                     hostname, 0, false, NULL) == 0);
+                     hostname, 0, false, false) == 0);
 
     assert(dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, false) == 0);
     rc = dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1, false);
@@ -236,9 +236,9 @@ static void dss_unlock_early_other_pid(void **state)
     assert(hostname != NULL);
 
     assert(_dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
-                     hostname, 0, true, NULL) == 0);
+                     hostname, 0, true, false) == 0);
     assert(_dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1,
-                     hostname, 0, false, NULL) == 0);
+                     hostname, 0, false, false) == 0);
 
     assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, false) == 0);
     rc = dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1, false);

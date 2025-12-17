@@ -234,7 +234,7 @@ static int paml_ok_lock_setup(void **state)
 
     /* lock medium */
     if (_dss_lock(&adm->dss, DSS_MEDIA, &medium_info, 1, HOSTNAME, 12345,
-                  false, NULL))
+                  false, false))
         return -1;
 
     return 0;

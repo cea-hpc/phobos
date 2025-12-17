@@ -257,12 +257,9 @@ static int dss_build_lock_id_list(PGconn *conn, const void *item_list,
 
 static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
                       const char *lock_id, int lock_owner,
-                      const char *lock_hostname, bool is_early,
-                      struct timeval *last_locate)
+                      const char *lock_hostname, bool is_early, bool is_locate)
 {
-    char dss_time[PHO_TIMEVAL_MAX_LEN + 2];
     GString *request = g_string_new("");
-    char time_str[PHO_TIMEVAL_MAX_LEN];
     PGconn *conn = handle->dh_conn;
     PGresult *res;
     int rc;
@@ -270,17 +267,10 @@ static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
     if (lock_type == DSS_DEPREC)
         lock_type = DSS_OBJECT;
 
-    if (last_locate)
-        timeval2str(last_locate, time_str);
-
-    snprintf(dss_time, PHO_TIMEVAL_MAX_LEN + 2, "%s%s%s",
-             !is_early && last_locate ? "'" : "",
-             is_early ? "now()" : last_locate ? time_str : "NULL",
-             !is_early && last_locate ? "'" : "");
-
     g_string_printf(request, lock_query[DSS_LOCK_QUERY],
                     dss_type_names[lock_type], lock_id, lock_owner,
-                    lock_hostname, dss_time,
+                    lock_hostname,
+                    is_locate ? "now()" : "NULL",
                     is_early ? "TRUE" : "FALSE");
 
     rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
@@ -408,7 +398,7 @@ static int dss_lock_rollback(struct dss_handle *handle, enum dss_type type,
 
 int _dss_lock(struct dss_handle *handle, enum dss_type type,
               const void *item_list, int item_cnt, const char *lock_hostname,
-              int lock_pid, bool is_early, struct timeval *last_locate)
+              int lock_pid, bool is_early, bool is_locate)
 {
     PGconn *conn = handle->dh_conn;
     GString **ids;
@@ -427,7 +417,7 @@ int _dss_lock(struct dss_handle *handle, enum dss_type type,
         int rc2;
 
         rc2 = basic_lock(handle, type, ids[i]->str, lock_pid,
-                         lock_hostname, is_early, last_locate);
+                         lock_hostname, is_early, is_locate);
 
         if (rc2) {
             rc = rc ? : rc2;
@@ -457,7 +447,7 @@ int dss_lock(struct dss_handle *handle, enum dss_type type,
         LOG_RETURN(rc, "Couldn't retrieve hostname");
 
     return _dss_lock(handle, type, item_list, item_cnt, hostname, pid,
-                     false, NULL);
+                     false, false);
 }
 
 int dss_lock_with_last_locate(struct dss_handle *handle, enum dss_type type,
@@ -473,7 +463,7 @@ int dss_lock_with_last_locate(struct dss_handle *handle, enum dss_type type,
         LOG_RETURN(rc, "Couldn't retrieve hostname");
 
     return _dss_lock(handle, type, item_list, item_cnt, hostname, pid,
-                     false, last_locate);
+                     false, true);
 }
 
 int dss_lock_hostname(struct dss_handle *handle, enum dss_type type,
@@ -485,7 +475,7 @@ int dss_lock_hostname(struct dss_handle *handle, enum dss_type type,
     pid = getpid();
 
     return _dss_lock(handle, type, item_list, item_cnt, hostname, pid, true,
-                     NULL);
+                     true);
 }
 
 int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
