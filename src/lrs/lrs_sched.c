@@ -224,7 +224,7 @@ static int take_and_update_lock(struct dss_handle *dss, enum dss_type type,
              "???");
 
     if (last_locate)
-        rc = dss_lock_with_last_locate(dss, type, item, 1, last_locate);
+        rc = dss_lock_locate(dss, type, item, 1);
     else
         rc = dss_lock(dss, type, item, 1);
 

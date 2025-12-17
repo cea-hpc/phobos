@@ -855,15 +855,13 @@ int dss_lock_hostname(struct dss_handle *handle, enum dss_type type,
  * @param[in]   type            Type of the resources to lock.
  * @param[in]   item_list       List of resources to lock.
  * @param[in]   item_cnt        Number of resources to lock.
- * @param[in]   last_locate     Last early lock timestamp.
  *
  * @return                      0 on success,
  *                             -EEXIST if one of the targeted locks already
  *                              exists.
  */
-int dss_lock_with_last_locate(struct dss_handle *handle, enum dss_type type,
-                              const void *item_list, int item_cnt,
-                              struct timeval *last_locate);
+int dss_lock_locate(struct dss_handle *handle, enum dss_type type,
+                    const void *item_list, int item_cnt);
 
 /**
  * Refresh lock timestamps.

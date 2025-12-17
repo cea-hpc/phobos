@@ -55,84 +55,30 @@ do {                                                  \
 } while (0)
 
 enum lock_query_idx {
-    DSS_LOCK_QUERY,
-    DSS_REFRESH_QUERY,
-    DSS_REFRESH_LOCATE_QUERY,
-    DSS_UNLOCK_QUERY,
-    DSS_UNLOCK_FORCE_QUERY,
-    DSS_STATUS_QUERY,
     DSS_CLEAN_DEVICE_QUERY,
     DSS_CLEAN_MEDIA_QUERY,
     DSS_PURGE_ALL_LOCKS_QUERY,
 };
 
-#define DECLARE_BLOCK " DECLARE lock_type lock_type:= '%s'::lock_type;" \
-                      "         lock_id TEXT:= '%s';"                   \
-                      "         lock_hostname TEXT:="                   \
-                      "             (SELECT hostname FROM lock"         \
-                      "              WHERE type = lock_type AND "       \
-                      "                    id = lock_id);"              \
-                      "         lock_owner INTEGER:="                   \
-                      "             (SELECT owner FROM lock"            \
-                      "              WHERE type = lock_type AND "       \
-                      "                    id = lock_id);"              \
-                      "         lock_is_early BOOLEAN:="                \
-                      "             (SELECT is_early FROM lock"         \
-                      "              WHERE type = lock_type AND "       \
-                      "                    id = lock_id);"
+#define POSSESS_LOCK (1 << 0) /** caller wants to possess the lock, and remove
+                                * its weak state
+                                */
+#define WEAK_LOCK    (1 << 1) /** caller wants to set the weak state of
+                                * the lock
+                                */
+#define LOCATE_LOCK  (1 << 2) /* caller wants to set/update a locate lock */
+#define FORCE_LOCK   (1 << 3) /* caller wants to force a lock unset */
 
-#define CHECK_VALID_OWNER_HOSTNAME " IF (lock_is_early = FALSE AND "    \
-                                   "     lock_owner IS NULL) OR "       \
-                                   "    lock_hostname IS NULL THEN"     \
-                                   "  RAISE USING errcode = 'PHLK1';"   \
-                                   " END IF;"
+#define WHERE_ID " WHERE type = '\%s'::lock_type AND id = '\%s' "
 
-#define CHECK_OWNER_HOSTNAME_EXISTS " IF (lock_is_early = FALSE AND "   \
-                                    "     lock_owner <> '%d') OR "      \
-                                    "    lock_hostname <> '%s' THEN"    \
-                                    "  RAISE USING errcode = 'PHLK2';"  \
-                                    " END IF;"
+static int get_nb_affected_rows(PGresult *res)
+{
+    char *nb_rows_affected_str = PQcmdTuples(res);
 
-#define WHERE_CONDITION " WHERE type = lock_type AND id = lock_id AND " \
-                        "       (lock_is_early = TRUE "                 \
-                        "        OR owner = lock_owner) AND "           \
-                        "       hostname = lock_hostname;"
+    return *nb_rows_affected_str ? atoi(nb_rows_affected_str) : 0;
+}
 
 static const char * const lock_query[] = {
-    [DSS_LOCK_QUERY]         = "INSERT INTO lock"
-                               " (type, id, owner, hostname, last_locate, "
-                               "  is_early)"
-                               " VALUES ('%s'::lock_type, '%s', %d, '%s', %s, "
-                               "         %s);",
-    [DSS_REFRESH_QUERY]      = "DO $$"
-                                 DECLARE_BLOCK
-                               " BEGIN"
-                                 CHECK_VALID_OWNER_HOSTNAME
-                                 CHECK_OWNER_HOSTNAME_EXISTS
-                               " UPDATE lock SET timestamp = now()"
-                                 WHERE_CONDITION
-                               "END $$;",
-    [DSS_REFRESH_LOCATE_QUERY] = "UPDATE lock SET last_locate = now()"
-                               "  WHERE type = '%s'::lock_type AND id = '%s';",
-    [DSS_UNLOCK_QUERY]       = "DO $$"
-                                 DECLARE_BLOCK
-                               " BEGIN"
-                                 CHECK_VALID_OWNER_HOSTNAME
-                                 CHECK_OWNER_HOSTNAME_EXISTS
-                               " DELETE FROM lock"
-                                 WHERE_CONDITION
-                               "END $$;",
-    [DSS_UNLOCK_FORCE_QUERY] = "DO $$"
-                                  DECLARE_BLOCK
-                               "  BEGIN"
-                                  CHECK_VALID_OWNER_HOSTNAME
-                               "  DELETE FROM lock"
-                               "   WHERE type = lock_type AND id = lock_id;"
-                               "END $$;",
-    [DSS_STATUS_QUERY]       = "SELECT hostname, owner, timestamp, "
-                               "  last_locate, is_early"
-                               "  FROM lock "
-                               "  WHERE type = '%s'::lock_type AND id = '%s';",
     [DSS_CLEAN_DEVICE_QUERY] = "WITH id_host AS (SELECT id || '_' || library "
                                "                        AS id, host "
                                "                     FROM device "
@@ -256,22 +202,26 @@ static int dss_build_lock_id_list(PGconn *conn, const void *item_list,
 }
 
 static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
-                      const char *lock_id, int lock_owner,
-                      const char *lock_hostname, bool is_early, bool is_locate)
+                      const char *lock_id, int owner,
+                      const char *hostname, int lock_flags)
 {
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
     PGresult *res;
     int rc;
 
-    if (lock_type == DSS_DEPREC)
-        lock_type = DSS_OBJECT;
+    lock_type = lock_type != DSS_DEPREC ? lock_type : DSS_OBJECT;
 
-    g_string_printf(request, lock_query[DSS_LOCK_QUERY],
-                    dss_type_names[lock_type], lock_id, lock_owner,
-                    lock_hostname,
-                    is_locate ? "now()" : "NULL",
-                    is_early ? "TRUE" : "FALSE");
+    g_string_printf(request,
+                    "INSERT INTO lock "
+                    "  (type, id, is_early, owner, hostname, last_locate) "
+                    "  VALUES ('%s'::lock_type, '%s', %s, %d, '%s', %s)"
+                    ";",
+                    dss_type_names[lock_type], lock_id,
+                    lock_flags & WEAK_LOCK || lock_flags & LOCATE_LOCK ?
+                        "TRUE" : "FALSE",
+                    owner, hostname,
+                    lock_flags & LOCATE_LOCK ? "now()" : "NULL");
 
     rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
 
@@ -282,49 +232,92 @@ static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
 }
 
 static int basic_refresh(struct dss_handle *handle, enum dss_type lock_type,
-                         const char *lock_id, int lock_owner,
-                         const char *lock_hostname, bool locate)
-{
-    GString *request = g_string_new("");
-    PGconn *conn = handle->dh_conn;
-    PGresult *res;
-    int rc = 0;
-
-    if (!locate)
-        g_string_printf(request, lock_query[DSS_REFRESH_QUERY],
-                        dss_type_names[lock_type], lock_id, lock_owner,
-                        lock_hostname);
-    else
-        g_string_printf(request, lock_query[DSS_REFRESH_LOCATE_QUERY],
-                        dss_type_names[lock_type], lock_id);
-
-    rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
-
-    PQclear(res);
-    g_string_free(request, true);
-
-    return rc;
-}
-
-static int basic_unlock(struct dss_handle *handle, enum dss_type lock_type,
-                        const char *lock_id, int lock_owner,
-                        const char *lock_hostname)
+                         const char *lock_id, int owner,
+                         const char *hostname, int lock_flags)
 {
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
     PGresult *res;
     int rc;
 
-    if (lock_owner)
-        g_string_printf(request, lock_query[DSS_UNLOCK_QUERY],
-                        dss_type_names[lock_type], lock_id, lock_owner,
-                        lock_hostname);
-    else
-        g_string_printf(request, lock_query[DSS_UNLOCK_FORCE_QUERY],
+    if (lock_flags & POSSESS_LOCK)
+        g_string_printf(request,
+                        "INSERT INTO lock AS l "
+                        "  (type, id, is_early, owner, hostname) "
+                        "  VALUES('%s'::lock_type, '%s', FALSE, %d, '%s') "
+                        "  ON CONFLICT (type, id) "
+                        "    DO UPDATE "
+                        "      SET timestamp = now(), "
+                        "        owner = EXCLUDED.owner, "
+                        "        is_early = FALSE "
+                        "      WHERE l.is_early = TRUE AND "
+                        "        l.hostname = EXCLUDED.hostname "
+                        ";",
+                        dss_type_names[lock_type], lock_id, owner, hostname);
+    else if (lock_flags & LOCATE_LOCK)
+        g_string_printf(request,
+                        "UPDATE lock "
+                        "  SET last_locate = now() "
+                           WHERE_ID
+                        ";",
                         dss_type_names[lock_type], lock_id);
+    else
+        g_string_printf(request,
+                        "UPDATE lock "
+                        "  SET timestamp = now() "
+                           WHERE_ID
+                        "        AND owner = %d AND hostname = '%s'"
+                        ";",
+                        dss_type_names[lock_type], lock_id, owner, hostname);
 
     rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
+    if (rc)
+        goto out;
 
+    if (get_nb_affected_rows(res) == 0)
+        rc = -ENOLCK;
+
+out:
+    PQclear(res);
+    g_string_free(request, true);
+
+    return rc;
+
+}
+
+static int basic_unlock(struct dss_handle *handle, enum dss_type lock_type,
+                        const char *lock_id, int owner,
+                        const char *hostname, int lock_flags)
+{
+    GString *request = g_string_new("");
+    PGconn *conn = handle->dh_conn;
+    PGresult *res;
+    int rc;
+
+    if (lock_flags & FORCE_LOCK)
+        g_string_printf(request,
+                        "DELETE FROM lock "
+                           WHERE_ID
+                        ";",
+                        dss_type_names[lock_type], lock_id);
+    else
+        g_string_printf(request,
+                        "DELETE FROM lock "
+                           WHERE_ID
+                        "  AND ((owner = %d AND hostname = '%s') "
+                        "       OR is_early = TRUE)"
+                        ";",
+                        dss_type_names[lock_type], lock_id,
+                        owner, hostname);
+
+    rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
+    if (rc)
+        goto out;
+
+    if (get_nb_affected_rows(res) == 0)
+        rc = -ENOLCK;
+
+out:
     PQclear(res);
     g_string_free(request, true);
 
@@ -334,14 +327,18 @@ static int basic_unlock(struct dss_handle *handle, enum dss_type lock_type,
 static int basic_status(struct dss_handle *handle, enum dss_type lock_type,
                         const char *lock_id, struct pho_lock *lock)
 {
-    struct timeval last_locate_timestamp;
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
-    struct timeval lock_timestamp;
+    struct timeval last_locate_ts;
+    struct timeval lock_ts;
     PGresult *res;
-    int rc = 0;
+    int rc;
 
-    g_string_printf(request, lock_query[DSS_STATUS_QUERY],
+    g_string_printf(request,
+                    "SELECT hostname, owner, timestamp, last_locate, is_early "
+                    "  FROM lock "
+                       WHERE_ID
+                    ";",
                     dss_type_names[lock_type], lock_id);
 
     rc = execute(conn, request->str, &res, PGRES_TUPLES_OK);
@@ -349,7 +346,7 @@ static int basic_status(struct dss_handle *handle, enum dss_type lock_type,
         goto out_cleanup;
 
     if (PQntuples(res) == 0) {
-        pho_debug("Requested lock '%s' was not found, request: '%s' ",
+        pho_debug("Requested lock '%s' was not found, request: '%s'",
                   lock_id, request->str);
         rc = -ENOLCK;
         if (lock) {
@@ -360,12 +357,13 @@ static int basic_status(struct dss_handle *handle, enum dss_type lock_type,
     }
 
     if (lock) {
-        str2timeval(PQgetvalue(res, 0, 2), &lock_timestamp);
-        str2timeval(PQgetvalue(res, 0, 3), &last_locate_timestamp);
-        init_pho_lock(lock, PQgetvalue(res, 0, 0),
+        str2timeval(PQgetvalue(res, 0, 2), &lock_ts);
+        str2timeval(PQgetvalue(res, 0, 3), &last_locate_ts);
+        init_pho_lock(lock,
+                      PQgetvalue(res, 0, 0),
                       (int) strtoll(PQgetvalue(res, 0, 1), NULL, 10),
-                      &lock_timestamp,
-                      &last_locate_timestamp,
+                      &lock_ts,
+                      &last_locate_ts,
                       psqlstrbool2bool(*PQgetvalue(res, 0, 4)));
     }
 
@@ -386,7 +384,7 @@ static int dss_lock_rollback(struct dss_handle *handle, enum dss_type type,
         int rc2;
 
         /* If a lock failure happens, we force every unlock */
-        rc2 = basic_unlock(handle, type, ids[i]->str, 0, NULL);
+        rc2 = basic_unlock(handle, type, ids[i]->str, 0, NULL, FORCE_LOCK);
         if (rc2) {
             rc = rc ? : rc2;
             pho_error(rc2, "Failed to unlock %s after lock failure, "
@@ -401,6 +399,7 @@ int _dss_lock(struct dss_handle *handle, enum dss_type type,
               int lock_pid, bool is_early, bool is_locate)
 {
     PGconn *conn = handle->dh_conn;
+    int lock_flags = 0;
     GString **ids;
     int rc = 0;
     int i;
@@ -413,11 +412,16 @@ int _dss_lock(struct dss_handle *handle, enum dss_type type,
     if (rc)
         LOG_GOTO(cleanup, rc, "Ids list build failed");
 
+    if (is_early)
+        lock_flags |= WEAK_LOCK;
+    if (is_locate)
+        lock_flags |= LOCATE_LOCK;
+
     for (i = 0; i < item_cnt; ++i) {
         int rc2;
 
         rc2 = basic_lock(handle, type, ids[i]->str, lock_pid,
-                         lock_hostname, is_early, is_locate);
+                         lock_hostname, lock_flags);
 
         if (rc2) {
             rc = rc ? : rc2;
@@ -450,9 +454,8 @@ int dss_lock(struct dss_handle *handle, enum dss_type type,
                      false, false);
 }
 
-int dss_lock_with_last_locate(struct dss_handle *handle, enum dss_type type,
-                              const void *item_list, int item_cnt,
-                              struct timeval *last_locate)
+int dss_lock_locate(struct dss_handle *handle, enum dss_type type,
+                    const void *item_list, int item_cnt)
 {
     const char *hostname;
     int pid;
@@ -481,9 +484,10 @@ int dss_lock_hostname(struct dss_handle *handle, enum dss_type type,
 int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
                       const void *item_list, int item_cnt,
                       const char *lock_hostname, int lock_owner,
-                      bool locate)
+                      bool locate, bool take_possession)
 {
     PGconn *conn = handle->dh_conn;
+    int lock_flags = 0;
     GString **ids;
     int rc = 0;
     int i;
@@ -496,11 +500,16 @@ int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
     if (rc)
         LOG_GOTO(cleanup, rc, "Ids list build failed");
 
+    if (locate)
+        lock_flags |= LOCATE_LOCK;
+    if (take_possession)
+        lock_flags |= POSSESS_LOCK;
+
     for (i = 0; i < item_cnt; ++i) {
         int rc2;
 
         rc2 = basic_refresh(handle, type, ids[i]->str,
-                            lock_owner, lock_hostname, locate);
+                            lock_owner, lock_hostname, lock_flags);
 
         if (rc2) {
             rc = rc ? : rc2;
@@ -524,7 +533,7 @@ int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
         LOG_RETURN(-EINVAL, "Couldn't retrieve hostname");
 
     return _dss_lock_refresh(handle, type, item_list, item_cnt, hostname, pid,
-                             locate);
+                             locate, false);
 }
 
 int _dss_unlock(struct dss_handle *handle, enum dss_type type,
@@ -548,7 +557,8 @@ int _dss_unlock(struct dss_handle *handle, enum dss_type type,
         int rc2;
 
             rc2 = basic_unlock(handle, type, ids[i]->str, lock_owner,
-                               lock_hostname);
+                               lock_hostname,
+                               !lock_owner && !lock_hostname ? FORCE_LOCK : 0);
 
         if (rc2) {
             rc = rc ? : rc2;
