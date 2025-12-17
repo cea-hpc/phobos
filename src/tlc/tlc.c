@@ -64,7 +64,6 @@ static int tlc_init(struct tlc *tlc, const char *library)
 {
     union pho_comm_addr sock_addr = {0};
     json_t *json_message;
-    const char *lib_dev;
     size_t len_library;
     int rc;
 
@@ -83,25 +82,27 @@ static int tlc_init(struct tlc *tlc, const char *library)
     tlc->lib.name[len_library] = '\0';
 
     /* open TLC lib file descriptor and load library cache */
-    rc = tlc_lib_device_from_cfg(tlc->lib.name, &lib_dev);
+    rc = tlc_lib_device_from_cfg(tlc->lib.name, &tlc->lib.lib_devices,
+                                 &tlc->lib.nb_lib_device);
     if (rc)
         LOG_RETURN(-EINVAL,
                    "Failed to get TLC lib device from config for library %s",
                    tlc->lib.name);
 
-    rc = tlc_library_open(&tlc->lib, lib_dev, &json_message);
+    rc = tlc_library_open(&tlc->lib, &json_message);
     if (rc) {
         if (json_message) {
             char *dump = json_dumps(json_message, 0);
 
             pho_error(rc, "Failed to open library device '%s': %s",
-                      lib_dev, dump);
+                      tlc->lib.lib_devices[0], dump);
             free(dump);
             json_decref(json_message);
             return rc;
         } else {
             LOG_RETURN(-errno,
-                       "Failed to open library device '%s'", lib_dev);
+                       "Failed to open library device '%s'",
+                       tlc->lib.lib_devices[0]);
         }
     }
 
@@ -371,21 +372,7 @@ static int process_status_request(struct tlc *tlc, pho_tlc_req_t *req,
     int rc, rc2;
 
     if (req->status->refresh) {
-        const char *lib_dev;
-
-        rc = tlc_lib_device_from_cfg(tlc->lib.name, &lib_dev);
-        if (rc) {
-            pho_error(rc,
-                      "Failed to get default library device from config to "
-                      "refresh for library %s", tlc->lib.name);
-            json_message = json_pack("{s:s}", "LIB_DEV_CONF_ERROR",
-                                     "Failed to get default library device "
-                                     "from config to refresh");
-            refresh_failed = true;
-            goto error_response;
-        }
-
-        rc = tlc_library_refresh(&tlc->lib, lib_dev, &json_message);
+        rc = tlc_library_refresh(&tlc->lib, &json_message);
         if (rc) {
             refresh_failed = true;
             goto error_response;
@@ -454,23 +441,10 @@ static int process_refresh_request(struct tlc *tlc, pho_tlc_req_t *req,
     pho_tlc_resp_t *resp = NULL;
     pho_tlc_resp_t refresh_resp;
     pho_tlc_resp_t error_resp;
-    const char *lib_dev;
     int rc, rc2;
 
-    rc = tlc_lib_device_from_cfg(tlc->lib.name, &lib_dev);
+    rc = tlc_library_refresh(&tlc->lib, &json_message);
     if (rc) {
-        pho_error(rc,
-                  "Failed to get default library device from config to refresh "
-                  "for library %s", tlc->lib.name);
-        json_message = json_pack("{s:s}", "LIB_DEV_CONF_ERROR",
-                                 "Failed to get default library device from "
-                                 "config to refresh");
-        goto error_response;
-    }
-
-    rc = tlc_library_refresh(&tlc->lib, lib_dev, &json_message);
-    if (rc) {
-error_response:
         tlc_build_response_error(&error_resp, req->id, rc, json_message);
         if (json_message)
             json_decref(json_message);

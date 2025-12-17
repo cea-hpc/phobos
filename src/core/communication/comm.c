@@ -214,8 +214,10 @@ int tlc_listen_interface_from_cfg(const char *library,
     return rc;
 }
 
-int tlc_lib_device_from_cfg(const char *library, const char **tlc_lib_device)
+int tlc_lib_device_from_cfg(const char *library, char ***tlc_lib_devices,
+                            size_t *nb_lib_device)
 {
+    const char *lib_devices;
     char *section_name;
     int rc;
 
@@ -223,12 +225,14 @@ int tlc_lib_device_from_cfg(const char *library, const char **tlc_lib_device)
     if (rc < 0)
         return -ENOMEM;
 
-    rc = pho_cfg_get_val(section_name, TLC_LIB_DEVICE_CFG_PARAM,
-                         tlc_lib_device);
+    rc = pho_cfg_get_val(section_name, TLC_LIB_DEVICE_CFG_PARAM, &lib_devices);
     if (rc == -ENODATA) {
-        *tlc_lib_device = DEFAULT_TLC_LIB_DEVICE;
+        lib_devices = DEFAULT_TLC_LIB_DEVICE;
         rc = 0;
     }
+
+    if (!rc)
+        get_val_csv(lib_devices, tlc_lib_devices, nb_lib_device);
 
     free(section_name);
     return rc;

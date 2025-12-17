@@ -11,9 +11,11 @@ the default library name.
 *Library device*
 ----------------
 
-The **lib_device** parameter defines the path of the library changer for the TLC
+The **lib_device** parameter defines a list of library changer for the TLC
 server. This is a **critical parameter** as it tells the TLC where to find the
-device it needs to control.
+devices it needs to control. Specifying multiple lib devices will help make the
+TLC more resilient to failures by adding redundancy to the lib devices it can
+use. The value must be a comma-separated list without any spaces.
 
 If this parameter is not specified, Phobos defaults to the following:
 **lib_device = /dev/changer**.
@@ -23,7 +25,7 @@ Example:
 .. code:: ini
 
     [tlc "legacy"]
-    lib_device = /dev/changer
+    lib_device = /dev/changer1,/dev/changer2
 
 *Listen hostname*
 -----------------

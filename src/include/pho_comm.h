@@ -198,15 +198,16 @@ int tlc_listen_interface_from_cfg(const char *library,
                                   const char **tlc_listen_interface);
 
 /**
- * Get TLC library device from config
+ * Get TLC library devices from config
  *
- * \param[in]       library         Targeted library
- * \param[out]      tlc_lib_device  TLC library device
+ * \param[in]       library          Targeted library
+ * \param[out]      tlc_lib_devices  TLC library devices
+ * \param[out]      nb_lib_device    Number of TLC library devices
  *
  * \return                      0 on success, negative POSIX error on failure
  */
-int tlc_lib_device_from_cfg(const char *library,
-                            const char **tlc_library_device);
+int tlc_lib_device_from_cfg(const char *library, char ***tlc_lib_devices,
+                            size_t *nb_lib_device);
 
 /**
  * Open a socket

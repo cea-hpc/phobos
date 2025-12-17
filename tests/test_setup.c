@@ -119,7 +119,6 @@ static int setup_dss_and_tlc_lib(void **state, bool setup_db)
 {
     struct dss_and_tlc_lib *dss_and_tlc_lib;
     json_t *json_message;
-    const char *lib_dev;
     int rc;
 
     dss_and_tlc_lib = xcalloc(1, sizeof(*dss_and_tlc_lib));
@@ -134,13 +133,15 @@ static int setup_dss_and_tlc_lib(void **state, bool setup_db)
 
     strcpy(dss_and_tlc_lib->tlc_lib.name, "legacy");
 
-    lib_dev = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, lib_device);
-    if (!lib_dev) {
+    rc = tlc_lib_device_from_cfg("legacy",
+                                 &dss_and_tlc_lib->tlc_lib.lib_devices,
+                                 &dss_and_tlc_lib->tlc_lib.nb_lib_device);
+    if (rc) {
         dss_fini(&dss_and_tlc_lib->dss);
         return -1;
     }
 
-    rc = tlc_library_open(&dss_and_tlc_lib->tlc_lib, lib_dev, &json_message);
+    rc = tlc_library_open(&dss_and_tlc_lib->tlc_lib, &json_message);
     if (rc) {
         dss_fini(&dss_and_tlc_lib->dss);
         return -1;

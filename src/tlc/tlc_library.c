@@ -37,6 +37,7 @@
 
 #include "pho_cfg.h"
 #include "pho_common.h"
+#include "pho_comm.h"
 #include "pho_types.h"
 #include "scsi_api.h"
 #include "tlc_library.h"
@@ -305,12 +306,14 @@ static int lib_status_load(struct lib_descriptor *lib,
     return 0;
 }
 
-int tlc_library_open(struct lib_descriptor *lib, const char *dev,
-                     json_t **json_message)
+int tlc_library_open(struct lib_descriptor *lib, json_t **json_message)
 {
+    const char *dev;
     int rc;
 
+    dev = lib->lib_devices[0];
     *json_message = NULL;
+
     lib->fd = open(dev, O_RDWR | O_NONBLOCK);
     if (lib->fd < 0) {
         *json_message = json_pack("{s:s}", "LIB_OPEN_FAILURE", dev);
@@ -332,14 +335,36 @@ void tlc_library_close(struct lib_descriptor *lib)
         close(lib->fd);
         lib->fd = 0;
     }
+
+    for (int i = 0; i < lib->nb_lib_device; i++)
+        free(lib->lib_devices[i]);
+    free(lib->lib_devices);
+
+    lib->lib_devices = NULL;
+    lib->nb_lib_device = 0;
 }
 
-int tlc_library_refresh(struct lib_descriptor *lib, const char *dev,
-                        json_t **json_message)
+int tlc_library_refresh(struct lib_descriptor *lib, json_t **json_message)
 {
     *json_message = NULL;
+    int rc;
+
     tlc_library_close(lib);
-    return tlc_library_open(lib, dev, json_message);
+
+    rc = tlc_lib_device_from_cfg(lib->name, &lib->lib_devices,
+                                 &lib->nb_lib_device);
+    if (rc) {
+        pho_error(rc,
+                  "Failed to get default library device from config to refresh "
+                  "for library %s", lib->name);
+        *json_message = json_pack("{s:s}", "LIB_DEV_CONF_ERROR",
+                                 "Failed to get default library device from "
+                                 "config to refresh");
+        return rc;
+    }
+
+
+    return tlc_library_open(lib, json_message);
 }
 
 /**

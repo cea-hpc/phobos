@@ -42,6 +42,10 @@ struct lib_descriptor {
     /* library name */
     char name[PHO_URI_MAX];
 
+    /* List of lib devices */
+    char **lib_devices;
+    size_t nb_lib_device;
+
     /* file descriptor to SCSI lib device */
     int fd;
 
@@ -61,7 +65,6 @@ struct lib_descriptor {
  *
  * @param[in,out]   lib             Already allocated library to fill with
  *                                  current status
- * @param[in]       dev             Device path of the library
  * @param[out]      json_message    Set to NULL, if no message. On error or
  *                                  success, could be set to a value different
  *                                  from NULL, containing a message which
@@ -70,8 +73,7 @@ struct lib_descriptor {
  *
  * @return              0 if success, else a negative error code
  */
-int tlc_library_open(struct lib_descriptor *lib, const char *dev,
-                     json_t **json_message);
+int tlc_library_open(struct lib_descriptor *lib, json_t **json_message);
 
 /**
  * Close and clean the library
@@ -166,7 +168,6 @@ int tlc_library_status(struct lib_descriptor *lib, json_t **lib_data,
  * Refresh the library descriptor
  *
  * @param[in,out]   lib             Library descriptor.
- * @param[in]       dev             Device path of the library
  * @param[out]      json_message    Set to NULL, if no message. On error or
  *                                  success, could be set to a value different
  *                                  from NULL, containing a message which
@@ -175,8 +176,7 @@ int tlc_library_status(struct lib_descriptor *lib, json_t **lib_data,
  *
  * @return 0 on success, negative error code on failure
  */
-int tlc_library_refresh(struct lib_descriptor *lib, const char *dev,
-                        json_t **json_message);
+int tlc_library_refresh(struct lib_descriptor *lib, json_t **json_message);
 
 
 /**
