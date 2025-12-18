@@ -311,14 +311,39 @@ int tlc_library_open(struct lib_descriptor *lib, json_t **json_message)
     const char *dev;
     int rc;
 
-    dev = lib->lib_devices[0];
     *json_message = NULL;
 
-    lib->fd = open(dev, O_RDWR | O_NONBLOCK);
-    if (lib->fd < 0) {
-        *json_message = json_pack("{s:s}", "LIB_OPEN_FAILURE", dev);
-        LOG_RETURN(rc = -errno, "Failed to open '%s'", dev);
+    lib->fd_array = xcalloc(lib->nb_lib_device, sizeof(*lib->fd_array));
+    lib->curr_fd_idx = -1;
+
+    for (int i = 0; i < lib->nb_lib_device; i++) {
+        dev = lib->lib_devices[i];
+        lib->fd_array[i] = open(dev, O_RDWR | O_NONBLOCK);
+        if (lib->fd_array[i] == -1) {
+            pho_error(rc = -errno, "Failed to open '%s'", dev);
+            continue;
+        }
+
+        /* Check if we can use this lib device to access the library */
+        rc = scsi_inquiry(lib->fd_array[i]);
+        if (rc) {
+            pho_error(rc = -errno, "Failed to inquiry with '%s'", dev);
+            close(lib->fd_array[i]);
+            lib->fd_array[i] = -1;
+        }
+
+        /* Set curr_fd_idx and the fd to used to the first successfull
+         * (open + inquiry) fd
+         */
+        if (lib->curr_fd_idx == -1) {
+            lib->curr_fd_idx = i;
+            lib->fd = lib->fd_array[i];
+        }
     }
+
+    /* All the lib device are marked as failed */
+    if (lib->curr_fd_idx == -1)
+        LOG_RETURN(rc = -errno, "All the lib devices are invalid");
 
     rc = lib_status_load(lib, SCSI_TYPE_ALL, json_message);
     if (rc)
@@ -331,13 +356,15 @@ void tlc_library_close(struct lib_descriptor *lib)
 {
     lib_status_clear(lib);
     lib_addrs_clear(lib);
-    if (lib->fd >= 0) {
-        close(lib->fd);
-        lib->fd = 0;
+    for (int i = 0; i < lib->nb_lib_device; i++) {
+        if (lib->fd_array[i] >= 0) {
+            close(lib->fd_array[i]);
+            lib->fd_array[i] = -1;
+        }
+        free(lib->lib_devices[i]);
     }
 
-    for (int i = 0; i < lib->nb_lib_device; i++)
-        free(lib->lib_devices[i]);
+    free(lib->fd_array);
     free(lib->lib_devices);
 
     lib->lib_devices = NULL;
@@ -673,7 +700,8 @@ int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
 
     /* move medium to device */
     /* arm = 0 for default transport element */
-    rc = scsi_move_medium(lib->fd, 0, source_element_status->address,
+    rc = scsi_move_medium(lib->fd, 0,
+                          source_element_status->address,
                           drive_element_status->address, log.message);
     emit_log_after_action(dss, &log, PHO_DEVICE_LOAD, rc);
     if (rc)
@@ -837,7 +865,8 @@ int tlc_library_unload(struct dss_handle *dss, struct lib_descriptor *lib,
 
     /* move medium to device */
     /* arm = 0 for default transport element */
-    rc = scsi_move_medium(lib->fd, 0, drive_element_status->address,
+    rc = scsi_move_medium(lib->fd, 0,
+                          drive_element_status->address,
                           target_element_status->address, log.message);
     emit_log_after_action(dss, &log, PHO_DEVICE_UNLOAD, rc);
     if (rc) {

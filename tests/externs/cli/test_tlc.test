@@ -95,6 +95,28 @@ function tlc_daemon_bad_lib_dev
         $PHOBOS_CFG_FILE
 }
 
+function tlc_multi_lib_dev
+{
+    export PHOBOS_TLC_LEGACY_lib_device="/dev/changer,/dev/changer2"
+
+    if ! invoke_tlc; then
+        waive_tlc
+        unset PHOBOS_TLC_LEGACY_lib_device
+        error "TLC daemon start must succeed with one valid lib dev"
+    fi
+
+    waive_tlc
+    export PHOBOS_TLC_LEGACY_lib_device="/dev/changer1,/dev/changer2"
+
+    if invoke_tlc; then
+        waive_tlc
+        unset PHOBOS_TLC_LEGACY_lib_device
+        error "TLC daemon start must fail with invalid lib dev"
+    fi
+
+    unset PHOBOS_TLC_LEGACY_lib_device
+}
+
 if [[ ! -w /dev/changer ]]; then
     skip "TLC tests need a tape library"
 fi
@@ -104,5 +126,6 @@ TESTS=("tlc_interactive_sig SIGINT" \
        "tlc_interactive_sig SIGTERM" \
        "invoke_tlc; tlc_daemon_started; waive_tlc" \
        "tlc_daemon_bad_port" \
-       "tlc_daemon_bad_lib_dev")
+       "tlc_daemon_bad_lib_dev" \
+       "tlc_multi_lib_dev")
 TEST_CLEANUP=drop_tables

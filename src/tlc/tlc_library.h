@@ -46,8 +46,17 @@ struct lib_descriptor {
     char **lib_devices;
     size_t nb_lib_device;
 
-    /* file descriptor to SCSI lib device */
+    /* Current file descriptor to the SCSI lib device used */
     int fd;
+    /* List of file descriptors for all the lib devices.
+     * In this list, a value of -1 means that the file descriptor is invalid and
+     * cannot be used.
+     */
+    int *fd_array;
+    /* Index of the current file descriptor used.
+     * A value of -1 means that all the file descriptor are invalid
+     */
+    int curr_fd_idx;
 
     /* Cache of library element address */
     struct mode_sense_info msi;
