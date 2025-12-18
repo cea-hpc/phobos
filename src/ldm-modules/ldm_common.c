@@ -32,23 +32,30 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <jansson.h>
-#include <sys/user.h>
 #include <sys/statfs.h>
+#include <unistd.h>
 
 int mnttab_foreach(mntent_cb_t cb_func, void *cb_data)
 {
-    struct mntent  mnt_ent;
+    struct mntent mnt_ent;
     struct mntent *p_mnt;
-    FILE          *fp;
-    int            rc = 0;
-    char           mnt_buff[PAGE_SIZE];
+    long page_size;
+    char *mnt_buff;
+    int rc = 0;
+    FILE *fp;
 
     assert(cb_func != NULL);
+
+    page_size = sysconf(_SC_PAGESIZE);
+    if (page_size == -1)
+        LOG_RETURN(rc = -EINVAL, "Failed to get current system page size");
+
+    mnt_buff = xmalloc(page_size);
 
     fp = setmntent(_PATH_MOUNTED, "r");
 
     if (fp == NULL)
-        LOG_RETURN(-errno, "Failed to open mount table");
+        LOG_GOTO(out_free, rc = -errno, "Failed to open mount table");
 
     while ((p_mnt = getmntent_r(fp, &mnt_ent, mnt_buff,
                                 sizeof(mnt_buff))) != NULL) {
@@ -61,6 +68,9 @@ int mnttab_foreach(mntent_cb_t cb_func, void *cb_data)
 
 out_close:
     endmntent(fp);
+out_free:
+    free(mnt_buff);
+
     return rc;
 }
 
