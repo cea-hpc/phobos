@@ -469,8 +469,7 @@ static void dss_lock_hostname_unlock_ok(void **state)
     struct pho_lock lock;
     int rc;
 
-    rc = dss_lock_hostname(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
-                           lock_hostname);
+    rc = dss_lock_weak(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, lock_hostname);
     assert_return_code(rc, -rc);
 
     rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &lock);

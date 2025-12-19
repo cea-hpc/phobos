@@ -541,7 +541,7 @@ static int lock_extents(struct dss_handle *dss,
                          loc->medium->rsc.id.library);
                 continue;
             }
-            rc = dss_lock_hostname(dss, DSS_MEDIA, &medium, 1, hostname);
+            rc = dss_lock_weak(dss, DSS_MEDIA, &medium, 1, hostname);
             if (rc == -EEXIST) {
                 /* somebody else took the lock */
                 continue;

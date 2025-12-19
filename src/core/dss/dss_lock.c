@@ -477,9 +477,8 @@ int dss_lock_locate(struct dss_handle *handle, enum dss_type type,
                      false, true);
 }
 
-int dss_lock_hostname(struct dss_handle *handle, enum dss_type type,
-                      const void *item_list, int item_cnt,
-                      const char *hostname)
+int dss_lock_weak(struct dss_handle *handle, enum dss_type type,
+                  const void *item_list, int item_cnt, const char *hostname)
 {
     int pid;
 

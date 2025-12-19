@@ -929,8 +929,8 @@ int dss_check_and_take_lock(struct dss_handle *handle,
                            "resource "FMT_PHO_ID,
                            PHO_ID(*id));
 
-            rc = dss_lock_hostname(handle, resource_type, resource, 1,
-                                   lock->hostname);
+            rc = dss_lock_weak(handle, resource_type, resource, 1,
+                               lock->hostname);
             if (rc)
                 LOG_RETURN(rc, "unable to lock item "FMT_PHO_ID,
                            PHO_ID(*id));

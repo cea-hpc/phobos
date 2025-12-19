@@ -823,7 +823,8 @@ int dss_lock(struct dss_handle *handle, enum dss_type type,
              const void *item_list, int item_cnt);
 
 /**
- * Take locks on a specific hostname, only used with locate operations.
+ * Take weak locks on a specific hostname, used for example on locate
+ * operations.
  *
  * If any lock cannot be taken, then the ones that already are will be
  * forcefully unlocked, and the function will not try to lock any other
@@ -839,9 +840,9 @@ int dss_lock(struct dss_handle *handle, enum dss_type type,
  *                             -EEXIST if one of the targeted locks already
  *                              exists.
  */
-int dss_lock_hostname(struct dss_handle *handle, enum dss_type type,
-                      const void *item_list, int item_cnt,
-                      const char *hostname);
+int dss_lock_weak(struct dss_handle *handle, enum dss_type type,
+                  const void *item_list, int item_cnt,
+                  const char *hostname);
 
 /**
  * Take lock and set its last_locate field, only used if an early lock was
