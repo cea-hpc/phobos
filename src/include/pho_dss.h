@@ -835,6 +835,8 @@ int dss_lock(struct dss_handle *handle, enum dss_type type,
  * @param[in]   item_list       List of resources to lock.
  * @param[in]   item_cnt        Number of resources to lock.
  * @param[in]   hostname        Hostname of the lock to set
+ * @param[in]   is_locate       True if the weak lock is taken by a locate
+ *                              command, will set the `last_locate` field.
  *
  * @return                      0 on success,
  *                             -EEXIST if one of the targeted locks already
@@ -842,27 +844,7 @@ int dss_lock(struct dss_handle *handle, enum dss_type type,
  */
 int dss_lock_weak(struct dss_handle *handle, enum dss_type type,
                   const void *item_list, int item_cnt,
-                  const char *hostname);
-
-/**
- * Take lock and set its last_locate field, only used if an early lock was
- * previously taken for those items.
- *
- * If any lock cannot be taken, then the ones that already are will be
- * forcefully unlocked, and the function will not try to lock any other
- * resource (all-or-nothing policy).
- *
- * @param[in]   handle          DSS handle.
- * @param[in]   type            Type of the resources to lock.
- * @param[in]   item_list       List of resources to lock.
- * @param[in]   item_cnt        Number of resources to lock.
- *
- * @return                      0 on success,
- *                             -EEXIST if one of the targeted locks already
- *                              exists.
- */
-int dss_lock_locate(struct dss_handle *handle, enum dss_type type,
-                    const void *item_list, int item_cnt);
+                  const char *hostname, bool is_locate);
 
 /**
  * Refresh lock timestamps.

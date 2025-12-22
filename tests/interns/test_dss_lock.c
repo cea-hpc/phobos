@@ -469,7 +469,8 @@ static void dss_lock_hostname_unlock_ok(void **state)
     struct pho_lock lock;
     int rc;
 
-    rc = dss_lock_weak(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, lock_hostname);
+    rc = dss_lock_weak(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, lock_hostname,
+                       true);
     assert_return_code(rc, -rc);
 
     rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &lock);
@@ -485,10 +486,12 @@ static void dss_lock_hostname_unlock_ok(void **state)
 static void dss_lock_last_locate(void **state)
 {
     struct dss_handle *handle = (struct dss_handle *)*state;
+    const char *lock_hostname = get_hostname();
     struct pho_lock lock;
     int rc;
 
-    rc = dss_lock_locate(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1);
+    rc = dss_lock_weak(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, lock_hostname,
+                       true);
     assert_return_code(rc, -rc);
 
     rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &lock);
@@ -511,11 +514,13 @@ static void dss_lock_last_locate(void **state)
 static void dss_lock_update_last_locate(void **state)
 {
     struct dss_handle *handle = (struct dss_handle *)*state;
+    const char *lock_hostname = get_hostname();
     struct pho_lock lock;
     struct timeval tv;
     int rc;
 
-    rc = dss_lock_locate(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1);
+    rc = dss_lock_weak(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, lock_hostname,
+                       true);
     assert_return_code(rc, -rc);
 
     assert(dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &lock) == 0);

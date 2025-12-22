@@ -218,8 +218,7 @@ static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
                     "  VALUES ('%s'::lock_type, '%s', %s, %d, '%s', %s)"
                     ";",
                     dss_type_names[lock_type], lock_id,
-                    lock_flags & WEAK_LOCK || lock_flags & LOCATE_LOCK ?
-                        "TRUE" : "FALSE",
+                    lock_flags & WEAK_LOCK ? "TRUE" : "FALSE",
                     owner, hostname,
                     lock_flags & LOCATE_LOCK ? "now()" : "NULL");
 
@@ -462,30 +461,16 @@ int dss_lock(struct dss_handle *handle, enum dss_type type,
                      false, false);
 }
 
-int dss_lock_locate(struct dss_handle *handle, enum dss_type type,
-                    const void *item_list, int item_cnt)
-{
-    const char *hostname;
-    int pid;
-    int rc;
-
-    rc = fill_host_owner(&hostname, &pid);
-    if (rc)
-        LOG_RETURN(rc, "Couldn't retrieve hostname");
-
-    return _dss_lock(handle, type, item_list, item_cnt, hostname, pid,
-                     false, true);
-}
-
 int dss_lock_weak(struct dss_handle *handle, enum dss_type type,
-                  const void *item_list, int item_cnt, const char *hostname)
+                  const void *item_list, int item_cnt, const char *hostname,
+                  bool is_locate)
 {
     int pid;
 
     pid = getpid();
 
     return _dss_lock(handle, type, item_list, item_cnt, hostname, pid, true,
-                     true);
+                     is_locate);
 }
 
 int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
