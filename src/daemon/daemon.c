@@ -271,7 +271,7 @@ int daemon_init(struct daemon_params param)
     if (param.use_syslog)
         pho_log_callback_set(phobos_log_callback_def_with_sys);
 
-    return rc;
+    return 0;
 }
 
 void daemon_notify_init_done(int pipefd_to_close, int *rc)
