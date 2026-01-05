@@ -67,6 +67,9 @@ struct lib_descriptor {
     struct status_array slots;
     struct status_array impexp;
     struct status_array drives;
+
+    /* Number of lib device to try before exiting as error */
+    int max_device_retry;
 };
 
 /**

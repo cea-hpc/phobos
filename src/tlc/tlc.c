@@ -139,6 +139,8 @@ static int tlc_init(struct tlc *tlc, const char *library)
     if (rc)
         LOG_GOTO(close_lib, rc, "Cannot initialize DSS");
 
+    tlc->lib.max_device_retry = -1;
+
     return rc;
 
 close_lib:

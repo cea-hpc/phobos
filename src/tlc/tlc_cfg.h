@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2023 CEA/DAM.
+ *  All rights reserved (c) 2014-2026 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -28,6 +28,8 @@
 #include "pho_cfg.h"
 #include "pho_types.h"
 
+#define DEFAULT_TLC_MAX_DEVICE_RETRY 1
+
 /** List of TLC configuration parameters */
 enum pho_cfg_params_tlc {
     PHO_CFG_TLC_FIRST,
@@ -35,8 +37,9 @@ enum pho_cfg_params_tlc {
     /* tlc parameters */
     PHO_CFG_TLC_lib_device = PHO_CFG_TLC_FIRST,
     PHO_CFG_TLC_default_library,
+    PHO_CFG_TLC_retry_count,
 
-    PHO_CFG_TLC_LAST = PHO_CFG_TLC_default_library,
+    PHO_CFG_TLC_LAST = PHO_CFG_TLC_retry_count,
 };
 
 extern const struct pho_config_item cfg_tlc[];

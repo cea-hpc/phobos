@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2023 CEA/DAM.
+ *  All rights reserved (c) 2014-2026 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -36,11 +36,13 @@
 #include <unistd.h>
 
 #include "pho_cfg.h"
+#include "pho_comm.h"
 #include "pho_common.h"
 #include "pho_comm.h"
 #include "pho_types.h"
 #include "scsi_api.h"
 #include "tlc_library.h"
+#include "tlc_cfg.h"
 
 /** List of SCSI library configuration parameters */
 enum pho_cfg_params_libscsi {
@@ -70,6 +72,53 @@ static void lib_addrs_clear(struct lib_descriptor *lib)
     lib->msi_loaded = false;
 }
 
+static int cfg_tlc_max_device_retry(struct lib_descriptor *lib)
+{
+    int retry_count = -1;
+    char *section_name;
+    const char *value;
+    int rc;
+
+    if (lib->max_device_retry != -1)
+        return lib->max_device_retry;
+
+    rc = asprintf(&section_name, TLC_SECTION_CFG, lib->name);
+    if (rc < 0)
+        return -1;
+
+    rc = pho_cfg_get_val(section_name, "max_device_retry", &value);
+    free(section_name);
+    if (rc) {
+        if (rc == -ENODATA) {
+            lib->max_device_retry = DEFAULT_TLC_MAX_DEVICE_RETRY;
+            return lib->max_device_retry;
+        } else {
+            return -1;
+        }
+    }
+
+    retry_count = str2int64(value);
+    if (retry_count == LLONG_MIN || retry_count < INT_MIN ||
+        retry_count > INT_MAX)
+        return -1;
+
+    if (retry_count > lib->nb_lib_device) {
+        pho_info("max_device_retry higher than the number of lib device, will "
+                 "be set to %ld", lib->nb_lib_device);
+        lib->max_device_retry = lib->nb_lib_device;
+        return lib->max_device_retry;
+    } else if (retry_count < 1) {
+        pho_info("max_device_retry lower than 1, will be set to %d",
+                 DEFAULT_TLC_MAX_DEVICE_RETRY);
+        lib->max_device_retry = DEFAULT_TLC_MAX_DEVICE_RETRY;
+        return lib->max_device_retry;
+    }
+
+    lib->max_device_retry = retry_count;
+
+    return lib->max_device_retry;
+}
+
 /**
  * Load addresses of elements in library.
  * @return 0 if the mode sense info is successfully loaded, or already loaded.
@@ -85,8 +134,9 @@ static int lib_addrs_load(struct lib_descriptor *lib, json_t *message)
     if (lib->fd < 0)
         return -EBADF;
 
-    PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
-                   scsi_mode_sense, lib->fd, &lib->msi, message);
+    PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib,
+                   cfg_tlc_max_device_retry(lib), scsi_mode_sense,
+                   lib->fd, &lib->msi, message);
     if (rc)
         LOG_RETURN(rc, "MODE_SENSE failed");
 
@@ -116,8 +166,9 @@ static int query_drive_sn(struct lib_descriptor *lib, json_t *message)
     int                      rc;
 
     /* query for drive serial number */
-    PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
-                   scsi_element_status, lib->fd, SCSI_TYPE_DRIVE,
+    PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib,
+                   cfg_tlc_max_device_retry(lib), scsi_element_status,
+                   lib->fd, SCSI_TYPE_DRIVE,
                    lib->msi.drives.first_addr, lib->msi.drives.nb,
                    ESF_GET_DRV_ID, &items, &count, message);
     if (rc)
@@ -170,11 +221,12 @@ static int lib_status_load(struct lib_descriptor *lib,
     status_json = json_object();
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_ARM) && !lib->arms.loaded) {
-        PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
-                       scsi_element_status, lib->fd,
-                       SCSI_TYPE_ARM, lib->msi.arms.first_addr,
-                       lib->msi.arms.nb, ESF_GET_LABEL, &lib->arms.items,
-                       &lib->arms.count, status_json);
+        PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib,
+                       cfg_tlc_max_device_retry(lib), scsi_element_status,
+                       lib->fd, SCSI_TYPE_ARM,
+                       lib->msi.arms.first_addr, lib->msi.arms.nb,
+                       ESF_GET_LABEL, &lib->arms.items, &lib->arms.count,
+                       status_json);
         if (rc) {
             if (json_object_size(status_json) != 0) {
                 *message = json_object();
@@ -195,11 +247,12 @@ static int lib_status_load(struct lib_descriptor *lib,
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_SLOT)
         && !lib->slots.loaded) {
-        PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
-                       scsi_element_status, lib->fd,
-                       SCSI_TYPE_SLOT, lib->msi.slots.first_addr,
-                       lib->msi.slots.nb, ESF_GET_LABEL, &lib->slots.items,
-                       &lib->slots.count, status_json);
+        PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib,
+                       cfg_tlc_max_device_retry(lib), scsi_element_status,
+                       lib->fd, SCSI_TYPE_SLOT,
+                       lib->msi.slots.first_addr, lib->msi.slots.nb,
+                       ESF_GET_LABEL, &lib->slots.items, &lib->slots.count,
+                       status_json);
         if (rc) {
             if (json_object_size(status_json) != 0) {
                 *message = json_object();
@@ -220,11 +273,12 @@ static int lib_status_load(struct lib_descriptor *lib,
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_IMPEXP)
         && !lib->impexp.loaded) {
-        PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
-                       scsi_element_status, lib->fd,
-                       SCSI_TYPE_IMPEXP, lib->msi.impexp.first_addr,
-                       lib->msi.impexp.nb, ESF_GET_LABEL, &lib->impexp.items,
-                       &lib->impexp.count, status_json);
+        PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib,
+                       cfg_tlc_max_device_retry(lib), scsi_element_status,
+                       lib->fd, SCSI_TYPE_IMPEXP,
+                       lib->msi.impexp.first_addr, lib->msi.impexp.nb,
+                       ESF_GET_LABEL, &lib->impexp.items, &lib->impexp.count,
+                       status_json);
         if (rc) {
             if (json_object_size(status_json) != 0) {
                 *message = json_object();
@@ -261,11 +315,11 @@ static int lib_status_load(struct lib_descriptor *lib,
         else /* default: get both */
             flags = ESF_GET_LABEL | ESF_GET_DRV_ID;
 
-        PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
-                       scsi_element_status, lib->fd,
-                       SCSI_TYPE_DRIVE, lib->msi.drives.first_addr,
-                       lib->msi.drives.nb, flags, &lib->drives.items,
-                       &lib->drives.count, status_json);
+        PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib,
+                       cfg_tlc_max_device_retry(lib), scsi_element_status,
+                       lib->fd, SCSI_TYPE_DRIVE,
+                       lib->msi.drives.first_addr, lib->msi.drives.nb, flags,
+                       &lib->drives.items, &lib->drives.count, status_json);
         if (rc) {
             if (json_object_size(status_json) != 0) {
                 *message = json_object();
@@ -702,9 +756,9 @@ int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
 
     /* move medium to device */
     /* arm = 0 for default transport element */
-    PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
-                   scsi_move_medium, lib->fd, 0,
-                   source_element_status->address,
+    PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib,
+                   cfg_tlc_max_device_retry(lib), scsi_move_medium,
+                   lib->fd, 0, source_element_status->address,
                    drive_element_status->address, log.message);
     emit_log_after_action(dss, &log, PHO_DEVICE_LOAD, rc);
     if (rc)
@@ -868,9 +922,9 @@ int tlc_library_unload(struct dss_handle *dss, struct lib_descriptor *lib,
 
     /* move medium to device */
     /* arm = 0 for default transport element */
-    PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
-                   scsi_move_medium, lib->fd, 0,
-                   drive_element_status->address,
+    PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib,
+                   cfg_tlc_max_device_retry(lib), scsi_move_medium,
+                   lib->fd, 0, drive_element_status->address,
                    target_element_status->address, log.message);
     emit_log_after_action(dss, &log, PHO_DEVICE_UNLOAD, rc);
     if (rc) {

@@ -95,6 +95,23 @@ Example:
     [tlc "legacy"]
     hostname = localhost
 
+*Max_device_retry*
+------------------
+
+The **max_device_retry** parameter defines how many lib devices the tlc will try
+before considering a request as failed. The value must be between **1** and the
+**number of lib devices opened**.
+
+If this parameter is not specified, Phobos defaults to the following:
+**max_device_retry = 1**.
+
+Example:
+
+.. code:: ini
+
+    [tlc "legacy"]
+    max_device_retry = 1
+
 *Port*
 ------
 
