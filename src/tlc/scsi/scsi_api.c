@@ -650,18 +650,6 @@ int scsi_inquiry(int fd)
     return rc;
 }
 
-/** Indicate whether a SCSI error must be retried after a delay */
-static inline bool scsi_delayed_retry(int rc)
-{
-    return rc == -EBUSY || rc == -EIO || rc == -ETIMEDOUT;
-}
-
-/** Indicate whether a SCSI error can be retried immediatly */
-static inline bool scsi_immediate_retry(int rc)
-{
-    return rc == -EAGAIN || rc == -EINTR;
-}
-
 void scsi_retry_func(const char *fnname, int rc, int *retry_cnt,
                      struct scsi_error *err)
 {
