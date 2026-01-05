@@ -199,4 +199,7 @@ struct element_status *
 media_element_status_from_label(struct lib_descriptor *lib,
                                 const char *label);
 
+void tlc_library_retry_func(const char *fnname, int rc, int *retry_cnt,
+                            struct lib_descriptor *lib);
+
 #endif /* _PHO_TLC_LIBRARY_H */

@@ -286,7 +286,7 @@ static int test1(void *hint)
 
     /* test retry loop */
     val = 0;
-    PHO_RETRY_LOOP(rc, scsi_retry_func, &err, 5, incr_val1);
+    PHO_RETRY_LOOP(rc, scsi_retry_func, &err, 5, incr_val1, &err);
     /* rc should be 0 */
     if (err.rc != 0) {
         fprintf(stderr, "1) rc should be 0\n");
@@ -306,7 +306,7 @@ static int test2(void *hint)
     int rc;
 
     val = 0;
-    PHO_RETRY_LOOP(rc, scsi_retry_func, &err, 3, incr_val2);
+    PHO_RETRY_LOOP(rc, scsi_retry_func, &err, 3, incr_val2, &err);
     if (err.rc != -EAGAIN) {
         fprintf(stderr, "3) rc should be -EAGAIN\n");
         return -1;

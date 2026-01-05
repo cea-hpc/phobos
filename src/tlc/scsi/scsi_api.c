@@ -222,7 +222,7 @@ int scsi_mode_sense(int fd, struct mode_sense_info *info, json_t *message)
     /* all other fields are zeroed */
 
     PHO_RETRY_LOOP(rc, scsi_retry_func, &scsi_err, scsi_retry_count(),
-                   scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
+                   scsi_execute, &scsi_err, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), buffer, sizeof(buffer),
                    scsi_query_timeout_ms(), log_object);
 
@@ -416,7 +416,7 @@ static int _scsi_element_status(int fd, enum element_type_code type,
     htobe24(len, req.alloc_length);
 
     PHO_RETRY_LOOP(rc, scsi_retry_func, &scsi_err, scsi_retry_count(),
-                   scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
+                   scsi_execute, &scsi_err, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), buffer, len,
                    scsi_query_timeout_ms(), message);
 
@@ -620,7 +620,7 @@ int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
     req.destination_address = htobe16(tgt_addr);
 
     PHO_RETRY_LOOP(rc, scsi_retry_func, &scsi_err, scsi_retry_count(),
-                   scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
+                   scsi_execute, &scsi_err, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), NULL, 0,
                    scsi_move_timeout_ms(), log_object);
 
@@ -643,7 +643,7 @@ int scsi_inquiry(int fd)
     req.allocation_length = 36;
 
     PHO_RETRY_LOOP(rc, scsi_retry_func, &scsi_err, scsi_retry_count(),
-                   scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
+                   scsi_execute, &scsi_err, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), &inquiry_response,
                    sizeof(inquiry_response), scsi_inquiry_timeout_ms(), NULL);
 

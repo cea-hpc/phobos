@@ -188,7 +188,8 @@ static void get_op_params(struct sg_io_hdr *hdr, uint8_t *code, uint8_t *type)
         struct read_status_cdb *req = (struct read_status_cdb *)hdr->cmdp;
 
         *type = req->element_type_code;
-    } else if (*code != MODE_SENSE && *code != MOVE_MEDIUM) {
+    } else if (*code != MODE_SENSE && *code != MOVE_MEDIUM &&
+               *code != INQUIRY) {
         fail();
     }
 }

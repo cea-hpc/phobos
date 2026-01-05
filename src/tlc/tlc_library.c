@@ -85,7 +85,8 @@ static int lib_addrs_load(struct lib_descriptor *lib, json_t *message)
     if (lib->fd < 0)
         return -EBADF;
 
-    rc = scsi_mode_sense(lib->fd, &lib->msi, message);
+    PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
+                   scsi_mode_sense, lib->fd, &lib->msi, message);
     if (rc)
         LOG_RETURN(rc, "MODE_SENSE failed");
 
@@ -115,9 +116,10 @@ static int query_drive_sn(struct lib_descriptor *lib, json_t *message)
     int                      rc;
 
     /* query for drive serial number */
-    rc = scsi_element_status(lib->fd, SCSI_TYPE_DRIVE,
-                             lib->msi.drives.first_addr, lib->msi.drives.nb,
-                             ESF_GET_DRV_ID, &items, &count, message);
+    PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
+                   scsi_element_status, lib->fd, SCSI_TYPE_DRIVE,
+                   lib->msi.drives.first_addr, lib->msi.drives.nb,
+                   ESF_GET_DRV_ID, &items, &count, message);
     if (rc)
         LOG_GOTO(err_free, rc, "scsi_element_status() failed to get drive S/N");
 
@@ -168,12 +170,11 @@ static int lib_status_load(struct lib_descriptor *lib,
     status_json = json_object();
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_ARM) && !lib->arms.loaded) {
-        rc = scsi_element_status(lib->fd, SCSI_TYPE_ARM,
-                                 lib->msi.arms.first_addr, lib->msi.arms.nb,
-                                 /* to check if the arm holds a tape */
-                                 ESF_GET_LABEL,
-                                 &lib->arms.items, &lib->arms.count,
-                                 status_json);
+        PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
+                       scsi_element_status, lib->fd,
+                       SCSI_TYPE_ARM, lib->msi.arms.first_addr,
+                       lib->msi.arms.nb, ESF_GET_LABEL, &lib->arms.items,
+                       &lib->arms.count, status_json);
         if (rc) {
             if (json_object_size(status_json) != 0) {
                 *message = json_object();
@@ -194,11 +195,11 @@ static int lib_status_load(struct lib_descriptor *lib,
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_SLOT)
         && !lib->slots.loaded) {
-        rc = scsi_element_status(lib->fd, SCSI_TYPE_SLOT,
-                                 lib->msi.slots.first_addr, lib->msi.slots.nb,
-                                 ESF_GET_LABEL,
-                                 &lib->slots.items, &lib->slots.count,
-                                 status_json);
+        PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
+                       scsi_element_status, lib->fd,
+                       SCSI_TYPE_SLOT, lib->msi.slots.first_addr,
+                       lib->msi.slots.nb, ESF_GET_LABEL, &lib->slots.items,
+                       &lib->slots.count, status_json);
         if (rc) {
             if (json_object_size(status_json) != 0) {
                 *message = json_object();
@@ -219,11 +220,11 @@ static int lib_status_load(struct lib_descriptor *lib,
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_IMPEXP)
         && !lib->impexp.loaded) {
-        rc = scsi_element_status(lib->fd, SCSI_TYPE_IMPEXP,
-                                 lib->msi.impexp.first_addr, lib->msi.impexp.nb,
-                                 ESF_GET_LABEL,
-                                 &lib->impexp.items, &lib->impexp.count,
-                                 status_json);
+        PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
+                       scsi_element_status, lib->fd,
+                       SCSI_TYPE_IMPEXP, lib->msi.impexp.first_addr,
+                       lib->msi.impexp.nb, ESF_GET_LABEL, &lib->impexp.items,
+                       &lib->impexp.count, status_json);
         if (rc) {
             if (json_object_size(status_json) != 0) {
                 *message = json_object();
@@ -260,10 +261,11 @@ static int lib_status_load(struct lib_descriptor *lib,
         else /* default: get both */
             flags = ESF_GET_LABEL | ESF_GET_DRV_ID;
 
-        rc = scsi_element_status(lib->fd, SCSI_TYPE_DRIVE,
-                                 lib->msi.drives.first_addr, lib->msi.drives.nb,
-                                 flags, &lib->drives.items, &lib->drives.count,
-                                 status_json);
+        PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
+                       scsi_element_status, lib->fd,
+                       SCSI_TYPE_DRIVE, lib->msi.drives.first_addr,
+                       lib->msi.drives.nb, flags, &lib->drives.items,
+                       &lib->drives.count, status_json);
         if (rc) {
             if (json_object_size(status_json) != 0) {
                 *message = json_object();
@@ -700,9 +702,10 @@ int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
 
     /* move medium to device */
     /* arm = 0 for default transport element */
-    rc = scsi_move_medium(lib->fd, 0,
-                          source_element_status->address,
-                          drive_element_status->address, log.message);
+    PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
+                   scsi_move_medium, lib->fd, 0,
+                   source_element_status->address,
+                   drive_element_status->address, log.message);
     emit_log_after_action(dss, &log, PHO_DEVICE_LOAD, rc);
     if (rc)
         LOG_RETURN(rc, "SCSI move failed for load of tape '%s' in drive '%s'",
@@ -865,9 +868,10 @@ int tlc_library_unload(struct dss_handle *dss, struct lib_descriptor *lib,
 
     /* move medium to device */
     /* arm = 0 for default transport element */
-    rc = scsi_move_medium(lib->fd, 0,
-                          drive_element_status->address,
-                          target_element_status->address, log.message);
+    PHO_RETRY_LOOP(rc, tlc_library_retry_func, lib, lib->nb_lib_device,
+                   scsi_move_medium, lib->fd, 0,
+                   drive_element_status->address,
+                   target_element_status->address, log.message);
     emit_log_after_action(dss, &log, PHO_DEVICE_UNLOAD, rc);
     if (rc) {
         free(*unloaded_tape_label);
@@ -990,4 +994,67 @@ int tlc_library_status(struct lib_descriptor *lib, json_t **lib_data,
         scan_element(&lib->drives.items[i], json_array_append_cb, *lib_data);
 
     return 0;
+}
+
+static int update_curr_fd(struct lib_descriptor *lib)
+{
+    int nb_try = 1;
+
+     /* Always move to next FD, even if current is valid */
+    lib->curr_fd_idx = (lib->curr_fd_idx + 1) % lib->nb_lib_device;
+
+    while (lib->fd_array[lib->curr_fd_idx] == -1 &&
+           nb_try != lib->nb_lib_device) {
+        lib->curr_fd_idx = (lib->curr_fd_idx + 1) % lib->nb_lib_device;
+        nb_try++;
+    }
+
+    lib->fd = lib->fd_array[lib->curr_fd_idx];
+
+    return nb_try == lib->nb_lib_device ? -1 : 0;
+}
+
+void tlc_library_retry_func(const char *fnname, int rc, int *retry_cnt,
+                            struct lib_descriptor *lib)
+{
+    int rc2;
+
+    /* If it succeed, exit the retry loop */
+    if (rc == 0) {
+        *retry_cnt = -1;
+        return;
+    }
+
+    /* Check if the lib device is still valid */
+    rc2 = scsi_inquiry(lib->fd);
+    if (rc2) {
+        pho_error(-errno, "Inquiry check for '%s' failed",
+                  lib->lib_devices[lib->curr_fd_idx]);
+
+        if (lib->fd_array[lib->curr_fd_idx] >= 0)
+            close(lib->fd_array[lib->curr_fd_idx]);
+
+        lib->fd_array[lib->curr_fd_idx] = -1;
+    }
+
+    rc2 = update_curr_fd(lib);
+    if (rc2) {
+        pho_error(-EBADF, "All lib devices are failed");
+        /* Means all the fds are invalid */
+        lib->curr_fd_idx = -1;
+        *retry_cnt = -1;
+        return;
+    }
+
+    (*retry_cnt)--;
+    if ((*retry_cnt) == 0) {
+        *retry_cnt = -1;
+        if (rc)
+            pho_error(rc, "%s: all retries failed.", fnname);
+
+        return;
+    }
+
+    pho_error(rc, "%s failed: retry with another lib device: %s",
+              fnname, lib->lib_devices[lib->curr_fd_idx]);
 }

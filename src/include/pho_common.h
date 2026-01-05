@@ -462,16 +462,15 @@ unsigned char *hex2uchar(const char *hex, int uchar_size);
 typedef void(*retry_func_t)(const char *fnname, int rc, int *retry_cnt,
                             void *context);
 
-/** Manage retry loops */
-#define PHO_RETRY_LOOP(_rc, _retry_func, _udata, _retry_cnt, _call_func, ...) \
+#define PHO_RETRY_LOOP(_rc, _retry_func, _retry_udata, _retry_cnt, _call_func, \
+                       _call_udata, ...) \
     do {                                         \
         int retry = (_retry_cnt);                \
         do {                                     \
-            (_rc) = (_call_func)((_udata), ##__VA_ARGS__);   \
-            (_retry_func)(#_call_func, (_rc), &retry, (_udata)); \
+            (_rc) = (_call_func)((_call_udata), ##__VA_ARGS__);   \
+            (_retry_func)(#_call_func, (_rc), &retry, (_retry_udata)); \
         } while (retry >= 0);                    \
     } while (0)
-
 
 /**
  * Phobos-specific type to iterate over a GLib hashtable and stop on error.
