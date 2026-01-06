@@ -9,5 +9,6 @@ libphobos_admin_la_LIBADD=../core/libpho_core.la \
                           ../io/libpho_io.la ../ldm/libpho_ldm.la \
                           ../layout-modules/libpho_layout_raid1.la \
                           ../io-modules/libpho_io_adapter_posix.la \
-                          ../io-modules/libpho_io_adapter_ltfs.la
+                          ../io-modules/libpho_io_adapter_ltfs.la \
+                          ../layout/libpho_layout.la
 libphobos_admin_la_CFLAGS=$(AM_CFLAGS) -I../io-modules -I../layout-modules
