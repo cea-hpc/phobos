@@ -43,7 +43,13 @@ def setup_db(database, user, password):
         raise ValueError("database and user cannot be None")
 
     # Connect to "postgres" (admin) database
-    with psycopg2.connect(dbname="postgres") as conn:
+
+    # Warning: with psycopg2.connect(dbname="postgres") as conn
+    # is creating a transaction and CREATE USER can not be executed into a
+    # transaction.
+    conn = psycopg2.connect(dbname="postgres")
+
+    try:
         conn.autocommit = True
         with conn.cursor() as cursor:
             # Admin input: no privilege escalation here, hence we don't care
@@ -67,9 +73,17 @@ def setup_db(database, user, password):
                     "CREATE DATABASE %s WITH OWNER %s"
                     % (database, user)
                 )
+    finally:
+        conn.close()
 
     # Connect to the newly created database to create extensions
-    with psycopg2.connect(dbname=database) as conn:
+
+    # WARNING: with psycopg2.connect(dbname=database) as conn:
+    # is creating a transaction and CREATE EXTENSION can not be executed into a
+    # transaction.
+    conn = psycopg2.connect(dbname=database)
+
+    try:
         conn.autocommit = True
         with conn.cursor() as cursor:
             # Create btree_gin extension
@@ -80,10 +94,18 @@ def setup_db(database, user, password):
                 -- Create uuid-ossp extension
                 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA public;
             """)
+    finally:
+        conn.close()
 
 def drop_db(database, user):
     """Drop the phobos database and user"""
-    with psycopg2.connect(dbname="postgres") as conn:
+
+    # WARNING: with psycopg2.connect(dbname="postgres") as conn:
+    # is creating a transaction and DROP USER or DROP DATABASE can not be
+    # executed into a transaction.
+    conn = psycopg2.connect(dbname="postgres")
+
+    try:
         conn.autocommit = True
         with conn.cursor() as cursor:
             with _allow_pg_prog_error("does not exist"):
@@ -91,3 +113,5 @@ def drop_db(database, user):
             with _allow_pg_prog_error("does not exist"):
                 cursor.execute("DROP USER %s" % (user,))
             # Don't drop the btree_gin extension in case another database use it
+    finally:
+        conn.close()
