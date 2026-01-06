@@ -43,6 +43,7 @@ EXTENSION_KWARGS = {
         '../include',
         '/usr/include/glib-2.0',
         '/usr/lib64/glib-2.0/include',
+        '/usr/lib/x86_64-linux-gnu/glib-2.0/include',
     ],
     "libraries": GLOBAL_LIBS,
     "library_dirs": GLOBAL_LIBDIRS,
