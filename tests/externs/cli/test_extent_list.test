@@ -65,7 +65,6 @@ function cleanup
 {
     if [[ -w /dev/changer ]]; then
         waive_daemons
-        waive_tlc_bis
         drain_all_drives
     else
         waive_lrs

@@ -153,7 +153,6 @@ function dir_cleanup
 function tape_cleanup
 {
     waive_daemons
-    waive_tlc_bis
     drop_tables
     drain_all_drives
     rm -rf /tmp/out*
@@ -398,7 +397,6 @@ function test_locate_library
     $phobos put --library legacy /etc/hosts legacy_obj
 
     waive_daemons
-    waive_tlc_bis
     drain_all_drives
 
     # change the host of drive to $other_hostname
@@ -440,7 +438,6 @@ function test_locate_prelocking_compatibility
     $phobos drive unload --library library_bis ${drive_bis}
 
     waive_daemons
-    waive_tlc_bis
     drain_all_drives
 
     # change the host of drives in library bis to $other_hostname

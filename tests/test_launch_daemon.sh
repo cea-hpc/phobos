@@ -90,4 +90,5 @@ function waive_daemons()
 {
     waive_lrs
     waive_tlc
+    waive_tlc_bis
 }

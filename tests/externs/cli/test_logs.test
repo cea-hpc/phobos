@@ -59,14 +59,6 @@ function cleanup
     drain_all_drives
 }
 
-function cleanup_bis
-{
-    waive_daemons
-    waive_tlc_bis
-    drop_tables
-    drain_all_drives
-}
-
 function clear_logs
 {
     $valg_phobos logs clear --clear-all ||
@@ -390,5 +382,5 @@ function test_clear_filters
 
 TESTS=("setup; test_device_load; cleanup"
        "setup; test_device_unload; cleanup"
-       "setup_bis; test_dump_filters; cleanup_bis"
-       "setup_bis; test_clear_filters; cleanup_bis")
+       "setup_bis; test_dump_filters; cleanup"
+       "setup_bis; test_clear_filters; cleanup")

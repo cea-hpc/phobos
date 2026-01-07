@@ -38,7 +38,6 @@ function setup
 
 function cleanup
 {
-    waive_tlc_bis
     waive_daemons
     drain_all_drives
     drop_tables
