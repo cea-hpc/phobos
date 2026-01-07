@@ -22,15 +22,19 @@ Stats target for Phobos CLI
 """
 
 import sys
+import phobos.core.cfg as cfg
 
 from phobos.cli.common import (BaseOptHandler, env_error_format)
 from phobos.core.admin import Client as AdminClient
+from phobos.core.ffi import ResourceFamily
 
 class StatsOptHandler(BaseOptHandler):
     """Stats handler."""
 
     label = 'stats'
     descr = 'Query and display stats from Phobos daemons'
+    family = None
+    library = None
 
     def __enter__(self):
         return self
@@ -56,15 +60,20 @@ class StatsOptHandler(BaseOptHandler):
 
     def exec_stats(self):
         """Stats call"""
-
-        # FIXME support requests to TLC
-        #print("TLC:", self.params.get('tlc'))
-
         try:
-            with AdminClient(lrs_required=(self.params.get('tlc') is None)) \
+            tlc = self.params.get('tlc')
+            with AdminClient(lrs_required=(tlc is None)) \
                 as adm:
-                json = adm.stats(self.params.get('namespace_name'),
-                                 self.params.get('tags'))
+                if tlc is not None:
+                    self.family = ResourceFamily(ResourceFamily.RSC_TAPE)
+                    self.library = cfg.get_default_library(self.family) \
+                        if tlc == 'default_tlc' else tlc
+                    json = adm.tlc_stats(self.library,
+                                         self.params.get('namespace_name'),
+                                         self.params.get('tags'))
+                else:
+                    json = adm.stats(self.params.get('namespace_name'),
+                                     self.params.get('tags'))
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

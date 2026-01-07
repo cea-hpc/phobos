@@ -44,6 +44,11 @@ function setup
     setup_tables
     invoke_lrs
 
+    if [ -w /dev/changer ]; then
+        invoke_tlc
+        invoke_tlc_bis
+    fi
+
     # create 3 dirs to allow RAID4 writes
     for i in {1..3}; do
         dir=$(dir_setup)
@@ -53,7 +58,7 @@ function setup
 
 function cleanup
 {
-    waive_lrs
+    waive_daemons
     for dir in "${phobos_dirs[@]}"; do
         rm -rf "$dir"
     done
@@ -139,10 +144,59 @@ function test_stats_values
         error "no ongoing format expected"
 }
 
+function get_file_value #file #name #tags
+{
+    local val
+
+    val=$(grep -e "$3[ \,]" "$1" | grep "$2" | sed -e "s/.*$2=//")
+    echo $val
+}
+
+function test_tlc_stats
+{
+    local stat_file=$(mktemp /tmp/testfile.XXXXXX)
+
+    # ping default TLC thrice
+    $valg_phobos tlc ping || error "TLC ping should be successful"
+    $valg_phobos tlc ping || error "TLC ping should be successful"
+    $valg_phobos tlc ping || error "TLC ping should be successful"
+    # ping TLC bis twice
+    $valg_phobos tlc ping --library library_bis \
+        || error "TLC ping should be successful"
+    $valg_phobos tlc ping --library library_bis \
+        || error "TLC ping should be successful"
+
+    $valg_phobos stats --tlc > $stat_file || error "TLC stats failed"
+    # expected: 3 ping, 1 stat
+    [ $(get_file_value $stat_file req.count request=PING) == "3" ] \
+        || error "3 PING requests expected"
+    [ $(get_file_value $stat_file req.count request=STAT) == "1" ] \
+        || error "1 STAT request expected"
+
+    $valg_phobos stats --tlc=legacy > $stat_file || error "TLC stats failed"
+    # expected: 3 ping, 2 stat
+    [ $(get_file_value $stat_file req.count request=PING) == "3" ] \
+        || error "3 PING requests expected"
+    [ $(get_file_value $stat_file req.count request=STAT) == "2" ] \
+        || error "2 STAT request expected"
+
+    $valg_phobos stats --tlc=library_bis > $stat_file || error "TLC stats failed"
+    # expected: 2 ping, 1 stat
+    [ $(get_file_value $stat_file req.count request=PING) == "2" ] \
+        || error "2 PING requests expected"
+    [ $(get_file_value $stat_file req.count request=STAT) == "1" ] \
+        || error "1 STAT request expected"
+
+    rm -f $stat_file
+}
+
 TEST_SETUP=setup
 TESTS=("test_stats_valid_args" \
        "test_stats_invalid_args" \
        "test_stats_values")
+if [[ -w /dev/changer ]]; then
+    TESTS+=("test_tlc_stats")
+fi
 TEST_CLEANUP=cleanup
 
 # -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-

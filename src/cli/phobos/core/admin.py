@@ -26,7 +26,7 @@ Provide access to admin commands with the right level (tm) of abstraction.
 import errno
 import json
 
-from ctypes import (addressof, byref, c_int, c_char_p, c_void_p, pointer,
+from ctypes import (addressof, byref, CDLL, c_int, c_char_p, c_void_p, pointer,
                     Structure, c_size_t, c_bool)
 
 from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-name-in-module
@@ -40,7 +40,11 @@ from phobos.core.dss import DSSHandle, dss_sort
 from phobos.core.ffi import (CommInfo, Id, LayoutInfo, LibDrvInfo, LIBPHOBOS,
                              LIBPHOBOS_ADMIN, MediaInfo, MediaStats,
                              OperationFlags, StringArray)
-
+# Load LibC once
+try:
+    LIBC = CDLL("libc.so.6")
+except OSError as err:
+    raise EnvironmentError(errno.ENOSYS, f"Failed to load libc: {err}")
 
 def string_list2c_array(str_list, getter):
     """Convert a Python list into a C list. A getter can be used to select
@@ -530,17 +534,46 @@ class Client: # pylint: disable=too-many-public-methods
         if rc:
             raise EnvironmentError(rc, "Failed to retrieve stats")
 
-        if not stats_str.value:
+        if not stats_str or not stats_str.value:
             return None
 
         # Convert to JSON
         try:
             stats_json = json.loads(stats_str.value.decode('utf-8'))
+            return stats_json
         except json.JSONDecodeError as jerr:
             raise EnvironmentError(errno.EPROTO,
                                    f"Failed to decode JSON: {jerr}")
+        finally:
+            LIBC.free(stats_str)
 
-        return stats_json
+    def tlc_stats(self, library, fullname, tags):
+        """Retrieve stats from TLC Daemon."""
+        stats_str = c_char_p(None)
+
+        tlc_encoded = c_char_p(library.encode('utf-8'))
+        fullname_encoded = (fullname.encode('utf-8') if fullname else None)
+        tags_encoded = (tags.encode('utf-8') if tags else None)
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_stats_tlc(tlc_encoded,
+                                                    fullname_encoded,
+                                                    tags_encoded,
+                                                    byref(stats_str))
+        if rc:
+            raise EnvironmentError(rc, "Failed to retrieve stats from TCL")
+
+        if not stats_str or not stats_str.value:
+            return None
+
+        # Convert to JSON
+        try:
+            stats_json = json.loads(stats_str.value.decode('utf-8'))
+            return stats_json
+        except json.JSONDecodeError as jerr:
+            raise EnvironmentError(errno.EPROTO,
+                                   f"Failed to decode JSON: {jerr}")
+        finally:
+            LIBC.free(stats_str)
 
     @staticmethod
     def layout_list_free(layouts, n_layouts):
