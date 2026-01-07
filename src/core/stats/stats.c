@@ -165,8 +165,8 @@ struct pho_stat *pho_stat_create(enum pho_stat_type type,
     stat->type = type;
     stat->namespace = xstrdup_safe(namespace);
     stat->name = xstrdup_safe(name);
-    asprintf(&stat->full_name, "%s.%s", stat->namespace, stat->name);
-    if (!stat->full_name) {
+    if ((asprintf(&stat->full_name, "%s.%s", stat->namespace, stat->name) < 0)
+        || stat->full_name == NULL) {
         pho_error(-ENOMEM, "Failed to allocate string in asprintf()");
         abort();
     }
