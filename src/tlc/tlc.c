@@ -50,6 +50,26 @@
 #include "tlc_cfg.h"
 #include "tlc_library.h"
 
+/** namespace for stats in this file */
+#define TLC_REQ_STAT_NS "req"
+
+/** used for indexing stats on requests */
+enum tlc_req_type {
+    PHO_TLC_REQ_PING    = 0,
+    PHO_TLC_REQ_DRIVE_LOOKUP = 1,
+    PHO_TLC_REQ_LOAD    = 2,
+    PHO_TLC_REQ_UNLOAD  = 3,
+    PHO_TLC_REQ_STATUS  = 4,
+    PHO_TLC_REQ_REFRESH = 5,
+    PHO_TLC_REQ_STAT    = 6,
+
+    PHO_TLC_REQ_COUNT   = PHO_TLC_REQ_STAT + 1,
+};
+/** used for tagging stats on requests */
+const char *tlc_req_name[PHO_TLC_REQ_COUNT] = { "PING", "DRIVE_LOOKUP", "LOAD",
+                                                "UNLOAD", "STATUS", "REFRESH",
+                                                "STAT" };
+
 static bool should_tlc_stop(void)
 {
     return !running;
@@ -59,6 +79,8 @@ struct tlc {
     struct pho_comm_info comm;  /*!< Communication handle */
     struct lib_descriptor lib;  /*!< Library descriptor */
     struct dss_handle dss;      /*!< DSS handle, configured from conf */
+
+    struct pho_stat *req_stats[PHO_TLC_REQ_COUNT]; /*!< Counters per req type */
 };
 
 static int tlc_init(struct tlc *tlc, const char *library)
@@ -66,7 +88,7 @@ static int tlc_init(struct tlc *tlc, const char *library)
     union pho_comm_addr sock_addr = {0};
     json_t *json_message;
     size_t len_library;
-    int rc;
+    int rc, i;
 
     if (!library)
         library = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, default_library);
@@ -142,6 +164,18 @@ static int tlc_init(struct tlc *tlc, const char *library)
 
     tlc->lib.max_device_retry = -1;
 
+    /* initalize stats */
+    for (i = 0; i < PHO_TLC_REQ_COUNT; i++) {
+        char *tag_string = NULL;
+
+        if (asprintf(&tag_string, "request=%s", tlc_req_name[i]) == -1)
+            LOG_GOTO(close_lib, rc = -ENOMEM, "Failed to allocate string");
+
+        tlc->req_stats[i] = pho_stat_create(PHO_STAT_COUNTER, TLC_REQ_STAT_NS,
+                                            "count", tag_string);
+        free(tag_string);
+    }
+
     return rc;
 
 close_lib:
@@ -151,7 +185,7 @@ close_lib:
 
 static void tlc_fini(struct tlc *tlc)
 {
-    int rc;
+    int rc, i;
 
     ENTRY;
 
@@ -165,6 +199,9 @@ static void tlc_fini(struct tlc *tlc)
     tlc_library_close(&tlc->lib);
 
     dss_fini(&tlc->dss);
+
+    for (i = 0; i < PHO_TLC_REQ_COUNT; i++)
+        pho_stat_destroy(&tlc->req_stats[i]);
 }
 
 /**
@@ -537,36 +574,43 @@ static int recv_work(struct tlc *tlc)
             continue;
 
         if (pho_tlc_request_is_ping(req)) {
+            pho_stat_incr(tlc->req_stats[PHO_TLC_REQ_PING], 1);
             process_ping_request(tlc, req, data[i].fd);
             goto out_request;
         }
 
         if (pho_tlc_request_is_drive_lookup(req)) {
+            pho_stat_incr(tlc->req_stats[PHO_TLC_REQ_DRIVE_LOOKUP], 1);
             process_drive_lookup_request(tlc, req, data[i].fd);
             goto out_request;
         }
 
         if (pho_tlc_request_is_load(req)) {
+            pho_stat_incr(tlc->req_stats[PHO_TLC_REQ_LOAD], 1);
             process_load_request(tlc, req, data[i].fd);
             goto out_request;
         }
 
         if (pho_tlc_request_is_unload(req)) {
+            pho_stat_incr(tlc->req_stats[PHO_TLC_REQ_UNLOAD], 1);
             process_unload_request(tlc, req, data[i].fd);
             goto out_request;
         }
 
         if (pho_tlc_request_is_status(req)) {
+            pho_stat_incr(tlc->req_stats[PHO_TLC_REQ_STATUS], 1);
             process_status_request(tlc, req, data[i].fd);
             goto out_request;
         }
 
         if (pho_tlc_request_is_refresh(req)) {
+            pho_stat_incr(tlc->req_stats[PHO_TLC_REQ_REFRESH], 1);
             process_refresh_request(tlc, req, data[i].fd);
             goto out_request;
         }
 
         if (pho_tlc_request_is_stat(req)) {
+            pho_stat_incr(tlc->req_stats[PHO_TLC_REQ_STAT], 1);
             process_stat_request(tlc, req, data[i].fd);
             goto out_request;
         }
