@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 dir=$(dirname $(readlink -m $0))
 exec git diff --cached --format=email | $dir/checkpatch.pl --patch --no-tree -q - || exit $?

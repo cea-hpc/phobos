@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This script shows the undelete feature offered by phobos.
 # It must be run on a node ready to execute a phobos server.

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This scripts shows how phobos could be used in parallel on two servers by
 # executing the following steps:

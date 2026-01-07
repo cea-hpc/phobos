@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 # This script demonstrates phobos tags feature by using various phobos commands.
 # It must be executed on a ready to run phobos server with a phobos database

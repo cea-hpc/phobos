@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This scripts simulates with "mtx [status|load|unload]" commands how
 # phobos manages a tape library during a massive format session and

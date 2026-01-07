@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
 # vim:expandtab:shiftwidth=4:tabstop=4:
 

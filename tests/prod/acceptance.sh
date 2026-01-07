@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # acceptance:
 #   - put_family test ------------> to move

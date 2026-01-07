@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Local version of phobos_db, suited for testing
 
 cur_dir="$(dirname $(readlink -m $0))"

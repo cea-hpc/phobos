@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh

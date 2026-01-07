@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This script sets up a simple Ceph cluster for phobos CI tests.
 #

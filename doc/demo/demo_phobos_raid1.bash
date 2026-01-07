@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This script shows raid1 layout features offered by phobos as robustness facing
 # media failures and flexibility facing nearly full media.

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 # This script must be run on a phobos admin node.
 # This script shows some of the list features offered by phobos by executing

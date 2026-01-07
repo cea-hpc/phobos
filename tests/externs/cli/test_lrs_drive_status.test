@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #
 #  All rights reserved (c) 2014-2025 CEA/DAM.
