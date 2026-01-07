@@ -69,6 +69,7 @@ check_PROGRAMS=test_attrs \
                test_store_profile \
                test_store_object_md \
                test_store_object_md_get \
+               test_tlc_lib_device \
                test_type_utils
 
 TESTS=$(check_PROGRAMS)
@@ -215,6 +216,12 @@ test_store_object_md_get_LDADD=$(STORE_LIB) $(ADMIN_LIB) $(TESTS_LIB) \
                                $(TESTS_LIB_DEPS)
 test_store_object_md_get_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/store \
                                 $(TESTS_LIB_INCLUDES)
+
+test_tlc_lib_device_SOURCES=test_tlc_lib_device.c
+test_tlc_lib_device_LDADD=$(MOD_LOAD_LIB) $(SCSI_LIB) $(LDM_SCSI_LIB) \
+                          $(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS) $(TLC_LIB)
+test_tlc_lib_device_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs \
+                           -I$(TO_SRC)/ldm-modules $(TESTS_LIB_INCLUDES)
 
 test_type_utils_SOURCES=test_type_utils.c
 test_type_utils_LDADD=$(TESTS_LIB) $(TESTS_LIB_DEPS)
