@@ -142,6 +142,26 @@ int pho_cfg_set_thread_conn(void *dss_handle)
     return 0;
 }
 
+/**
+ * Removes quotes (") and replaces spaces with underscores (_).
+ */
+static void remove_quote_and_space(const char *src, char *dst)
+{
+    int i = 0, j = 0;
+
+    while (src[i] != '\0') {
+        if (src[i] == '"') {
+            i++;
+        } else if (src[i] == ' ') {
+            dst[j++] = '_';
+            i++;
+        } else {
+            dst[j++] = src[i++];
+        }
+    }
+    dst[j] = '\0';
+}
+
 /** Build environment variable name for a given section and parameter name:
  * PHOBOS_<section(upper case)>_<param_name(lower case)>.
  * @param[in]  section   section name of the configuration item.
@@ -152,7 +172,7 @@ int pho_cfg_set_thread_conn(void *dss_handle)
  */
 static void build_env_name(const char *section, const char *name, char **env)
 {
-    char  *env_var, *curr;
+    char *env_var, *curr;
     size_t strsize;
 
     /* sizeof returns length + 1, which makes room for first '_'.
@@ -166,7 +186,7 @@ static void build_env_name(const char *section, const char *name, char **env)
     curr = end_of_string(env_var);
 
     /* copy and upper case section */
-    strcpy(curr, section);
+    remove_quote_and_space(section, curr);
     upperstr(curr);
     curr = end_of_string(curr);
     *curr = '_';
