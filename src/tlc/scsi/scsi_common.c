@@ -288,8 +288,9 @@ int scsi_execute(struct scsi_error *err, int fd, enum scsi_direction direction,
     if (rc) {
         err->rc = -errno;
         err->status = SCSI_FATAL_ERROR;
-        json_insert_element(message, "SCSI ERROR",
-                            json_string("ioctl() failed"));
+        if (message)
+            json_insert_element(message, "SCSI ERROR",
+                                json_string("ioctl() failed"));
         LOG_RETURN(rc = -errno, "ioctl() failed");
     }
 
