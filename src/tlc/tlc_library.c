@@ -734,6 +734,13 @@ int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
 
     *json_message = NULL;
 
+    if (lib->curr_fd_idx == -1) {
+        *json_message = json_pack("{s:s}",
+                                  "NO_AVAILABLE_LIB_DEVICE",
+                                  "All the lib devices are marked as invalid");
+        return -EBADF;
+    }
+
     /* get device addr */
     drive_element_status = drive_element_status_from_serial(lib, drive_serial);
     if (!drive_element_status) {
@@ -872,6 +879,13 @@ int tlc_library_unload(struct dss_handle *dss, struct lib_descriptor *lib,
     unload_addr->lia_addr = 0;
     *json_message = NULL;
     *unloaded_tape_label = NULL;
+
+    if (lib->curr_fd_idx == -1) {
+        *json_message = json_pack("{s:s}",
+                                  "NO_AVAILABLE_LIB_DEVICE",
+                                  "All the lib devices are marked as invalid");
+        return -EBADF;
+    }
 
     /* get device addr */
     drive_element_status = drive_element_status_from_serial(lib, drive_serial);

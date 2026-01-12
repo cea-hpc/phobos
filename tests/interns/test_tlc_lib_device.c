@@ -124,8 +124,7 @@ static int mock_ioctl(int fd, unsigned long request, ...)
 }
 
 static void tlc_load(struct dss_and_tlc_lib *dss_and_tlc_lib, bool should_fail,
-                     enum scsi_operation_type op, char *device_name,
-                     char *medium_name)
+                     int expected_rc, char *device_name, char *medium_name)
 {
     struct phobos_global_context *context = phobos_context();
     json_t *json_message = NULL;
@@ -135,7 +134,6 @@ static void tlc_load(struct dss_and_tlc_lib *dss_and_tlc_lib, bool should_fail,
     get_serial_from_path(device_name, &device_serial);
 
     context->mocks.mock_ioctl = &mock_ioctl;
-    will_return_always(mock_ioctl, op);
 
     rc = tlc_library_load(&dss_and_tlc_lib->dss, &dss_and_tlc_lib->tlc_lib,
                           device_serial, medium_name, &json_message);
@@ -146,7 +144,7 @@ static void tlc_load(struct dss_and_tlc_lib *dss_and_tlc_lib, bool should_fail,
 
     if (should_fail) {
         pho_context_reset_mock_functions();
-        assert_int_equal(-rc, EINVAL);
+        assert_int_equal(-rc, expected_rc);
     } else {
         assert_return_code(-rc, rc);
     }
@@ -192,9 +190,11 @@ static void tlc_load_dev_scsi_failed_one_try(void **state)
 
     lib = &dss_and_tlc_lib->tlc_lib;
 
+    will_return_always(mock_ioctl, LOAD_MEDIUM);
+
     setup(lib, 1, 1);
 
-    tlc_load(dss_and_tlc_lib, true, LOAD_MEDIUM, "/dev/st0", "P00003L5");
+    tlc_load(dss_and_tlc_lib, true, EINVAL, "/dev/st0", "P00003L5");
 
     assert_int_not_equal(lib->fd_array[0], -1);
     assert_int_not_equal(lib->fd_array[1], -1);
@@ -214,6 +214,8 @@ static void tlc_load_dev_scsi_inquiry_failed_one_try(void **state)
 
     lib = &dss_and_tlc_lib->tlc_lib;
 
+    will_return_always(mock_ioctl, LOAD_MEDIUM);
+
     setup(lib, 1, 1);
 
     /* Will failed the inquiry for the first lib device, we can close the fd
@@ -221,7 +223,7 @@ static void tlc_load_dev_scsi_inquiry_failed_one_try(void **state)
      */
     close(lib->fd_array[0]);
     lib->fd = lib->fd_array[0];
-    tlc_load(dss_and_tlc_lib, true, LOAD_MEDIUM, "/dev/st0", "P00003L5");
+    tlc_load(dss_and_tlc_lib, true, EINVAL, "/dev/st0", "P00003L5");
 
     assert_int_equal(lib->fd_array[0], -1);
     assert_int_not_equal(lib->fd_array[1], -1);
@@ -242,9 +244,11 @@ static void tlc_load_dev_scsi_failed_two_try(void **state)
 
     lib = &dss_and_tlc_lib->tlc_lib;
 
+    will_return_always(mock_ioctl, LOAD_MEDIUM);
+
     setup(lib, 2, 1);
 
-    tlc_load(dss_and_tlc_lib, false, LOAD_MEDIUM, "/dev/st0", "P00003L5");
+    tlc_load(dss_and_tlc_lib, false, EINVAL, "/dev/st0", "P00003L5");
 
     assert_int_not_equal(lib->fd_array[0], -1);
     assert_int_not_equal(lib->fd_array[1], -1);
@@ -264,6 +268,8 @@ static void tlc_load_dev_scsi_inquiry_failed_two_try(void **state)
 
     lib = &dss_and_tlc_lib->tlc_lib;
 
+    will_return_always(mock_ioctl, LOAD_MEDIUM);
+
     setup(lib, 2, 1);
 
     /* Will failed the inquiry for the first lib device, we can close the fd
@@ -271,7 +277,7 @@ static void tlc_load_dev_scsi_inquiry_failed_two_try(void **state)
      */
     close(lib->fd_array[0]);
     lib->fd = lib->fd_array[0];
-    tlc_load(dss_and_tlc_lib, false, LOAD_MEDIUM, "/dev/st0", "P00003L5");
+    tlc_load(dss_and_tlc_lib, false, EINVAL, "/dev/st0", "P00003L5");
 
     /* Only the first lib device should be marked as failed and we should have
      * change the current lib device
@@ -296,9 +302,11 @@ static void tlc_load_dev_scsi_all_failed_two_try(void **state)
 
     lib = &dss_and_tlc_lib->tlc_lib;
 
+    will_return_always(mock_ioctl, LOAD_MEDIUM);
+
     setup(lib, 2, 2);
 
-    tlc_load(dss_and_tlc_lib, true, LOAD_MEDIUM, "/dev/st0", "P00003L5");
+    tlc_load(dss_and_tlc_lib, true, EINVAL, "/dev/st0", "P00003L5");
 
     /* Only the first lib device should be marked as failed and we should have
      * change the current lib device
@@ -322,6 +330,8 @@ static void tlc_load_dev_scsi_inquiry_all_failed_two_try(void **state)
 
     lib = &dss_and_tlc_lib->tlc_lib;
 
+    will_return_always(mock_ioctl, LOAD_MEDIUM);
+
     setup(lib, 2, 2);
 
     /* Will failed the inquiry for the first lib device, we can close the fd
@@ -331,7 +341,7 @@ static void tlc_load_dev_scsi_inquiry_all_failed_two_try(void **state)
     lib->fd = lib->fd_array[0];
     close(lib->fd_array[1]);
 
-    tlc_load(dss_and_tlc_lib, true, LOAD_MEDIUM, "/dev/st0", "P00003L5");
+    tlc_load(dss_and_tlc_lib, true, EINVAL, "/dev/st0", "P00003L5");
 
     /* Only the first lib device should be marked as failed and we should have
      * change the current lib device
@@ -339,6 +349,42 @@ static void tlc_load_dev_scsi_inquiry_all_failed_two_try(void **state)
     assert_int_equal(lib->fd_array[0], -1);
     assert_int_equal(lib->fd_array[1], -1);
     assert_int_equal(lib->curr_fd_idx, -1);
+
+    lib->fd_array[0] = open("/dev/changer", O_RDWR | O_NONBLOCK);
+    lib->fd = lib->fd_array[0];
+    lib->fd_array[1] = open("/dev/changer2", O_RDWR | O_NONBLOCK);
+
+    cleanup_lib(lib);
+}
+
+static void tlc_load_dev_all_failed_retry(void **state)
+{
+    struct dss_and_tlc_lib *dss_and_tlc_lib = *state;
+    struct lib_descriptor *lib;
+
+    lib = &dss_and_tlc_lib->tlc_lib;
+
+    will_return_always(mock_ioctl, LOAD_MEDIUM);
+
+    setup(lib, 2, 3);
+
+    /* Will failed the inquiry for the first lib device, we can close the fd
+     * because we are mocking the ioctl
+     */
+    close(lib->fd_array[0]);
+    lib->fd = lib->fd_array[0];
+    close(lib->fd_array[1]);
+
+    tlc_load(dss_and_tlc_lib, true, EINVAL, "/dev/st0", "P00003L5");
+
+    /* Only the first lib device should be marked as failed and we should have
+     * change the current lib device
+     */
+    assert_int_equal(lib->fd_array[0], -1);
+    assert_int_equal(lib->fd_array[1], -1);
+    assert_int_equal(lib->curr_fd_idx, -1);
+
+    tlc_load(dss_and_tlc_lib, true, EBADF, "/dev/st0", "P00003L5");
 
     lib->fd_array[0] = open("/dev/changer", O_RDWR | O_NONBLOCK);
     lib->fd = lib->fd_array[0];
@@ -356,6 +402,7 @@ int main(void)
         cmocka_unit_test(tlc_load_dev_scsi_inquiry_failed_two_try),
         cmocka_unit_test(tlc_load_dev_scsi_all_failed_two_try),
         cmocka_unit_test(tlc_load_dev_scsi_inquiry_all_failed_two_try),
+        cmocka_unit_test(tlc_load_dev_all_failed_retry),
     };
     int error_count;
     int rc;

@@ -318,6 +318,7 @@ static void scsi_dev_load_logs_move_medium_failure(void **state)
      */
     scsi_dev_load_logs_check(dss_and_tlc_lib, LOAD_MEDIUM, true, "/dev/st0",
                              "P00003L5");
+    dss_and_tlc_lib->tlc_lib.curr_fd_idx = 0;
 }
 
 static void scsi_dev_load_logs_move_medium_success(void **state)
@@ -410,6 +411,7 @@ static void scsi_dev_unload_logs_move_medium_failure(void **state)
 
     scsi_dev_unload_logs_check(dss_and_tlc_lib, UNLOAD_MEDIUM, true,
                                "/dev/st0", "P00003L5");
+    dss_and_tlc_lib->tlc_lib.curr_fd_idx = 0;
 }
 
 static void scsi_dev_unload_logs_move_medium_success(void **state)
