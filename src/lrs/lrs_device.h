@@ -192,11 +192,6 @@ struct sync_params {
                                      */
 };
 
-struct ongoing_grouping {
-    char *grouping;  /**< NULL if no ongoing grouping */
-    int socket_id;   /**< Socket id of the ongoing grouping */
-};
-
 /** exported stats per device */
 struct dev_stats {
     struct pho_stat *nb_mount;
@@ -287,7 +282,13 @@ struct lrs_dev {
                                                   *  scheduled
                                                   */
     atomic_bool          ld_ongoing_io;         /**< one I/O is ongoing */
-    struct ongoing_grouping ld_ongoing_grouping; /**< track on going grouping */
+    int                  ld_ongoing_socket_id;  /**< Socket fd of the ongoing
+                                                  * IO. -1 means no current
+                                                  * socket_id.
+                                                  */
+    char                *ld_ongoing_grouping;   /**< track on going grouping
+                                                  * NULL if no ongoing grouping
+                                                  */
     atomic_bool          ld_needs_sync;         /**< medium needs to be sync */
     struct thread_info   ld_device_thread;      /**< thread handling the actions
                                                   * executed on the device
@@ -326,6 +327,23 @@ struct lrs_dev {
 
     struct dev_stats    stats; /**< exported device stats */
 };
+
+/**
+ * Clean all ongoing IO values to acknowledge the end of the current IO
+ *
+ * Should be called with locked mutex on dev.
+ */
+static inline void dev_clean_io(struct lrs_dev *dev, bool let_for_partial)
+{
+    dev->ld_ongoing_io = false;
+    if (!let_for_partial) {
+        dev->ld_ongoing_socket_id = -1;
+        if (dev->ld_ongoing_grouping) {
+            free(dev->ld_ongoing_grouping);
+            dev->ld_ongoing_grouping = NULL;
+        }
+    }
+}
 
 static inline bool dev_is_failed(struct lrs_dev *dev)
 {

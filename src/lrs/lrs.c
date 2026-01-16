@@ -290,12 +290,7 @@ static void notify_device_request_is_canceled(struct resp_container *respc)
 
     for (i = 0; i < respc->devices_len; i++) {
         MUTEX_LOCK(&respc->devices[i]->ld_mutex);
-        respc->devices[i]->ld_ongoing_io = false;
-        if (respc->devices[i]->ld_ongoing_grouping.grouping) {
-            free(respc->devices[i]->ld_ongoing_grouping.grouping);
-            respc->devices[i]->ld_ongoing_grouping.grouping = NULL;
-        }
-
+        dev_clean_io(respc->devices[i], false);
         MUTEX_UNLOCK(&respc->devices[i]->ld_mutex);
     }
 }
@@ -654,12 +649,7 @@ static int release_medium(struct lrs_sched *sched,
         push_new_sync_to_device(dev, reqc, medium_index);
 
     /* Acknowledgement of the request */
-    dev->ld_ongoing_io = false;
-    if (dev->ld_ongoing_grouping.grouping && !reqc->req->release->partial) {
-        free(dev->ld_ongoing_grouping.grouping);
-        dev->ld_ongoing_grouping.grouping = NULL;
-    }
-
+    dev_clean_io(dev, reqc->req->release->partial);
     MUTEX_UNLOCK(&dev->ld_mutex);
 
     return rc;
@@ -915,6 +905,42 @@ static bool handle_quick_requests(struct lrs *lrs, struct req_container *reqc)
 }
 
 /**
+ * When a client socket is closed, we checked if we have pending allocation
+ * to close.
+ * This situation could happen if the client faces an error and crashes without
+ * releasing its allocated resources.
+ */
+static void release_on_socket_close(struct lrs *lrs, int closed_fd)
+{
+    int family;
+
+    for (family = 0; family < PHO_RSC_LAST; family++) {
+        struct lrs_sched *sched = lrs->sched[family];
+        GPtrArray *devices;
+        int i;
+
+        if (!sched)
+            continue;
+
+        devices = sched->devices.ldh_devices;
+        for (i = 0; i < devices->len; i++) {
+            struct lrs_dev *dev = NULL;
+
+            /* XXX /!\ Must be fixed !
+             * The schedulers threads are concurrently modifying this
+             * array through the lock/unlock/add notifications.
+             */
+            dev = g_ptr_array_index(devices, i);
+            MUTEX_LOCK(&dev->ld_mutex);
+            if (dev->ld_ongoing_io && dev->ld_ongoing_socket_id == closed_fd)
+                dev_clean_io(dev, false);
+            MUTEX_UNLOCK(&dev->ld_mutex);
+        }
+    }
+
+}
+
+/**
  * schedulers_to_signal is a bool array of length PHO_RSC_LAST, representing
  * every scheduler that could be signaled
  */
@@ -929,8 +955,10 @@ static int _prepare_requests(struct lrs *lrs, bool *schedulers_to_signal,
         struct req_container *req_cont;
         int rc2;
 
-        if (data[i].buf.size == -1) /* close notification, ignore */
+        if (data[i].buf.size == -1) {/* close notification, ignore */
+            release_on_socket_close(lrs, data[i].fd);
             continue;
+        }
 
         req_cont = xcalloc(1, sizeof(*req_cont));
 

@@ -26,20 +26,27 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/tape_drive.sh
 . $test_dir/utils_generation.sh
 
-lrs_simple_client="$test_dir/externs/cli/lrs_simple_client"
 pho_ldm_helper="$test_dir/../scripts/pho_ldm_helper"
 
 function setup
 {
     export PHOBOS_LRS_lock_file="$test_bin_dir/phobosd.lock"
+    setup_test_dirs
+    setup_dummy_files 1 1k 1
+    flag_file="$DIR_TEST_IN/ready"
+    out_file="$DIR_TEST_OUT/out_file"
 }
 
 function cleanup
 {
+    waive_daemons
     drop_tables
     if [[ -w /dev/changer ]]; then
         drain_all_drives
     fi
+
+    cleanup_dummy_files
+    cleanup_test_dirs
 }
 
 function test_invalid_lock_file()
@@ -77,7 +84,6 @@ set +e
 set -e
 
     unset PHOBOS_LRS_lock_file
-    cleanup
     trap - EXIT
 }
 
@@ -95,8 +101,6 @@ set -e
 
     $PSQL -c "UPDATE schema_info SET version = '$VERSION';"
     trap - EXIT
-    waive_lrs
-    cleanup
 }
 
 function test_multiple_instances
@@ -120,8 +124,6 @@ function test_multiple_instances
     # Second daemon error code should be EEXIST, which is 17
     test $rc -eq 17 ||
         error "Second daemon instance does not get the right error code"
-
-    drop_tables
 }
 
 function test_recover_dir_old_locks
@@ -173,8 +175,6 @@ function test_recover_dir_old_locks
                          where id = '${dir3}_legacy';" |
            xargs)
     [ "${host}other" == "$lock" ] || error "${dir3} should be locked"
-
-    drop_tables
 }
 
 function test_remove_invalid_media_locks
@@ -233,8 +233,6 @@ function test_remove_invalid_media_locks
                "select hostname from lock where id = '${dir1}_legacy';" |
            xargs)
     [ -z $lock ] || error "${dir1} should be unlocked"
-
-    drop_tables
 }
 
 function test_recover_drive_old_locks
@@ -280,8 +278,6 @@ function test_recover_drive_old_locks
 
     lock=$($phobos drive list -o lock_hostname /dev/st1)
     [ "${host}other" == "$lock" ] || error "Device should be locked"
-
-    drop_tables
 }
 
 function test_remove_invalid_device_locks
@@ -333,9 +329,27 @@ function test_remove_invalid_device_locks
 
     lock=$($phobos drive list -o lock_hostname /dev/st1)
     [ "None" == "$lock" ] || error "Dir /dev/st1 should be unlocked"
+}
 
+# Execute a put command but sleep after having get the booking
+function writer_sleep_after_recv_alloc
+{
+    (
+        tmp_gdb_script=$(mktemp)
+        trap "rm $tmp_gdb_script" EXIT
+        cat <<EOF > "$tmp_gdb_script"
+set breakpoint pending on
+break raid_writer_split_setup
+commands
+shell touch ${flag_file}
+shell sleep 5
+continue
+end
+run $phobos $*
+EOF
 
-    drop_tables
+        DEBUGINFOD_URLS="" gdb -batch -x "$tmp_gdb_script" -q python3
+    )
 }
 
 function test_wait_end_of_IO_before_shutdown()
@@ -349,14 +363,15 @@ function test_wait_end_of_IO_before_shutdown()
     $phobos dir add "$dir"
     $phobos dir format --unlock --fs posix "$dir"
 
-    local release_medium_name=$($lrs_simple_client put dir)
+    writer_sleep_after_recv_alloc put -f dir ${FILES[0]} obj &
+    local pid=$!
+    while [ ! -f ${flag_file} ]; do
+        sleep 1
+    done
 
     kill $PID_LRS
     sleep 1
     ps --pid $PID_LRS || error "Daemon should still be online"
-
-    # send release request
-    $lrs_simple_client release 1 $release_medium_name dir
 
     timeout 10 tail --pid=$PID_LRS -f /dev/null
     if [[ $? != 0 ]]; then
@@ -365,7 +380,7 @@ function test_wait_end_of_IO_before_shutdown()
     PID_LRS=0
     trap - EXIT
     rm -rf '$dir'
-    cleanup
+    wait $pid
 }
 
 function wait_for_process_end()
@@ -395,10 +410,14 @@ function test_cancel_waiting_requests_before_shutdown()
     $phobos dir add "$dir"
     $phobos dir format --unlock --fs posix "$dir"
 
-    local release_medium_name=$($lrs_simple_client put dir)
+    writer_sleep_after_recv_alloc put -f dir ${FILES[0]} obj &
+    local pid=$!
+    while [ ! -f ${flag_file} ]; do
+        sleep 1
+    done
 
     # this request will be waiting in the LRS as the only dir is used by
-    # lrs_simple_client
+    # the preivous put
     ( set +e; $phobos put --family dir "$file" oid; echo $? > "$res_file" ) &
     local put_pid=$!
 
@@ -415,9 +434,6 @@ function test_cancel_waiting_requests_before_shutdown()
         error "Waiting request should have been canceled"
     fi
 
-    # send the release request
-    $lrs_simple_client release 1 $release_medium_name dir
-
     timeout 10 tail --pid=$PID_LRS -f /dev/null
     if [[ $? != 0 ]]; then
         error "Daemon not stopped after 10 seconds"
@@ -425,7 +441,7 @@ function test_cancel_waiting_requests_before_shutdown()
     PID_LRS=0
     trap - EXIT
     rm -rf '$dir' '$file' '$res_file'
-    cleanup
+    wait ${pid}
 }
 
 function test_refuse_new_request_during_shutdown()
@@ -440,15 +456,16 @@ function test_refuse_new_request_during_shutdown()
     $phobos dir add "$dir"
     $phobos dir format --unlock --fs posix "$dir"
 
-    local release_medium_name=$($lrs_simple_client put dir)
+    writer_sleep_after_recv_alloc put -f dir ${FILES[0]} obj &
+    local pid=$!
+    while [ ! -f ${flag_file} ]; do
+        sleep 1
+    done
 
     kill $PID_LRS
 
     $phobos put --family dir "$file" oid &&
         error "New put should have failed during shutdown"
-
-    # send the release request
-    $lrs_simple_client release 1 $release_medium_name dir
 
     timeout 10 tail --pid=$PID_LRS -f /dev/null
     if [[ $? != 0 ]]; then
@@ -457,7 +474,7 @@ function test_refuse_new_request_during_shutdown()
     PID_LRS=0
     trap - EXIT
     rm -rf '$dir' '$file'
-    cleanup
+    wait ${pid}
 }
 
 function test_mount_failure_during_read_response()
@@ -495,10 +512,8 @@ function test_mount_failure_during_read_response()
     ps --pid "$PID_LRS"
 
     export PHOBOS_LTFS_cmd_mount="$save_mount_cmd"
-    waive_daemons
     trap - EXIT
     rm -f "$file"
-    cleanup
 }
 
 function format_wait_and_check()
@@ -543,8 +558,6 @@ function test_format_fail_without_suitable_device()
                           "the drive '$drive' and tape '$tape' are incompatible"
 
     trap - EXIT
-    waive_daemons
-    cleanup
 }
 
 function test_retry_on_error_setup()
@@ -668,8 +681,6 @@ function test_fair_share_max_reached()
 
     export PHOBOS_IO_SCHED_TAPE_dispatch_algo=none
     trap - EXIT
-    waive_daemons
-    cleanup
 }
 
 function test_no_DAEMON_PID_FILEPATH_lock_cleaned()
@@ -750,8 +761,6 @@ function test_health()
         error "Drive should be set to failed once the max error is reached"
 
     trap - EXIT
-    waive_daemons
-    cleanup
     # Reset error count for mount script
     echo 0 > /tmp/mount_count
     unset PHOBOS_LRS_max_health
@@ -797,8 +806,6 @@ function test_health_medium_failure()
         error "No drive should be failed as their health should be one"
 
     trap - EXIT
-    waive_daemons
-    cleanup
     # Reset error count for mount script
     echo 0 > /tmp/mount_count
     unset PHOBOS_LRS_max_health
@@ -844,8 +851,6 @@ function test_health_device_failure()
         error "No tape should be failed as their health should be one"
 
     trap - EXIT
-    waive_daemons
-    cleanup
     # Reset error count for mount script
     echo 0 > /tmp/mount_count
     unset PHOBOS_LRS_max_health
@@ -887,8 +892,6 @@ function test_health_format_without_tlc()
     $phobos drive list -o adm_status | grep "unlocked" ||
         error "Drive should be unlocked"
 
-    waive_lrs
-    cleanup
     unset PHOBOS_LRS_max_health
 }
 
@@ -933,9 +936,29 @@ function test_health_put_without_tlc()
     $phobos drive list -o adm_status | grep "unlocked" ||
         error "Drive should be unlocked"
 
-    waive_lrs
-    cleanup
     unset PHOBOS_LRS_max_health
+}
+
+
+# Execute a get command but sleep after having get the booking
+function reader_sleep_after_recv_alloc
+{
+    (
+        tmp_gdb_script=$(mktemp)
+        trap "rm $tmp_gdb_script" EXIT
+        cat <<EOF > "$tmp_gdb_script"
+set breakpoint pending on
+break raid_reader_split_setup
+commands
+shell touch ${flag_file}
+shell sleep 5
+continue
+end
+run $phobos $*
+EOF
+
+        DEBUGINFOD_URLS="" gdb -batch -x "$tmp_gdb_script" -q python3
+    )
 }
 
 function test_ralloc_2_of_3_dir()
@@ -951,15 +974,16 @@ function test_ralloc_2_of_3_dir()
     $phobos dir add "${dir1}" "${dir2}" "${dir3}"
     $phobos dir format --unlock --fs posix "${dir1}" "${dir2}" "${dir3}"
 
-    local release_medium_name=$($lrs_simple_client get 3 2 \
-                                "${dir1}" "${dir2}" "${dir3}" dir)
+    $phobos put -f dir --layout raid4 ${FILES[0]} obj
+    reader_sleep_after_recv_alloc get obj ${out_file} &
+    local pid=$!
+    while [ ! -f ${flag_file} ]; do
+        sleep 1
+    done
 
     kill $PID_LRS
     sleep 1
     ps --pid $PID_LRS || error "Daemon should still be online"
-
-    # send release request
-    $lrs_simple_client release 2 ${release_medium_name} dir
 
     timeout 10 tail --pid=$PID_LRS -f /dev/null
     if [[ $? != 0 ]]; then
@@ -967,13 +991,13 @@ function test_ralloc_2_of_3_dir()
     fi
     PID_LRS=0
     rm -rf '${dir1}' '${dir2}' '${dir3}'
-    cleanup
+    wait ${pid}
     trap - EXIT
 }
 
 function test_ralloc_2_of_3_tape()
 {
-    local drives=$(get_lto_drives 6 2)
+    local drives=$(get_lto_drives 6 3)
     local tapes=$(get_tapes L6 3 | nodeset -e)
 
     trap "waive_daemons; drop_tables" EXIT
@@ -984,39 +1008,37 @@ function test_ralloc_2_of_3_tape()
     $phobos tape add --type lto6 $tapes
     $phobos tape format --unlock $tapes
 
-    local release_medium_name=$($lrs_simple_client get 3 2 $tapes tape)
+    $phobos put -f tape --layout raid4 ${FILES[0]} obj
+    reader_sleep_after_recv_alloc get obj ${out_file} &
+    local pid=$!
+    while [ ! -f ${flag_file} ]; do
+        sleep 1
+    done
 
     kill $PID_LRS
     sleep 1
     ps --pid $PID_LRS || error "Daemon should still be online"
-
-    # send release request
-    $lrs_simple_client release 2 ${release_medium_name} tape
 
     timeout 10 tail --pid=$PID_LRS -f /dev/null
     if [[ $? != 0 ]]; then
         error "Daemon not stopped after 10 seconds"
     fi
     PID_LRS=0
-    waive_tlc
-    cleanup
+    wait ${pid}
     trap - EXIT
 }
 
-TEST_SETUP=setup
-TEST_CLEANUP=cleanup
-
 TESTS=(
-    test_invalid_lock_file
-    test_invalid_db_schema_version
-    test_multiple_instances
-    test_recover_dir_old_locks
-    test_remove_invalid_media_locks
-    test_wait_end_of_IO_before_shutdown
-    test_cancel_waiting_requests_before_shutdown
-    test_refuse_new_request_during_shutdown
-    test_no_DAEMON_PID_FILEPATH_lock_cleaned
-    test_ralloc_2_of_3_dir
+    "setup; test_invalid_lock_file; cleanup"
+    "setup; test_invalid_db_schema_version; cleanup"
+    "setup; test_multiple_instances; cleanup"
+    "setup; test_recover_dir_old_locks; cleanup"
+    "setup; test_remove_invalid_media_locks; cleanup"
+    "setup; test_wait_end_of_IO_before_shutdown; cleanup"
+    "setup; test_cancel_waiting_requests_before_shutdown; cleanup"
+    "setup; test_refuse_new_request_during_shutdown; cleanup"
+    "setup; test_no_DAEMON_PID_FILEPATH_lock_cleaned; cleanup"
+    "setup; test_ralloc_2_of_3_dir; cleanup"
 )
 
 # Tape tests are available only if /dev/changer exists, which is the entry
@@ -1029,17 +1051,17 @@ if [[ -w /dev/changer ]]; then
         "test_retry_on_error_setup fifo; \
          test_retry_on_error; \
          test_retry_on_error_cleanup"
-        test_recover_drive_old_locks
-        test_remove_invalid_device_locks
-        "test_mount_failure_during_read_response fifo"
-        "test_mount_failure_during_read_response grouped_read"
-        test_format_fail_without_suitable_device
-        test_fair_share_max_reached
-        test_health
-        test_health_medium_failure
-        test_health_device_failure
-        test_health_format_without_tlc
-        test_health_put_without_tlc
-        test_ralloc_2_of_3_tape
+        "setup; test_recover_drive_old_locks; cleanup"
+        "setup; test_remove_invalid_device_locks; cleanup"
+        "setup; test_mount_failure_during_read_response fifo; cleanup"
+        "setup; test_mount_failure_during_read_response grouped_read; cleanup"
+        "setup; test_format_fail_without_suitable_device; cleanup"
+        "setup; test_fair_share_max_reached; cleanup"
+        "setup; test_health; cleanup"
+        "setup; test_health_medium_failure; cleanup"
+        "setup; test_health_device_failure; cleanup"
+        "setup; test_health_format_without_tlc; cleanup"
+        "setup; test_health_put_without_tlc; cleanup"
+        "setup; test_ralloc_2_of_3_tape; cleanup"
     )
 fi

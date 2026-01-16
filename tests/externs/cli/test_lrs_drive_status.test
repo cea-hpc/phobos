@@ -24,7 +24,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/setup_db.sh
 . $test_dir/test_launch_daemon.sh
 . $test_dir/tape_drive.sh
-lrs_simple_client="$test_dir/externs/cli/lrs_simple_client"
+. $test_dir/utils_generation.sh
 
 ################################################################################
 #                                    SETUP                                     #
@@ -34,6 +34,9 @@ function setup()
 {
     setup_tables
     invoke_daemons
+    setup_test_dirs
+    setup_dummy_files 1 1k 1
+    flag_file="$DIR_TEST_IN/ready"
 }
 
 function cleanup()
@@ -41,6 +44,8 @@ function cleanup()
     waive_daemons
     drop_tables
     drain_all_drives
+    cleanup_dummy_files
+    cleanup_test_dirs
 }
 
 function test_drive_status_no_daemon()
@@ -72,6 +77,27 @@ function test_drive_status()
     done
 }
 
+# Execute a put command but sleep after having get the booking
+function writer_sleep_after_recv_alloc
+{
+    (
+        tmp_gdb_script=$(mktemp)
+        trap "rm $tmp_gdb_script" EXIT
+        cat <<EOF > "$tmp_gdb_script"
+set breakpoint pending on
+break raid_writer_split_setup
+commands
+shell touch ${flag_file}
+shell sleep 5
+continue
+end
+run $phobos $*
+EOF
+
+        DEBUGINFOD_URLS="" gdb -batch -x "$tmp_gdb_script" -q python3
+    )
+}
+
 function test_drive_status_with_ongoing_io()
 {
     local tape=$(get_tapes L6 1)
@@ -82,7 +108,14 @@ function test_drive_status_with_ongoing_io()
     $phobos drive unlock "$drive"
     $phobos tape format --unlock "$tape"
 
-    local release_medium_name=$($lrs_simple_client put tape)
+    rm -f ${flag_file}
+    writer_sleep_after_recv_alloc put -f tape ${FILES[0]} obj &
+    local pid=$!
+    while [ ! -f ${flag_file} ]; do
+        sleep 1
+    done
+
+    rm ${flag_file}
 
     $phobos drive status |
         grep True |
@@ -90,8 +123,7 @@ function test_drive_status_with_ongoing_io()
         grep RWF |
         grep "$tape"
 
-    # send release request
-    $lrs_simple_client release 1 $release_medium_name tape
+    wait $pid
 }
 
 function mount_failure_cmd()

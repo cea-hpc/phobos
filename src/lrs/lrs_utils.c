@@ -117,6 +117,13 @@ static struct lrs_dev *__search_loaded_medium(GPtrArray *devices,
         struct lrs_dev *dev = NULL;
         const char *media_id;
 
+       /* XXX /!\ Must be fixed !
+        * The schedulers threads are concurrently modifying this
+        * array through the lock/unlock/add notifications.
+        *
+        * This function is also called by the main lrs thread through the
+        * "process_release_request" function.
+        */
         dev = g_ptr_array_index(devices, i);
         MUTEX_LOCK(&dev->ld_mutex);
         if (dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED &&

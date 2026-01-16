@@ -209,6 +209,7 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
     (*dev)->ld_handle = handle;
     (*dev)->ld_sub_request = NULL;
     (*dev)->ld_mnt_path[0] = 0;
+    (*dev)->ld_ongoing_socket_id = -1;
 
     if ((*dev)->ld_dss_dev_info->rsc.model) {
         /* not every family has a model set */
@@ -1895,13 +1896,14 @@ static int dev_handle_read_write(struct lrs_dev *dev)
         goto out_free;
     }
 
+    /* saving socket_id */
+    socket_id = dev->ld_sub_request->reqc->socket_id;
+
     /* saving grouping id */
     if (pho_request_is_write(dev->ld_sub_request->reqc->req) &&
-        dev->ld_sub_request->reqc->req->walloc->grouping) {
+        dev->ld_sub_request->reqc->req->walloc->grouping)
             grouping =
                 xstrdup(dev->ld_sub_request->reqc->req->walloc->grouping);
-            socket_id = dev->ld_sub_request->reqc->socket_id;
-    }
 
     medium_to_alloc =
         reqc->params.rwalloc.media[sub_request->medium_index].alloc_medium;
@@ -1939,10 +1941,10 @@ out_free:
 
     if (!io_ended && !sub_request_requeued) {
         dev->ld_ongoing_io = true;
+        dev->ld_ongoing_socket_id = socket_id;
         if (grouping) {
-            dev->ld_ongoing_grouping.grouping = grouping;
+            dev->ld_ongoing_grouping = grouping;
             grouping = NULL;
-            dev->ld_ongoing_grouping.socket_id = socket_id;
         }
     }
 
@@ -2224,11 +2226,7 @@ static void dev_thread_end(struct lrs_dev *device)
     if (device->ld_device_thread.status)
         dev_cleanup_on_error(device);
 
-    device->ld_ongoing_io = false;
-    if (device->ld_ongoing_grouping.grouping) {
-        free(device->ld_ongoing_grouping.grouping);
-        device->ld_ongoing_grouping.grouping = NULL;
-    }
+    dev_clean_io(device, false);
 }
 
 static int dev_perform_sync(struct lrs_dev *device, struct thread_info *thread)

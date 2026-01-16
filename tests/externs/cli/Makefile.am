@@ -36,7 +36,6 @@ TEST_EXTENSIONS+=.test
 TEST_LOG_DRIVER=$(TO_TEST)/test-driver.sh
 
 check_PROGRAMS=test_fair_share \
-               lrs_simple_client \
                medium_locker
 
 check_SCRIPTS=acceptance.test \
@@ -105,10 +104,6 @@ TESTS=$(check_SCRIPTS)
 test_fair_share_SOURCES=test_fair_share.c
 test_fair_share_LDADD=$(CORE_LIB) $(LRS_LIB)
 test_fair_share_CFLAGS=-I$(TO_TEST)
-
-lrs_simple_client_SOURCES=lrs_simple_client.c
-lrs_simple_client_LDADD=$(LRS_LIB) $(CORE_LIB)
-lrs_simple_client_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
 
 medium_locker_SOURCES=medium_locker.c ../../test_setup.c
 medium_locker_LDADD=$(TLC_LIB) $(SCSI_LIB) $(ADMIN_LIB) $(CORE_LIB) $(STORE_LIB)

@@ -186,10 +186,10 @@ static bool current_write_per_grouping_greater_than_max(GPtrArray *devices,
              !g_ptr_array_find(socket_id_array,
                  (gconstpointer)(intptr_t) dev->ld_sub_request->reqc->socket_id,
                  NULL)) ||
-            (dev->ld_ongoing_io && dev->ld_ongoing_grouping.grouping &&
-             !strcmp(dev->ld_ongoing_grouping.grouping, grouping) &&
+            (dev->ld_ongoing_io && dev->ld_ongoing_grouping &&
+             !strcmp(dev->ld_ongoing_grouping, grouping) &&
              !g_ptr_array_find(socket_id_array,
-                 (gconstpointer)(intptr_t) dev->ld_ongoing_grouping.socket_id,
+                 (gconstpointer)(intptr_t) dev->ld_ongoing_socket_id,
                  NULL))) {
             nb_write++;
             if (nb_write >= max_grouping) {
@@ -201,7 +201,7 @@ static bool current_write_per_grouping_greater_than_max(GPtrArray *devices,
             g_ptr_array_add(socket_id_array,
                             (gpointer)(intptr_t) (dev->ld_sub_request ?
                                 dev->ld_sub_request->reqc->socket_id :
-                                dev->ld_ongoing_grouping.socket_id));
+                                dev->ld_ongoing_socket_id));
         }
 
         MUTEX_UNLOCK(&dev->ld_mutex);

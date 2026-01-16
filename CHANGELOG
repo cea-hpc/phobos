@@ -5,6 +5,7 @@
  * Add sort option to dss_extent_get, and delete dss_get_extents_order_by_ctime
    funtion
  * Add tape lost management
+ * LRS releases the resources on client disconnection
 
 ## 3.2.0
  * WARNING: the db schema moves from 3.0 to 3.2 and a migration is needed
