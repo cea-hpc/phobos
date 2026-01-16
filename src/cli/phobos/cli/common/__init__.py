@@ -44,14 +44,21 @@ from phobos.core.store import XferClient
 
 def env_error_format(exc):
     """Return a human readable representation of an environment exception."""
-    if exc.errno and exc.strerror:
-        return "%s (%s)" % (exc.strerror, os.strerror(abs(exc.errno)))
-    elif exc.errno:
-        return "%s (%s)" % (os.strerror(abs(exc.errno)), abs(exc.errno))
-    elif exc.strerror:
-        return exc.strerror
+    msg = ""
 
-    return ""
+    if exc.errno and exc.strerror:
+        msg = "%s (%s)" % (exc.strerror, os.strerror(abs(exc.errno)))
+    elif exc.errno:
+        msg = "%s (%s)" % (os.strerror(abs(exc.errno)), abs(exc.errno))
+    elif exc.strerror:
+        msg = exc.strerror
+    else:
+        return ""
+
+    if exc.filename:
+        msg = "'%s': %s" % (exc.filename, msg)
+
+    return msg
 
 def phobos_log_handler(log_record):
     """
