@@ -35,8 +35,10 @@ function dir_setup
 {
     setup_tables
     # start phobosd manually to kill it even if client1 never releases the lock
-    $phobosd -i &
-    phobosd_pid=$!
+    DAEMON_PID_FILEPATH=$test_bin_dir/phobosd.pid \
+        $LOG_COMPILER $LOG_FLAGS $phobosd &
+    wait $!
+    phobosd_pid=$(cat "$test_bin_dir/phobosd.pid")
 
     export dirs="
         $(mktemp -d "$PWD/test.pho.XXXX")
@@ -53,8 +55,10 @@ function tape_setup
     setup_tables
     invoke_tlc
     # start phobosd manually to kill it even if client1 never releases the lock
-    $phobosd -i &
-    phobosd_pid=$!
+    DAEMON_PID_FILEPATH=$test_bin_dir/phobosd.pid \
+        $LOG_COMPILER $LOG_FLAGS $phobosd &
+    wait $!
+    phobosd_pid=$(cat "$test_bin_dir/phobosd.pid")
 
     # get tapes
     local tapes="$(get_tapes L6 2)"
@@ -76,8 +80,8 @@ function env_setup
 
 function env_cleanup
 {
-    kill -9 $(pgrep phobosd)
     rm -f ${PHOBOS_LRS_lock_file}
+    rm -f "$test_bin_dir/phobosd.pid"
     unset PHOBOS_LRS_lock_file
     unset PHOBOS_STORE_default_family
     if [[ -w /dev/changer ]]; then
@@ -94,6 +98,7 @@ function dir_cleanup
 {
     kill -9 ${phobosd_pid}
     rm -f ${PHOBOS_LRS_lock_file}
+    rm -f "$test_bin_dir/phobosd.pid"
     drop_tables
     rm -rf $dirs
     rm -rf /tmp/out*
@@ -103,6 +108,7 @@ function tape_cleanup
 {
     kill -9 ${phobosd_pid}
     rm -f ${PHOBOS_LRS_lock_file}
+    rm -f "$test_bin_dir/phobosd.pid"
     waive_tlc
     drop_tables
     drain_all_drives
