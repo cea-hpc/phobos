@@ -1065,7 +1065,10 @@ static int update_curr_fd(struct lib_descriptor *lib)
 
     lib->fd = lib->fd_array[lib->curr_fd_idx];
 
-    return nb_try == lib->nb_lib_device ? -1 : 0;
+    /* If lib->fd == -1, it means that all fd have been tried and are all
+     * invalid.
+     */
+    return lib->fd == -1 ? -1 : 0;
 }
 
 void tlc_library_retry_func(const char *fnname, int rc, int *retry_cnt,
