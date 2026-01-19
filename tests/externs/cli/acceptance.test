@@ -553,7 +553,7 @@ function phobos_delayed_dev_release()
         trap "rm $tmp_gdb_script" EXIT
         cat <<EOF > "$tmp_gdb_script"
 set breakpoint pending on
-break write_all_chunks
+break raid_writer_split_setup
 commands
 shell sleep 2
 continue
