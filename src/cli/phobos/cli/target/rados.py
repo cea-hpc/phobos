@@ -22,13 +22,15 @@ RadosPool target for Phobos CLI
 """
 
 import argparse
-import sys
-
+# pylint: disable=duplicate-code
 from phobos.cli.action.format import FormatOptHandler
 from phobos.cli.action.lock import LockOptHandler
 from phobos.cli.action.resource_delete import ResourceDeleteOptHandler
 from phobos.cli.action.unlock import UnlockOptHandler
+from phobos.cli.common.exec import (exec_add_dir_rados, exec_delete_dir_rados,
+                                    exec_lock_dir_rados, exec_unlock_dir_rados)
 from phobos.cli.common.utils import (setaccess_epilog, uncase_fstype)
+# pylint: enable=duplicate-code
 from phobos.cli.target.media import (MediaAddOptHandler,
                                      MediaListOptHandler,
                                      MediaLocateOptHandler,
@@ -36,7 +38,7 @@ from phobos.cli.target.media import (MediaAddOptHandler,
                                      MediaRenameOptHandler,
                                      MediaSetAccessOptHandler,
                                      MediaUpdateOptHandler)
-from phobos.core.const import fs_type2str # pylint: disable=no-name-in-module
+from phobos.core.const import fs_type2str, PHO_RSC_RADOS_POOL # pylint: disable=no-name-in-module
 from phobos.core.ffi import (FSType, ResourceFamily)
 
 
@@ -68,7 +70,7 @@ class RadosPoolOptHandler(MediaOptHandler):
     verbs = [
         LockOptHandler,
         MediaAddOptHandler,
-        MediaListOptHandler,
+        MediaListOptHandler, # pylint: disable=duplicate-code
         MediaLocateOptHandler,
         MediaUpdateOptHandler,
         MediaRenameOptHandler,
@@ -87,14 +89,7 @@ class RadosPoolOptHandler(MediaOptHandler):
         Note that this is a special case where we add both a media (storage) and
         a device (mean to access it).
         """
-        (rc, nb_dev_to_add, nb_dev_added) = self.add_medium_and_device()
-        if nb_dev_added == nb_dev_to_add:
-            self.logger.info("Added %d RADOS pool(s) successfully",
-                             nb_dev_added)
-        else:
-            self.logger.error("Failed to add %d/%d RADOS pools",
-                              nb_dev_to_add - nb_dev_added, nb_dev_to_add)
-            sys.exit(abs(rc))
+        exec_add_dir_rados(self, PHO_RSC_RADOS_POOL)
 
     def del_medium(self, adm, family, resources, library, lost):
         #pylint: disable=too-many-arguments
@@ -106,12 +101,20 @@ class RadosPoolOptHandler(MediaOptHandler):
         Note that this is a special case where we delete both a media (storage)
         and a device (mean to access it).
         """
-        rc, nb_dev_to_del, nb_dev_del = self.delete_medium_and_device()
+        exec_delete_dir_rados(self, PHO_RSC_RADOS_POOL)
 
-        if nb_dev_del == nb_dev_to_del:
-            self.logger.info("Deleted %d RADOS pool(s) successfully",
-                             nb_dev_del)
-        else:
-            self.logger.error("Failed to delete %d/%d RADOS pools",
-                              nb_dev_to_del - nb_dev_del, nb_dev_to_del)
-            sys.exit(abs(rc))
+    def exec_lock(self):
+        """
+        Lock a RADOS pool.
+        Note that this is a special case where we lock both a media (storage)
+        and a device (mean to access it).
+        """
+        exec_lock_dir_rados(self, PHO_RSC_RADOS_POOL)
+
+    def exec_unlock(self):
+        """
+        Unlock a RADOS pool.
+        Note that this is a special case where we unlock both a media (storage)
+        and a device (mean to access it).
+        """
+        exec_unlock_dir_rados(self, PHO_RSC_RADOS_POOL)

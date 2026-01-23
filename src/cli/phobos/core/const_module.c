@@ -187,6 +187,19 @@ static PyObject *py_str2dss_type(PyObject *self, PyObject *args)
     return Py_BuildValue("i", type);
 }
 
+static PyObject *py_dss_type2str(PyObject *self, PyObject *args)
+{
+    const char *str_repr;
+    enum dss_type type;
+
+    if (!PyArg_ParseTuple(args, "i", &type))
+        return NULL;
+
+    str_repr = dss_type2str(type);
+
+    return Py_BuildValue("s", str_repr);
+}
+
 static PyObject *py_str2operation_type(PyObject *self, PyObject *args)
 {
     const char *str_repr;
@@ -246,6 +259,8 @@ static PyMethodDef ConstMethods[] = {
      "fs type enum value from name."},
     {"str2dss_type", py_str2dss_type, METH_VARARGS,
      "dss type enum value from name."},
+    {"dss_type2str", py_dss_type2str, METH_VARARGS,
+     "printable dss type."},
     {"str2operation_type", py_str2operation_type, METH_VARARGS,
      "operation type enum value from name."},
     {NULL, NULL, 0, NULL}

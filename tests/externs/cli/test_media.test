@@ -29,6 +29,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_launch_daemon.sh
 . $test_dir/tape_drive.sh
 . $test_dir/utils_generation.sh
+. $test_dir/utils.sh
 
 ################################################################################
 #                                    SETUP                                     #
@@ -59,6 +60,24 @@ function setup_dir()
 {
     setup
     umask 000
+    export dirs=(
+                 $(mktemp -d "$PWD/pho.test.XXXX")
+                 $(mktemp -d "$PWD/pho.test.XXXX")
+                )
+
+    $phobos dir add --unlock ${dirs[@]}
+    $phobos dir format --fs POSIX --unlock ${dirs[@]}
+}
+
+function setup_dir_log()
+{
+    setup_tables
+    EVENT_FILE="$test_dir/test_media_events"
+
+    invoke_lrs_debug &
+    wait_for_lrs
+    last_read=$(now)
+
     export dirs=(
                  $(mktemp -d "$PWD/pho.test.XXXX")
                  $(mktemp -d "$PWD/pho.test.XXXX")
@@ -107,6 +126,15 @@ function cleanup_dir()
 {
     cleanup
     rm -rf ${dirs[@]}
+}
+
+function cleanup_dir_log()
+{
+    rm -f "$EVENT_FILE"
+
+    kill $(pgrep phobosd)
+    rm -rf ${dirs[@]}
+    drop_tables
 }
 
 function cleanup_tape()
@@ -348,13 +376,39 @@ function test_dir_lock_path()
 {
     local name=$(basename ${dirs[1]})
     $valg_phobos dir lock "./$name"
+    local res=$(get_daemon_event "dev_thread_end" $last_read)
+    last_read=$(now)
+    local count=$(echo "$res" | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be 1 dev_thread_end (got $count)"
+    fi
     $phobos dir list -o adm_status ${dirs[1]} | grep "locked"
+
     $valg_phobos dir unlock "./$name"
+    res=$(get_daemon_event "dev_thread_init" $last_read)
+    last_read=$(now)
+    count=$(echo "$res" | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be 1 dev_thread_init (got $count)"
+    fi
     $phobos dir list -o adm_status ${dirs[1]} | grep "unlocked"
 
     $valg_phobos dir lock "${dirs[0]}/"
+    res=$(get_daemon_event "dev_thread_end" $last_read)
+    last_read=$(now)
+    count=$(echo "$res" | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be 1 dev_thread_end (got $count)"
+    fi
     $phobos dir list -o adm_status ${dirs[0]} | grep "locked"
+
     $valg_phobos dir unlock "${dirs[0]}/"
+    res=$(get_daemon_event "dev_thread_init" $last_read)
+    last_read=$(now)
+    count=$(echo "$res" | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be 1 dev_thread_init (got $count)"
+    fi
     $phobos dir list -o adm_status ${dirs[0]} | grep "unlocked"
 }
 
@@ -422,8 +476,10 @@ TESTS=("setup_dir; \
             test_put_access; \
             test_get_access; \
             test_dir_list_path; \
-            test_dir_lock_path; \
         cleanup_dir"
+       "setup_dir_log; \
+            test_dir_lock_path; \
+        cleanup_dir_log"
        "setup; test_dir_add_path; cleanup"
        "setup_dir; test_put_update_dir_path; cleanup_dir"
        "setup_dir; test_put_update_dir_relative_path; cleanup_dir"

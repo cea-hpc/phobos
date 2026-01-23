@@ -27,8 +27,8 @@ import sys
 from phobos.cli.common import env_error_format
 from phobos.cli.common.utils import set_library
 from phobos.core.admin import Client as AdminClient
-from phobos.core.const import (DSS_DEVICE, DSS_MEDIA, # pylint: disable=no-name-in-module
-                               PHO_RSC_DIR)
+from phobos.core.const import (DSS_DEVICE, DSS_MEDIA, rsc_family2str, # pylint: disable=no-name-in-module
+                               dss_type2str)
 
 def exec_add_dir_rados(obj, family):
     """Add a new directory or rados pool."""
@@ -36,11 +36,11 @@ def exec_add_dir_rados(obj, family):
 
     if nb_dev_added == nb_dev_to_add:
         obj.logger.info("Added %d %s(s) successfully", nb_dev_added,
-                        "dir" if family == PHO_RSC_DIR else "rados")
+                        rsc_family2str(family))
     else:
         obj.logger.error("Failed to add %d/%d %s(s)",
                          nb_dev_to_add - nb_dev_added, nb_dev_to_add,
-                         "dir" if family == PHO_RSC_DIR else "rados")
+                         rsc_family2str(family))
         sys.exit(abs(rc))
 
 def exec_delete_dir_rados(obj, family):
@@ -49,11 +49,38 @@ def exec_delete_dir_rados(obj, family):
 
     if nb_dev_del == nb_dev_to_del:
         obj.logger.info("Deleted %d %s(s) successfully", nb_dev_del,
-                        "dir" if family == PHO_RSC_DIR else "rados")
+                        rsc_family2str(family))
     else:
         obj.logger.error("Failed to delete %d/%d %s(s)",
                          nb_dev_to_del - nb_dev_del, nb_dev_to_del,
-                         "dir" if family == PHO_RSC_DIR else "rados")
+                         rsc_family2str(family))
+
+        sys.exit(abs(rc))
+
+def exec_lock_dir_rados(obj, family):
+    """Lock a directory or rados pool"""
+    rc, nb_to_lock, nb_locked = obj.lock_unlock_medium_and_device(True)
+
+    if nb_locked == nb_to_lock:
+        obj.logger.info("Locked %d %s(s) successfully", nb_locked,
+                        rsc_family2str(family))
+    else:
+        obj.logger.error("Failed to lock %d/%d %s(s)",
+                         nb_to_lock - nb_locked, nb_to_lock,
+                         rsc_family2str(family))
+        sys.exit(abs(rc))
+
+def exec_unlock_dir_rados(obj, family):
+    """Lock a directory or rados pool"""
+    rc, nb_to_unlock, nb_unlocked = obj.lock_unlock_medium_and_device(False)
+
+    if nb_unlocked == nb_to_unlock:
+        obj.logger.info("Unlocked %d %s(s) successfully", nb_unlocked,
+                        rsc_family2str(family))
+    else:
+        obj.logger.error("Failed to unlock %d/%d %s(s)",
+                         nb_to_unlock - nb_unlocked, nb_to_unlock,
+                         rsc_family2str(family))
         sys.exit(abs(rc))
 
 def exec_delete_medium_device(obj, dss_type):
@@ -83,12 +110,11 @@ def exec_delete_medium_device(obj, dss_type):
 
     if num_deleted == num2delete:
         obj.logger.info("Deleted %d %s(s) successfully", num_deleted,
-                        "media" if dss_type == DSS_MEDIA else "device")
+                        dss_type2str(dss_type))
     elif num_deleted == 0:
         obj.logger.error("No %s deleted: %d/%d",
-                         "media" if dss_type == DSS_MEDIA else "device",
-                         num_deleted, num2delete)
+                         dss_type2str(dss_type), num_deleted, num2delete)
     else:
         obj.logger.warning("Failed to delete %d/%d %s(s)",
                            num2delete - num_deleted, num2delete,
-                           "media" if dss_type == DSS_MEDIA else "device")
+                           dss_type2str(dss_type))

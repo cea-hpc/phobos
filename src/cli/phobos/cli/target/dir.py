@@ -21,12 +21,15 @@
 Dir target for Phobos CLI
 """
 
+# pylint: disable=duplicate-code
 from phobos.cli.action.format import FormatOptHandler
 from phobos.cli.action.lock import LockOptHandler
 from phobos.cli.action.resource_delete import ResourceDeleteOptHandler
 from phobos.cli.action.unlock import UnlockOptHandler
-from phobos.cli.common.exec import exec_add_dir_rados, exec_delete_dir_rados
+from phobos.cli.common.exec import (exec_add_dir_rados, exec_delete_dir_rados,
+                                    exec_lock_dir_rados, exec_unlock_dir_rados)
 from phobos.cli.common.utils import (setaccess_epilog, uncase_fstype)
+# pylint: enable=duplicate-code
 from phobos.cli.target.media import (MediaAddOptHandler, MediaListOptHandler,
                                      MediaLocateOptHandler, MediaOptHandler,
                                      MediaRenameOptHandler,
@@ -77,12 +80,12 @@ class DirOptHandler(MediaOptHandler):
         DirFormatOptHandler,
         DirSetAccessOptHandler,
         DirImportOptHandler,
-        LockOptHandler,
+        LockOptHandler, # pylint: disable=duplicate-code
         MediaAddOptHandler,
         MediaListOptHandler,
         MediaLocateOptHandler,
         MediaRenameOptHandler,
-        MediaUpdateOptHandler,
+        MediaUpdateOptHandler, # pylint: enable=duplicate-code
         ResourceDeleteOptHandler,
         UnlockOptHandler,
     ]
@@ -109,3 +112,19 @@ class DirOptHandler(MediaOptHandler):
         and a device (mean to access it).
         """
         exec_delete_dir_rados(self, PHO_RSC_DIR)
+
+    def exec_lock(self):
+        """
+        Lock a directory.
+        Note that this is a special case where we lock both a media (storage)
+        and a device (mean to access it).
+        """
+        exec_lock_dir_rados(self, PHO_RSC_DIR)
+
+    def exec_unlock(self):
+        """
+        Unlock a directory.
+        Note that this is a special case where we unlock both a media (storage)
+        and a device (mean to access it).
+        """
+        exec_unlock_dir_rados(self, PHO_RSC_DIR)

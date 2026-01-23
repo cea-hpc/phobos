@@ -393,6 +393,47 @@ class MediaOptHandler(BaseResourceOptHandler):
                  for uid in uids]
         self._media_update(media, ADM_STATUS)
 
+    def lock_unlock_medium_and_device(self, lock):
+        """Lock or unlock a medium and device at once"""
+        resources = self.params.get('res')
+        set_library(self)
+        valid_count = 0
+        rc = 0
+
+        try:
+            with AdminClient(lrs_required=True) as adm:
+                for path in resources:
+                    medium_is_locked_unlocked = False
+                    medium = MediaInfo(family=self.family, name=path,
+                                       adm_status= \
+                                        PHO_RSC_ADM_ST_LOCKED if lock else \
+                                        PHO_RSC_ADM_ST_UNLOCKED,
+                                       library=self.library)
+                    try:
+                        self._media_update([medium], ADM_STATUS)
+                        medium_is_locked_unlocked = True
+                        if lock:
+                            adm.device_lock(self.family, [path], self.library,
+                                            False)
+                        else:
+                            adm.device_unlock(self.family, [path], self.library,
+                                              False)
+                        valid_count += 1
+                    except EnvironmentError as err:
+                        self.logger.error(env_error_format(err))
+                        rc = (err.errno if not rc else rc)
+                        if medium_is_locked_unlocked:
+                            medium.adm_status = \
+                             PHO_RSC_ADM_ST_UNLOCKED if lock else \
+                             PHO_RSC_ADM_ST_LOCKED
+                            self._media_update([medium], ADM_STATUS)
+
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
+        return (rc, len(resources), valid_count)
+
     def exec_lock(self):
         """Lock media"""
         set_library(self)
