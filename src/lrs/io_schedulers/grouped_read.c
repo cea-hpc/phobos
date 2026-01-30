@@ -784,7 +784,7 @@ static int allocate_queue_if_loaded(struct io_scheduler *io_sched,
     struct device *device;
     struct lrs_dev *d;
 
-    d = search_loaded_medium(io_sched->io_sched_hdl->global_device_list,
+    d = search_loaded_medium(io_sched->io_sched_hdl->global_device_list, NULL,
                              queue->medium_id.name, queue->medium_id.library);
     /* If the device belongs to another scheduler, the request will be pushed to
      * the queue in the hash table. The device will be associated to the queue

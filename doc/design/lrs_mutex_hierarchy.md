@@ -10,6 +10,7 @@ regarding how critical the data locked are.
 Here are the list of mutex currently used in the LRS, ordered by which mutex
 should be locked first in case multiple interact with each other, without
 any possibility to separate their use:
+ 0. Sched devices remove mutex
  1. Device thread's data mutex
  2. Request's container mutex
  3. Device thread's scheduled queue mutex

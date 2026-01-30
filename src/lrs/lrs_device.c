@@ -84,6 +84,7 @@ int lrs_dev_hdl_init(struct lrs_dev_hdl *handle, enum rsc_family family)
     int rc;
 
     handle->ldh_devices = g_ptr_array_new();
+    pthread_mutex_init(&handle->ldh_devices_remove_mutex, NULL);
 
     rc = get_cfg_sync_time_ms_value(family, &handle->sync_time_ms);
     if (rc)

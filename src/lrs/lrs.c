@@ -619,6 +619,7 @@ static int release_medium(struct lrs_sched *sched,
 
     /* find the corresponding device */
     dev = search_loaded_medium(sched->devices.ldh_devices,
+                               &sched->devices.ldh_devices_remove_mutex,
                                release->med_id->name, release->med_id->library);
     if (!dev) {
         *req_rc = -ENODEV;
@@ -923,6 +924,7 @@ static void release_on_socket_close(struct lrs *lrs, int closed_fd)
             continue;
 
         devices = sched->devices.ldh_devices;
+        MUTEX_LOCK(&sched->devices.ldh_devices_remove_mutex);
         for (i = 0; i < devices->len; i++) {
             struct lrs_dev *dev = NULL;
 
@@ -936,6 +938,8 @@ static void release_on_socket_close(struct lrs *lrs, int closed_fd)
                 dev_clean_io(dev, false);
             MUTEX_UNLOCK(&dev->ld_mutex);
         }
+
+        MUTEX_UNLOCK(&sched->devices.ldh_devices_remove_mutex);
     }
 
 }

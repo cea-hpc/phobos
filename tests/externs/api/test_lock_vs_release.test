@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:
+
+#
+#  All rights reserved (c) 2014-2026 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Context initializer for lock vs release test
+#
+
+test_bin_dir=$PWD
+test_bin="$test_bin_dir/test_lock_vs_release"
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
+
+function setup
+{
+    setup_tables
+    setup_test_dirs
+    invoke_lrs
+}
+
+function cleanup
+{
+    waive_lrs
+    cleanup_test_dirs
+    drop_tables
+}
+
+function test_lock_vs_release
+{
+    $LOG_COMPILER $test_bin $DIR_TEST_IN
+}
+
+TEST_SETUP=setup
+TESTS=(test_lock_vs_release)
+TEST_CLEANUP=cleanup

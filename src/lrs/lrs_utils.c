@@ -102,6 +102,7 @@ void reqc_pho_id_from_index(struct req_container *reqc, size_t index,
 }
 
 static struct lrs_dev *__search_loaded_medium(GPtrArray *devices,
+                                              pthread_mutex_t *devices_mutex,
                                               const char *name,
                                               const char *library,
                                               bool keep_lock)
@@ -113,17 +114,13 @@ static struct lrs_dev *__search_loaded_medium(GPtrArray *devices,
     pho_debug("Searching loaded medium (name '%s', library '%s')",
               name, library);
 
+    if (devices_mutex)
+        MUTEX_LOCK(devices_mutex);
+
     for (i = 0; i < devices->len; i++) {
         struct lrs_dev *dev = NULL;
         const char *media_id;
 
-       /* XXX /!\ Must be fixed !
-        * The schedulers threads are concurrently modifying this
-        * array through the lock/unlock/add notifications.
-        *
-        * This function is also called by the main lrs thread through the
-        * "process_release_request" function.
-        */
         dev = g_ptr_array_index(devices, i);
         MUTEX_LOCK(&dev->ld_mutex);
         if (dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED &&
@@ -148,6 +145,8 @@ static struct lrs_dev *__search_loaded_medium(GPtrArray *devices,
 
             pho_debug("Found loaded medium (name '%s', library '%s') in '%s'",
                       name, library, dev->ld_dss_dev_info->rsc.id.name);
+            if (devices_mutex)
+                MUTEX_UNLOCK(devices_mutex);
             return dev;
         }
 
@@ -157,21 +156,25 @@ err_continue:
 
     pho_debug("Did not find loaded medium (name '%s', library '%s')",
               name, library);
+    if (devices_mutex)
+        MUTEX_UNLOCK(devices_mutex);
+
     return NULL;
 }
 
 struct lrs_dev *search_loaded_medium(GPtrArray *devices,
+                                     pthread_mutex_t *devices_mutex,
                                      const char *name,
                                      const char *library)
 {
-    return __search_loaded_medium(devices, name, library, false);
+    return __search_loaded_medium(devices, devices_mutex, name, library, false);
 }
 
 struct lrs_dev *search_loaded_medium_keep_lock(GPtrArray *devices,
                                                const char *name,
                                                const char *library)
 {
-    return __search_loaded_medium(devices, name, library, true);
+    return __search_loaded_medium(devices, NULL, name, library, true);
 }
 
 struct lrs_dev *search_in_use_medium(GPtrArray *devices, const char *name,

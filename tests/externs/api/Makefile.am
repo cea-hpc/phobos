@@ -40,6 +40,7 @@ check_PROGRAMS=phobos_put_copy \
                test_dss \
                test_locate \
                test_lock_clean \
+               test_lock_vs_release \
                test_mput_sync_error \
                test_multithread \
                test_raid1_split_locate \
@@ -56,6 +57,7 @@ check_SCRIPTS=test_bad_comm.sh \
               test_store.test \
               test_locate.test \
               test_lock_clean.sh \
+              test_lock_vs_release.test \
               test_mput_sync_error.test \
               test_multithread.test \
               test_put_copy.test \
@@ -99,6 +101,9 @@ test_locate_CFLAGS=$(AM_CFLAGS) $(TESTS_INCLUDE)
 test_lock_clean_SOURCES=test_lock_clean.c
 test_lock_clean_LDADD=$(ADMIN_LIB) $(STORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_lock_clean_CFLAGS=$(TESTS_INCLUDE)
+
+test_lock_vs_release_SOURCES=test_lock_vs_release.c
+test_lock_vs_release_LDADD=$(ADMIN_LIB) $(STORE_LIB)
 
 test_mput_sync_error_SOURCES=test_mput_sync_error.c
 test_mput_sync_error_LDADD=$(STORE_LIB) $(LAYOUT_COMMON_LIB) \

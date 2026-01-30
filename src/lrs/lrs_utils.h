@@ -50,7 +50,9 @@ struct lrs_dev *search_in_use_medium(GPtrArray *devices,
                                      const char *name, const char *library,
                                      bool *sched_ready);
 
+/* devices_mutex could be NULL if called from the scheduler thread */
 struct lrs_dev *search_loaded_medium(GPtrArray *devices,
+                                     pthread_mutex_t *devices_mutex,
                                      const char *name, const char *library);
 
 struct lrs_dev *search_loaded_medium_keep_lock(GPtrArray *devices,

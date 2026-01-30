@@ -47,6 +47,11 @@ struct lrs_dev_hdl {
     GPtrArray      *ldh_devices;   /**< List of active devices of
                                      *  type lrs_dev
                                      */
+    pthread_mutex_t ldh_devices_remove_mutex;
+                                   /**< Taken by sched thread to remove devices.
+                                    *   Taken by other thread to scan the
+                                    *   devices list.
+                                    */
     struct timespec sync_time_ms;  /**< Time threshold for medium
                                      *  synchronization
                                      */
