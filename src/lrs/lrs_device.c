@@ -1010,7 +1010,6 @@ static int dev_sync(struct lrs_dev *dev)
                           sync_params->tosync_nb_extents);
         }
     } else {
-        /* this will cause the device thread to stop */
         rc = dev->ld_last_client_rc;
     }
 
