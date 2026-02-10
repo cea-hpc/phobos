@@ -143,14 +143,7 @@ struct media_info *media_info_dup(const struct media_info *mda)
     struct media_info *media_out;
 
     media_out = xmalloc(sizeof(*media_out));
-
-    memcpy(media_out, mda, sizeof(*media_out));
-    media_out->rsc.model = xstrdup_safe(mda->rsc.model);
-
-    string_array_dup(&media_out->tags, &mda->tags);
-
-    pho_lock_cpy(&media_out->lock, &mda->lock);
-
+    media_info_copy(media_out, mda);
     return media_out;
 }
 
