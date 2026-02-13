@@ -5,7 +5,7 @@
 AC_PREREQ(2.59)
 
 m4_define([PHOBOS_VERSION_MAJOR], [3])
-m4_define([PHOBOS_VERSION_MINOR], [2])
+m4_define([PHOBOS_VERSION_MINOR], [3])
 m4_define([PHOBOS_VERSION_PATCH], [0])
 m4_define([PHOBOS_VERSION_RELEASE], [1])
 

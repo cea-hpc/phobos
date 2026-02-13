@@ -1,11 +1,20 @@
 # CHANGELOG UPDATES
 
-## Next
+## 3.3.0
+ * WARNING: the db schema moves from 3.2 to 3.3 and a migration is needed
+ * Metrology is now available
+ * TLC can be secured by the use of multiple devices
+ * Add a way to mark a tape as lost
+ * LRS is strengthened against client error. LRS releases the resources on
+   client disconnection. LRS is resistant to client crash when sending message.
+ * Store clients support input file size errors
  * Add grouping_on_dir configuration parameter to disengage dir from grouping
  * Add sort option to dss_extent_get, and delete dss_get_extents_order_by_ctime
-   funtion
- * Add tape lost management
- * LRS releases the resources on client disconnection
+   function
+ * Lock update management
+ * hsm sync by grouping option
+ * hsm sync does not update the sync time on error
+ * Fix locate with grouping by adding grouping copy to media info duplication
 
 ## 3.2.0
  * WARNING: the db schema moves from 3.0 to 3.2 and a migration is needed
