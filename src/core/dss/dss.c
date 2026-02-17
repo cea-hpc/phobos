@@ -190,17 +190,14 @@ int dss_execute_generic_get(struct dss_handle *handle, enum dss_type type,
         void *item_ptr = (char *)&dss_res->items.raw + i * item_size;
 
         rc = create_resource(type, handle, item_ptr, res, i);
-        if (rc)
+        if (rc) {
+            _dss_result_free(dss_res, i);
             return rc;
+        }
     }
 
     *item_list = &dss_res->items.raw;
     *item_cnt = PQntuples(res);
-
-    if (rc)
-        /* Only free elements that were initialized, this also frees res */
-        _dss_result_free(dss_res, i);
-
     return rc;
 }
 
