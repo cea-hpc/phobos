@@ -675,7 +675,7 @@ int phobos_admin_sched_conf_set(struct admin_handle *adm,
 }
 
 int phobos_admin_device_delete(struct admin_handle *adm, struct pho_id *dev_ids,
-                               int num_dev, int *num_removed_dev)
+                               int num_dev, int *num_removed_dev, bool force)
 {
     struct dev_info *devices;
     struct dev_info *dev_res;
@@ -690,7 +690,7 @@ int phobos_admin_device_delete(struct admin_handle *adm, struct pho_id *dev_ids,
     for (i = 0; i < num_dev; ++i) {
         if (dev_ids[i].family == PHO_RSC_DIR) {
             rc = _normalize_path(dev_ids[i].name);
-            if (rc)
+            if (rc && !force)
                 continue;
         }
 
@@ -2025,7 +2025,8 @@ int phobos_admin_media_add(struct admin_handle *adm, struct media_info *med_ls,
 }
 
 int phobos_admin_media_delete(struct admin_handle *adm, struct pho_id *med_ids,
-                              int num_med, bool lost, int *num_removed_med)
+                              int num_med, bool lost, int *num_removed_med,
+                              bool force)
 {
     struct media_info *media_res;
     struct media_info *media;
@@ -2042,7 +2043,7 @@ int phobos_admin_media_delete(struct admin_handle *adm, struct pho_id *med_ids,
     for (i = 0; i < num_med; ++i) {
         if (med_ids[i].family == PHO_RSC_DIR) {
             rc = _normalize_path(med_ids[i].name);
-            if (rc)
+            if (rc && !force)
                 goto out_free;
         }
 

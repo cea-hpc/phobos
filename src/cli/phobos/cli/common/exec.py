@@ -99,11 +99,11 @@ def exec_delete_medium_device(obj, dss_type):
                 num_deleted, num2delete = adm.medium_delete(obj.family,
                                                             resources,
                                                             obj.library,
-                                                            lost)
+                                                            lost, False)
             elif dss_type == DSS_DEVICE:
                 num_deleted, num2delete = adm.device_delete(obj.family,
                                                             resources,
-                                                            obj.library)
+                                                            obj.library, False)
     except EnvironmentError as err:
         obj.logger.error(env_error_format(err))
         sys.exit(abs(err.errno))

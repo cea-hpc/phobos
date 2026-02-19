@@ -44,7 +44,7 @@ from phobos.core.ffi import (CommInfo, Id, LayoutInfo, LibDrvInfo, LIBPHOBOS,
 try:
     LIBC = CDLL("libc.so.6")
 except OSError as err:
-    raise EnvironmentError(errno.ENOSYS, f"Failed to load libc: {err}")
+    raise EnvironmentError(errno.ENOSYS, f"Failed to load libc: {err}") from err
 
 def string_list2c_array(str_list, getter):
     """Convert a Python list into a C list. A getter can be used to select
@@ -73,7 +73,7 @@ def init_medium(media, fstype, tags):
 class Client: # pylint: disable=too-many-public-methods
     """Wrapper on the phobos admin client"""
     def __init__(self, lrs_required=True):
-        super(Client, self).__init__()
+        super().__init__()
         self.lrs_required = lrs_required
         self.handle = None
 
@@ -118,7 +118,7 @@ class Client: # pylint: disable=too-many-public-methods
             fs_type_enum = PHO_FS_RADOS
         else:
             raise EnvironmentError(errno.EOPNOTSUPP,
-                                   "Unknown filesystem type '%s'" % fs_type)
+                                   f"Unknown filesystem type '{fs_type}'")
 
         c_id = Id * len(media_list)
         mstruct = [Id(rsc_family, name=medium_id, library=library)
@@ -131,9 +131,8 @@ class Client: # pylint: disable=too-many-public-methods
                                                  unlock,
                                                  force)
         if rc:
-            raise EnvironmentError(rc,
-                                   "Failed to format some medium in '%s'" %
-                                   str(media_list))
+            raise EnvironmentError(
+                rc, f"Failed to format some medium in '{media_list}'")
 
     def device_add(self, dev_family, dev_names, keep_locked, library):
         """Add devices to the LRS."""
@@ -147,8 +146,7 @@ class Client: # pylint: disable=too-many-public-methods
                                                      len(dev_ids), keep_locked,
                                                      c_library)
         if rc:
-            raise EnvironmentError(rc, "Failed to add device(s) '%s'" %
-                                   dev_names)
+            raise EnvironmentError(rc, f"Failed to add device(s) '{dev_names}'")
 
     def device_scsi_release(self, dev_names, library):
         """Release LTFS reservation of devices (for now, only tape drives)."""
@@ -163,7 +161,7 @@ class Client: # pylint: disable=too-many-public-methods
                                                              byref(count))
         if rc:
             raise EnvironmentError(rc, "Failed to release SCSI reservation of"
-                                   " device(s) '%s'" % dev_names)
+                                   f" device(s) '{dev_names}'")
         return count.value
 
     def device_migrate(self, dev_names, library, host, new_lib):
@@ -181,12 +179,12 @@ class Client: # pylint: disable=too-many-public-methods
                                                         len(dev_ids), c_host,
                                                         c_new_lib, byref(count))
         if rc:
-            raise EnvironmentError(rc, "Failed to migrate device(s) '%s'" %
-                                   dev_names)
+            raise EnvironmentError(
+                rc, f"Failed to migrate device(s) '{dev_names}'")
 
         return count.value
 
-    def device_delete(self, dev_family, dev_names, library):
+    def device_delete(self, dev_family, dev_names, library, force):
         """Remove devices to phobos system."""
         c_id = Id * len(dev_names)
         dev_ids = [Id(dev_family, name=name, library=library)
@@ -196,11 +194,11 @@ class Client: # pylint: disable=too-many-public-methods
         rc = LIBPHOBOS_ADMIN.phobos_admin_device_delete(byref(self.handle),
                                                         c_id(*dev_ids),
                                                         len(dev_ids),
-                                                        byref(count))
+                                                        byref(count), force)
 
         if rc:
-            raise EnvironmentError(rc, "Failed to delete device(s) '%s'" %
-                                   dev_names)
+            raise EnvironmentError(
+                rc, f"Failed to delete device(s) '{dev_names}'")
 
         return count.value, len(dev_ids)
 
@@ -267,8 +265,8 @@ class Client: # pylint: disable=too-many-public-methods
                                                       c_id(*dev_ids),
                                                       len(dev_ids), is_forced)
         if rc:
-            raise EnvironmentError(rc, "Failed to lock device(s) '%s'" %
-                                   dev_names)
+            raise EnvironmentError(
+                rc, f"Failed to lock device(s) '{dev_names}'")
 
     def device_unlock(self, dev_family, dev_names, dev_library, is_forced):
         """Wrapper for the device unlock command."""
@@ -281,8 +279,8 @@ class Client: # pylint: disable=too-many-public-methods
                                                         len(dev_ids),
                                                         is_forced)
         if rc:
-            raise EnvironmentError(rc, "Failed to unlock device(s) '%s'" %
-                                   dev_names)
+            raise EnvironmentError(
+                rc, f"Failed to unlock device(s) '{dev_names}'")
 
     def device_status(self, family):
         """Query the status of the local devices"""
@@ -318,8 +316,7 @@ class Client: # pylint: disable=too-many-public-methods
                                                       byref(n_layouts),
                                                       sref)
         if rc:
-            raise EnvironmentError(rc, "Failed to list the extent(s) '%s'" %
-                                   res)
+            raise EnvironmentError(rc, f"Failed to list the extent(s) '{res}'")
 
         if not degroup:
             list_lyts = [layouts[i] for i in range(n_layouts.value)]
@@ -349,10 +346,9 @@ class Client: # pylint: disable=too-many-public-methods
             byref(Id(rsc_family, name=medium_id, library=library)),
             byref(hostname))
         if rc:
-            raise EnvironmentError(rc, "Failed to locate medium '%s'" %
-                                   medium_id)
+            raise EnvironmentError(rc, f"Failed to locate medium '{medium_id}'")
 
-        return hostname.value.decode('utf-8') if hostname.value else ""
+        return hostname.value.decode('utf-8') if hostname.value else "" #pylint: disable=no-member,using-constant-test
 
     def clean_locks(self, global_mode, force, #pylint: disable=too-many-arguments
                     type_str, family_str, lock_ids):
@@ -387,7 +383,7 @@ class Client: # pylint: disable=too-many-public-methods
         if rc:
             raise EnvironmentError(rc, "Failed to add media")
 
-    def medium_delete(self, med_family, med_names, library, lost):
+    def medium_delete(self, med_family, med_names, library, lost, force): # pylint: disable=too-many-arguments
         """Remove mediums to phobos system."""
         c_id = Id * len(med_names)
         med_ids = [Id(med_family, name=name, library=library)
@@ -398,10 +394,10 @@ class Client: # pylint: disable=too-many-public-methods
                                                        c_id(*med_ids),
                                                        len(med_ids),
                                                        lost,
-                                                       byref(count))
+                                                       byref(count), force)
         if rc:
-            raise EnvironmentError(rc, "Failed to delete media(s) '%s'" %
-                                   med_names)
+            raise EnvironmentError(
+                rc, f"Failed to delete media(s) '{med_names}'")
         return count.value, len(med_ids)
 
     def medium_import(self, fstype, media, check_hash, tags=None):
@@ -516,7 +512,7 @@ class Client: # pylint: disable=too-many-public-methods
                                 byref(self.handle), c_id(*med_ids),
                                 len(med_ids), c_new_lib, byref(count))
         if rc:
-            raise EnvironmentError(rc, "Failed to rename media(s) '%s'" % media)
+            raise EnvironmentError(rc, f"Failed to rename media(s) '{media}'")
 
         return count.value
 
@@ -539,15 +535,16 @@ class Client: # pylint: disable=too-many-public-methods
 
         # Convert to JSON
         try:
-            stats_json = json.loads(stats_str.value.decode('utf-8'))
+            stats_json = json.loads(stats_str.value.decode('utf-8')) #pylint: disable=no-member
             return stats_json
         except json.JSONDecodeError as jerr:
             raise EnvironmentError(errno.EPROTO,
-                                   f"Failed to decode JSON: {jerr}")
+                                   f"Failed to decode JSON: {jerr}") from jerr
         finally:
             LIBC.free(stats_str)
 
-    def tlc_stats(self, library, fullname, tags):
+    @staticmethod
+    def tlc_stats(library, fullname, tags):
         """Retrieve stats from TLC Daemon."""
         stats_str = c_char_p(None)
 
@@ -567,11 +564,11 @@ class Client: # pylint: disable=too-many-public-methods
 
         # Convert to JSON
         try:
-            stats_json = json.loads(stats_str.value.decode('utf-8'))
+            stats_json = json.loads(stats_str.value.decode('utf-8')) #pylint: disable=no-member
             return stats_json
         except json.JSONDecodeError as jerr:
             raise EnvironmentError(errno.EPROTO,
-                                   f"Failed to decode JSON: {jerr}")
+                                   f"Failed to decode JSON: {jerr}") from jerr
         finally:
             LIBC.free(stats_str)
 

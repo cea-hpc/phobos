@@ -103,6 +103,9 @@ int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
  * \param[in]       dev_ids         Device IDs to remove.
  * \param[in]       num_dev         Number of device to remove.
  * \param[out]      num_removed_dev Number of removed devices.
+ * \param[in]       force           Try to delete the device even if the path
+ *                                  normalization failed (ie: dir path not
+ *                                  available on localhost)
  *
  * \return                          0     on success,
  *                                 -errno on failure.
@@ -110,7 +113,7 @@ int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
  * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_device_delete(struct admin_handle *adm, struct pho_id *dev_ids,
-                               int num_dev, int *num_removed_dev);
+                               int num_dev, int *num_removed_dev, bool force);
 
 /**
  * Update the configuration of the local daemon
@@ -452,6 +455,9 @@ int phobos_admin_media_add(struct admin_handle *adm, struct media_info *med_ls,
  * \param[in]      lost            Whether the media to remove should be
  *                                 considered lost or not
  * \param[out]     num_removed_med Number of removed media.
+ * \param[in]      force           Try to delete the media even if the path
+ *                                 normalization failed (ie: dir path not
+ *                                 available on localhost)
  *
  * \return                         0      on success,
  *                                 -errno on failure.
@@ -459,7 +465,8 @@ int phobos_admin_media_add(struct admin_handle *adm, struct media_info *med_ls,
  * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_media_delete(struct admin_handle *adm, struct pho_id *med_ids,
-                              int num_med, bool lost, int *num_removed_med);
+                              int num_med, bool lost, int *num_removed_med,
+                              bool force);
 /**
  * Imports non-empty media into the DSS without formatting them thus preserving
  * the data on the device.

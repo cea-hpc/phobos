@@ -91,9 +91,9 @@ class RadosPoolOptHandler(MediaOptHandler):
         """
         exec_add_dir_rados(self, PHO_RSC_RADOS_POOL)
 
-    def del_medium(self, adm, family, resources, library, lost):
+    def del_medium(self, adm, family, resources, library, lost, force):
         #pylint: disable=too-many-arguments
-        adm.medium_delete(family, resources, library, lost)
+        adm.medium_delete(family, resources, library, lost, force)
 
     def exec_delete(self):
         """

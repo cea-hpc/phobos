@@ -70,6 +70,17 @@ class DirImportOptHandler(MediaImportOptHandler):
                             type=uncase_fstype(list(map(fs_type2str, FSType))),
                             help='Filesystem type (default: POSIX)')
 
+class DirResourceDeleteOptHandler(ResourceDeleteOptHandler):
+    """Specific version of the 'delete' command for directories"""
+    descr = 'remove dir(s) from the system'
+
+    @classmethod
+    def add_options(cls, parser):
+        super(DirResourceDeleteOptHandler, cls).add_options(parser)
+        parser.add_argument('-f', '--force', action='store_true',
+                            help="Try to delete the device even if the path "
+                                 "normalization failed (ie: dir path not "
+                                 "available on localhost")
 
 class DirOptHandler(MediaOptHandler):
     """Directory-related options and actions."""
@@ -86,7 +97,7 @@ class DirOptHandler(MediaOptHandler):
         MediaLocateOptHandler,
         MediaRenameOptHandler,
         MediaUpdateOptHandler, # pylint: enable=duplicate-code
-        ResourceDeleteOptHandler,
+        DirResourceDeleteOptHandler,
         UnlockOptHandler,
     ]
 
@@ -101,9 +112,9 @@ class DirOptHandler(MediaOptHandler):
         """
         exec_add_dir_rados(self, PHO_RSC_DIR)
 
-    def del_medium(self, adm, family, resources, library, lost):
+    def del_medium(self, adm, family, resources, library, lost, force):
         #pylint: disable=too-many-arguments
-        adm.medium_delete(family, resources, library, lost)
+        adm.medium_delete(family, resources, library, lost, force)
 
     def exec_delete(self):
         """

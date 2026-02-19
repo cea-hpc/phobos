@@ -161,9 +161,21 @@ function test_dir_delete_relative_path()
     rm -rf ${dirs[@]}
 }
 
+function test_dir_delete_force()
+{
+    $phobos dir add --unlock $DIR
+    mv $DIR ${DIR}_moved
+    $valg_phobos dir delete $DIR && error "phobos dir delete $DIR should" \
+                                          "failed because local path does not" \
+                                          "exist"
+    $valg_phobos dir delete -f $DIR
+    mv ${DIR}_moved $DIR
+}
+
 TESTS=("setup_dir; test_dir_delete; cleanup_dir"
        "setup_dir; test_dir_delete_lib; cleanup_dir"
-       "setup_dir; test_dir_delete_relative_path; cleanup_dir")
+       "setup_dir; test_dir_delete_relative_path; cleanup_dir"
+       "setup_dir; test_dir_delete_force; cleanup_dir")
 
 if [[ -w /dev/changer ]]; then
     TESTS+=("setup; test_tape_delete; cleanup")
