@@ -842,7 +842,7 @@ class UtilClient:
         xfers[0].xd_params.delete = XferDelParams(del_params)
         xfers[0].xd_flags = PHO_XFER_COPY_HARD_DEL
 
-        rc = LIBPHOBOS.phobos_copy_delete(xfers, n_xfers)
+        rc = LIBPHOBOS.phobos_delete(xfers, n_xfers)
 
         if rc:
             raise EnvironmentError(rc, f"Failed to delete '{oid}''s copy "

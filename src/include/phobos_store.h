@@ -317,16 +317,37 @@ int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
 /* TODO int phobos_query(criteria, &obj_list); */
 
 /**
- * Delete an object from the object store
+ * Delete an object or a copy's object from the object store
  *
- * This deletion is not a hard remove, and only deprecates the object.
+ * If no flag is set, it will delete an object. This deletion is not a hard
+ * remove, and only deprecates the object. It can be done even if an object has
+ * several copies. As the object will be deprecated, all copies of this object
+ * will also be considered deprecated.
  *
  * If the flag PHO_XFER_OBJ_HARD_DEL is set, the object, and its past versions,
- * will be removed from the database. The extents will still be present, to
- * keep tracking usage stats of tapes.
+ * will be removed from the database. With the tapes, the extents will still be
+ * present on the tapes and the extents in the DSS are marked as orphan. It's to
+ * keep tracking usage stats of tapes. With the directories, the extents on
+ * the directory and in the DSS are removed.
+ * It can only be done if an object has only one copy left. Multiple
+ * phobos_delete with the flag PHO_XFER_COPY_HARD_DEL must be done to delete all
+ * the copies of an object.
  *
- * @param[in]   xfers       Objects to delete, only the oid field is used
- * @param[in]   num_xfers   Number of objects to delete
+ * If the flag PHO_XFER_COPY_HARD_DEL is set, the copy's object will be removed
+ * from the database. With the tapes, the extents will still be present on the
+ * tapes and the extents in the DSS are marked as orphan. It's to keep tracking
+ * usage stats of tapes. With the directories, the extents on the directory and
+ * in the DSS are removed.
+ * The copy name set in the delete pho_xfer_params is used to select which copy
+ * to delete. It can't be done if its the last copy of an object. The deletion
+ * of the last copy of an object is done by doing a phobos_delete with no flag
+ * or the flag PHO_XFER_OBJ_HARD_DEL.
+ *
+ * The objid, objuuid and version inside a xfer_target can be used to select
+ * on which object the delete operation will operate.
+ *
+ * @param[in]   xfers       Objects or copies to delete
+ * @param[in]   num_xfers   Number of objects or copies to delete
  *
  * @return                  0 on success, -errno on failure
  *
@@ -468,18 +489,6 @@ int phobos_rename(const char *old_oid, const char *uuid, char *new_oid);
  */
 int phobos_copy(struct pho_xfer_desc *xfers, size_t n,
                 pho_completion_cb_t cb, void *udata);
-
-/**
- * Delete a copy's object from the object store
- *
- * @param[in]   xfers       Copy objects to delete
- * @param[in]   num_xfers   Number of objects to delete
- *
- * @return                  0 on success, -errno on failure
- *
- * This must be called after phobos_init.
- */
-int phobos_copy_delete(struct pho_xfer_desc *xfers, size_t num_xfers);
 
 /**
  * Clean a pho_xfer_desc structure by freeing the uuid and attributes, and

@@ -209,7 +209,7 @@ static int release_copy(const char *oid, const char *object_uuid, int version,
     target.xt_objuuid = target_uuid;
     target.xt_version = version;
 
-    rc = phobos_copy_delete(&xfer, 1);
+    rc = phobos_delete(&xfer, 1);
     if (rc)
         pho_warn("Error %d (%s) when deleting copy '%s' of object "
                  "('%s' oid', '%s' uuid, '%d' version)",
