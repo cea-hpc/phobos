@@ -121,7 +121,7 @@ class StoreGetMDOptHandler(XferOptHandler):
             return
 
         for key, value in sorted(itm.items()):
-            res.append('%s=%s' % (key, value))
+            res.append(f'{key}={value}')
 
         print(','.join(res))
 
@@ -225,7 +225,7 @@ class StorePutOptHandler(XferOptHandler):
         if mput_file == '-':
             fin = sys.stdin
         else:
-            fin = open(mput_file)
+            fin = open(mput_file, encoding="utf-8") # pylint: disable=consider-using-with
 
         mput_list = []
         for i, line in enumerate(fin):
@@ -259,7 +259,6 @@ class StorePutOptHandler(XferOptHandler):
 
         if fin is not sys.stdin:
             fin.close()
-
 
     def exec_put(self):
         """Insert an object into backend."""

@@ -340,8 +340,8 @@ class StringArray(Structure): # pylint: disable=too-few-public-methods
             self.strings = None
             self.count = 0
         else:
-            enc_strings = list([s.encode('utf-8') if isinstance(s, str)
-                                else s for _, s in enumerate(string_list)])
+            enc_strings = [s.encode('utf-8') if isinstance(s, str)
+                                else s for s in string_list]
             strings = (c_char_p * len(enc_strings))(*enc_strings)
             LIBPHOBOS.string_array_init(byref(self), strings, len(enc_strings))
 
@@ -440,8 +440,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
 
     def get_display_dict(self, numeric=False, max_width=None, fmt=None):
         """Update level0 representation with nested structures content."""
-        export = super(MediaInfo, self).get_display_dict(numeric, max_width,
-                                                         fmt)
+        export = super().get_display_dict(numeric, max_width, fmt)
         export.update(self.expanded_fs_info)
         export.update(self.expanded_stats)
         return export
@@ -668,6 +667,7 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
         # pylint: disable=attribute-defined-outside-init
         self._oid = val.encode('utf-8')
 
+# pylint: disable=duplicate-code
     @property
     def uuid(self):
         """Wrapper to get uuid"""
@@ -678,6 +678,8 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
         """Wrapper to set uuid"""
         # pylint: disable=attribute-defined-outside-init
         self._uuid = val.encode('utf-8') if val else None
+
+# pylint: enable=duplicate-code
 
     @property
     def user_md(self):
@@ -737,7 +739,7 @@ class CopyInfo(Structure, CLIManagedResourceMixin):
             'creation_time': Timeval.to_string,
             'access_time': Timeval.to_string,
         }
-
+    # pylint: disable=duplicate-code
     @property
     def uuid(self):
         """Wrapper to get uuid"""
@@ -759,6 +761,7 @@ class CopyInfo(Structure, CLIManagedResourceMixin):
         """Wrapper to set copy_name"""
         # pylint: disable=attribute-defined-outside-init
         self.copy_name = val.encode('utf-8') if val else None
+    # pylint: enable=duplicate-code
 
 class Buffer(Structure): # pylint: disable=too-few-public-methods
     """String buffer."""
@@ -930,7 +933,7 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     @property
     def xxh128(self):
         """Wrapper to get extent xxh128."""
-        return [''.join('%02x' % one_byte
+        return [''.join(f'{one_byte:02x}'
                         for one_byte in self.extents[i].xxh128)
                 if self.extents[i].with_xxh128
                 else None
@@ -939,7 +942,7 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     @property
     def md5(self):
         """Wrapper to get extent md5."""
-        return [''.join('%02x' % one_byte
+        return [''.join(f'{one_byte:02x}'
                         for one_byte in self.extents[i].md5)
                 if self.extents[i].with_md5
                 else None
@@ -1024,9 +1027,8 @@ def pho_rc_check(rc, func, args):
         except AttributeError:
             name = str(func)
 
-        raise EnvironmentError(
-            -rc, "%s(%s) failed" % (name, ", ".join(map(repr, args)))
-        )
+        raise EnvironmentError(-rc,
+                               f"{name}({', '.join(map(repr, args))}) failed")
 
     # Convention to signal ctypes to leave the return value untouched
     return args
@@ -1049,7 +1051,7 @@ def pho_rc_func(name, *args, **kwargs):
         def __call__(self, *args, **kwargs):
             # pylint: disable=attribute-defined-outside-init
             self.errcheck = pho_rc_check
-            return super(_PhoRcFunc, self).__call__(*args, **kwargs)
+            return super().__call__(*args, **kwargs)
         def __str__(self):
             return name
     return _PhoRcFunc

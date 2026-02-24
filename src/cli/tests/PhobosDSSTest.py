@@ -111,7 +111,7 @@ class DSSClientTest(unittest.TestCase):
         with Client() as client:
             insert_list = []
             for _ in range(10):
-                medium = MediaInfo(name='/tmp/test_%d' % randint(0, 1000000),
+                medium = MediaInfo(name=f'/tmp/test_{randint(0, 1000000)}',
                                    family=PHO_RSC_DIR, model=None,
                                    is_adm_locked=False, library='legacy')
 
@@ -149,7 +149,7 @@ class DSSClientTest(unittest.TestCase):
         """Test media lock and unlock wrappers"""
         with AdminClient(lrs_required=False) as admclient:
             # Create a dummy media in db
-            medium = MediaInfo(name='m%d' % randint(0, 1000000),
+            medium = MediaInfo(name=f'm{randint(0, 1000000)}',
                                family=PHO_RSC_TAPE, model="lto8",
                                is_adm_locked=False, library='legacy')
             admclient.medium_add([medium], 'LTFS')

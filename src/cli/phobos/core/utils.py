@@ -33,7 +33,7 @@ def num2human(number, unit='', base=1000, decimals=1):
             break
         number /= base
 
-    return '{{:.{:d}f}}{:s}{:s}'.format(decimals, prefix, unit).format(number) # pylint: disable=undefined-loop-variable
+    return '{{:.{:d}f}}{:s}{:s}'.format(decimals, prefix, unit).format(number) # pylint: disable=undefined-loop-variable,consider-using-f-string
 
 def bytes2human(number, *args, **kwargs):
     """Convert a size in bytes to a human readable string"""

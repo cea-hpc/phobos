@@ -34,7 +34,7 @@ from socket import gethostname
 from phobos import HANDLERS
 from phobos.cli.common import PhobosActionContext
 from phobos.core.dss import MediaManager
-import phobos.core.cfg as cfg
+from phobos.core import cfg
 
 def gethostname_short():
     """Return short hostname"""
@@ -364,7 +364,7 @@ class BasicExecutionTest(unittest.TestCase):
             self.assertEqual(exc.code, code)
         else:
             if code:
-                self.fail("SystemExit with code %d expected" % code)
+                self.fail(f"SystemExit with code {code} expected")
 
     def pho_execute_capture(self, *args, **kwargs):
         """Same as pho_execute but captures and returns (stdout, stderr)"""
@@ -549,41 +549,40 @@ class DeviceAddTest(BasicExecutionTest):
         """Test adding directories. Simple case."""
         flist = []
         for _ in range(5):
-            file = tempfile.TemporaryDirectory()
+            file = tempfile.TemporaryDirectory() # pylint: disable=consider-using-with
             self.pho_execute(['-v', 'dir', 'add', file.name])
             flist.append(file)
 
         for file in flist:
-            path = "%s:%s" % (gethostname_short(), file.name)
+            path = f"{gethostname_short()}:{file.name}"
             self.pho_execute(['-v', 'dir', 'list', '-o', 'all', path])
 
     def test_dir_tags(self):
         """Test adding a directory with tags."""
-        tmp_f = tempfile.TemporaryDirectory()
-        tmp_path = tmp_f.name
-        self.pho_execute(['dir', 'add', tmp_path, '--tags', 'tag-foo,tag-bar'])
-        output, _ = self.pho_execute_capture(['dir', 'list', '-o', 'all',
-                                              tmp_path])
-        self.assertIn("['tag-foo', 'tag-bar']", output)
+        with tempfile.TemporaryDirectory() as tmp_path:
+            self.pho_execute(['dir', 'add', tmp_path, '--tags',
+                             'tag-foo,tag-bar'])
+            output, _ = self.pho_execute_capture(['dir', 'list', '-o', 'all',
+                                                 tmp_path])
+            self.assertIn("['tag-foo', 'tag-bar']", output)
 
     def test_dir_update(self):
         """Test updating a directory."""
-        tmp_f = tempfile.TemporaryDirectory()
-        tmp_path = tmp_f.name
-        self.pho_execute(['dir', 'add', tmp_path, '--tags', 'tag-baz'])
+        with tempfile.TemporaryDirectory() as tmp_path:
+            self.pho_execute(['dir', 'add', tmp_path, '--tags', 'tag-baz'])
 
-        # Check inserted media
-        output, _ = self.pho_execute_capture(['dir', 'list', '--output', 'tags',
-                                              tmp_path])
-        self.assertEqual(output.strip(), "['tag-baz']")
+            # Check inserted media
+            output, _ = self.pho_execute_capture(['dir', 'list', '--output',
+                                                 'tags', tmp_path])
+            self.assertEqual(output.strip(), "['tag-baz']")
 
-        # Update media
-        self.pho_execute(['dir', 'update', '-T', '', tmp_path])
+            # Update media
+            self.pho_execute(['dir', 'update', '-T', '', tmp_path])
 
-        # Check updated media
-        output, _ = self.pho_execute_capture(['dir', 'list', '--output', 'tags',
-                                              tmp_path])
-        self.assertEqual(output.strip(), "[]")
+            # Check updated media
+            output, _ = self.pho_execute_capture(['dir', 'list', '--output',
+                                                 'tags', tmp_path])
+            self.assertEqual(output.strip(), "[]")
 
     def test_dir_add_missing(self):
         """Adding a non-existent directory should raise an error."""
@@ -594,25 +593,24 @@ class DeviceAddTest(BasicExecutionTest):
 
     def test_dir_add_double(self):
         """Adding a directory twice should raise an error."""
-        file = tempfile.TemporaryDirectory()
-        self.pho_execute(['-v', 'dir', 'add', file.name])
-        self.pho_execute(['-v', 'dir', 'add', file.name], code=errno.EEXIST)
+        with tempfile.TemporaryDirectory() as file:
+            self.pho_execute(['-v', 'dir', 'add', file])
+            self.pho_execute(['-v', 'dir', 'add', file], code=errno.EEXIST)
 
     def test_dir_add_correct_and_missing(self): # pylint: disable=invalid-name
         """
         Adding existing and a non-existent directories should add the correct
         directories and raise an error because of the missing one.
         """
-        file1 = tempfile.TemporaryDirectory()
-        file2 = tempfile.TemporaryDirectory()
+        with tempfile.TemporaryDirectory() as file1, \
+             tempfile.TemporaryDirectory() as file2:
 
-        self.pho_execute(['-v', 'dir', 'add', file1.name, '/tmp/notfileAA',
-                          file2.name],
-                         code=errno.ENOENT)
-        output, _ = self.pho_execute_capture(['dir', 'list'])
-        self.assertIn(file1.name, output)
-        self.assertNotIn('/tmp/notfileAA', output)
-        self.assertIn(file2.name, output)
+            self.pho_execute(['-v', 'dir', 'add', file1, '/tmp/notfileAA',
+                             file2], code=errno.ENOENT)
+            output, _ = self.pho_execute_capture(['dir', 'list'])
+            self.assertIn(file1, output)
+            self.assertNotIn('/tmp/notfileAA', output)
+            self.assertIn(file2, output)
 
 class SyslogTest(BasicExecutionTest):
     """Syslog related tests"""

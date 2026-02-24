@@ -29,7 +29,7 @@ import json
 import logging
 import os
 from ctypes import byref, c_int, c_void_p, c_char_p, c_bool, POINTER, Structure
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 
 from phobos.core.const import DSS_MEDIA # pylint: disable=no-name-in-module
 from phobos.core.ffi import (DevInfo, MediaInfo, LIBPHOBOS, ResourceFamily)
@@ -101,7 +101,7 @@ def key_convert(obj_type, key):
         if key.endswith(sufx):
             kname, comp = key[:-len(sufx)], comp_enum
             break
-    return "%s%s" % (kname_prefx, kname), comp
+    return f"{kname_prefx}{kname}", comp
 
 def dss_filter(obj_type, **kwargs):
     """Convert a k/v filter into a CDSS-compatible list of criteria."""
@@ -153,8 +153,8 @@ class DSSResult: # pylint: disable=too-few-public-methods
 
     def __getitem__(self, index):
         if index >= self._n_elts or index < -self._n_elts:
-            raise IndexError("Index must be between -%d and %d, got %r"
-                             % (self._n_elts, self._n_elts - 1, index))
+            raise IndexError(f"Index must be between -{self._n_elts} and "
+                             f"{self._n_elts - 1}, got {index}")
         if index < 0:
             index = self._n_elts + index
         item = self._native_res[index]
@@ -212,7 +212,7 @@ class BaseEntityManager:
 
     def __init__(self, client, *args, **kwargs):
         """Initialize new instance."""
-        super(BaseEntityManager, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.logger = logging.getLogger(__name__)
         self.client = client
 
@@ -220,11 +220,13 @@ class BaseEntityManager:
     def _dss_get(self, hdl, qry_filter, res, res_cnt, qry_sort): #pylint: disable=too-many-arguments
         """Return DSS specialized GET method for this type of object."""
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def wrapped_class(self):
         """Return the ctype class which this proxy wraps."""
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def wrapped_ident(self):
         """Return the short name of the class which this proxy wraps."""
 
@@ -392,7 +394,7 @@ class Client:
     """High-level, object-oriented, double-keyworded DSS wrappers for the CLI"""
     def __init__(self, *args, **kwargs):
         """Initialize a new DSS context."""
-        super(Client, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.handle = None
         self.media = MediaManager(self)
         self.devices = DeviceManager(self)

@@ -34,7 +34,7 @@ def load_file(path=None):
     ret = LIBPHOBOS.pho_cfg_init_local(path.encode('utf-8') if path else None)
     ret = abs(ret)
     if ret not in (0, errno.EALREADY):
-        raise IOError(ret, "Phobos config init failed: %s" % os.strerror(ret))
+        raise IOError(ret, f"Phobos config init failed: {os.strerror(ret)}")
 
 
 # Singleton to differenciate cases where default was not provided and
@@ -52,10 +52,10 @@ def get_val(section, name, default=RAISE_ERROR):
                                     name.encode('utf-8'), byref(cfg_value))
     if ret != 0:
         if default is RAISE_ERROR:
-            raise KeyError("No value in cfg for section '%s', key '%s', rc='%s'"
-                           % (section, name, os.strerror(-ret)))
+            raise KeyError(f"No value in cfg for section '{section}',"
+                           f"key '{name}', rc='{os.strerror(-ret)}'")
         return default
-    return cfg_value.value.decode('utf-8')
+    return cfg_value.value.decode('utf-8') # pylint: disable=no-member
 
 def get_default_library(family):
     """Return the default library of family"""
@@ -68,14 +68,14 @@ def get_default_library(family):
             return get_val("store", "default_rados_library")
         else:
             raise ValueError(f"bad ResourceFamily value {family}")
-    except KeyError:
-        raise KeyError("Default library is not set for '%s', must be defined "
-                       "in Phobos configuration" % family)
+    except KeyError as err:
+        raise KeyError(f"Default library is not set for '{family}', must be "
+                       "defined in Phobos configuration") from err
 
 def get_default_copy_name():
     """Return the default copy name"""
     try:
         return get_val("copy", "default_copy_name")
-    except KeyError:
+    except KeyError as err:
         raise KeyError("Default copy name is not set, must be defined in Phobos"
-                       "configuration")
+                       "configuration") from err

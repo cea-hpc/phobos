@@ -22,8 +22,8 @@ Stats target for Phobos CLI
 """
 
 import sys
-import phobos.core.cfg as cfg
 
+from phobos.core import cfg
 from phobos.cli.common import (BaseOptHandler, env_error_format)
 from phobos.core.admin import Client as AdminClient
 from phobos.core.ffi import ResourceFamily

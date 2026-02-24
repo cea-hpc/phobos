@@ -86,8 +86,7 @@ class PhoListFilters(Structure): # pylint: disable=too-few-public-methods, too-m
     def __init__(self, list_filters):
         super().__init__()
         if list_filters.res:
-            enc_res = list([s.encode('utf-8')
-                            for _, s in enumerate(list_filters.res)])
+            enc_res = [s.encode('utf-8') for s in list_filters.res]
             self.res = (c_char_p * len(enc_res))(*enc_res)
         else:
             self.res = None
@@ -98,8 +97,7 @@ class PhoListFilters(Structure): # pylint: disable=too-few-public-methods, too-m
         self.is_pattern = list_filters.is_pattern
 
         if list_filters.metadata:
-            enc_metadata = list([s.encode('utf-8')
-                                 for _, s in enumerate(list_filters.metadata)])
+            enc_metadata = [s.encode('utf-8') for s in list_filters.metadata]
             self.metadata = (c_char_p * len(enc_metadata))(*enc_metadata)
         else:
             self.metadata = None
@@ -108,6 +106,7 @@ class PhoListFilters(Structure): # pylint: disable=too-few-public-methods, too-m
         self.status_filter = list_filters.status_filter
         self.copy_name = list_filters.copy_name
 
+# pylint: disable=duplicate-code
     @property
     def uuid(self):
         """Wrapper to get uuid"""
@@ -129,6 +128,7 @@ class PhoListFilters(Structure): # pylint: disable=too-few-public-methods, too-m
         """Wrapper to set copy_name"""
         # pylint: disable=attribute-defined-outside-init
         self._copy_name = val.encode('utf-8') if val else None
+# pylint: enable=duplicate-code
 
 
 class ListFilters(namedtuple('ListFilters',
@@ -524,7 +524,7 @@ class Store:
     """Store handler"""
     def __init__(self, *args, **kwargs):
         """Initialize new instance."""
-        super(Store, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         # Keep references to CFUNCTYPES objects as long as they can be
         # called by the underlying C code, so that they do not get GC'd
         self.logger = logging.getLogger(__name__)
@@ -574,7 +574,7 @@ class XferClient: # pylint: disable=too-many-instance-attributes
     """Main class: issue data transfers with the object store."""
     def __init__(self, **kwargs):
         """Initialize a new instance."""
-        super(XferClient, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
         self._store = Store()
         self.getmd_session = []
@@ -636,7 +636,7 @@ class XferClient: # pylint: disable=too-many-instance-attributes
                                             self.getmd_session, compl_cb)
             if rc:
                 full_oids = ", ".join(xfer_targets2str(self.getmd_session, 0))
-                raise IOError(rc, "Cannot GETMD for objid(s) '%s'" % full_oids)
+                raise IOError(rc, f"Cannot GETMD for objid(s) '{full_oids}'")
 
         if self.get_session:
             rc, node_name = self._store.phobos_xfer(LIBPHOBOS.phobos_get,
@@ -656,8 +656,8 @@ class XferClient: # pylint: disable=too-many-instance-attributes
 
                 full_oids = ", ".join(xfer_targets2str(self.get_session, 0))
                 full_paths = ", ".join(xfer_targets2str(self.get_session, 1))
-                raise IOError(rc, "Cannot GET objid(s) '%s' to '%s'" %
-                              (full_oids, full_paths))
+                raise IOError(rc, f"Cannot GET objid(s) '{full_oids}' to "
+                              f"'{full_paths}'")
 
         if self.put_session:
             rc, _ = self._store.phobos_xfer(LIBPHOBOS.phobos_put,
@@ -665,15 +665,15 @@ class XferClient: # pylint: disable=too-many-instance-attributes
             if rc:
                 full_oids = ", ".join(xfer_targets2str(self.put_session, 0))
                 full_paths = ", ".join(xfer_targets2str(self.put_session, 1))
-                raise IOError(rc, "Cannot PUT '%s' to objid(s) '%s'" %
-                              (full_paths, full_oids))
+                raise IOError(rc, f"Cannot PUT '{full_paths}' to objid(s) "
+                              f"'{full_oids}'")
 
         if self.copy_session:
             rc, _ = self._store.phobos_xfer(LIBPHOBOS.phobos_copy,
                                             self.copy_session, compl_cb)
             if rc:
                 full_oids = ", ".join(xfer_targets2str(self.copy_session, 0))
-                raise IOError(rc, "Cannot COPY '%s'" % full_oids)
+                raise IOError(rc, f"Cannot COPY '{full_oids}'")
 
         self.clear()
 
@@ -681,7 +681,7 @@ class UtilClient:
     """Secondary class: issue user commands without data transfers."""
     def __init__(self, **kwargs):
         """Initialize a new instance."""
-        super(UtilClient, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
 
     @staticmethod
@@ -705,7 +705,7 @@ class UtilClient:
 
         rc = LIBPHOBOS.phobos_delete(xfers, n_xfers)
         if rc:
-            raise EnvironmentError(rc, "Failed to delete objects '%s'" % oids)
+            raise EnvironmentError(rc, f"Failed to delete objects '{oids}'")
 
     @staticmethod
     def object_undelete(oids, uuid):
@@ -724,8 +724,7 @@ class UtilClient:
 
         rc = LIBPHOBOS.phobos_undelete(xfers, n_xfers)
         if rc:
-            raise EnvironmentError(rc, "Failed to undelete objects '%s'" %
-                                   oids)
+            raise EnvironmentError(rc, f"Failed to undelete objects '{oids}'")
 
     @staticmethod
     def object_list(res, is_pattern, metadata, uuid, version, scope, **kwargs): # pylint: disable=too-many-arguments,too-many-locals
@@ -749,9 +748,8 @@ class UtilClient:
                                                 byref(n_objs), sref)
 
         if rc:
-            raise EnvironmentError(rc, "Failed to list %s" %
-                                   ("object(s) '%s'" % res
-                                    if res else "all objects"))
+            items = f"object(s) '{res}'" if res else "all objects"
+            raise EnvironmentError(rc, f"Failed to list {items}")
 
         objs = (obj_type * n_objs.value).from_address(
             cast(objs, c_void_p).value)
@@ -788,11 +786,11 @@ class UtilClient:
             copy_name.encode('utf-8') if copy_name else None,
             byref(hostname), byref(nb_new_lock))
         if rc:
-            raise EnvironmentError(rc, "Failed to locate object by %s '%s'" %
-                                   ("oid" if oid else "uuid",
-                                    oid if oid else uuid))
+            raise EnvironmentError(rc, "Failed to locate object by"
+                                   f"{'oid' if oid else 'uuid'}"
+                                   f"'{oid if oid else uuid}'")
 
-        return (hostname.value.decode('utf-8') if hostname.value else "",
+        return (hostname.value.decode('utf-8') if hostname.value else "", #pylint: disable=no-member,using-constant-test
                 nb_new_lock)
 
     @staticmethod
@@ -813,9 +811,8 @@ class UtilClient:
                                               None)
 
         if rc:
-            raise EnvironmentError(rc, "Failed to list %s" %
-                                   ("copies '%s'" % res
-                                    if res else "all copies"))
+            items = f"copies '{res}'" if res else "all copies"
+            raise EnvironmentError(rc, f"Failed to list {items}")
 
         copy = (CopyInfo * n_copy.value).from_address(
             cast(copy, c_void_p).value)
@@ -848,5 +845,5 @@ class UtilClient:
         rc = LIBPHOBOS.phobos_copy_delete(xfers, n_xfers)
 
         if rc:
-            raise EnvironmentError(rc, "Failed to delete '%s''s copy '%s' " %
-                                   (oid, del_params.copy_name))
+            raise EnvironmentError(rc, f"Failed to delete '{oid}''s copy "
+                                   f"'{del_params.copy_name}'")

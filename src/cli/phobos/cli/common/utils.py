@@ -28,7 +28,7 @@ import os
 from shlex import shlex
 import sys
 
-import phobos.core.cfg as cfg
+from phobos.core import cfg
 from phobos.core.const import (DSS_STATUS_FILTER_ALL, # pylint: disable=no-name-in-module
                                DSS_STATUS_FILTER_COMPLETE,
                                DSS_STATUS_FILTER_INCOMPLETE,
@@ -57,7 +57,7 @@ def check_max_width_is_valid(value):
     """Check that the width 'value' is greater than the one of '...}'"""
     ivalue = int(value)
     if ivalue <= len("...}"):
-        raise ArgumentTypeError("%s is an invalid positive int value" % value)
+        raise ArgumentTypeError(f"{value} is an invalid positive int value")
     return ivalue
 
 def check_output_attributes(attrs, out_attrs, logger):
@@ -224,12 +224,12 @@ def parse_set_access_flags(flags):
 
 def setaccess_epilog(family):
     """Generic epilog"""
-    return """Examples:
-    phobos %s set-access GD      # allow get and delete, forbid put
-    phobos %s set-access +PG     # allow put, get (other flags are unchanged)
-    phobos %s set-access -- -P   # forbid put (other flags are unchanged)
+    return f"""Examples:
+    phobos {family} set-access GD     # allow get and delete, forbid put
+    phobos {family} set-access +PG    # allow put, get (other flags are unchanged)
+    phobos {family} set-access -- -P  # forbid put (other flags are unchanged)
     (Warning: use the '--' separator to use the -PGD flags syntax)
-    """ % (family, family, family)
+    """
 
 def set_library(obj):
     """Set the library of obj first from its 'library' param, then its family"""
@@ -249,8 +249,8 @@ def str_to_timestamp(value):
             element = datetime.datetime.strptime(value, "%Y-%m-%d")
         else:
             raise ValueError()
-    except ValueError:
-        raise ArgumentTypeError("%s is not a valid date format" % value)
+    except ValueError as err:
+        raise ArgumentTypeError(f"{value} is not a valid date format") from err
 
     return datetime.datetime.timestamp(element)
 

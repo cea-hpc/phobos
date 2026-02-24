@@ -47,7 +47,7 @@ class LogControl():
 
     def __init__(self, *args, **kwargs):
         """Initialize fresh instance."""
-        super(LogControl, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._cb_ref = None
 
     def set_callback(self, callback):

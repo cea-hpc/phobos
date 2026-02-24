@@ -104,16 +104,16 @@ class MigratorTest(unittest.TestCase):
             # Add --restrict-key option because since PostgreSQL 13.22, the
             # pg_dump command appends a `\restrict key` to the dump file. If the
             # key is not provided, it is generated randomly.
-            process = Popen("psql --version | awk '{print $3}'",
+            process = Popen("psql --version | awk '{print $3}'", # pylint: disable=consider-using-with
                             shell=True, stdout=PIPE)
             out_version, _ = process.communicate()
 
             if float(out_version) >= 13.22:
-                process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s',
+                process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s', # pylint: disable=consider-using-with
                                  '-U', 'phobos', f'--restrict-key=key{idx}',
                                  '-f', '/tmp/schema_dump', 'phobos_test'])
             else:
-                process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s',
+                process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s', # pylint: disable=consider-using-with
                                  '-U', 'phobos', '-f', '/tmp/schema_dump',
                                  'phobos_test'])
 
@@ -123,18 +123,18 @@ class MigratorTest(unittest.TestCase):
             self.migrator.create_schema(ORDERED_SCHEMAS[idx - 1])
             self.migrator.migrate(version)
             if float(out_version) >= 13.22:
-                process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s',
+                process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s', # pylint: disable=consider-using-with
                                  '-U', 'phobos', f'--restrict-key=key{idx}',
                                  '-f', '/tmp/migrate_dump', 'phobos_test'])
             else:
-                process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s',
+                process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s', # pylint: disable=consider-using-with
                                  '-U', 'phobos', '-f', '/tmp/migrate_dump',
                                  'phobos_test'])
 
             process.wait()
             self.migrator.drop_tables()
 
-            process = Popen(['diff', '/tmp/schema_dump', '/tmp/migrate_dump'],
+            process = Popen(['diff', '/tmp/schema_dump', '/tmp/migrate_dump'], # pylint: disable=consider-using-with
                             stdout=PIPE)
             out_diff, _ = process.communicate()
 
@@ -159,7 +159,7 @@ class MigratorTest(unittest.TestCase):
     def exit_put_get_migration(self, success, msg=None):
         """Function to cleanup"""
         Popen("pid=$(pgrep phobosd); kill $pid; while kill -0 $pid; \
-               do sleep 1; done", shell=True).wait()
+               do sleep 1; done", shell=True).wait() # pylint: disable=consider-using-with
         shutil.rmtree('/run/phobosd')
         os.unlink('oid-file')
 
@@ -181,41 +181,41 @@ class MigratorTest(unittest.TestCase):
         size = os.stat('/etc/hosts').st_size
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            self.migrator.execute("""
+            self.migrator.execute(f"""
                 INSERT INTO device
                     (family, model, id, host, adm_status, path, lock, lock_ts)
-                     VALUES ('dir', NULL, '%s:%s', '%s',
-                             'unlocked', '%s', '', 0);
+                     VALUES ('dir', NULL, '{host}:{tmpdir}', '{host}',
+                             'unlocked', '{tmpdir}', '', 0);
 
                 INSERT INTO extent
                     (oid, uuid, version, state, lyt_info, extents)
                      VALUES ('oid', '04f88176-3923-4fe8-881e-c9a213db0faa', 1,
-                           'sync', '{"name": "simple", "major": 0, "minor": 1}',
-                           '[{"sz": %d, "fam": "dir",
-                              "addr": "08/ad/08ad81f4_oid.s0",
-                              "media": "%s"}]');
+                         'sync', '{{"name": "simple", "major": 0, "minor": 1}}',
+                         '[{{"sz": {size}, "fam": "dir",
+                             "addr": "08/ad/08ad81f4_oid.s0",
+                             "media": "{tmpdir}"}}]');
 
                 INSERT INTO media (family, model, id, adm_status, fs_type,
                                    fs_label, address_type, fs_status, lock,
                                    lock_ts, stats, tags, put, get, delete)
-                    VALUES ('dir', NULL, '%s', 'unlocked',
-                            'POSIX', '%s', 'HASH1', 'used', '',
-                            0, '{"nb_obj": 1, "last_load": 0, "nb_errors": 0,
-                                 "logc_spc_used": %d,
+                    VALUES ('dir', NULL, '{tmpdir}', 'unlocked',
+                            'POSIX', '{tmpdir}', 'HASH1', 'used', '',
+                            0, '{{"nb_obj": 1, "last_load": 0, "nb_errors": 0,
+                                 "logc_spc_used": {size},
                                  "phys_spc_free": 17784107008,
-                                 "phys_spc_used": 3679174656}',
+                                 "phys_spc_used": 3679174656}}',
                             '[]', 't', 't', 't');
 
                 INSERT INTO object (oid, uuid, version, user_md)
                     VALUES ('oid', '04f88176-3923-4fe8-881e-c9a213db0faa', 1,
-                            '{}');
-            """ % (host, tmpdir, host, tmpdir, size, tmpdir, tmpdir, tmpdir,
-                   size))
+                            '{{}}');
+            """)
 
             os.makedirs(f'{tmpdir}/08/ad')
             shutil.copyfile('/etc/hosts', f'{tmpdir}/08/ad/08ad81f4_oid.s0')
 
-            with open(f'{tmpdir}/.phobos_dir_label', 'w+') as fd:
+            with open(f'{tmpdir}/.phobos_dir_label', 'w+',
+                      encoding="utf-8") as fd:
                 fd.write(f'{tmpdir}')
 
             # Migrate to the last version
@@ -225,23 +225,23 @@ class MigratorTest(unittest.TestCase):
 
             os.mkdir('/run/phobosd')
 
-            Popen("DAEMON_PID_FILEPATH=/run/phobosd/phobosd.pid $phobosd",
+            Popen("DAEMON_PID_FILEPATH=/run/phobosd/phobosd.pid $phobosd", # pylint: disable=consider-using-with
                   shell=True, stdout=PIPE)
 
             # Check that phobosd is running
             nb_try = 0
-            process = Popen('$phobos phobosd ping', shell=True, stdout=PIPE)
+            process = Popen('$phobos phobosd ping', shell=True, stdout=PIPE) # pylint: disable=consider-using-with
             result, _ = process.communicate()
             while process.returncode and nb_try < 5:
                 time.sleep(0.5)
                 nb_try += 1
-                process = Popen('$phobos phobosd ping', shell=True, stdout=PIPE)
+                process = Popen('$phobos phobosd ping', shell=True, stdout=PIPE) # pylint: disable=consider-using-with
                 result, _ = process.communicate()
 
             if process.returncode:
                 self.exit_put_get_migration(False, "Failed to ping phobosd")
 
-            process = Popen('$phobos get oid oid-file', shell=True, stdout=PIPE)
+            process = Popen('$phobos get oid oid-file', shell=True, stdout=PIPE) # pylint: disable=consider-using-with
             result, _ = process.communicate()
             if process.returncode:
                 print(result.decode('utf-8'))

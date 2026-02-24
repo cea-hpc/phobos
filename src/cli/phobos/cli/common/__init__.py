@@ -47,16 +47,16 @@ def env_error_format(exc):
     msg = ""
 
     if exc.errno and exc.strerror:
-        msg = "%s (%s)" % (exc.strerror, os.strerror(abs(exc.errno)))
+        msg = f"{exc.strerror} ({os.strerror(abs(exc.errno))})"
     elif exc.errno:
-        msg = "%s (%s)" % (os.strerror(abs(exc.errno)), abs(exc.errno))
+        msg = f"{os.strerror(abs(exc.errno))} ({abs(exc.errno)})"
     elif exc.strerror:
         msg = exc.strerror
     else:
         return ""
 
     if exc.filename:
-        msg = "'%s': %s" % (exc.filename, msg)
+        msg = f"'{exc.filename}': {msg}"
 
     return msg
 
@@ -114,7 +114,7 @@ class BaseOptHandler:
         Initialize action handler with command line parameters. These are to be
         re-checked later by the specialized chk_* methods.
         """
-        super(BaseOptHandler, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.params = params
         self.logger = logging.getLogger(__name__)
 
@@ -161,7 +161,7 @@ class DSSInteractHandler(BaseOptHandler):
     """Option handler for actions that interact with the DSS."""
     def __init__(self, params, **kwargs):
         """Initialize a new instance."""
-        super(DSSInteractHandler, self).__init__(params, **kwargs)
+        super().__init__(params, **kwargs)
         self.client = None
 
     def __enter__(self):
@@ -188,7 +188,7 @@ class XferOptHandler(BaseOptHandler):
     """Option handler for actions that do data transfers."""
     def __init__(self, params, **kwargs):
         """Initialize a store client."""
-        super(XferOptHandler, self).__init__(params, **kwargs)
+        super().__init__(params, **kwargs)
         self.client = None
 
     @classmethod
@@ -221,7 +221,7 @@ class PhobosActionContext:
                          "%(funcName)s:%(filename)s:%(lineno)d] %(message)s"
 
     def __init__(self, handlers, args, **kwargs):
-        super(PhobosActionContext, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.parser = None
         self.parameters = None
         self.supported_handlers = handlers
@@ -289,7 +289,7 @@ class PhobosActionContext:
         try:
             cfg.load_file(cpath)
         except IOError as exc:
-            if exc.errno == errno.ENOENT or exc.errno == errno.EALREADY:
+            if exc.errno in (errno.ENOENT, errno.EALREADY):
                 return
             raise
 

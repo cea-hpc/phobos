@@ -95,7 +95,7 @@ class RadosPoolAddTest(PhobosCLITest.BasicExecutionTest):
         output, _ = self.pho_execute_capture(['rados_pool', 'list'])
         self.assertTrue(output.count("pho_pool_list") == 1)
 
-        path = "%s:%s" % (PhobosCLITest.gethostname_short(), 'pho_pool_list')
+        path = f"{PhobosCLITest.gethostname_short()}:pho_pool_list"
         self.pho_execute(['-v', 'rados_pool', 'list', '-o', 'all', path])
 
         pho_rados_pool_remove('pho_pool_list', self.cluster)

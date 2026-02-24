@@ -75,26 +75,26 @@ def add_list_arguments(parser, attr, default_output, sort_option=False, # pylint
 def add_log_arguments(parser, verb):
     """Default arguments for logs actions"""
     parser.add_argument('-D', '--drive',
-                        help='drive ID of the logs to %s' % verb)
-    parser.add_argument('-T', '--tape', help='tape ID of the logs to %s' % verb)
+                        help=f'drive ID of the logs to {verb}')
+    parser.add_argument('-T', '--tape', help=f'tape ID of the logs to {verb}')
     parser.add_argument('--library',
                         help="Library containing the target drive and tape")
     parser.add_argument('-e', '--errno', type=int,
-                        help='error number of the logs to %s' % verb)
+                        help=f'error number of the logs to {verb}')
     parser.add_argument('--errors', action='store_true',
-                        help='%s all errors' % verb)
-    parser.add_argument('-c', '--cause', help='cause of the logs to %s' % verb,
+                        help=f'{verb} all errors')
+    parser.add_argument('-c', '--cause', help=f'cause of the logs to {verb}',
                         choices=["library_scan", "library_open",
                                  "device_lookup", "medium_lookup",
                                  "device_load", "device_unload",
                                  "ltfs_mount", "ltfs_umount", "ltfs_format",
                                  "ltfs_df", "ltfs_sync"])
     parser.add_argument('--start', type=str_to_timestamp, default=0,
-                        help="timestamp of the most recent logs to %s,"
-                             "in format YYYY-MM-DD [hh:mm:ss]" % verb)
+                        help=f"timestamp of the most recent logs to {verb},"
+                             "in format YYYY-MM-DD [hh:mm:ss]")
     parser.add_argument('--end', type=str_to_timestamp, default=0,
-                        help="timestamp of the oldest logs to %s,"
-                             "in format 'YYYY-MM-DD [hh:mm:ss]'" % verb)
+                        help=f"timestamp of the oldest logs to {verb},"
+                             "in format 'YYYY-MM-DD [hh:mm:ss]'")
 
 def add_object_arguments(parser):
     """Default arguments for get object-like actions"""

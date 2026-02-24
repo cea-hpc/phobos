@@ -58,21 +58,16 @@ def setup_db(database, user, password):
 
             # Create user
             with _allow_pg_prog_error("already exists"):
-                cursor.execute("CREATE USER %s" % (user,))
+                cursor.execute(f"CREATE USER {user}")
 
             if password is not None:
                 # Even if the user exists, update the password
-                cursor.execute(
-                    "ALTER USER %s " % (user,) +
-                    "WITH PASSWORD %s", (password,)
-                )
+                cursor.execute(f"ALTER USER {user} " +
+                               "WITH PASSWORD %s", (password,))
 
             # Create database
             with _allow_pg_prog_error("already exists"):
-                cursor.execute(
-                    "CREATE DATABASE %s WITH OWNER %s"
-                    % (database, user)
-                )
+                cursor.execute(f"CREATE DATABASE {database} WITH OWNER {user}")
     finally:
         conn.close()
 
@@ -109,9 +104,9 @@ def drop_db(database, user):
         conn.autocommit = True
         with conn.cursor() as cursor:
             with _allow_pg_prog_error("does not exist"):
-                cursor.execute("DROP DATABASE %s" % (database,))
+                cursor.execute(f"DROP DATABASE {database}")
             with _allow_pg_prog_error("does not exist"):
-                cursor.execute("DROP USER %s" % (user,))
+                cursor.execute(f"DROP USER {user}")
             # Don't drop the btree_gin extension in case another database use it
     finally:
         conn.close()

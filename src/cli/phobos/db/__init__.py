@@ -45,10 +45,10 @@ LOGGER = logging.getLogger(__name__)
 def get_sql_script(schema_version, script_name):
     """Return the content of a script for a given schema version"""
     if schema_version not in AVAIL_SCHEMAS:
-        raise ValueError("Unknown schema version: %s" % (schema_version,))
+        raise ValueError(f"Unknown schema version: {schema_version}")
     this_dir = os.path.dirname(__file__)
     script_path = os.path.join(this_dir, "sql", schema_version, script_name)
-    with open(script_path) as script_file:
+    with open(script_path, encoding="utf-8") as script_file:
         return script_file.read()
 
 def size_update_3_0_to_3_2(object_table): # pylint: disable=line-too-long
@@ -679,7 +679,7 @@ class Migrator: # pylint: disable=too-many-public-methods
     def convert_schema_2_1_to_2_2(self):
         """DB schema changes: add _grouping and groupings columnst"""
         cur = self.conn.cursor()
-        cur.execute(f"""
+        cur.execute("""
             -- add _grouping to object and deprecated_object tables
             ALTER TABLE object ADD _grouping varchar(255);
             ALTER TABLE deprecated_object ADD _grouping varchar(255);
@@ -828,16 +828,15 @@ class Migrator: # pylint: disable=too-many-public-methods
         # Check that the target version can be reached before migrating
         if target_version not in self.reachable_versions:
             raise ValueError(
-                "Don't know how to migrate to version %s" % (target_version,)
+                f"Don't know how to migrate to version {target_version}"
             )
 
         # Check that the current version is anterior to the target version
         current_version = self.schema_version()
         if LooseVersion(current_version) > LooseVersion(target_version):
             raise ValueError(
-                "Cannot migrate to an older version (current version: %s, "
-                "target version: %s)"
-                % (current_version, target_version)
+                "Cannot migrate to an older version (current version: "
+                f"{current_version}, target version: {target_version})"
             )
 
         # Perform successive migrations. To enforce consistency, the new
@@ -847,8 +846,8 @@ class Migrator: # pylint: disable=too-many-public-methods
                 next_version, converter = self.convert_funcs[current_version]
             except KeyError:
                 raise RuntimeError(
-                    "Inconsistent migration table, cannot migrate from %s"
-                    % (current_version)
+                    "Inconsistent migration table, cannot migrate from "
+                    f"{current_version}"
                 ) from KeyError
             LOGGER.info(
                 "Migrating from %s to %s", current_version, next_version
@@ -857,8 +856,8 @@ class Migrator: # pylint: disable=too-many-public-methods
             current_version = self.schema_version()
             if current_version != next_version:
                 raise RuntimeError(
-                    "Migration to version %s unexpectedly led to version %s"
-                    % (next_version, current_version)
+                    f"Migration to version {next_version} unexpectedly led to "
+                    f"version {current_version}"
                 )
 
     def schema_version(self):

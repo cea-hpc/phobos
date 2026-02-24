@@ -59,14 +59,13 @@ def migrate(args, migrator):
     target_version = args.target_version
 
     if schema_version == target_version:
-        print("Database schema already up to date (version %s)" %
-              (target_version))
+        print(f"Database schema already up to date (version {target_version})")
         return
 
     # Skip confirmation for '-y' and if the database wasn't initialized
     if not args.yes and schema_version != "0":
-        print("You are about to upgrade database schema from version %s "
-              "to version %s." % (schema_version, target_version))
+        print("You are about to upgrade database schema from version "
+              f"{schema_version} to version {target_version}.")
         confirm = input("Do you want to continue? [y/N]: ")
         if confirm != 'y':
             sys.exit(1)
@@ -86,7 +85,7 @@ def setup_db_main(args, _migrator): # pylint: disable=unused-argument
 
     # Get the password to set for the new user
     if password is None:
-        password = getpass("New password for SQL user %s: " % (user,))
+        password = getpass(f"New password for SQL user {user}: ")
     elif password == "-":
         sys.stdin.readline().strip('\n')
     database = args.database
@@ -97,8 +96,8 @@ def setup_db_main(args, _migrator): # pylint: disable=unused-argument
     print("Database properly set up.")
     print("Please fill your phobos.conf with appropriate information for "
           "connection, for example:\n")
-    print("    dbname='%s' user='%s' password=<your password> host=example.com"\
-          % (database, user))
+    print(f"    dbname='{database}' user='{user}' password=<your password> "
+          "host=example.com")
     print()
 
     if args.schema:
@@ -112,9 +111,7 @@ def setup_db_main(args, _migrator): # pylint: disable=unused-argument
 def drop_db_main(args, _migrator): # pylint: disable=unused-argument
     """CLI wrapper on drop_db"""
     db_config.drop_db(args.database, args.user)
-    print("Database %s and user %s successfully dropped" % (
-        args.user, args.database,
-    ))
+    print(f"Database {args.user} and user {args.database} successfully dropped")
 
 
 def main(argv=None):

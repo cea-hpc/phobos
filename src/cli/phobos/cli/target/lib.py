@@ -23,8 +23,7 @@ Lib target for Phobos CLI
 
 import sys
 
-import phobos.core.cfg as cfg
-
+from phobos.core import cfg
 from phobos.cli.action import ActionOptHandler
 from phobos.cli.common import BaseResourceOptHandler
 from phobos.core.admin import Client as AdminClient
@@ -115,10 +114,10 @@ class LibOptHandler(BaseResourceOptHandler):
             done = set(["type"])
             line = []
             flags = []
-            line.append("%s:" % (elt.get("type", "element"),))
+            line.append(f"{elt.get('type', 'element')}:")
             for key in "address", "source_address":
                 if key in elt:
-                    line.append("%s=%#x" % (key, elt[key]))
+                    line.append(f"{key}={elt[key]:#x}")
                     done.add(key)
 
             for key in sorted(elt):
@@ -130,6 +129,6 @@ class LibOptHandler(BaseResourceOptHandler):
                         # Flags are printed after the other properties
                         flags.append(key)
                 else:
-                    line.append("%s=%r" % (key, str(value)))
+                    line.append(f"{key}={str(value)!r}")
             line.extend(flags)
             print(" ".join(line))
