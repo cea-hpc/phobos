@@ -592,14 +592,7 @@ out_update:
     copy.object_uuid = obj_res->uuid;
     copy.version = obj_res->version;
     copy.copy_status = PHO_COPY_STATUS_INCOMPLETE;
-
-    if (copy_name) {
-        copy.copy_name = copy_name;
-    } else {
-        rc = get_cfg_default_copy_name(&copy.copy_name);
-        if (rc)
-            LOG_GOTO(out_res, rc, "Cannot get default copy_name from conf");
-    }
+    copy.copy_name = copy_name;
 
     rc = dss_copy_insert(dss, &copy, 1);
     if (rc)
@@ -1348,17 +1341,7 @@ cont:
 
             copy.object_uuid = xfer->xd_targets[i].xt_objuuid;
             copy.version = xfer->xd_targets[i].xt_version;
-            if (xfer->xd_params.copy.put.copy_name) {
-                copy.copy_name = xfer->xd_params.copy.put.copy_name;
-            } else {
-                rc2 = get_cfg_default_copy_name(&copy.copy_name);
-                if (rc2) {
-                    pho_error(rc2,
-                              "Cannot get default copy_name from conf");
-                    rc = rc ? : rc2;
-                    continue;
-                }
-            }
+            copy.copy_name = xfer->xd_params.copy.put.copy_name;
 
             rc2 = dss_copy_delete(&pho->dss, &copy, 1);
             if (rc2) {
@@ -1687,17 +1670,7 @@ static int store_perform_xfers(struct phobos_handle *pho)
                 copy.object_uuid = xfer->xd_targets[j].xt_objuuid;
                 copy.version = xfer->xd_targets[j].xt_version;
                 copy.copy_status = PHO_COPY_STATUS_INCOMPLETE;
-                if (xfer->xd_params.copy.put.copy_name) {
-                    copy.copy_name = xfer->xd_params.copy.put.copy_name;
-                } else {
-                    rc2 = get_cfg_default_copy_name(&copy.copy_name);
-                    if (rc2) {
-                        pho_error(rc2,
-                                  "Cannot get default copy_name from conf");
-                        rc = rc ? : rc2;
-                        break;
-                    }
-                }
+                copy.copy_name = xfer->xd_params.copy.put.copy_name;
 
                 rc2 = dss_copy_insert(&pho->dss, &copy, 1);
                 if (rc2) {

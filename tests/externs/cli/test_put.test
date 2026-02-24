@@ -37,7 +37,8 @@ function dir_setup
 {
     export empty_put_dir1=$(mktemp -d /tmp/test.pho.XXXX)
     empty_put_dir2=$(mktemp -d /tmp/test.pho.XXXX)
-    dirs="$empty_put_dir1 $empty_put_dir2"
+    empty_put_dir3=$(mktemp -d /tmp/test.pho.XXXX)
+    dirs="$empty_put_dir1 $empty_put_dir2 $empty_put_dir3"
 
     echo "adding directories $dirs"
     $phobos dir add $dirs
@@ -401,6 +402,14 @@ function test_user_copy_name
 function test_user_copy_name_profile
 {
     unset PHOBOS_STORE_default_family
+
+    # Check that the default copy name is linked with a profile
+    export PHOBOS_COPY_default_copy_name="legacy"
+    put_checkout oid_copy_default_profile
+    output_checkout extent family oid_copy_default_profile \
+        "['dir', 'dir', 'dir']"
+    output_checkout extent layout oid_copy_default_profile "raid4"
+    unset PHOBOS_COPY_default_copy_name
 
     put_checkout oid_copy_profile_dir "--copy-name cache"
 

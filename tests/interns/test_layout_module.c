@@ -47,6 +47,7 @@ static void le_valid_module(void **data)
     target.xt_size = 0;
     xfer.xd_ntargets = 1;
     xfer.xd_targets = &target;
+    xfer.xd_params.put.copy_name = "source";
     xfer.xd_params.put.layout_name = "raid1";
     xfer.xd_params.put.lyt_params.attr_set = NULL;
 
@@ -82,6 +83,7 @@ static void le_invalid_layout_io_size(void **data)
     target.xt_size = 0;
     xfer.xd_ntargets = 1;
     xfer.xd_targets = &target;
+    xfer.xd_params.put.copy_name = "source";
     xfer.xd_params.put.layout_name = "raid1";
     xfer.xd_params.put.lyt_params.attr_set = NULL;
     xfer.xd_params.put.family = PHO_RSC_DIR;
@@ -118,6 +120,7 @@ static void le_valid_layout_io_size(void **data)
     target.xt_size = 0;
     xfer.xd_ntargets = 1;
     xfer.xd_targets = &target;
+    xfer.xd_params.put.copy_name = "source";
     xfer.xd_params.put.layout_name = "raid1";
     xfer.xd_params.put.lyt_params.attr_set = NULL;
     xfer.xd_params.put.family = PHO_RSC_DIR;

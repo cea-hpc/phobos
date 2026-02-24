@@ -229,7 +229,7 @@ out:
  *
  * @return 0 on success, negative errro in case of failure
  */
-static int apply_copy_to_put_params(struct pho_xfer_put_params *put_params)
+static int set_profile_from_copy_name(struct pho_xfer_put_params *put_params)
 {
     const char *cfg_val;
     char *section_name;
@@ -278,12 +278,17 @@ int fill_put_params(struct pho_xfer_desc *xfer)
     else
         put_params = &xfer->xd_params.put;
 
+    /* Fill the default copy name if not set */
+    if (put_params->copy_name == NULL) {
+        rc = get_cfg_default_copy_name(&put_params->copy_name);
+        if (rc != 0)
+            return rc;
+    }
+
     for (lvl = PHO_CFG_LEVEL_PROCESS; lvl < PHO_CFG_LEVEL_LAST; ++lvl) {
-        if (put_params->copy_name != NULL) {
-            rc = apply_copy_to_put_params(put_params);
-            if (rc != 0)
-                return rc;
-        }
+        rc = set_profile_from_copy_name(put_params);
+        if (rc != 0)
+            return rc;
 
         rc = apply_defaults_to_put_params(put_params, lvl);
         if (rc != 0 && rc != -ENODATA)
