@@ -64,6 +64,23 @@ static PyObject *py_extent_state2str(PyObject *self, PyObject *args)
     return Py_BuildValue("s", str_repr);
 }
 
+static PyObject *ValueError;
+
+static PyObject *py_str2extent_state(PyObject *self, PyObject *args)
+{
+    enum extent_state state;
+    const char *str_repr;
+
+    if (!PyArg_ParseTuple(args, "s", &str_repr)) {
+        PyErr_SetString(ValueError, "Unrecognized state");
+        return Py_BuildValue("i", PHO_EXT_ST_INVAL);
+    }
+
+    state = str2extent_state(str_repr);
+
+    return Py_BuildValue("i", state);
+}
+
 static PyObject *py_rsc_family2str(PyObject *self, PyObject *args)
 {
     enum rsc_family family;
@@ -76,8 +93,6 @@ static PyObject *py_rsc_family2str(PyObject *self, PyObject *args)
 
     return Py_BuildValue("s", str_repr);
 }
-
-static PyObject *ValueError;
 
 static PyObject *py_str2rsc_family(PyObject *self, PyObject *args)
 {
@@ -241,6 +256,8 @@ static PyObject *py_str2operation_type(PyObject *self, PyObject *args)
 static PyMethodDef ConstMethods[] = {
     {"extent_state2str", py_extent_state2str, METH_VARARGS,
      "printable extent state name."},
+    {"str2extent_state", py_str2extent_state, METH_VARARGS,
+     "state enum value from name."},
     {"rsc_family2str", py_rsc_family2str, METH_VARARGS,
      "printable dev family name."},
     {"str2rsc_family", py_str2rsc_family, METH_VARARGS,
