@@ -33,19 +33,6 @@ test_dir=$(dirname $(readlink -e $0))
 #                                    SETUP                                     #
 ################################################################################
 
-function dir_setup
-{
-    setup_test_dirs
-    dir1="${DIR_TEST_IN}/dir1"
-    dir2="${DIR_TEST_IN}/dir2"
-    mkdir ${dir1}
-    mkdir ${dir2}
-    $phobos dir add -T first_dir $dir1
-    $phobos dir format --fs posix --unlock $dir1
-    $phobos dir add -T second_dir $dir2
-    $phobos dir format --fs posix --unlock $dir2
-}
-
 function setup
 {
     setup_tables
@@ -57,8 +44,46 @@ function setup
         invoke_lrs
     fi
 
-    dir_setup
+    setup_test_dirs
     setup_dummy_files 3 1k 1
+}
+
+function setup_dir
+{
+    setup
+
+    dir1="${DIR_TEST_IN}/dir1"
+    dir2="${DIR_TEST_IN}/dir2"
+    mkdir ${dir1}
+    mkdir ${dir2}
+    $phobos dir add -T first_dir $dir1
+    $phobos dir format --fs posix --unlock $dir1
+    $phobos dir add -T second_dir $dir2
+    $phobos dir format --fs posix --unlock $dir2
+}
+
+function setup_tape
+{
+    setup
+
+    local tape=$(get_tapes L6 1)
+    local drive="$(get_lto_drives 6 1)"
+
+    $phobos drive add --unlock ${drive}
+    $phobos tape add --type lto6 ${tape}
+    $phobos tape format --unlock ${tape}
+}
+
+function setup_tape_bis
+{
+    setup_tape
+
+    local tape_bis=$(get_tapes_bis L6 1)
+    local drive_bis="$(get_lto_drives_bis 6 1)"
+
+    $phobos drive add --unlock ${drive_bis} --library library_bis
+    $phobos tape add --type lto6 ${tape_bis} --library library_bis
+    $phobos tape format --unlock ${tape_bis} --library library_bis
 }
 
 function cleanup
@@ -70,9 +95,9 @@ function cleanup
         waive_lrs
     fi
 
+    drop_tables
     cleanup_dummy_files
     cleanup_test_dirs
-    drop_tables
 }
 
 function list_error
@@ -157,25 +182,8 @@ function test_extent_list_pattern
 }
 
 function test_extent_list_tapes_lib() {
-    touch /tmp/extent3
-    touch /tmp/extent4
-
-    local tape=$(get_tapes L6 1)
-    local drive="$(get_lto_drives 6 1)"
-    local tape_bis=$(get_tapes_bis L6 1)
-    local drive_bis="$(get_lto_drives_bis 6 1)"
-
-    $phobos drive add --unlock ${drive} --library legacy
-    $phobos drive add --unlock ${drive_bis} --library library_bis
-
-    $phobos tape add --type lto6 ${tape} --library legacy
-    $phobos tape add --type lto6 ${tape_bis} --library library_bis
-
-    $phobos tape format --unlock ${tape} --library legacy
-    $phobos tape format --unlock ${tape_bis} --library library_bis
-
-    $phobos put -l raid1 --lyt-params repl_count=2 /tmp/extent3 extent3
-    $phobos put -l raid1 --lyt-params repl_count=1 /tmp/extent4 extent4 \
+    $phobos put -l raid1 --lyt-params repl_count=2 ${FILES[0]} extent3
+    $phobos put -l raid1 --lyt-params repl_count=1 ${FILES[0]} extent4 \
         --library library_bis
 
     output=$($phobos extent list --library legacy)
@@ -184,10 +192,6 @@ function test_extent_list_tapes_lib() {
     output=$($phobos extent list --library library_bis)
     echo "$output" | grep -E "extent3|extent4" | wc -l | grep -q "^2$" \
         && ! echo "$output" | grep -vE "extent3|extent4"
-
-
-    cleanup_test_dirs
-    rm /tmp/extent3 /tmp/extent4
 }
 
 function test_extent_list_dirs_lib() {
@@ -232,32 +236,43 @@ function test_extent_list_copy_name() {
     echo "$output" | grep "bob"
 }
 
-function test_extent_list_orphan() {
-    $phobos put -f dir ${FILES[0]} oid1-orphan
-    $phobos put -f dir ${FILES[0]} oid2-orphan
+function test_extent_list_state() {
+    $phobos put -f tape ${FILES[0]} oid1
+    $phobos put -f tape ${FILES[0]} oid2
 
-    local output=$($valg_phobos extent list -f csv -o oid,state --orphan |
+    local output=$($valg_phobos extent list -f csv -o oid,state --state orphan |
                    tail -n +2 | wc -l)
     if [[ $output -ne 0 ]]; then
         error "There should be no orphan extent, got $output"
     fi
 
-    local extent_uuid=$($phobos extent list -o ext_uuid oid1-orphan)
-    extent_uuid=${extent_uuid#\[\'}
-    extent_uuid=${extent_uuid%\'\]}
+    local extent_uuid1=$($phobos extent list -o ext_uuid oid1)
+    extent_uuid1=$(printf '%s' "$extent_uuid1" | tr -d "[]'")
 
-    $PSQL << EOF
-UPDATE extent SET state = 'orphan' WHERE extent_uuid='$extent_uuid';
-EOF
+    local extent_uuid2=$($phobos extent list -o ext_uuid oid2)
+    extent_uuid2=$(printf '%s' "$extent_uuid2" | tr -d "[]'")
 
-    output=$($valg_phobos extent list --orphan)
+    $phobos delete --hard oid1
+
+    output=$($valg_phobos extent list -o ext_uuid --state orphan)
     local count=$(echo "$output" | wc -l)
     if [[ $count -ne 1 ]]; then
         error "There should be one extent, got $count"
     fi
 
-    if [[ "$output" != "oid1-orphan" ]]; then
-        error "It should be oid1-orphan, got $oid"
+    if [[ "$output" != "$extent_uuid1" ]]; then
+        error "It should be $extent_uuid1, got $output"
+    fi
+
+    output=$($valg_phobos extent list -o ext_uuid --state sync)
+    output=$(printf '%s' "$output" | tr -d "[]'")
+    count=$(echo "$output" | wc -l)
+    if [[ $count -ne 1 ]]; then
+        error "There should be one extent, got $count"
+    fi
+
+    if [[ "$output" != "$extent_uuid2" ]]; then
+        error "It should be $extent_uuid2, got $output"
     fi
 }
 
@@ -359,14 +374,15 @@ cut -f 2 -d \')"
     fi
 }
 
-TEST_SETUP=setup
-TESTS=("test_extent_list_degroup"
-       "test_extent_list_pattern"
-       "test_extent_list_copy_name"
-       "test_extent_list_dirs_lib"
-       "test_extent_list_ctime")
+TESTS=("setup_dir; \
+            test_extent_list_degroup; \
+            test_extent_list_pattern; \
+            test_extent_list_copy_name; \
+            test_extent_list_dirs_lib; \
+            test_extent_list_ctime; \
+        cleanup")
 
 if [[ -w /dev/changer ]]; then
-    TESTS+=("test_extent_list_tapes_lib")
+    TESTS+=("setup_tape; test_extent_list_state; cleanup"
+            "setup_tape_bis; test_extent_list_tapes_lib; cleanup")
 fi
-TEST_CLEANUP=cleanup
