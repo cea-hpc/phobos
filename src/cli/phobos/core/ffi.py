@@ -787,23 +787,102 @@ class PhoAttrs(Structure): # pylint: disable=too-few-public-methods
         ('attr_set', c_void_p)
     ]
 
-class ExtentInfo(Structure): # pylint: disable=too-few-public-methods
+class ExtentInfo(Structure, CLIManagedResourceMixin): # pylint: disable=too-few-public-methods
     """DSS extent descriptor."""
     _fields_ = [
         ('extent_uuid', c_char_p),
         ('layout_idx', c_int),
-        ('state', c_int),
+        ('_state', c_int),
         ('size', c_ssize_t),
         ('media', Id),
-        ('address', Buffer),
+        ('_address', Buffer),
         ('offset', c_ssize_t),
         ('with_xxh128', c_bool),
-        ('xxh128', c_ubyte * 16),
+        ('_xxh128', c_ubyte * 16),
         ('with_md5', c_bool),
-        ('md5', c_ubyte * MD5_BYTE_LENGTH),
+        ('_md5', c_ubyte * MD5_BYTE_LENGTH),
         ('info', PhoAttrs),
         ('creation_time', Timeval),
     ]
+
+    def get_display_fields(self, max_width=None):
+        """Return a dict of available fields and optional display formatters."""
+        return {
+            'state': None,
+            'ext_uuid': None,
+            'media_name': None,
+            'media_library': None,
+            'family': None,
+            'address': None,
+            'offset': None,
+            'xxh128': None,
+            'md5': None,
+            'library': None,
+            'creation_time': Timeval.to_string,
+        }
+
+    @property
+    def library(self):
+        """Wrapper to get library"""
+        return self.media.library
+
+    @property
+    def state(self):
+        """Wrapper to get state"""
+        return extent_state2str(self._state)
+
+    @property
+    def ext_uuid(self):
+        """Wrapper to get extent UUIDs"""
+        return self.extent_uuid.decode('utf-8')
+
+    @property
+    def media_name(self):
+        """Wrapper to get medium name."""
+        return self.media.name
+
+    @property
+    def media_library(self):
+        """Wrapper to get medium library."""
+        return self.media.library
+
+    @property
+    def family(self):
+        """Wrapper to get medium family."""
+        return rsc_family2str(self.media.family)
+
+    @property
+    def size(self):
+        """Wrapper to get extent size."""
+        return self.size
+
+    @property
+    def offset(self):
+        """Wrapper to get extent offset."""
+        return self.offset
+
+    @property
+    def address(self):
+        """Wrapper to get extent address."""
+        return self._address.buff
+
+    @property
+    def xxh128(self):
+        """Wrapper to get extent xxh128."""
+        return ''.join(f'{one_byte:02x}' for one_byte in self._xxh128) \
+               if self.with_xxh128 else None
+
+    @property
+    def md5(self):
+        """Wrapper to get extent md5."""
+        return ''.join(f'{one_byte:02x}' for one_byte in self._md5) \
+               if self.with_md5 else None
+
+    @property
+    def creation_time(self):
+        """Wrapper to get extent creation time"""
+        return self.creation_time
+
 
 class ModuleDesc(Structure): # pylint: disable=too-few-public-methods
     """Module description."""
@@ -890,8 +969,7 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     @property
     def state(self):
         """Wrapper to get state"""
-        return [extent_state2str(self.extents[i].state)
-                for i in range(self.ext_count)]
+        return [self.extents[i].state for i in range(self.ext_count)]
 
     @property
     def ext_uuid(self):
@@ -928,25 +1006,19 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     @property
     def address(self):
         """Wrapper to get extent address."""
-        return [self.extents[i].address.buff for i in range(self.ext_count)]
+        return [self.extents[i].address for i in range(self.ext_count)]
 
     @property
     def xxh128(self):
         """Wrapper to get extent xxh128."""
-        return [''.join(f'{one_byte:02x}'
-                        for one_byte in self.extents[i].xxh128)
-                if self.extents[i].with_xxh128
-                else None
-                for i in range(self.ext_count)]
+        return [self.extents[i].xxh128 if self.extents[i].with_xxh128
+                else None for i in range(self.ext_count)]
 
     @property
     def md5(self):
         """Wrapper to get extent md5."""
-        return [''.join(f'{one_byte:02x}'
-                        for one_byte in self.extents[i].md5)
-                if self.extents[i].with_md5
-                else None
-                for i in range(self.ext_count)]
+        return [self.extents[i].md5 if self.extents[i].with_md5
+                else None for i in range(self.ext_count)]
 
     @property
     def layout(self):
