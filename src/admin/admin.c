@@ -1767,16 +1767,17 @@ int phobos_admin_stats_tlc(const char *library, const char *full_name,
  * \param[in,out]   extent_str      Empty extent string.
  * \param[in]       medium          Medium filter.
  * \param[in]       library         Library filter.
- * \param[in]       orphan          Orphan state filter.
+ * \param[in]       state           State filter.
  */
 static void phobos_construct_extent(GString *extent_str, const char *medium,
-                                    const char *library, bool orphan)
+                                    const char *library,
+                                    enum extent_state state)
 {
     int count = 0;
 
     count += (medium != NULL ? 1 : 0);
     count += (library != NULL ? 1 : 0);
-    count += (orphan ? 1 : 0);
+    count += (state != PHO_EXT_ST_INVAL ? 1 : 0);
 
     if (count == 0)
         return;
@@ -1793,10 +1794,10 @@ static void phobos_construct_extent(GString *extent_str, const char *medium,
                                "{\"DSS::EXT::medium_library\": \"%s\"}%s",
                                library, --count != 0 ? "," : "");
 
-    if (orphan)
+    if (state != PHO_EXT_ST_INVAL)
         g_string_append_printf(extent_str,
                                "{\"DSS::EXT::state\": \"%s\"}",
-                               extent_state2str(PHO_EXT_ST_ORPHAN));
+                               extent_state2str(state));
 
     g_string_append_printf(extent_str, "]}");
 }
@@ -1844,11 +1845,44 @@ static void phobos_construct_object(GString *obj_str, const char **res,
     g_string_append_printf(obj_str, "]}");
 }
 
+int phobos_admin_extent_list(struct admin_handle *adm, const char *medium,
+                             const char *library, enum extent_state state,
+                             struct extent **extents, int *n_extents,
+                             struct dss_sort *sort)
+{
+    struct dss_filter *extent_filter_ptr = NULL;
+    struct dss_filter extent_filter;
+    GString *extent_str;
+    int rc = 0;
+
+    extent_str = g_string_new(NULL);
+
+    phobos_construct_extent(extent_str, medium, library, state);
+
+    rc = dss_filter_build(&extent_filter, "%s", extent_str->str);
+    if (rc)
+        goto release_extent;
+
+    extent_filter_ptr = &extent_filter;
+
+    rc = dss_extent_get(&adm->dss, extent_filter_ptr, extents, n_extents, sort);
+    if (rc)
+        pho_error(rc, "Cannot fetch extents");
+
+release_extent:
+    g_string_free(extent_str, TRUE);
+
+    dss_filter_free(extent_filter_ptr);
+
+    return rc;
+}
+
 int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
                              int n_res, bool is_pattern, const char *medium,
                              const char *library, const char *copy_name,
-                             bool orphan, struct layout_info **layouts,
-                             int *n_layouts, struct dss_sort *sort)
+                             enum extent_state state,
+                             struct layout_info **layouts, int *n_layouts,
+                             struct dss_sort *sort)
 {
     struct dss_filter *extent_filter_ptr = NULL;
     struct dss_filter *obj_filter_ptr = NULL;
@@ -1866,9 +1900,15 @@ int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
 
     medium_is_valid = (medium && strcmp(medium, ""));
     library_is_valid = (library && strcmp(library, ""));
+    copy_is_valid = (copy_name && strcmp(copy_name, ""));
 
-    if (medium_is_valid || library_is_valid || orphan) {
-        phobos_construct_extent(extent_str, medium, library, orphan);
+    if (state == PHO_EXT_ST_ORPHAN) {
+        pho_error(-EINVAL, "Cannot filter with the orphan state");
+        GOTO(release_extent, -EINVAL);
+    }
+
+    if (medium_is_valid || library_is_valid || state != PHO_EXT_ST_INVAL) {
+        phobos_construct_extent(extent_str, medium, library, state);
 
         rc = dss_filter_build(&extent_filter, "%s", extent_str->str);
         if (rc)
@@ -1881,8 +1921,6 @@ int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
      * If there are at least one resource, we construct a string containing
      * each request.
      */
-    copy_is_valid = (copy_name && strcmp(copy_name, ""));
-
     if (n_res || copy_is_valid) {
         phobos_construct_object(obj_str, res, n_res, is_pattern, copy_name);
         rc = dss_filter_build(&obj_filter, "%s", obj_str->str);
@@ -1912,9 +1950,9 @@ release_extent:
     return rc;
 }
 
-void phobos_admin_layout_list_free(struct layout_info *layouts, int n_layouts)
+void phobos_admin_dss_res_free(void *res, int n_res)
 {
-    dss_res_free(layouts, n_layouts);
+    dss_res_free(res, n_res);
 }
 
 int phobos_admin_medium_locate(struct admin_handle *adm,

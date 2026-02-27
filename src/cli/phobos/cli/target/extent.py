@@ -29,7 +29,10 @@ from phobos.cli.common.args import add_list_arguments
 from phobos.cli.common.utils import (check_output_attributes,
                                      handle_sort_option)
 from phobos.core.admin import Client as AdminClient
-from phobos.core.ffi import LayoutInfo
+from phobos.core.const import (extent_state2str, PHO_EXT_ST_ORPHAN,  # pylint: disable=no-name-in-module
+                               PHO_EXT_ST_PENDING, PHO_EXT_ST_SYNC,
+                               str2extent_state)
+from phobos.core.ffi import LayoutInfo, ExtentInfo
 from phobos.output import dump_object_list
 
 class ExtentListOptHandler(ListOptHandler):
@@ -58,8 +61,16 @@ class ExtentListOptHandler(ListOptHandler):
         parser.add_argument('-p', '--pattern', action='store_true',
                             help="filter using POSIX regexp instead of "
                                  "exact extent")
-        parser.add_argument('--orphan', action='store_true',
-                            help="list only extent that are orphan")
+        attr = list(ExtentInfo().get_display_dict().keys())
+        attr.sort()
+        parser.add_argument('-s', '--state',
+                            help=("filter on extent state. If the state is " +
+                                  extent_state2str(PHO_EXT_ST_ORPHAN) + " only "
+                                  "these attributes are available: {" +
+                                  " ".join(attr) + "}"),
+                            choices=[extent_state2str(PHO_EXT_ST_PENDING),
+                                     extent_state2str(PHO_EXT_ST_SYNC),
+                                     extent_state2str(PHO_EXT_ST_ORPHAN)])
 
 
 class ExtentOptHandler(BaseResourceOptHandler):
@@ -82,26 +93,35 @@ class ExtentOptHandler(BaseResourceOptHandler):
         if self.params.get('copy_name'):
             kwargs['copy_name'] = self.params.get('copy_name')
 
-        if self.params.get('orphan'):
-            kwargs['orphan'] = self.params.get('orphan')
+        kwargs['state'] = str2extent_state(self.params.get('state') \
+                                           if self.params.get('state') else '')
 
-        kwargs = handle_sort_option(self.params, LayoutInfo(), self.logger,
-                                    **kwargs)
+        kwargs = handle_sort_option(
+                        self.params,
+                        ExtentInfo() if kwargs['state'] == PHO_EXT_ST_ORPHAN \
+                        else LayoutInfo(),
+                        self.logger,
+                        **kwargs)
 
         try:
             with AdminClient(lrs_required=False) as adm:
-                obj_list, p_objs, n_objs = adm.layout_list(
-                    self.params.get('res'),
-                    self.params.get('pattern'),
-                    self.params.get('name'),
-                    self.params.get('degroup'),
-                    **kwargs)
+                if kwargs['state'] == PHO_EXT_ST_ORPHAN:
+                    obj_list, p_objs, n_objs = adm.extent_list(
+                                                    self.params.get('name'),
+                                                    **kwargs)
+                else:
+                    obj_list, p_objs, n_objs = adm.layout_list(
+                        self.params.get('res'),
+                        self.params.get('pattern'),
+                        self.params.get('name'),
+                        self.params.get('degroup'),
+                        **kwargs)
 
                 if len(obj_list) > 0:
                     dump_object_list(obj_list, attr=self.params.get('output'),
                                      fmt=self.params.get('format'))
 
-                adm.layout_list_free(p_objs, n_objs)
+                adm.dss_res_free(p_objs, n_objs)
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

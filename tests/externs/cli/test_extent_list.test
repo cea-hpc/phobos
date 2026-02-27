@@ -364,7 +364,6 @@ TESTS=("test_extent_list_degroup"
        "test_extent_list_pattern"
        "test_extent_list_copy_name"
        "test_extent_list_dirs_lib"
-       "test_extent_list_orphan"
        "test_extent_list_ctime")
 
 if [[ -w /dev/changer ]]; then

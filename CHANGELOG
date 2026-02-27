@@ -1,5 +1,10 @@
 # CHANGELOG UPDATES
 
+## Next
+ * WARNING: the `--orphan` from `phobos extent list` change to `--state`. It
+   allows the filtering of the extents with their states.
+ * Add `phobos_admin_extent_list` in the store API to list only the extents
+
 ## 3.3.0
  * WARNING: the db schema moves from 3.2 to 3.3 and a migration is needed
  * Metrology is now available

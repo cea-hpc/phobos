@@ -141,6 +141,9 @@ class CLIParametersTest(unittest.TestCase):
                                   'blob'])
         self.check_cmdline_valid(['extent', 'list', '--pattern',
                                   'blob', 'lorem'])
+        self.check_cmdline_valid(['extent', 'list', '--state', 'sync'])
+        self.check_cmdline_valid(['extent', 'list', '--state', 'orphan'])
+        self.check_cmdline_valid(['extent', 'list', '--state', 'pending'])
         self.check_cmdline_valid(['delete', 'oid'])
         self.check_cmdline_valid(['delete', 'oid1', 'oid2', 'oid3'])
         self.check_cmdline_valid(['del', 'oid'])
@@ -251,6 +254,7 @@ class CLIParametersTest(unittest.TestCase):
                                 code=2)
         self.check_cmdline_exit(['dir', 'rename', '--new-library', 'blob'],
                                 code=2)
+        self.check_cmdline_exit(['extent', 'list', '--state', 'blob'], code=2)
 
     def test_cli_logs_command(self): # pylint: disable=too-many-statements
         """Check logs specific commands"""

@@ -773,13 +773,13 @@ class Buffer(Structure): # pylint: disable=too-few-public-methods
     @property
     def buff(self):
         """Wrapper to get buff"""
-        return self._buff.decode('utf-8')
+        return self._buff.decode('utf-8') if self._buff else None
 
     @buff.setter
     def buff(self, val):
         """Wrapper to set buff"""
         # pylint: disable=attribute-defined-outside-init
-        self._buff = val.encode('utf-8')
+        self._buff = val.encode('utf-8') if val else None
 
 class PhoAttrs(Structure): # pylint: disable=too-few-public-methods
     """Attribute set."""
@@ -834,7 +834,7 @@ class ExtentInfo(Structure, CLIManagedResourceMixin): # pylint: disable=too-few-
     @property
     def ext_uuid(self):
         """Wrapper to get extent UUIDs"""
-        return self.extent_uuid.decode('utf-8')
+        return self.extent_uuid.decode('utf-8') if self.extent_uuid else None
 
     @property
     def media_name(self):
@@ -852,16 +852,6 @@ class ExtentInfo(Structure, CLIManagedResourceMixin): # pylint: disable=too-few-
         return rsc_family2str(self.media.family)
 
     @property
-    def size(self):
-        """Wrapper to get extent size."""
-        return self.size
-
-    @property
-    def offset(self):
-        """Wrapper to get extent offset."""
-        return self.offset
-
-    @property
     def address(self):
         """Wrapper to get extent address."""
         return self._address.buff
@@ -877,11 +867,6 @@ class ExtentInfo(Structure, CLIManagedResourceMixin): # pylint: disable=too-few-
         """Wrapper to get extent md5."""
         return ''.join(f'{one_byte:02x}' for one_byte in self._md5) \
                if self.with_md5 else None
-
-    @property
-    def creation_time(self):
-        """Wrapper to get extent creation time"""
-        return self.creation_time
 
 
 class ModuleDesc(Structure): # pylint: disable=too-few-public-methods

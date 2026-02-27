@@ -334,19 +334,24 @@ int phobos_admin_stats_tlc(const char *library, const char *full_name,
 /**
  * Retrieve layouts of objects whose IDs match the given name or pattern.
  *
- * The caller must release the list calling phobos_admin_layout_list_free().
+ * Warning: the orphan state filter is not supported because orphan extents are
+ * no longer linked to objects, copies or layouts. This must be done using
+ * phobos_admin_extent_list().
+ *
+ * The caller must release the list calling phobos_admin_dss_res_free().
  *
  * \param[in]       adm             Admin module handler.
  * \param[in]       res             Objids or patterns, depending on
  *                                  \a is_pattern.
- * \param[in]       n_res           Number of resources requested.
+ * \param[in]       n_res           Number of objects requested.
  * \param[in]       is_pattern      True if search done using POSIX pattern.
  * \param[in]       medium          Single medium filter.
  * \param[in]       library         Single library filter.
  * \param[in]       copy_name       Single copy name filter.
- * \param[in]       orphan          Orphan state filter.
+ * \param[in]       state           Extent's state filter.
  * \param[out]      layouts         Retrieved layouts.
  * \param[out]      n_layouts       Number of retrieved items.
+ * \param[in]       sort            Sort filter.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
@@ -356,18 +361,48 @@ int phobos_admin_stats_tlc(const char *library, const char *full_name,
 int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
                              int n_res, bool is_pattern, const char *medium,
                              const char *library, const char *copy_name,
-                             bool orphan, struct layout_info **layouts,
-                             int *n_layouts, struct dss_sort *sort);
+                             enum extent_state state,
+                             struct layout_info **layouts, int *n_layouts,
+                             struct dss_sort *sort);
 
 /**
- * Release the list of layouts retrieved using phobos_admin_layout_list().
+ * Retrieve extents matching the different filters.
  *
- * \param[in]       layouts            List of layouts to release.
- * \param[in]       n_layouts          Number of layouts to release.
+ * Warning: retrieving of orphan extents must be done with this call as they are
+ * no longer linked to objects, copies or layouts.
+ *
+ * phobos_admin_layout_list() will return an error if it is used with the orphan
+ * state filter.
+ *
+ * The caller must release the list calling phobos_admin_dss_res_free().
+ *
+ * \param[in]    adm              Admin module handler.
+ * \param[in]    medium           Single medium filter.
+ * \param[in]    library          Single library filter.
+ * \param[in]    state            Extent's state filter.
+ * \param[out]   extents          Retrieved extents.
+ * \param[out]   n_extents        Number of retrieved extents.
+ * \param[in]    sort             Sort filter.
+ *
+ * \return                        0     on success,
+ *                               -errno on failure.
  *
  * This must be called with an admin_handle initialized with phobos_admin_init.
  */
-void phobos_admin_layout_list_free(struct layout_info *layouts, int n_layouts);
+int phobos_admin_extent_list(struct admin_handle *adm, const char *medium,
+                             const char *library, enum extent_state state,
+                             struct extent **extents, int *n_extents,
+                             struct dss_sort *sort);
+
+/**
+ * Release dss resources.
+ *
+ * \param[in]       res            List of resources to release.
+ * \param[in]       n_res          Number of resources to release.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
+ */
+void phobos_admin_dss_res_free(void *res, int n_res);
 
 /**
  * Retrieve the name of the node which holds a medium or NULL if any node can

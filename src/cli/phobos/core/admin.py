@@ -39,7 +39,7 @@ from phobos.core.glue import admin_device_status, jansson_dumps  # pylint: disab
 from phobos.core.dss import DSSHandle, dss_sort
 from phobos.core.ffi import (CommInfo, Id, LayoutInfo, LibDrvInfo, LIBPHOBOS,
                              LIBPHOBOS_ADMIN, MediaInfo, MediaStats,
-                             OperationFlags, StringArray)
+                             OperationFlags, StringArray, ExtentInfo)
 # Load LibC once
 try:
     LIBC = CDLL("libc.so.6")
@@ -292,7 +292,7 @@ class Client: # pylint: disable=too-many-public-methods
         layouts = pointer(LayoutInfo())
         library_name = kwargs.get('library')
         copy_name = kwargs.get('copy_name')
-        orphan = kwargs.get('orphan')
+        state = kwargs.get('state')
 
         enc_medium = medium.encode('utf-8') if medium else None
         enc_library = library_name.encode('utf-8') if library_name else None
@@ -311,7 +311,7 @@ class Client: # pylint: disable=too-many-public-methods
                                                       enc_medium,
                                                       enc_library,
                                                       enc_copy_name,
-                                                      orphan,
+                                                      state,
                                                       byref(layouts),
                                                       byref(n_layouts),
                                                       sref)
@@ -337,6 +337,33 @@ class Client: # pylint: disable=too-many-public-methods
                             list_lyts.append(lyt)
 
         return list_lyts, layouts, n_layouts
+
+    def extent_list(self, medium, **kwargs):
+        """List only extents."""
+        n_extents = c_int(0)
+        extents = pointer(ExtentInfo())
+        library_name = kwargs.get('library')
+        state = kwargs.get('state')
+
+        enc_medium = medium.encode('utf-8') if medium else None
+        enc_library = library_name.encode('utf-8') if library_name else None
+
+        sort, kwargs = dss_sort('extent', **kwargs)
+        sref = byref(sort) if sort else None
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_extent_list(byref(self.handle),
+                                                      enc_medium,
+                                                      enc_library,
+                                                      state,
+                                                      byref(extents),
+                                                      byref(n_extents),
+                                                      sref)
+        if rc:
+            raise EnvironmentError(rc, "Failed to list the extent(s)")
+
+        list_exts = [extents[i] for i in range(n_extents.value)]
+
+        return list_exts, extents, n_extents
 
     def medium_locate(self, rsc_family, medium_id, library):
         """Locate a medium by calling phobos_admin_medium_locate API"""
@@ -573,9 +600,9 @@ class Client: # pylint: disable=too-many-public-methods
             LIBC.free(stats_str)
 
     @staticmethod
-    def layout_list_free(layouts, n_layouts):
-        """Free a previously obtained layout list."""
-        LIBPHOBOS_ADMIN.phobos_admin_layout_list_free(layouts, n_layouts)
+    def dss_res_free(res, n_res):
+        """Free a previously obtained dss res list."""
+        LIBPHOBOS_ADMIN.phobos_admin_dss_res_free(res, n_res)
 
     @staticmethod
     def lib_scan(lib_type, library, with_refresh):
