@@ -77,17 +77,37 @@ const struct pho_config_item cfg_store_profile[] = {
     },
 };
 
-static int apply_defaults_to_put_params(struct pho_xfer_put_params *put_params,
-                                        int lvl)
+static int set_default_profile(struct pho_xfer_put_params *put_params,
+                               enum pho_cfg_level lvl)
+{
+    const char *cfg_val;
+    int rc = 0;
+
+    if (put_params->profile == NULL) {
+        rc = pho_cfg_get_val_from_level(
+               cfg_store_profile[PHO_CFG_STORE_default_profile].section,
+               cfg_store_profile[PHO_CFG_STORE_default_profile].name, lvl,
+               &cfg_val);
+        if (rc == 0)
+            put_params->profile = cfg_val;
+        else if (rc != -ENODATA)
+            return rc;
+    }
+
+    return 0;
+}
+
+static int set_default_layout_family(struct pho_xfer_put_params *put_params,
+                                     enum pho_cfg_level lvl)
 {
     const char *cfg_val;
     int rc = 0;
 
     if (put_params->layout_name == NULL) {
         rc = pho_cfg_get_val_from_level(
-            cfg_store_profile[PHO_CFG_STORE_default_layout].section,
-            cfg_store_profile[PHO_CFG_STORE_default_layout].name, lvl,
-            &cfg_val);
+                cfg_store_profile[PHO_CFG_STORE_default_layout].section,
+                cfg_store_profile[PHO_CFG_STORE_default_layout].name, lvl,
+                &cfg_val);
         if (rc == 0)
             put_params->layout_name = cfg_val;
         else if (rc != -ENODATA)
@@ -96,28 +116,16 @@ static int apply_defaults_to_put_params(struct pho_xfer_put_params *put_params,
 
     if (put_params->family == PHO_RSC_INVAL) {
         rc = pho_cfg_get_val_from_level(
-            cfg_store_profile[PHO_CFG_STORE_default_family].section,
-            cfg_store_profile[PHO_CFG_STORE_default_family].name, lvl,
-            &cfg_val);
+                cfg_store_profile[PHO_CFG_STORE_default_family].section,
+                cfg_store_profile[PHO_CFG_STORE_default_family].name, lvl,
+                &cfg_val);
         if (rc == 0)
             put_params->family = str2rsc_family(cfg_val);
-        else if (rc != -ENODATA)
-            goto out;
-    }
-
-    if (put_params->profile == NULL) {
-        rc = pho_cfg_get_val_from_level(
-            cfg_store_profile[PHO_CFG_STORE_default_profile].section,
-            cfg_store_profile[PHO_CFG_STORE_default_profile].name, lvl,
-            &cfg_val);
-        if (rc == 0)
-            put_params->profile = cfg_val;
         else if (rc != -ENODATA)
             return rc;
     }
 
-out:
-    return rc;
+    return 0;
 }
 
 static int set_lyt_params(char *section_name, struct pho_attrs *attrs)
@@ -159,10 +167,12 @@ out:
  *
  * @param[in] put_params the phobos xfer put parameters read out and apply the
  *                       profile
+ * @param[in] lvl        level of configuration to check
  *
  * @return 0 on success, negative errro in case of failure
  */
-static int apply_profile_to_put_params(struct pho_xfer_put_params *put_params)
+static int apply_profile_to_put_params(struct pho_xfer_put_params *put_params,
+                                       enum pho_cfg_level lvl)
 {
     const char *cfg_val;
     char *section_name;
@@ -175,7 +185,8 @@ static int apply_profile_to_put_params(struct pho_xfer_put_params *put_params)
 
     // family
     if (put_params->family == PHO_RSC_INVAL) {
-        rc = pho_cfg_get_val(section_name, PROFILE_FAMILY_CFG_PARAM, &cfg_val);
+        rc = pho_cfg_get_val_from_level(section_name, PROFILE_FAMILY_CFG_PARAM,
+                                        lvl, &cfg_val);
         if (!rc)
             put_params->family = str2rsc_family(cfg_val);
         else if (rc != -ENODATA)
@@ -184,7 +195,8 @@ static int apply_profile_to_put_params(struct pho_xfer_put_params *put_params)
 
     // layout
     if (put_params->layout_name == NULL) {
-        rc = pho_cfg_get_val(section_name, PROFILE_LAYOUT_CFG_PARAM, &cfg_val);
+        rc = pho_cfg_get_val_from_level(section_name, PROFILE_LAYOUT_CFG_PARAM,
+                                        lvl, &cfg_val);
         if (!rc)
             put_params->layout_name = cfg_val;
         else if (rc != -ENODATA)
@@ -198,7 +210,8 @@ static int apply_profile_to_put_params(struct pho_xfer_put_params *put_params)
     }
 
     // tags
-    rc = pho_cfg_get_val(section_name, PROFILE_TAGS_CFG_PARAM, &cfg_val);
+    rc = pho_cfg_get_val_from_level(section_name, PROFILE_TAGS_CFG_PARAM,
+                                    lvl, &cfg_val);
     if (rc == 0)
         str2string_array(cfg_val, &put_params->tags);
     else if (rc != -ENODATA)
@@ -206,7 +219,8 @@ static int apply_profile_to_put_params(struct pho_xfer_put_params *put_params)
 
     // library
     if (put_params->library == NULL) {
-        rc = pho_cfg_get_val(section_name, PROFILE_LIBRARY_CFG_PARAM, &cfg_val);
+        rc = pho_cfg_get_val_from_level(section_name, PROFILE_LIBRARY_CFG_PARAM,
+                                        lvl, &cfg_val);
         if (!rc)
             put_params->library = cfg_val;
         else if (rc != -ENODATA)
@@ -226,10 +240,12 @@ out:
  * and set the parameters of xfer.
  *
  * @param[in] put_params the phobos xfer put parameters
+ * @param[in] lvl        level of configuration to check
  *
  * @return 0 on success, negative errro in case of failure
  */
-static int set_profile_from_copy_name(struct pho_xfer_put_params *put_params)
+static int set_profile_from_copy_name(struct pho_xfer_put_params *put_params,
+                                      enum pho_cfg_level lvl)
 {
     const char *cfg_val;
     char *section_name;
@@ -240,7 +256,8 @@ static int set_profile_from_copy_name(struct pho_xfer_put_params *put_params)
         return -ENOMEM;
 
     if (put_params->profile == NULL) {
-        rc = pho_cfg_get_val(section_name, COPY_PROFILE_CFG_PARAM, &cfg_val);
+        rc = pho_cfg_get_val_from_level(section_name, COPY_PROFILE_CFG_PARAM,
+                                        lvl, &cfg_val);
         if (!rc)
             put_params->profile = cfg_val;
         else if (rc != -ENODATA)
@@ -286,23 +303,31 @@ int fill_put_params(struct pho_xfer_desc *xfer)
     }
 
     for (lvl = PHO_CFG_LEVEL_PROCESS; lvl < PHO_CFG_LEVEL_LAST; ++lvl) {
-        rc = set_profile_from_copy_name(put_params);
+        /* Fill the profile */
+        rc = set_profile_from_copy_name(put_params, lvl);
         if (rc != 0)
             return rc;
 
-        rc = apply_defaults_to_put_params(put_params, lvl);
-        if (rc != 0 && rc != -ENODATA)
-            return rc;
-
-        /* get information of profile from cfg if specified */
-        if (put_params->profile != NULL) {
-            rc = apply_profile_to_put_params(put_params);
+        if (put_params->profile == NULL) {
+            rc = set_default_profile(put_params, lvl);
             if (rc != 0)
                 return rc;
         }
+
+        /* get information of profile from cfg if specified */
+        if (put_params->profile != NULL) {
+            rc = apply_profile_to_put_params(put_params, lvl);
+            if (rc != 0)
+                return rc;
+        }
+
+        /* Fill default value from cfg */
+        rc = set_default_layout_family(put_params, lvl);
+        if (rc != 0)
+            return rc;
     }
 
-    /* Fill profile or default values into put params if not set prelimilarly */
+    /* Fill default values into put params if not set prelimilarly */
     if (put_params->family == PHO_RSC_INVAL)
         put_params->family = default_family_from_cfg();
 
