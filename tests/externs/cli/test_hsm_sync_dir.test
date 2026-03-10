@@ -38,8 +38,8 @@ function setup
 
     export PHOBOS_LRS_families="dir"
     export PHOBOS_STORE_default_family="dir"
-    export PHOBOS_HSM_synced_ctime_path="${DIR_TEST}/hsm_synced_ctime"
-    rm -f ${PHOBOS_HSM_synced_ctime_path}
+    export PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path="${DIR_TEST}/hsm_synced_ctime_source_sync"
+    rm -f ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
 
     invoke_lrs
 
@@ -115,17 +115,17 @@ EOF
         error "quiet dry-run sync must not show a sync of obj_to_sync") || true
 
     # run phobos_hsm_sync_dir with no synced ctime file but a large delay
-    rm -f ${PHOBOS_HSM_synced_ctime_path}
-    export PHOBOS_HSM_sync_delay_second="36000"
+    rm -f ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
+    export PHOBOS_HSM_SOURCE_SYNC_sync_delay_second="36000"
     no_synced_file_large_delay_log=$($valg_phobos_hsm_sync_dir source sync 2>&1)
     ((echo ${no_synced_file_large_delay_log} | grep "Syncing") &&
         error "no synced and a large delay must not show any sync") || true
-    unset PHOBOS_HSM_sync_delay_second
+    unset PHOBOS_HSM_SOURCE_SYNC_sync_delay_second
 
     # run phobos_hsm_sync_dir with no synced ctime file
-    rm -f ${PHOBOS_HSM_synced_ctime_path}
+    rm -f ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
     $valg_phobos_hsm_sync_dir source sync
-    if [ ! -f "${PHOBOS_HSM_synced_ctime_path}" ]; then
+    if [ ! -f "${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}" ]; then
         error "synced_ctime_file must be created"
     fi
 
@@ -143,11 +143,11 @@ EOF
     # run phobos_hsm_sync_dir with a synced ctime file but a large delay
     sleep 5
     $phobos put --tags this-host ${FILES[0]} new_obj_to_sync
-    export PHOBOS_HSM_sync_delay_second="5"
+    export PHOBOS_HSM_SOURCE_SYNC_sync_delay_second="5"
     synced_file_large_delay_log=$($valg_phobos_hsm_sync_dir source sync 2>&1)
     ((echo ${synced_file_large_delay_log} | grep "Syncing") &&
         error "synced and a large delay must not show any sync") || true
-    unset PHOBOS_HSM_sync_delay_second
+    unset PHOBOS_HSM_SOURCE_SYNC_sync_delay_second
 
     # run phobos_hsm_sync_dir with a synced ctime file and a new object
     new_object_log=$($valg_phobos_hsm_sync_dir source sync 2>&1)
@@ -156,7 +156,7 @@ EOF
 
     # run phobos_hsm_sync_dir with a synced ctime that exclude an old object
     $phobos put --tags this-host ${FILES[0]} old_object
-    date +"%Y-%m-%d %H:%M:%S.%6N" > ${PHOBOS_HSM_synced_ctime_path}
+    date +"%Y-%m-%d %H:%M:%S.%6N" > ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
     old_object_log=$($valg_phobos_hsm_sync_dir source sync 2>&1)
     ((echo ${old_object_log} | grep "Syncing") &&
         error "sync without only an old object must not show any sync") || true
@@ -173,9 +173,9 @@ function no_synced_time_on_error()
     rm -f ${extent_dir}/${extent_addr}
 
     # run phobos_hsm_sync_dir with no synced ctime file
-    rm -f ${PHOBOS_HSM_synced_ctime_path}
+    rm -f ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
     $valg_phobos_hsm_sync_dir source sync || true
-    if [ -f "${PHOBOS_HSM_synced_ctime_path}" ]; then
+    if [ -f "${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}" ]; then
         error "synced_ctime_file must not be created on error"
     fi
 }

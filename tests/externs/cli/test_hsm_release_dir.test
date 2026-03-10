@@ -175,14 +175,14 @@ EOF
     # rate is 60% .
 
     # dry-run phobos_hsm_release_dir with a too high threshold
-    export PHOBOS_HSM_dir_release_higher_threshold="99"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="99"
     dry_run_log=$($valg_phobos_hsm_release_dir -d copy_to_release copy_synced 2>&1)
     (echo ${dry_run_log} | grep "Deleting") &&
         error "Too high threshold dry-run must not show any release"
 
     # dry-run phobos_hsm_release_dir
-    export PHOBOS_HSM_dir_release_higher_threshold="1"
-    export PHOBOS_HSM_dir_release_lower_threshold="0"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="1"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_lower_threshold="0"
     dry_run_log=$($valg_phobos_hsm_release_dir -d copy_to_release copy_synced 2>&1)
     (echo ${dry_run_log} | grep "Deleting" | grep "DRY") ||
         error "dry-run must show a release"
@@ -199,9 +199,9 @@ EOF
 
     current=$(date +%s)
     ((release_delay_second = current - date_to_release))
-    export PHOBOS_HSM_release_delay_second="${release_delay_second}"
-    export PHOBOS_HSM_dir_release_higher_threshold="55"
-    export PHOBOS_HSM_dir_release_lower_threshold="45"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_release_delay_second="${release_delay_second}"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="55"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_lower_threshold="45"
     run_log=$($valg_phobos_hsm_release_dir copy_to_release copy_synced 2>&1)
 
     # released

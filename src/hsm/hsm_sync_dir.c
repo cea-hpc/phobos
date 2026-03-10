@@ -249,7 +249,7 @@ const struct pho_config_item cfg_hsm[] = {
     [PHO_CFG_HSM_synced_ctime_path] = {
         .section = "hsm",
         .name    = "synced_ctime_path",
-        .value   = "/var/lib/phobos/hsm_synced_ctime",
+        .value   = "/var/lib/phobos/hsm_synced_ctime_source_destination",
     },
     [PHO_CFG_HSM_sync_delay_second] = {
         .section = "hsm",
@@ -257,6 +257,8 @@ const struct pho_config_item cfg_hsm[] = {
         .value   = "0",
     },
 };
+
+#define HSM_SECTION_CFG "hsm \"%s\" \"%s\""
 
 #define SYNCED_CTIME_STRING_LENGTH 26
 
@@ -267,6 +269,7 @@ const struct pho_config_item cfg_hsm[] = {
  *  example: ""2025-09-26 18:17:07.548048", always 26 characters
  */
 static int set_synced_ctime(struct timeval *synced_ctime,
+                            const char *hsm_cfg_section_name,
                             const char **synced_ctime_path)
 {
     char synced_ctime_string[SYNCED_CTIME_STRING_LENGTH + 1] = {0};
@@ -275,10 +278,19 @@ static int set_synced_ctime(struct timeval *synced_ctime,
     size_t nb_char_read;
     int rc;
 
-    *synced_ctime_path = PHO_CFG_GET(cfg_hsm, PHO_CFG_HSM, synced_ctime_path);
-    if (!*synced_ctime_path)
+    rc = pho_cfg_get_val(hsm_cfg_section_name,
+                         cfg_hsm[PHO_CFG_HSM_synced_ctime_path].name,
+                         synced_ctime_path);
+    if (rc == -ENODATA) {
+        pho_warn("No synced_ctime_path value in config section '%s', we get "
+                 "default value '%s'", hsm_cfg_section_name,
+                 cfg_hsm[PHO_CFG_HSM_synced_ctime_path].value);
+        *synced_ctime_path = cfg_hsm[PHO_CFG_HSM_synced_ctime_path].value;
+    } else if (rc) {
         LOG_RETURN(-EINVAL,
-                   "Unable to get synced_ctime_path, check all extents");
+                   "Unable to get synced_ctime_path for config section '%s'",
+                   hsm_cfg_section_name);
+    }
 
     rc = stat(*synced_ctime_path, &statbuf);
     if (rc) {
@@ -329,8 +341,10 @@ error_close:
     return rc;
 }
 
-static int set_tosync_ctime(struct timeval *tosync_ctime)
+static int set_tosync_ctime(const char *hsm_cfg_section_name,
+                            struct timeval *tosync_ctime)
 {
+    const char *sync_delay_second_string;
     int sync_delay_second;
     int rc;
 
@@ -338,9 +352,24 @@ static int set_tosync_ctime(struct timeval *tosync_ctime)
     if (rc)
         LOG_RETURN(rc = -errno, "Error when getting current time");
 
-    sync_delay_second = PHO_CFG_GET_INT(cfg_hsm, PHO_CFG_HSM, sync_delay_second,
-                                        0);
+    rc = pho_cfg_get_val(hsm_cfg_section_name,
+                         cfg_hsm[PHO_CFG_HSM_sync_delay_second].name,
+                         &sync_delay_second_string);
+    if (rc == -ENODATA) {
+        pho_warn("No %s parameter for config section '%s', we use the default "
+                 "value '%s'",
+                 cfg_hsm[PHO_CFG_HSM_sync_delay_second].name,
+                 hsm_cfg_section_name,
+                 cfg_hsm[PHO_CFG_HSM_sync_delay_second].value);
+        sync_delay_second_string = cfg_hsm[PHO_CFG_HSM_sync_delay_second].value;
+    } else if (rc) {
+        LOG_RETURN(rc,
+                   "Unable to get %s config value for config section '%s'",
+                   cfg_hsm[PHO_CFG_HSM_sync_delay_second].name,
+                   hsm_cfg_section_name);
+    }
 
+    sync_delay_second = atoi(sync_delay_second_string);
     if (sync_delay_second < 0)
         LOG_RETURN(-EINVAL,
                    "hsm sync_delay_second config value can not be negative, %d",
@@ -479,6 +508,7 @@ int main(int argc, char **argv)
     char synced_ctime_string[SYNCED_CTIME_STRING_LENGTH + 1] = {0};
     char tosync_ctime_string[SYNCED_CTIME_STRING_LENGTH + 1] = {0};
     const char *synced_ctime_path = NULL;
+    char *hsm_cfg_section_name = NULL;
     struct timeval synced_ctime = {0};
     struct timeval tosync_ctime = {0};
     struct dev_info *dev_list = NULL;
@@ -510,13 +540,22 @@ int main(int argc, char **argv)
     if (rc)
         goto cfg_end;
 
+    /* build hsm cfg section */
+    rc = asprintf(&hsm_cfg_section_name, HSM_SECTION_CFG,
+                  params.source_copy_name, params.destination_copy_name);
+    if (rc < 0) {
+        hsm_cfg_section_name = NULL;
+        goto dss_end;
+    }
+
     /* Setting time window */
-    rc = set_synced_ctime(&synced_ctime, &synced_ctime_path);
+    rc = set_synced_ctime(&synced_ctime, hsm_cfg_section_name,
+                          &synced_ctime_path);
     if (rc)
         goto dss_end;
 
     timeval2str(&synced_ctime, synced_ctime_string);
-    rc = set_tosync_ctime(&tosync_ctime);
+    rc = set_tosync_ctime(hsm_cfg_section_name, &tosync_ctime);
     if (rc)
         goto dss_end;
 
@@ -802,6 +841,7 @@ dss_end:
     }
 
     dss_fini(&dss);
+    free(hsm_cfg_section_name);
 cfg_end:
     pho_cfg_local_fini();
 fini_end:

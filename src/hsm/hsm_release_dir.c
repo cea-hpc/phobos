@@ -94,6 +94,8 @@ const struct pho_config_item cfg_hsm[] = {
     },
 };
 
+#define HSM_SECTION_CFG "hsm \"%s\" \"%s\""
+
 static void print_usage(void)
 {
     printf("usage: %s [-h/--help] [-v/--verbose] [-q/--quiet] [-d/--dry-run] "
@@ -221,8 +223,10 @@ static int release_copy(const char *oid, const char *object_uuid, int version,
     return rc;
 }
 
-static int set_torelease_ctime(struct timeval *torelease_ctime)
+static int set_torelease_ctime(const char *hsm_cfg_section_name,
+                               struct timeval *torelease_ctime)
 {
+    const char *release_delay_second_string;
     int release_delay_second;
     int rc;
 
@@ -230,9 +234,23 @@ static int set_torelease_ctime(struct timeval *torelease_ctime)
     if (rc)
         LOG_RETURN(rc = -errno, "Error when getting current time");
 
-    release_delay_second = PHO_CFG_GET_INT(cfg_hsm, PHO_CFG_HSM,
-                                           release_delay_second, 0);
+    rc = pho_cfg_get_val(hsm_cfg_section_name,
+                         cfg_hsm[PHO_CFG_HSM_release_delay_second].name,
+                         &release_delay_second_string);
+    if (rc == -ENODATA) {
+        pho_warn("No %s parameter for config section '%s', we use the default "
+                 "value '%s'", cfg_hsm[PHO_CFG_HSM_release_delay_second].name,
+                 hsm_cfg_section_name,
+                 cfg_hsm[PHO_CFG_HSM_release_delay_second].value);
+        release_delay_second_string =
+            cfg_hsm[PHO_CFG_HSM_release_delay_second].value;
+    } else if (rc) {
+        LOG_RETURN(rc, "Unable to get %s config value for config section '%s'",
+                   cfg_hsm[PHO_CFG_HSM_release_delay_second].name,
+                   hsm_cfg_section_name);
+    }
 
+    release_delay_second = atoi(release_delay_second_string);
     if (release_delay_second < 0)
         LOG_RETURN(-EINVAL,
                    "hsm release_delay_second config value can not be negative, "
@@ -256,10 +274,89 @@ static int set_torelease_ctime(struct timeval *torelease_ctime)
  *  example: ""2025-09-26 18:17:07.548048", always 26 characters
  */
 
+static int set_higher_threshold(const char *hsm_cfg_section_name,
+                                int *higher_threshold)
+{
+    const char *higher_threshold_string;
+    int rc;
+
+    rc = pho_cfg_get_val(hsm_cfg_section_name,
+                         cfg_hsm[PHO_CFG_HSM_dir_release_higher_threshold].name,
+                         &higher_threshold_string);
+    if (rc == -ENODATA) {
+        pho_warn("No %s value in the config section '%s', we use the default "
+                 "value '%s'",
+                 cfg_hsm[PHO_CFG_HSM_dir_release_higher_threshold].name,
+                 hsm_cfg_section_name,
+                 cfg_hsm[PHO_CFG_HSM_dir_release_higher_threshold].value);
+        higher_threshold_string =
+            cfg_hsm[PHO_CFG_HSM_dir_release_higher_threshold].value;
+    } else if (rc) {
+        LOG_RETURN(rc, "Unable to get %s in the config section '%s'",
+                   cfg_hsm[PHO_CFG_HSM_dir_release_higher_threshold].name,
+                   hsm_cfg_section_name);
+    }
+
+    *higher_threshold = atoi(higher_threshold_string);
+    if (*higher_threshold < 1 || *higher_threshold > 100) {
+        LOG_RETURN(-EINVAL,
+                 "The %d%% dir_release_higher_threshold configuration value is "
+                 "invalid and must be a percentage integer between 1 and 100, "
+                 "strictly higher than dir_release_lower_threshold.",
+                 *higher_threshold);
+    }
+
+    if (*higher_threshold == 100)
+        pho_warn("dir_release_higher_threshold is set to 100%%, no release "
+                 "will happen.");
+
+    return 0;
+}
+
+static int set_lower_threshold(const char *hsm_cfg_section_name,
+                               int *lower_threshold)
+{
+    const char *lower_threshold_string;
+    int rc;
+
+    rc = pho_cfg_get_val(hsm_cfg_section_name,
+                         cfg_hsm[PHO_CFG_HSM_dir_release_lower_threshold].name,
+                         &lower_threshold_string);
+    if (rc == -ENODATA) {
+        pho_warn("No %s value in the config section '%s', we use the default "
+                 "value '%s'",
+                 cfg_hsm[PHO_CFG_HSM_dir_release_lower_threshold].name,
+                 hsm_cfg_section_name,
+                 cfg_hsm[PHO_CFG_HSM_dir_release_lower_threshold].value);
+        lower_threshold_string =
+            cfg_hsm[PHO_CFG_HSM_dir_release_lower_threshold].value;
+    } else if (rc) {
+        LOG_RETURN(rc, "Unable to get %s in the config section '%s'",
+                   cfg_hsm[PHO_CFG_HSM_dir_release_lower_threshold].name,
+                   hsm_cfg_section_name);
+    }
+
+    *lower_threshold = atoi(lower_threshold_string);
+    if (*lower_threshold < 0 || *lower_threshold > 99) {
+        LOG_RETURN(rc = -EINVAL,
+                  "The %d%% dir_release_lower_threshold configuration value is "
+                  "invalid and must be a percentage integer between 0 and 99, "
+                  "strictly lower than dir_release_higher_threshold.",
+                  *lower_threshold);
+    }
+
+    if (*lower_threshold == 0)
+        pho_warn("dir_release_lower_threshold is set to 0%%. If a purge "
+                 "starts, every selectable copy will be released.");
+
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     char torelease_ctime_string[TORELEASE_CTIME_STRING_LENGTH + 1] = {0};
     struct timeval torelease_ctime = {0};
+    char *hsm_cfg_section_name = NULL;
     struct dev_info *dev_list = NULL;
     const char *hostname = NULL;
     struct dss_filter filter;
@@ -287,7 +384,15 @@ int main(int argc, char **argv)
     if (rc)
         goto cfg_end;
 
-    rc = set_torelease_ctime(&torelease_ctime);
+    /* build hsm cfg section */
+    rc = asprintf(&hsm_cfg_section_name, HSM_SECTION_CFG,
+                  params.to_release_copy_name, params.backend_copy_name);
+    if (rc < 0) {
+        hsm_cfg_section_name = NULL;
+        goto dss_end;
+    }
+
+    rc = set_torelease_ctime(hsm_cfg_section_name, &torelease_ctime);
     if (rc)
         goto dss_end;
 
@@ -296,35 +401,13 @@ int main(int argc, char **argv)
     pho_info("Checking new object copies to release older than %s",
              torelease_ctime_string);
 
-    higher_threshold = PHO_CFG_GET_INT(cfg_hsm, PHO_CFG_HSM,
-                                       dir_release_higher_threshold, 95);
-    if (higher_threshold < 1 || higher_threshold > 100) {
-        LOG_GOTO(dss_end, rc = -EINVAL,
-                 "The %d%% dir_release_higher_threshold configuration value is "
-                 "invalid and must be a percentage integer between 1 and 100, "
-                 "strictly higher than dir_release_lower_threshold.",
-                 higher_threshold);
-    }
-
-    if (higher_threshold == 100) {
-        pho_warn("dir_release_higher_threshold is set to 100%%, no release "
-                 "will happen.");
+    rc = set_higher_threshold(hsm_cfg_section_name, &higher_threshold);
+    if (rc)
         goto dss_end;
-    }
 
-    lower_threshold = PHO_CFG_GET_INT(cfg_hsm, PHO_CFG_HSM,
-                                      dir_release_lower_threshold, 80);
-    if (lower_threshold < 0 || lower_threshold > 99) {
-        LOG_GOTO(dss_end, rc = -EINVAL,
-                 "The %d%% dir_release_lower_threshold configuration value is "
-                 "invalid and must be a percentage integer between 0 and 99, "
-                 "strictly lower than dir_release_higher_threshold.",
-                 lower_threshold);
-    }
-
-    if (lower_threshold == 0)
-        pho_warn("dir_release_lower_threshold is set to 0%%. If a purge "
-                 "starts, every selectable copy will be released.");
+    rc = set_lower_threshold(hsm_cfg_section_name, &lower_threshold);
+    if (rc)
+        goto dss_end;
 
     if (lower_threshold > higher_threshold) {
         pho_warn("dir_release_lower_threshold %d%% is upper than "
@@ -572,6 +655,7 @@ close_lib_hdl:
 
 dss_end:
     dss_fini(&dss);
+    free(hsm_cfg_section_name);
 cfg_end:
     pho_cfg_local_fini();
 fini_end:
