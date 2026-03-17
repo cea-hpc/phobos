@@ -56,9 +56,10 @@
 #include "pho_types.h"
 #include "pho_type_utils.h"
 
+#include "hsm_common.h"
+
 static int sync_object(const char *oid, const char *object_uuid, int version,
-                       const char *source_copy_name,
-                       const char *destination_copy_name, bool dry_run)
+                       const struct hsm_params *params)
 {
     struct pho_xfer_target target = {0};
     struct pho_xfer_desc xfer = {0};
@@ -66,10 +67,10 @@ static int sync_object(const char *oid, const char *object_uuid, int version,
     int rc;
 
     pho_info("Syncing object ('%s' oid, '%s' uuid, '%d' version) from copy "
-             "'%s' to copy '%s'%s", oid, object_uuid, version, source_copy_name,
-             destination_copy_name,
-             dry_run ? " (DRY RUN MODE, NO SYNC DONE)" : "");
-    if (dry_run)
+             "'%s' to copy '%s'%s", oid, object_uuid, version,
+             params->source_copy_name, params->destination_copy_name,
+             params->dry_run ? " (DRY RUN MODE, NO SYNC DONE)" : "");
+    if (params->dry_run)
         return 0;
 
     target_uuid = xstrdup(object_uuid);
@@ -79,32 +80,23 @@ static int sync_object(const char *oid, const char *object_uuid, int version,
     target.xt_version = version;
     xfer.xd_ntargets = 1;
     xfer.xd_targets = &target;
-    xfer.xd_params.copy.get.copy_name = source_copy_name;
+    xfer.xd_params.copy.get.copy_name = params->source_copy_name;
     /* only sync alive object */
     xfer.xd_params.copy.get.scope = DSS_OBJ_ALIVE;
     /* destination family is given by destination_copy_name profile */
     xfer.xd_params.copy.put.family = PHO_RSC_INVAL;
-    xfer.xd_params.copy.put.copy_name = destination_copy_name;
+    xfer.xd_params.copy.put.copy_name = params->destination_copy_name;
     xfer.xd_params.copy.put.grouping = NULL;
 
     rc = phobos_copy(&xfer, 1, NULL, NULL);
     if (rc)
-        pho_warn("Error %d (%s) when syncing object '%s' to copy '%s'",
-                 -rc, strerror(-rc), oid, destination_copy_name);
+        hsm_log_error(HSM_SYNC, rc, oid, object_uuid, version, params);
 
     pho_xfer_desc_clean(&xfer);
     free(target.xt_objid);
     free(target_uuid);
     return rc;
 }
-
-struct params {
-    const char *source_copy_name;
-    const char *destination_copy_name;
-    bool dry_run;
-    int log_level;
-    bool grouping;
-};
 
 struct object_to_sync {
     char *oid;
@@ -145,7 +137,7 @@ static gboolean equal_object_to_sync(gconstpointer a, gconstpointer b)
 
 struct sync_params {
     int rc;
-    struct params *params;
+    struct hsm_params *params;
 };
 
 static void sync_object_to_sync(gpointer data, gpointer user_data)
@@ -154,9 +146,7 @@ static void sync_object_to_sync(gpointer data, gpointer user_data)
     struct sync_params *sp = user_data;
     int rc;
 
-    rc = sync_object(ots->oid, ots->uuid, ots->version,
-                     sp->params->source_copy_name,
-                     sp->params->destination_copy_name, sp->params->dry_run);
+    rc = sync_object(ots->oid, ots->uuid, ots->version, sp->params);
     if (rc && !sp->rc)
         sp->rc = rc;
 }
@@ -233,35 +223,6 @@ static void add_object_to_sync(const char *grouping, const char *oid,
     }
 }
 
-/** List of HSM configuration parameters */
-enum pho_cfg_params_hsm {
-    /* File path to store the already sync copy ctime */
-    PHO_CFG_HSM_synced_ctime_path,
-    PHO_CFG_HSM_sync_delay_second,
-
-    /* Delimiters, update when modifying options */
-    PHO_CFG_HSM_FIRST = PHO_CFG_HSM_synced_ctime_path,
-    PHO_CFG_HSM_LAST  = PHO_CFG_HSM_sync_delay_second,
-};
-
-/** Definition and default values of HSM configuration parameters */
-const struct pho_config_item cfg_hsm[] = {
-    [PHO_CFG_HSM_synced_ctime_path] = {
-        .section = "hsm",
-        .name    = "synced_ctime_path",
-        .value   = "/var/lib/phobos/hsm_synced_ctime_source_destination",
-    },
-    [PHO_CFG_HSM_sync_delay_second] = {
-        .section = "hsm",
-        .name    = "sync_delay_second",
-        .value   = "0",
-    },
-};
-
-#define HSM_SECTION_CFG "hsm \"%s\" \"%s\""
-
-#define SYNCED_CTIME_STRING_LENGTH 26
-
 /** Open synced ctime file in a+ mode and set synced_time
  *
  *  The synced ctime file must contains a 'date +"%Y-%m-%d %H:%M:%S.%6N"' value,
@@ -272,7 +233,7 @@ static int set_synced_ctime(struct timeval *synced_ctime,
                             const char *hsm_cfg_section_name,
                             const char **synced_ctime_path)
 {
-    char synced_ctime_string[SYNCED_CTIME_STRING_LENGTH + 1] = {0};
+    char synced_ctime_string[CTIME_STRING_LENGTH + 1] = {0};
     FILE *synced_ctime_stream;
     struct stat statbuf;
     size_t nb_char_read;
@@ -314,19 +275,19 @@ static int set_synced_ctime(struct timeval *synced_ctime,
                    "Error when opening synced ctime file %s to load",
                    *synced_ctime_path);
 
-    nb_char_read = fread(synced_ctime_string, sizeof(char),
-                         SYNCED_CTIME_STRING_LENGTH, synced_ctime_stream);
+    nb_char_read = fread(synced_ctime_string, sizeof(char), CTIME_STRING_LENGTH,
+                         synced_ctime_stream);
     if (ferror(synced_ctime_stream))
         LOG_GOTO(error_close, rc = -errno,
                  "Error when reading synced ctime in file %s",
                  *synced_ctime_path);
 
-    if (nb_char_read != SYNCED_CTIME_STRING_LENGTH)
+    if (nb_char_read != CTIME_STRING_LENGTH)
         LOG_GOTO(error_close, rc = -EINVAL,
                  "%s must contain a synced ctime of at least %d characters, "
                  "with the \"YYYY-mm-dd HH:MM:SS.uuuuuu\" format of the "
                  "'date +\"%%Y-%%m-%%d %%H:%%M:%%S.%%6N\"' command",
-                 *synced_ctime_path, SYNCED_CTIME_STRING_LENGTH);
+                 *synced_ctime_path, CTIME_STRING_LENGTH);
 
     rc = str2timeval(synced_ctime_string, synced_ctime);
     if (rc)
@@ -407,9 +368,7 @@ static void print_usage(void)
            program_invocation_short_name);
 }
 
-#define DEFAULT_PARAMS {NULL, NULL, false, PHO_LOG_INFO}
-
-static struct params parse_args(int argc, char **argv)
+static struct hsm_params parse_args(int argc, char **argv)
 {
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
@@ -419,7 +378,7 @@ static struct params parse_args(int argc, char **argv)
         {"grouping", no_argument, 0, 'g'},
         {0, 0, 0, 0}
     };
-    struct params params = DEFAULT_PARAMS;
+    struct hsm_params params = DEFAULT_HSM_PARAMS;
     int c;
 
     while ((c = getopt_long(argc, argv, "hvqdg", long_options, NULL)) != -1) {
@@ -476,18 +435,18 @@ static int update_synced_ctime(const char *synced_ctime_path,
                    synced_ctime_path);
 
     nb_char_write = fwrite(synced_ctime_string, sizeof(char),
-                           SYNCED_CTIME_STRING_LENGTH, synced_ctime_stream);
+                           CTIME_STRING_LENGTH, synced_ctime_stream);
     if (ferror(synced_ctime_stream))
         LOG_GOTO(end, rc = -errno,
                  "Error when writing synced ctime %s in file %s",
                  synced_ctime_string, synced_ctime_path);
 
-    if (nb_char_write != SYNCED_CTIME_STRING_LENGTH)
+    if (nb_char_write != CTIME_STRING_LENGTH)
         LOG_GOTO(end, rc = -EINVAL,
                  "Error when writing synced ctime %s in file %s, "
                  "%zu written characters instead of %d",
                  synced_ctime_string, synced_ctime_path, nb_char_write,
-                 SYNCED_CTIME_STRING_LENGTH);
+                 CTIME_STRING_LENGTH);
 end:
     fclose(synced_ctime_stream);
     return rc;
@@ -505,8 +464,8 @@ int main(int argc, char **argv)
      * ctime
      */
     GQueue *grouping_queue = NULL;
-    char synced_ctime_string[SYNCED_CTIME_STRING_LENGTH + 1] = {0};
-    char tosync_ctime_string[SYNCED_CTIME_STRING_LENGTH + 1] = {0};
+    char synced_ctime_string[CTIME_STRING_LENGTH + 1] = {0};
+    char tosync_ctime_string[CTIME_STRING_LENGTH + 1] = {0};
     const char *synced_ctime_path = NULL;
     char *hsm_cfg_section_name = NULL;
     struct timeval synced_ctime = {0};
@@ -514,9 +473,9 @@ int main(int argc, char **argv)
     struct dev_info *dev_list = NULL;
     const char *hostname = NULL;
     struct dss_filter filter;
+    struct hsm_params params;
     bool update_sync = true;
     struct dss_handle dss;
-    struct params params;
     int dev_count = 0;
     int rc, rc2;
     int i;
@@ -567,13 +526,17 @@ int main(int argc, char **argv)
                  "Empty window time, synced_ctime '%s' is older than "
                  "tosync_ctime '%s'", synced_ctime_string, tosync_ctime_string);
 
+    rc = open_error_log_file(hsm_cfg_section_name, &params.error_log_file);
+    if (rc)
+        goto dss_end;
+
     pho_info("Checking new object copies from %s to %s",
              synced_ctime_string, tosync_ctime_string);
 
     /* only target local unlocked dir */
     hostname = get_hostname();
     if (!hostname)
-        GOTO(dss_end, rc = -errno);
+        GOTO(log_end, rc = -errno);
 
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
@@ -584,12 +547,12 @@ int main(int argc, char **argv)
                           hostname, rsc_family2str(PHO_RSC_DIR),
                           rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED));
     if (rc)
-        goto dss_end;
+        goto log_end;
 
     rc = dss_device_get(&dss, &filter, &dev_list, &dev_count, NULL);
     dss_filter_free(&filter);
     if (rc)
-        goto dss_end;
+        goto log_end;
 
     if (params.grouping) {
         grouping_queue = g_queue_new();
@@ -781,10 +744,7 @@ int main(int argc, char **argv)
                     if (!params.grouping) {
                         rc2 = sync_object(object_list[0].oid,
                                           layout_list[k].uuid,
-                                          layout_list[k].version,
-                                          params.source_copy_name,
-                                          params.destination_copy_name,
-                                          params.dry_run);
+                                          layout_list[k].version, &params);
                         if (rc2) {
                             update_sync = false;
                             rc = rc ? : rc2;
@@ -833,6 +793,9 @@ close_lib_hdl:
         if (rc2)
             rc = rc ? : rc2;
     }
+
+log_end:
+    fclose(params.error_log_file);
 
 dss_end:
     if (params.grouping) {

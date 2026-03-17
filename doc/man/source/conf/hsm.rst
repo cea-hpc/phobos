@@ -20,6 +20,9 @@ deleted, a "to release" copy must have an existing backend copy. The older
 copies are deleted first. "To release" copies with a creation time younger than
 "current_time - **release_delay_second**" are not deleted.
 
+The phobos_hsm_sync_dir and phobos_hsm_release_dir commands logs copies create
+or delete errors into the **error_log_path** file.
+
 *Recording and using the last synced time*
 ------------------------------------------
 
@@ -119,3 +122,23 @@ Example:
 
     [hsm "source_copy_name" "destination_copy_name"]
     dir_release_higher_threshold = 80
+
+*logging object copy create and delete errors*
+----------------------------------------------
+
+The **error_log_path** parameter is the path of the file opened in append mode
+to log all object copies create and delete errors.
+
+If this parameter is not specified, Phobos defaults to the
+**/var/lib/phobos/hsm_error** value.
+
+If the specified path does not exist, the phobos_hsm_sync_dir and
+phobos_hsm_release_dir commands will create it.
+
+Example:
+
+.. code:: ini
+
+    [hsm "source_copy_name" "destination_copy_name"]
+    error_log_path = "/var/lib/phobos/hsm_error"
+

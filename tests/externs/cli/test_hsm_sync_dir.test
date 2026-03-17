@@ -40,6 +40,8 @@ function setup
     export PHOBOS_STORE_default_family="dir"
     export PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path="${DIR_TEST}/hsm_synced_ctime_source_sync"
     rm -f ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
+    export PHOBOS_HSM_SOURCE_SYNC_error_log_path="${DIR_TEST}/hsm_error"
+    rm -f ${PHOBOS_HSM_SOURCE_SYNC_error_log_path}
 
     invoke_lrs
 
@@ -162,7 +164,7 @@ EOF
         error "sync without only an old object must not show any sync") || true
 }
 
-function no_synced_time_on_error()
+function no_synced_time_and_log_on_error()
 {
     # object to sync
     $phobos put --tags this-host ${FILES[0]} obj_to_sync
@@ -177,6 +179,10 @@ function no_synced_time_on_error()
     $valg_phobos_hsm_sync_dir source sync || true
     if [ -f "${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}" ]; then
         error "synced_ctime_file must not be created on error"
+    fi
+
+    if [! -f "${PHOBOS_HSM_SOURCE_SYNC_error_log_path}" ]; then
+        error "error log file must be created on error"
     fi
 }
 
@@ -215,6 +221,6 @@ function grouping_sync()
 TESTS=(
     "check_hsm_sync_dir_opt;"
     "setup; check_hsm_sync_dir; cleanup"
-    "setup; no_synced_time_on_error; cleanup"
+    "setup; no_synced_time_and_log_on_error; cleanup"
     "setup; grouping_sync; cleanup"
 )

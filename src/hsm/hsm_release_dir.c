@@ -34,7 +34,7 @@
  * "To release" copies with a creation time younger than
  * "current_time - release_delay_second" are not deleted.
  *
- * The "to_release_copy_name" and "backend_copy_name" are two mandatory command
+ * The "source_copy_name" and "destination_copy_name" are two mandatory command
  * line parameters.
  * The "dir_release_higher_threshold", "dir_release_lower_threshold" and
  * "release_delay_second" are config file parameters.
@@ -64,42 +64,12 @@
 #include "pho_types.h"
 #include "pho_type_utils.h"
 
-/** List of HSM configuration parameters */
-enum pho_cfg_params_hsm {
-    PHO_CFG_HSM_release_delay_second,
-    PHO_CFG_HSM_dir_release_higher_threshold,
-    PHO_CFG_HSM_dir_release_lower_threshold,
-
-    /* Delimiters, update when modifying options */
-    PHO_CFG_HSM_FIRST = PHO_CFG_HSM_release_delay_second,
-    PHO_CFG_HSM_LAST  = PHO_CFG_HSM_dir_release_lower_threshold,
-};
-
-/** Definition and default values of HSM configuration parameters */
-const struct pho_config_item cfg_hsm[] = {
-    [PHO_CFG_HSM_release_delay_second] = {
-        .section = "hsm",
-        .name    = "release_delay_second",
-        .value   = "0",
-    },
-    [PHO_CFG_HSM_dir_release_higher_threshold] = {
-        .section = "hsm",
-        .name    = "dir_release_higher_threshold",
-        .value   = "95",
-    },
-    [PHO_CFG_HSM_dir_release_lower_threshold] = {
-        .section = "hsm",
-        .name    = "dir_release_lower_threshold",
-        .value   = "80",
-    },
-};
-
-#define HSM_SECTION_CFG "hsm \"%s\" \"%s\""
+#include "hsm_common.h"
 
 static void print_usage(void)
 {
     printf("usage: %s [-h/--help] [-v/--verbose] [-q/--quiet] [-d/--dry-run] "
-           "to_release_copy_name backend_copy_name\n"
+           "source_copy_name destination_copy_name\n"
            "\n"
            "This command deletes copies of objects on the local dirs.\n"
            "\n"
@@ -108,31 +78,24 @@ static void print_usage(void)
            "extents on this dir to decrease the fill rate under the lower "
            "threshold.\n"
            "\n"
-           "To be deleted, a 'to_release_copy_name' copy must have an "
-           "existing 'backend_copy_name' copy.\n"
+           "To be deleted, a 'source_copy_name' copy must have an "
+           "existing 'destination_copy_name' copy.\n"
            "\n"
            "The older copies are deleted first.\n"
            "\n"
-           "'to_release_copy_name' copies with a creation time younger than "
+           "'source_copy_name' copies with a creation time younger than "
            "\"current_time - release_delay_second\" are not deleted.\n"
            "\n"
-           "The 'to_release_copy_name' and 'backend_copy_name' are two "
+           "The 'source_copy_name' and 'destination_copy_name' are two "
            "mandatory command line parameters.\n"
            "The 'dir_release_higher_threshold', 'dir_release_lower_threshold' "
            "and 'release_delay_second' are config file parameters.",
            program_invocation_short_name);
 }
 
-struct params {
-    const char *to_release_copy_name;
-    const char *backend_copy_name;
-    bool dry_run;
-    int log_level;
-};
-
 #define DEFAULT_PARAMS {NULL, NULL, false, PHO_LOG_INFO}
 
-static struct params parse_args(int argc, char **argv)
+static struct hsm_params parse_args(int argc, char **argv)
 {
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
@@ -141,7 +104,7 @@ static struct params parse_args(int argc, char **argv)
         {"dry-run", no_argument, 0, 'd'},
         {0, 0, 0, 0}
     };
-    struct params params = DEFAULT_PARAMS;
+    struct hsm_params params = DEFAULT_PARAMS;
     int c;
 
     while ((c = getopt_long(argc, argv, "hvqd", long_options, NULL)) != -1) {
@@ -169,8 +132,8 @@ static struct params parse_args(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    params.to_release_copy_name = argv[optind];
-    params.backend_copy_name = argv[optind + 1];
+    params.source_copy_name = argv[optind];
+    params.destination_copy_name = argv[optind + 1];
 
     if (params.log_level < PHO_LOG_DISABLED)
         params.log_level = PHO_LOG_DISABLED;
@@ -182,7 +145,7 @@ static struct params parse_args(int argc, char **argv)
 }
 
 static int release_copy(const char *oid, const char *object_uuid, int version,
-                        const char *to_release_copy_name, bool dry_run)
+                        const struct hsm_params *params)
 {
     struct pho_xfer_target target = {0};
     struct pho_xfer_desc xfer = {0};
@@ -191,13 +154,13 @@ static int release_copy(const char *oid, const char *object_uuid, int version,
     int rc = 0;
 
     pho_info("Deleting copy '%s' of object ('%s' oid, %s' uuid, '%d' version) "
-             "%s", to_release_copy_name, oid, object_uuid, version,
-             dry_run ? " (DRY RUN MODE, NO RELEASE DONE)" : "");
-    if (dry_run)
+             "%s", params->source_copy_name, oid, object_uuid, version,
+             params->dry_run ? " (DRY RUN MODE, NO RELEASE DONE)" : "");
+    if (params->dry_run)
         return rc;
 
     xfer.xd_op = PHO_XFER_OP_DEL;
-    copy_name = strdup(to_release_copy_name);
+    copy_name = strdup(params->source_copy_name);
     xfer.xd_params.delete.copy_name = copy_name;
     xfer.xd_params.delete.scope = DSS_OBJ_ALL;
     xfer.xd_flags = PHO_XFER_COPY_HARD_DEL;
@@ -211,10 +174,7 @@ static int release_copy(const char *oid, const char *object_uuid, int version,
 
     rc = phobos_delete(&xfer, 1);
     if (rc)
-        pho_warn("Error %d (%s) when deleting copy '%s' of object "
-                 "('%s' oid', '%s' uuid, '%d' version)",
-                 -rc, strerror(-rc), to_release_copy_name,
-                 oid, object_uuid, version);
+        hsm_log_error(HSM_RELEASE, rc, oid, object_uuid, version, params);
 
     pho_xfer_desc_clean(&xfer);
     free(target.xt_objid);
@@ -265,8 +225,6 @@ static int set_torelease_ctime(const char *hsm_cfg_section_name,
     torelease_ctime->tv_sec -= release_delay_second;
     return 0;
 }
-
-#define TORELEASE_CTIME_STRING_LENGTH 26
 
 /**
  *  The to_release ctime string follows the syntax of a PSQL timestamp of format
@@ -354,14 +312,14 @@ static int set_lower_threshold(const char *hsm_cfg_section_name,
 
 int main(int argc, char **argv)
 {
-    char torelease_ctime_string[TORELEASE_CTIME_STRING_LENGTH + 1] = {0};
+    char torelease_ctime_string[CTIME_STRING_LENGTH + 1] = {0};
     struct timeval torelease_ctime = {0};
     char *hsm_cfg_section_name = NULL;
     struct dev_info *dev_list = NULL;
     const char *hostname = NULL;
     struct dss_filter filter;
+    struct hsm_params params;
     struct dss_handle dss;
-    struct params params;
     int higher_threshold;
     int lower_threshold;
     int dev_count = 0;
@@ -386,7 +344,7 @@ int main(int argc, char **argv)
 
     /* build hsm cfg section */
     rc = asprintf(&hsm_cfg_section_name, HSM_SECTION_CFG,
-                  params.to_release_copy_name, params.backend_copy_name);
+                  params.source_copy_name, params.destination_copy_name);
     if (rc < 0) {
         hsm_cfg_section_name = NULL;
         goto dss_end;
@@ -416,10 +374,14 @@ int main(int argc, char **argv)
         goto dss_end;
     }
 
+    rc = open_error_log_file(hsm_cfg_section_name, &params.error_log_file);
+    if (rc)
+        goto log_end;
+
     /* only target local unlocked dir */
     hostname = get_hostname();
     if (!hostname)
-        GOTO(dss_end, rc = -errno);
+        GOTO(log_end, rc = -errno);
 
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
@@ -430,12 +392,12 @@ int main(int argc, char **argv)
                           hostname, rsc_family2str(PHO_RSC_DIR),
                           rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED));
     if (rc)
-        goto dss_end;
+        goto log_end;
 
     rc = dss_device_get(&dss, &filter, &dev_list, &dev_count, NULL);
     dss_filter_free(&filter);
     if (rc)
-        goto dss_end;
+        goto log_end;
 
     for (i = 0; i < dev_count; i++) {
         struct dev_adapter_module *dev_adapter;
@@ -568,7 +530,7 @@ int main(int argc, char **argv)
                                   "  {\"DSS::LYT::copy_name\": \"%s\"}"
                                   "]}",
                                   extent_list[j].uuid,
-                                  params.to_release_copy_name);
+                                  params.source_copy_name);
             if (rc)
                 continue;
 
@@ -592,7 +554,7 @@ int main(int argc, char **argv)
                                       "]}",
                                       layout_list[k].uuid,
                                       layout_list[k].version,
-                                      params.to_release_copy_name);
+                                      params.source_copy_name);
                 if (rc)
                     continue;
 
@@ -614,7 +576,7 @@ int main(int argc, char **argv)
                                       "]}",
                                       layout_list[k].uuid,
                                       layout_list[k].version,
-                                      params.backend_copy_name);
+                                      params.destination_copy_name);
                 if (rc)
                     continue;
 
@@ -634,8 +596,7 @@ int main(int argc, char **argv)
                     continue;
 
                 rc = release_copy(obj->oid, layout_list[k].uuid,
-                                  layout_list[k].version,
-                                  params.to_release_copy_name, params.dry_run);
+                                  layout_list[k].version, &params);
                 object_info_free(obj);
                 if (!rc)
                     size_to_release -= extent_list[j].size;
@@ -653,6 +614,8 @@ close_lib_hdl:
 
     dss_res_free(dev_list, dev_count);
 
+log_end:
+    fclose(params.error_log_file);
 dss_end:
     dss_fini(&dss);
     free(hsm_cfg_section_name);

@@ -38,6 +38,8 @@ function setup
 
     export PHOBOS_LRS_families="dir"
     export PHOBOS_STORE_default_family="dir"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_error_log_path="${DIR_TEST}/hsm_error"
+    rm -f ${PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_error_log_path}
 
     invoke_lrs
 
@@ -215,7 +217,33 @@ EOF
     check_copy too_young copy_to_release copy_synced
 }
 
+function log_on_error()
+{
+    # object to release
+    $phobos put --tags to_release --copy-name copy_to_release ${FILES[0]} to_release
+
+    # get extent to release
+    local extent_addr=$($phobos extent list -o address to_release | tr -d \ \'[])
+    local extent_dir=$($phobos extent list -o media_name to_release | tr -d \ \'[])
+
+    # sync the object
+    $phobos copy create --tags for_sync to_release copy_synced
+
+    # remove extent to release
+    rm -f ${extent_dir}/${extent_addr}
+
+    # run release and check that the log error file is created
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_release_delay_second="0"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="1"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_lower_threshold="0"
+    $valg_phobos_hsm_release_dir source sync || true
+    if [! -f "${PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_error_log_path}" ]; then
+        error "error log file must be created on error"
+    fi
+}
+
 TESTS=(
     "check_hsm_release_dir_opt;"
     "setup; check_hsm_release_dir; cleanup"
+    "setup; log_on_error; cleanup"
 )
