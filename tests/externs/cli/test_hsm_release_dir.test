@@ -178,15 +178,15 @@ EOF
 
     # dry-run phobos_hsm_release_dir with a too high threshold
     export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="99"
-    dry_run_log=$($valg_phobos_hsm_release_dir -d copy_to_release copy_synced 2>&1)
-    (echo ${dry_run_log} | grep "Deleting") &&
+    dry_run_log=$($valg_phobos_hsm_release_dir copy_to_release copy_synced)
+    (echo ${dry_run_log} | grep "DELETE") &&
         error "Too high threshold dry-run must not show any release"
 
     # dry-run phobos_hsm_release_dir
     export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="1"
     export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_lower_threshold="0"
-    dry_run_log=$($valg_phobos_hsm_release_dir -d copy_to_release copy_synced 2>&1)
-    (echo ${dry_run_log} | grep "Deleting" | grep "DRY") ||
+    dry_run_log=$($valg_phobos_hsm_release_dir copy_to_release copy_synced)
+    (echo ${dry_run_log} | grep "DELETE" | grep "to_release" | grep "copy_to_release") ||
         error "dry-run must show a release"
 
     # run phobos_hsm_release_dir
@@ -204,7 +204,7 @@ EOF
     export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_release_delay_second="${release_delay_second}"
     export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="55"
     export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_lower_threshold="45"
-    run_log=$($valg_phobos_hsm_release_dir copy_to_release copy_synced 2>&1)
+    run_log=$($valg_phobos_hsm_release_dir -d copy_to_release copy_synced 2>&1)
 
     # released
     check_copy to_release copy_synced
@@ -236,7 +236,7 @@ function log_on_error()
     export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_release_delay_second="0"
     export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="1"
     export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_lower_threshold="0"
-    $valg_phobos_hsm_release_dir source sync || true
+    $valg_phobos_hsm_release_dir -d source sync || true
     if [! -f "${PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_error_log_path}" ]; then
         error "error log file must be created on error"
     fi

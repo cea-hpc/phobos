@@ -68,28 +68,33 @@
 
 static void print_usage(void)
 {
-    printf("usage: %s [-h/--help] [-v/--verbose] [-q/--quiet] [-d/--dry-run] "
+    printf("usage: %s [-h/--help] [-v/--verbose] [-q/--quiet] [-d/--delete] "
            "source_copy_name destination_copy_name\n"
            "\n"
-           "This command deletes copies of objects on the local dirs.\n"
+           "This command detects which source_copy_name copies of objects on "
+           "the local dirs should be deleted. Each new copy to delete is "
+           "written on stdout with the following line:\n"
+           "DELETE \"oid\" \"uuid\" \"version\" \"copy_name\"\n"
            "\n"
            "If the fill rate of one local dir is above the higher threshold, "
-           "the phobos_hsm_release_dir command deletes copies of object with "
+           "the phobos_hsm_release_dir command selects copies of object with "
            "extents on this dir to decrease the fill rate under the lower "
            "threshold.\n"
            "\n"
-           "To be deleted, a 'source_copy_name' copy must have an "
-           "existing 'destination_copy_name' copy.\n"
+           "To be selected for deletion, a 'source_copy_name' copy must have "
+           "an existing 'destination_copy_name' copy.\n"
            "\n"
-           "The older copies are deleted first.\n"
+           "The older copies are selected first.\n"
            "\n"
            "'source_copy_name' copies with a creation time younger than "
-           "\"current_time - release_delay_second\" are not deleted.\n"
+           "\"current_time - release_delay_second\" are not selected.\n"
            "\n"
            "The 'source_copy_name' and 'destination_copy_name' are two "
            "mandatory command line parameters.\n"
            "The 'dir_release_higher_threshold', 'dir_release_lower_threshold' "
-           "and 'release_delay_second' are config file parameters.",
+           "and 'release_delay_second' are config file parameters.\n"
+           "If the '-d/--delete' option is set, new copies written on STDOUT "
+           "are sequentially deleted.\n",
            program_invocation_short_name);
 }
 
@@ -101,7 +106,7 @@ static struct hsm_params parse_args(int argc, char **argv)
         {"help", no_argument, 0, 'h'},
         {"verbose", no_argument, 0, 'v'},
         {"quiet", no_argument, 0, 'q'},
-        {"dry-run", no_argument, 0, 'd'},
+        {"delete", no_argument, 0, 'd'},
         {0, 0, 0, 0}
     };
     struct hsm_params params = DEFAULT_PARAMS;
@@ -119,7 +124,7 @@ static struct hsm_params parse_args(int argc, char **argv)
             --params.log_level;
             break;
         case 'd':
-            params.dry_run = true;
+            params.achieve = true;
             break;
         default:
             print_usage();
@@ -144,7 +149,7 @@ static struct hsm_params parse_args(int argc, char **argv)
     return params;
 }
 
-static int release_copy(const char *oid, const char *object_uuid, int version,
+static int release_copy(const struct object_info *obj,
                         const struct hsm_params *params)
 {
     struct pho_xfer_target target = {0};
@@ -153,10 +158,8 @@ static int release_copy(const char *oid, const char *object_uuid, int version,
     char *copy_name;
     int rc = 0;
 
-    pho_info("Deleting copy '%s' of object ('%s' oid, %s' uuid, '%d' version) "
-             "%s", params->source_copy_name, oid, object_uuid, version,
-             params->dry_run ? " (DRY RUN MODE, NO RELEASE DONE)" : "");
-    if (params->dry_run)
+    rc = hsm_write_candidate(HSM_RELEASE, obj, params);
+    if (rc || !params->achieve)
         return rc;
 
     xfer.xd_op = PHO_XFER_OP_DEL;
@@ -167,14 +170,14 @@ static int release_copy(const char *oid, const char *object_uuid, int version,
     xfer.xd_ntargets = 1;
     xfer.xd_targets = &target;
 
-    target_uuid = xstrdup(object_uuid);
-    target.xt_objid = xstrdup(oid);
+    target_uuid = xstrdup(obj->uuid);
+    target.xt_objid = xstrdup(obj->oid);
     target.xt_objuuid = target_uuid;
-    target.xt_version = version;
+    target.xt_version = obj->version;
 
     rc = phobos_delete(&xfer, 1);
     if (rc)
-        hsm_log_error(HSM_RELEASE, rc, oid, object_uuid, version, params);
+        hsm_log_error(HSM_RELEASE, rc, obj, params);
 
     pho_xfer_desc_clean(&xfer);
     free(target.xt_objid);
@@ -376,7 +379,7 @@ int main(int argc, char **argv)
 
     rc = open_error_log_file(hsm_cfg_section_name, &params.error_log_file);
     if (rc)
-        goto log_end;
+        goto dss_end;
 
     /* only target local unlocked dir */
     hostname = get_hostname();
@@ -595,8 +598,7 @@ int main(int argc, char **argv)
                 if (rc)
                     continue;
 
-                rc = release_copy(obj->oid, layout_list[k].uuid,
-                                  layout_list[k].version, &params);
+                rc = release_copy(obj, &params);
                 object_info_free(obj);
                 if (!rc)
                     size_to_release -= extent_list[j].size;

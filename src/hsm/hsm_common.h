@@ -70,13 +70,13 @@ static inline const char *hsm_type2str(enum hsm_type type)
 struct hsm_params {
     const char *source_copy_name;
     const char *destination_copy_name;
-    bool dry_run;
     int log_level;
     bool grouping;
     FILE *error_log_file;
+    bool achieve;
 };
 
-#define DEFAULT_HSM_PARAMS {NULL, NULL, false, PHO_LOG_INFO, false, NULL}
+#define DEFAULT_HSM_PARAMS {NULL, NULL, PHO_LOG_INFO, false, NULL, false}
 
 /*
  * Open and return the FILE * of the hsm log error file corresponding to
@@ -88,7 +88,9 @@ int open_error_log_file(const char *hsm_cfg_section_name,
 /*
  * Write one error line in the hsm log error file.
  */
-void hsm_log_error(enum hsm_type type, int rc,
-                   const char *oid, const char *object_uuid, int version,
+void hsm_log_error(enum hsm_type type, int rc, const struct object_info *obj,
                    const struct hsm_params *params);
+
+int hsm_write_candidate(enum hsm_type type, const struct object_info *object,
+                        const struct hsm_params *params);
 #endif /* _HSM_COMMON_H */
