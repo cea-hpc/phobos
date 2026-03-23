@@ -27,6 +27,8 @@
 #ifndef _HSM_COMMON_H
 #define _HSM_COMMON_H
 
+#include "pho_type_utils.h"
+
 /** List of HSM configuration parameters */
 enum pho_cfg_params_hsm {
     /* File path to store the already sync copy ctime */
@@ -74,9 +76,15 @@ struct hsm_params {
     bool grouping;
     FILE *error_log_file;
     bool achieve;
+    struct string_array wanted_keys;
 };
 
-#define DEFAULT_HSM_PARAMS {NULL, NULL, PHO_LOG_INFO, false, NULL, false}
+#define DEFAULT_HSM_PARAMS {NULL, NULL, PHO_LOG_INFO, false, NULL, false, {0} }
+
+static inline void clean_hsm_params(struct hsm_params *params)
+{
+    string_array_free(&params->wanted_keys);
+}
 
 /*
  * Open and return the FILE * of the hsm log error file corresponding to

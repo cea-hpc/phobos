@@ -332,14 +332,16 @@ static int set_tosync_ctime(const char *hsm_cfg_section_name,
 static void print_usage(void)
 {
     printf("usage: %s [-h/--help] [-v/--verbose] [-q/--quiet] [-g/--grouping] "
-           "[-c/--create] source_copy_name destination_copy_name\n"
+           "[-c/--create] [-m/--metadata key1[,key2,[...]]] "
+           "source_copy_name destination_copy_name\n"
            "\n"
            "This command detects which new copy `destination_copy_name` "
            "must be created to replicate the data referenced by "
            "`source_copy_name`. Each new copy to create is written on "
            "stdout with the following line:\n"
            "CREATE \"oid\" \"uuid\" \"version\" \"copy_name\" "
-           "[\"grouping\"=\"grouping_name\"]\n"
+           "[\"grouping\"=\"grouping_name\"] "
+           "[\"key1\"=\"value1\"] [\"key2\"=\"value2\"]\n"
            "\n"
            "The source copy must have data on directories to be copied, and "
            "the directories must be owned the local host.\n"
@@ -354,12 +356,16 @@ static void print_usage(void)
            "If the '-g/--grouping' option is set, sync are grouped per "
            "grouping (Warning: with this option, the first sync starts only "
            "when all the objects to sync had been listed from the DSS.). This "
-           "option also adds the \"grouping\"=\"grouping_name\" value on each "
-           "stdout line, only for each object that have a no NULL grouping "
-           "value.\n"
+           "option also adds the '\"grouping\"=\"grouping_name\"' value on "
+           "each stdout line, only for each object that have a no NULL "
+           "grouping value.\n"
            "\n"
            "If the '-c/--create' option is set, new copies written on STDOUT "
-           "are sequentially created.\n",
+           "are sequentially created.\n"
+           "\n"
+           "If the '-m/--metadata key1[,key2,[...]]' option is set, a "
+           "'\"keyX\"=\"value\"' is put on the line of each object which has a "
+           "'keyX' metadata.\n",
            program_invocation_short_name);
 }
 
@@ -371,12 +377,13 @@ static struct hsm_params parse_args(int argc, char **argv)
         {"quiet", no_argument, 0, 'q'},
         {"grouping", no_argument, 0, 'g'},
         {"create", no_argument, 0, 'c'},
+        {"metadata", required_argument, 0, 'm'},
         {0, 0, 0, 0}
     };
     struct hsm_params params = DEFAULT_HSM_PARAMS;
     int c;
 
-    while ((c = getopt_long(argc, argv, "hvqdgc", long_options, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "hvqgcm:", long_options, NULL)) != -1) {
         switch (c) {
         case 'h':
             print_usage();
@@ -392,6 +399,9 @@ static struct hsm_params parse_args(int argc, char **argv)
             break;
         case 'c':
             params.achieve = true;
+            break;
+        case 'm':
+            str2string_array(optarg, &params.wanted_keys);
             break;
         default:
             print_usage();
@@ -796,5 +806,6 @@ cfg_end:
     pho_cfg_local_fini();
 fini_end:
     phobos_fini();
+    clean_hsm_params(&params);
     return rc;
 }

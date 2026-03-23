@@ -26,11 +26,14 @@
 
 #define _GNU_SOURCE /*asprintf*/
 #include <errno.h>
+#include <glib.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 
+#include "pho_attrs.h"
 #include "pho_cfg.h"
 #include "pho_common.h"
 
@@ -135,22 +138,61 @@ void hsm_log_error(enum hsm_type type, int rc, const struct object_info *obj,
                  local_rc, strerror(local_rc));
 }
 
+static void add_metadata(GString *metadata_str, const struct object_info *obj,
+                         const struct hsm_params *params)
+{
+    struct pho_attrs obj_md = {0};
+    int rc, i;
+
+    rc = pho_json_to_attrs(&obj_md, obj->user_md);
+    if (rc) {
+        pho_warn("Error when parsing metadata '%s' of object "
+                 "(oid: '%s', uuid: '%s', version: '%d') : %d (%s)",
+                 obj->user_md, obj->oid, obj->uuid, obj->version,
+                 -rc, strerror(-rc));
+        return;
+    }
+
+    for (i = 0; i < params->wanted_keys.count; i++) {
+        const char *value = pho_attr_get(&obj_md,
+                                         params->wanted_keys.strings[i]);
+
+        if (value)
+            g_string_append_printf(metadata_str, " \"%s\"=\"%s\"",
+                                   params->wanted_keys.strings[i],
+                                   value);
+    }
+
+    pho_attrs_free(&obj_md);
+}
+
 int hsm_write_candidate(enum hsm_type type, const struct object_info *object,
                          const struct hsm_params *params)
 {
-    if (printf("%s \"%s\" \"%s\" \"%d\" \"%s\"%s%s%s\n",
+    GString *metadata_str = g_string_new("");
+    int rc = 0;
+
+    if (params->grouping && object->grouping)
+        g_string_append_printf(metadata_str, " \"grouping\"=\"%s\"",
+                               object->grouping);
+
+    if (params->wanted_keys.count > 0 && object->user_md)
+        add_metadata(metadata_str, object, params);
+
+    if (printf("%s \"%s\" \"%s\" \"%d\" \"%s\"%s\n",
                type == HSM_SYNC ? "CREATE" : "DELETE",
                object->oid, object->uuid, object->version,
                type == HSM_SYNC ? params->destination_copy_name :
                                   params->source_copy_name,
-               params->grouping && object->grouping ? " \"grouping\"=\"" : "",
-               params->grouping && object->grouping ? object->grouping : "",
-               params->grouping && object->grouping ? "\"" : "") < 0)
-        LOG_RETURN(-EIO, "Unable to write hsm : %s \"%s\" \"%s\" \"%d\" \"%s\"",
-                   type == HSM_SYNC ? "CREATE" : "DELETE",
-                   object->oid, object->uuid, object->version,
-                   type == HSM_SYNC ? params->destination_copy_name :
-                                      params->source_copy_name);
-    else
-        return 0;
+               metadata_str->str) < 0)
+        LOG_GOTO(clean, rc = -EIO,
+                 "Unable to write hsm : %s \"%s\" \"%s\" \"%d\" \"%s\"",
+                 type == HSM_SYNC ? "CREATE" : "DELETE",
+                 object->oid, object->uuid, object->version,
+                 type == HSM_SYNC ? params->destination_copy_name :
+                                    params->source_copy_name);
+
+clean:
+    g_string_free(metadata_str, true);
+    return rc;
 }

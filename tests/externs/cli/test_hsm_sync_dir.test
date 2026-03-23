@@ -27,8 +27,6 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_launch_daemon.sh
 . $test_dir/utils_generation.sh
 
-set -xe
-
 function setup
 {
     setup_tables
@@ -71,8 +69,7 @@ function cleanup
 
 function check_hsm_sync_dir_opt()
 {
-    ($valg_phobos_hsm_sync_dir --bad_opt &&
-         error "--bad_opt parsing must fail") || true
+    $valg_phobos_hsm_sync_dir --bad_opt && error "--bad_opt parsing must fail"
 
     local usage=$($valg_phobos_hsm_sync_dir -h)
     local usage_long=$($valg_phobos_hsm_sync_dir --help)
@@ -82,12 +79,15 @@ function check_hsm_sync_dir_opt()
     fi
 
     (echo ${usage} | grep usage) || error "-h must show usage"
+
+    return 0
 }
 
 function check_hsm_sync_dir()
 {
     # object to sync
-    $phobos put --grouping group --tags this-host ${FILES[0]} obj_to_sync
+    $phobos put --metadata key1=value1,key2=value2 --grouping group \
+        --tags this-host ${FILES[0]} obj_to_sync
 
     # object deprecated
     $phobos put --tags this-host ${FILES[0]} obj_deprecated
@@ -107,18 +107,20 @@ UPDATE device SET host = 'other_host' WHERE path = '${dir_other_host}';
 EOF
 
     # dry-run phobos_hsm_sync_dir
-    dry_run_log=$($valg_phobos_hsm_sync_dir source sync)
-    (echo ${dry_run_log} | grep "CREATE" | grep "obj_to_sync" | grep "sync") ||
+    dry_run_log=$($valg_phobos_hsm_sync_dir --metadata key1,k3,key2 source sync)
+    (echo "${dry_run_log}" | grep "CREATE" | grep "obj_to_sync" | grep "sync" | \
+     grep " \"key1\"=\"value1\"" | grep " \"key2\"=\"value2\"") ||
         error "dry-run sync must show a sync of obj_to_sync"
-    ((echo ${dry_run_log} | grep "CREATE" | grep "obj_to_sync" | grep "grouping") &&
-        error "sync must not show grouping without the option") || true
+    (echo "${dry_run_log}" | grep "CREATE" | grep "obj_to_sync" | \
+      grep "grouping") &&
+        error "sync must not show grouping without the option"
 
     # run phobos_hsm_sync_dir with no synced ctime file but a large delay
     rm -f ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
     export PHOBOS_HSM_SOURCE_SYNC_sync_delay_second="36000"
     no_synced_file_large_delay_log=$($valg_phobos_hsm_sync_dir source sync)
-    ((echo ${no_synced_file_large_delay_log} | grep "CREATE") &&
-        error "no synced and a large delay must not show any sync") || true
+    (echo "${no_synced_file_large_delay_log}" | grep "CREATE") &&
+        error "no synced and a large delay must not show any sync"
     unset PHOBOS_HSM_SOURCE_SYNC_sync_delay_second
 
     # run phobos_hsm_sync_dir with no synced ctime file
@@ -136,29 +138,32 @@ EOF
 
     # run phobos_hsm_sync_dir with no new file
     no_new_object_log=$($valg_phobos_hsm_sync_dir source sync)
-    ((echo ${no_new_object_log} | grep "CREATE") &&
-        error "sync without any new object must not show any sync") || true
+    (echo "${no_new_object_log}" | grep "CREATE") &&
+        error "sync without any new object must not show any sync"
 
     # run phobos_hsm_sync_dir with a synced ctime file but a large delay
     sleep 5
     $phobos put --grouping group --tags this-host ${FILES[0]} new_obj_to_sync
     export PHOBOS_HSM_SOURCE_SYNC_sync_delay_second="5"
     synced_file_large_delay_log=$($valg_phobos_hsm_sync_dir source sync)
-    ((echo ${synced_file_large_delay_log} | grep "CREATE") &&
-        error "synced and a large delay must not show any sync") || true
+    (echo "${synced_file_large_delay_log}" | grep "CREATE") &&
+        error "synced and a large delay must not show any sync"
     unset PHOBOS_HSM_SOURCE_SYNC_sync_delay_second
 
     # run phobos_hsm_sync_dir with a synced ctime file and a new object
     new_object_log=$($valg_phobos_hsm_sync_dir -g -c source sync)
-    (echo ${new_object_log} | grep "CREATE" | grep "new_obj_to_sync" | grep "sync" | grep "\"grouping\"=\"group\"") ||
+    (echo "${new_object_log}" | grep "CREATE" | grep "new_obj_to_sync" | \
+     grep "sync" | grep "\"grouping\"=\"group\"") ||
         error "sync must show a sync of new_obj_to_sync"
 
     # run phobos_hsm_sync_dir with a synced ctime that exclude an old object
     $phobos put --tags this-host ${FILES[0]} old_object
     date +"%Y-%m-%d %H:%M:%S.%6N" > ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
     old_object_log=$($valg_phobos_hsm_sync_dir source sync)
-    ((echo ${old_object_log} | grep "CREATE") &&
-        error "sync without only an old object must not show any sync") || true
+    (echo "${old_object_log}" | grep "CREATE") &&
+        error "sync without only an old object must not show any sync"
+
+    return 0
 }
 
 function no_synced_time_and_log_on_error()
@@ -174,6 +179,7 @@ function no_synced_time_and_log_on_error()
     # run phobos_hsm_sync_dir with no synced ctime file
     rm -f ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
     $valg_phobos_hsm_sync_dir -c source sync || true
+
     if [ -f "${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}" ]; then
         error "synced_ctime_file must not be created on error"
     fi
@@ -181,6 +187,8 @@ function no_synced_time_and_log_on_error()
     if [! -f "${PHOBOS_HSM_SOURCE_SYNC_error_log_path}" ]; then
         error "error log file must be created on error"
     fi
+
+    return 0
 }
 
 function grouping_sync()
@@ -190,18 +198,35 @@ function grouping_sync()
     $phobos put --grouping a --tags dir1 ${FILES[0]} a_1
     $phobos put --grouping b --tags dir1 ${FILES[0]} b_1
     $phobos put --tags dir1 ${FILES[0]} no_grp
-    $phobos put --grouping b --tags dir1 ${FILES[0]} b_2
-    $phobos put --grouping a --tags dir1 ${FILES[0]} a_2
+    $phobos put --grouping b --metadata kb=valueb --tags dir1 ${FILES[0]} b_2
+    $phobos put --grouping a --metadata ka=valuea --tags dir1 ${FILES[0]} a_2
+
+    # dry-run to check metadata
+    sync_log=$($valg_phobos_hsm_sync_dir -m ka,kb --grouping source sync)
+    rm -f ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
+    (echo "${sync_log}" | grep "CREATE" | grep "a_1" | grep "ka") &&
+        error "sync must not show key ka for a_1"
+    (echo "${sync_log}" | grep "CREATE" | grep "a_2" | grep "sync" | \
+     grep " \"grouping\"=\"a\"" | grep " \"ka\"=\"valuea\"") ||
+        error "sync must show a grouping and ka for a_2"
+    (echo "${sync_log}" | grep "CREATE" | grep "b_2" | grep "sync" | \
+     grep " \"grouping\"=\"b\"" | grep " \"kb\"=\"valueb\"") ||
+        error "sync must show a grouping and kb for b_2"
+    (echo "${sync_log}" | grep "CREATE" | grep "b_2" | grep "ka") &&
+        error "sync must not show key ka for b_2"
+
 
     # sync we must get in order:
     # a_1, a_2, b_1, b_2, no_grp
-    sync_log=$($valg_phobos_hsm_sync_dir --grouping source sync)
-    (echo ${sync_log} | grep "CREATE" | grep "a_1" | grep "sync" | grep "\"grouping\"=\"a\"") ||
+    sync_log=$($valg_phobos_hsm_sync_dir -c --grouping source sync)
+    (echo "${sync_log}" | grep "CREATE" | grep "a_1" | grep "sync" | \
+     grep "\"grouping\"=\"a\"") ||
         error "sync must show a grouping a for a_1"
-    (echo ${sync_log} | grep "CREATE" | grep "b_2" | grep "sync" | grep "\"grouping\"=\"b\"") ||
+    (echo "${sync_log}" | grep "CREATE" | grep "b_2" | grep "sync" | \
+     grep "\"grouping\"=\"b\"") ||
         error "sync must show a grouping b for b_2"
-    ((echo ${sync_log} | grep "CREATE" | grep "no_grp" | grep "grouping") &&
-        error "sync must not show grouping option when object have no group") || true
+    (echo "${sync_log}" | grep "CREATE" | grep "no_grp" | grep "grouping") &&
+        error "sync must not show grouping option when object have no group"
 
     # check order
     t_a_1=$($phobos copy list --copy-name sync -o creation_time a_1)
@@ -219,6 +244,8 @@ function grouping_sync()
     elif [[ ${t_b_2} > ${t_no_grp} ]]; then
         error "b_2 sync copy must be older than no_grp one"
     fi
+
+    return 0
 }
 
 TESTS=(

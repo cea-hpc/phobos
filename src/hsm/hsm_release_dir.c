@@ -69,12 +69,14 @@
 static void print_usage(void)
 {
     printf("usage: %s [-h/--help] [-v/--verbose] [-q/--quiet] [-d/--delete] "
+           "[-m/--metadata key1[,key2,[...]]] "
            "source_copy_name destination_copy_name\n"
            "\n"
            "This command detects which source_copy_name copies of objects on "
            "the local dirs should be deleted. Each new copy to delete is "
            "written on stdout with the following line:\n"
-           "DELETE \"oid\" \"uuid\" \"version\" \"copy_name\"\n"
+           "DELETE \"oid\" \"uuid\" \"version\" \"copy_name\" "
+           "[\"key1\"=\"value1\"] [\"key2\"=\"value2\"]\n"
            "\n"
            "If the fill rate of one local dir is above the higher threshold, "
            "the phobos_hsm_release_dir command selects copies of object with "
@@ -94,7 +96,11 @@ static void print_usage(void)
            "The 'dir_release_higher_threshold', 'dir_release_lower_threshold' "
            "and 'release_delay_second' are config file parameters.\n"
            "If the '-d/--delete' option is set, new copies written on STDOUT "
-           "are sequentially deleted.\n",
+           "are sequentially deleted.\n"
+           "\n"
+           "If the '-m/--metadata key1[,key2,[...]]' option is set, a "
+           "'\"keyX\"=\"value\"' is put on the line of each object which has a "
+           "'keyX' metadata.\n",
            program_invocation_short_name);
 }
 
@@ -107,12 +113,13 @@ static struct hsm_params parse_args(int argc, char **argv)
         {"verbose", no_argument, 0, 'v'},
         {"quiet", no_argument, 0, 'q'},
         {"delete", no_argument, 0, 'd'},
+        {"metadata", required_argument, 0, 'm'},
         {0, 0, 0, 0}
     };
     struct hsm_params params = DEFAULT_PARAMS;
     int c;
 
-    while ((c = getopt_long(argc, argv, "hvqd", long_options, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "hvqdm:", long_options, NULL)) != -1) {
         switch (c) {
         case 'h':
             print_usage();
@@ -125,6 +132,9 @@ static struct hsm_params parse_args(int argc, char **argv)
             break;
         case 'd':
             params.achieve = true;
+            break;
+        case 'm':
+            str2string_array(optarg, &params.wanted_keys);
             break;
         default:
             print_usage();
@@ -625,5 +635,6 @@ cfg_end:
     pho_cfg_local_fini();
 fini_end:
     phobos_fini();
+    clean_hsm_params(&params);
     return rc;
 }
