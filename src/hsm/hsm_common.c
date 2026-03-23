@@ -138,11 +138,14 @@ void hsm_log_error(enum hsm_type type, int rc, const struct object_info *obj,
 int hsm_write_candidate(enum hsm_type type, const struct object_info *object,
                          const struct hsm_params *params)
 {
-    if (printf("%s \"%s\" \"%s\" \"%d\" \"%s\"\n",
+    if (printf("%s \"%s\" \"%s\" \"%d\" \"%s\"%s%s%s\n",
                type == HSM_SYNC ? "CREATE" : "DELETE",
                object->oid, object->uuid, object->version,
                type == HSM_SYNC ? params->destination_copy_name :
-                                  params->source_copy_name) < 0)
+                                  params->source_copy_name,
+               params->grouping && object->grouping ? " \"grouping\"=\"" : "",
+               params->grouping && object->grouping ? object->grouping : "",
+               params->grouping && object->grouping ? "\"" : "") < 0)
         LOG_RETURN(-EIO, "Unable to write hsm : %s \"%s\" \"%s\" \"%d\" \"%s\"",
                    type == HSM_SYNC ? "CREATE" : "DELETE",
                    object->oid, object->uuid, object->version,
