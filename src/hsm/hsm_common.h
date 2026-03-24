@@ -77,9 +77,11 @@ struct hsm_params {
     FILE *error_log_file;
     bool achieve;
     struct string_array wanted_keys;
+    bool base64;
 };
 
-#define DEFAULT_HSM_PARAMS {NULL, NULL, PHO_LOG_INFO, false, NULL, false, {0} }
+#define DEFAULT_HSM_PARAMS {NULL, NULL, PHO_LOG_INFO, false, NULL, false, {0}, \
+                            false}
 
 static inline void clean_hsm_params(struct hsm_params *params)
 {

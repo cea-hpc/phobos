@@ -138,6 +138,60 @@ void hsm_log_error(enum hsm_type type, int rc, const struct object_info *obj,
                  local_rc, strerror(local_rc));
 }
 
+
+static char *str2base64(const char *str)
+{
+    const char *base64_chars =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const char *current_char = str;
+    size_t nb_char = strlen(str);
+    char *current_char_base64;
+    char *str_base64;
+
+    str_base64 = xcalloc((nb_char + 2) / 3 * 4 + 1, 1);
+    current_char_base64 = str_base64;
+    while (nb_char > 0) {
+        /*
+         *current_char :         [xxxxxx  xx] [xxxx  xxxx] [xx  xxxxxx]
+         *current_char_base_64 : [xxxxxx][xx   xxxx][xxxx   xx][xxxxxx]
+         */
+        current_char_base64[0] = base64_chars[current_char[0] >> 2];
+
+        if (nb_char > 1)
+            current_char_base64[1] =
+                base64_chars[((current_char[0] & 0x03) << 4) +
+                             (current_char[1] >> 4)];
+        else
+            current_char_base64[1] =
+                base64_chars[(current_char[0] & 0x03) << 4];
+
+        if (nb_char > 2)
+            current_char_base64[2] =
+                base64_chars[((current_char[1] & 0x0f) << 2) +
+                             (current_char[2] >> 6)];
+        else if (nb_char > 1)
+            current_char_base64[2] =
+                base64_chars[(current_char[1] & 0x0f) << 2];
+        else
+            current_char_base64[2] = '=';
+
+        if (nb_char > 2)
+            current_char_base64[3] = base64_chars[current_char[2] & 0x3f];
+        else
+            current_char_base64[3] = '=';
+
+        if (nb_char < 3)
+            nb_char = 0;
+        else
+            nb_char -= 3;
+
+        current_char += 3;
+        current_char_base64 += 4;
+    }
+
+    return str_base64;
+}
+
 static void add_metadata(GString *metadata_str, const struct object_info *obj,
                          const struct hsm_params *params)
 {
@@ -157,10 +211,15 @@ static void add_metadata(GString *metadata_str, const struct object_info *obj,
         const char *value = pho_attr_get(&obj_md,
                                          params->wanted_keys.strings[i]);
 
-        if (value)
+        if (value) {
+            if (params->base64)
+                value = str2base64(value);
+
             g_string_append_printf(metadata_str, " \"%s\"=\"%s\"",
-                                   params->wanted_keys.strings[i],
-                                   value);
+                                   params->wanted_keys.strings[i], value);
+            if (params->base64)
+                free((void *)value);
+        }
     }
 
     pho_attrs_free(&obj_md);

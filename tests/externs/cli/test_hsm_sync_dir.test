@@ -107,9 +107,11 @@ UPDATE device SET host = 'other_host' WHERE path = '${dir_other_host}';
 EOF
 
     # dry-run phobos_hsm_sync_dir
-    dry_run_log=$($valg_phobos_hsm_sync_dir --metadata key1,k3,key2 source sync)
+    dry_run_log=$($valg_phobos_hsm_sync_dir --base64 --metadata key1,k3,key2 \
+                      source sync)
     (echo "${dry_run_log}" | grep "CREATE" | grep "obj_to_sync" | grep "sync" | \
-     grep " \"key1\"=\"value1\"" | grep " \"key2\"=\"value2\"") ||
+     grep " \"key1\"=\"$(echo -n value1 | base64)\"" | \
+     grep " \"key2\"=\"$(echo -n value2 | base64)\"") ||
         error "dry-run sync must show a sync of obj_to_sync"
     (echo "${dry_run_log}" | grep "CREATE" | grep "obj_to_sync" | \
       grep "grouping") &&

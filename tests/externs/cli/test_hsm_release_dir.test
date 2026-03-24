@@ -197,6 +197,16 @@ EOF
      grep "copy_to_release" | grep " \"k2\"=\"v2\"") ||
         error "dry-run must show a release of deprec_to_release"
 
+    # base64 dry-run phobos_hsm_release_dir
+    dry_run_log=$($valg_phobos_hsm_release_dir -b -m k1,k2 \
+                      copy_to_release copy_synced)
+    (echo "${dry_run_log}" | grep "DELETE" | grep "to_release" | \
+     grep "copy_to_release" | grep " \"k1\"=\"$(echo -n v1 | base64)\"") ||
+        error "dry-run must show a release of to_release"
+    (echo "${dry_run_log}" | grep "DELETE" | grep "deprec_to_release" | \
+     grep "copy_to_release" | grep " \"k2\"=\"$(echo -n v2 | base64)\"") ||
+        error "dry-run must show a release of deprec_to_release"
+
     # run phobos_hsm_release_dir
 
     # 4 extents are candidates to be released : to_release, deprec_to_release,

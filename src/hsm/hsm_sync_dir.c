@@ -332,7 +332,7 @@ static int set_tosync_ctime(const char *hsm_cfg_section_name,
 static void print_usage(void)
 {
     printf("usage: %s [-h/--help] [-v/--verbose] [-q/--quiet] [-g/--grouping] "
-           "[-c/--create] [-m/--metadata key1[,key2,[...]]] "
+           "[-c/--create] [-m/--metadata key1[,key2,[...]]] [-b/--base64] "
            "source_copy_name destination_copy_name\n"
            "\n"
            "This command detects which new copy `destination_copy_name` "
@@ -365,7 +365,10 @@ static void print_usage(void)
            "\n"
            "If the '-m/--metadata key1[,key2,[...]]' option is set, a "
            "'\"keyX\"=\"value\"' is put on the line of each object which has a "
-           "'keyX' metadata.\n",
+           "'keyX' metadata.\n"
+           "\n"
+           "If the -b/--base64 option is set, all metadata values will be "
+           "printed on stdout in base 64.\n",
            program_invocation_short_name);
 }
 
@@ -378,12 +381,14 @@ static struct hsm_params parse_args(int argc, char **argv)
         {"grouping", no_argument, 0, 'g'},
         {"create", no_argument, 0, 'c'},
         {"metadata", required_argument, 0, 'm'},
+        {"base64", no_argument, 0, 'b'},
         {0, 0, 0, 0}
     };
     struct hsm_params params = DEFAULT_HSM_PARAMS;
     int c;
 
-    while ((c = getopt_long(argc, argv, "hvqgcm:", long_options, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "hvqgcm:b", long_options, NULL)) !=
+           -1) {
         switch (c) {
         case 'h':
             print_usage();
@@ -402,6 +407,9 @@ static struct hsm_params parse_args(int argc, char **argv)
             break;
         case 'm':
             str2string_array(optarg, &params.wanted_keys);
+            break;
+        case 'b':
+            params.base64 = true;
             break;
         default:
             print_usage();
