@@ -168,18 +168,28 @@ function test_object_list_uuid
     $phobos put -f dir /etc/hosts oid1
     $phobos put -f dir /etc/hosts oid2
 
-    $valg_phobos object list --uuid $uuid &&
-        error "object list with an UUID without oid should failed"
     $valg_phobos object list --uuid $uuid oid1 oid2 &&
         error "object list with an UUID with two oids should failed"
 
     [ -z $($valg_phobos object list --uuid $uuid oid1)] ||
         error "Object list with $uuid for oid1 should be empty"
 
-    local res=$($valg_phobos object list --uuid $uuid --deprecated oid1 | wc -l)
+    local res1=$($valg_phobos object list --uuid $uuid --deprecated oid1)
+    local count=$(echo "$res1" | wc -l)
 
-    if [[ $res -ne 2 ]]; then
+    if [[ $count -ne 2 ]]; then
         error "There should be two objects, got $count"
+    fi
+
+    local res2=$($valg_phobos object list --uuid $uuid --deprecated)
+    count=$(echo "$res2" | wc -l)
+
+    if [[ $count -ne 2 ]]; then
+        error "There should be two objects, got $count"
+    fi
+
+    if [[ "$res1" != "$res2" ]]; then
+        error "It should be exactly the same"
     fi
 }
 

@@ -89,9 +89,9 @@ class ObjectOptHandler(BaseResourceOptHandler):
         uuid = self.params.get('uuid')
         version = self.params.get('version')
 
-        if len(oids) != 1 and uuid is not None:
-            self.logger.error("only one oid can be provided with the --uuid "
-                              "option")
+        if len(oids) > 1 and uuid is not None:
+            self.logger.error("The --uuid option is not compatible with more "
+                              "than one oid")
             sys.exit(os.EX_USAGE)
 
         scope = get_scope(deprecated, deprecated_only)
