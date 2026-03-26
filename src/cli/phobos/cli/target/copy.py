@@ -46,9 +46,9 @@ class CopyCreateOptHandler(CreateOptHandler):
     def add_options(cls, parser):
         super(CopyCreateOptHandler, cls).add_options(parser)
         parser.add_argument('oid', help='targeted object')
-        parser.add_argument('copy', help='copy name')
+        parser.add_argument('copy', help='name of the new copy to create')
         parser.add_argument('-c', '--copy-name',
-                            help='Copy name of the object to copy')
+                            help='name of the copy to read from')
         add_put_arguments(parser)
 
 
