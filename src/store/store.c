@@ -564,7 +564,8 @@ static int processor_communicate(struct pho_data_processor *proc,
  * Retrieve metadata associated with this xfer oid or uuid from the DSS and
  * update the \a xfer xd_attrs field accordingly.
  */
-int object_md_get(struct dss_handle *dss, struct pho_xfer_target *xfer)
+int object_md_get(struct dss_handle *dss, struct pho_xfer_target *xfer,
+                  enum dss_obj_scope scope)
 {
     const char *id = xfer->xt_objid ? xfer->xt_objid : xfer->xt_objuuid;
     struct object_info *obj;
@@ -575,8 +576,8 @@ int object_md_get(struct dss_handle *dss, struct pho_xfer_target *xfer)
 
     ENTRY;
 
-    rc = dss_lazy_find_object(dss, xfer->xt_objid, xfer->xt_objuuid,
-                              xfer->xt_version, &obj);
+    rc = dss_find_object(dss, xfer->xt_objid, xfer->xt_objuuid,
+                              xfer->xt_version, scope, &obj);
     if (rc)
         LOG_RETURN(rc, "Cannot fetch object: '%s'", id);
 
@@ -2224,7 +2225,8 @@ int phobos_getmd(struct pho_xfer_desc *xfers, size_t n)
             xfers[i].xd_targets->xt_objuuid =
                 xstrdup(xfers[i].xd_targets->xt_objuuid);
 
-        rc = object_md_get(&dss, xfers[i].xd_targets);
+        rc = object_md_get(&dss, xfers[i].xd_targets,
+                           xfers[i].xd_params.get.scope);
         if (rc) {
             dss_fini(&dss);
             LOG_RETURN(rc, "Cannot find metadata for object: %s",

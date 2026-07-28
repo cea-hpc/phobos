@@ -32,6 +32,7 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
                    bool overwrite, const char *grouping, const char *copy_name);
 int object_md_del(struct dss_handle *dss, struct pho_xfer_target *xfer,
                   const char *copy_name);
-int object_md_get(struct dss_handle *dss, struct pho_xfer_target *xfer);
+int object_md_get(struct dss_handle *dss, struct pho_xfer_target *xfer,
+                  enum dss_obj_scope scope);
 
 #endif

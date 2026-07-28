@@ -170,7 +170,7 @@ static void get_xfer_and_check_res(struct test_state *state, int index,
     int rc;
 
     update_state_xfer(state, oid, uuid, version);
-    rc = object_md_get(state->dss, state->xfer.xd_targets);
+    rc = object_md_get(state->dss, state->xfer.xd_targets, DSS_OBJ_ALL);
     assert_xfer_in_state(state, index, rc);
     clean_state_xfer(state);
 }
@@ -182,7 +182,7 @@ static void check_omg_fails_with_rc(struct test_state *state,
     int rc;
 
     update_state_xfer(state, oid, uuid, version);
-    rc = object_md_get(state->dss, state->xfer.xd_targets);
+    rc = object_md_get(state->dss, state->xfer.xd_targets, DSS_OBJ_ALIVE);
     assert_int_equal(rc, expected_rc);
     clean_state_xfer(state);
 }

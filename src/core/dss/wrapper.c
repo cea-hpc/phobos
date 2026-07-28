@@ -405,10 +405,14 @@ int dss_find_object(struct dss_handle *hdl, const char *oid,
 
     ENTRY;
 
-    g_string_append_printf(filter_str,
-                           "{\"$AND\": [ "
-                           "{\"DSS::OBJ::oid\": \"%s\"}%s",
-                           oid, (uuid != NULL || version != 0) ? ", " : "");
+    if (!oid && !uuid)
+        LOG_RETURN(-EINVAL, "Cannot build filter without oid and uuid");
+
+    g_string_append_printf(filter_str, "{\"$AND\": [ ");
+
+    if (oid)
+        g_string_append_printf(filter_str, "{\"DSS::OBJ::oid\": \"%s\"}%s",
+                               oid, (uuid != NULL || version != 0) ? ", " : "");
 
     if (uuid)
         g_string_append_printf(filter_str, "{\"DSS::OBJ::uuid\": \"%s\"}%s",

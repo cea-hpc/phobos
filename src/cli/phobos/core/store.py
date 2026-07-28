@@ -39,7 +39,8 @@ from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OBJ_BEST_HOST, # p
                                PHO_XFER_OBJ_HARD_DEL, PHO_XFER_COPY_HARD_DEL,
                                PHO_XFER_OP_COPY, PHO_XFER_OP_GET,
                                PHO_XFER_OP_GETMD, PHO_XFER_OP_PUT,
-                               PHO_RSC_INVAL, str2rsc_family, DSS_OBJ_ALIVE)
+                               PHO_RSC_INVAL, str2rsc_family,
+                               DSS_OBJ_ALIVE, DSS_OBJ_ALL)
 from phobos.core.dss import dss_sort
 
 ATTRS_FOREACH_CB_TYPE = CFUNCTYPE(c_int, c_char_p, c_char_p, c_void_p)
@@ -261,7 +262,7 @@ class XferGetParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         self.copy_name = get_params.copy_name
         self.node_name = get_params.node_name
         if get_params.scope is None:
-            self.scope = DSS_OBJ_ALIVE
+            self.scope = DSS_OBJ_ALL
         else:
             self.scope = get_params.scope
 
@@ -933,6 +934,7 @@ class UtilClient:
         xfers[0].xd_ntargets = 1
         target = XferTarget * 1
         xfers[0].xd_targets = target()
+        xfers[0].xd_params.get = XferGetParams(GetParams())
         if oid is not None:
             xfers[0].xd_targets[0].xt_objid = oid
         if uuid is not None:
