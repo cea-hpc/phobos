@@ -584,6 +584,7 @@ static int try_exchange_extra_devices(struct io_scheduler *io_sched,
         }
 
         if (extra_devices[i]->ld_io_request_type & IO_REQ_READ) {
+            struct request_queue *queue;
             struct media_info *medium;
             struct device *d;
 
@@ -598,9 +599,11 @@ static int try_exchange_extra_devices(struct io_scheduler *io_sched,
                  */
                 continue;
 
-            d->queue = g_hash_table_lookup(data->request_queues,
-                                           &medium->rsc.id);
-            d->queue->device = d;
+            queue = g_hash_table_lookup(data->request_queues,
+                                        &medium->rsc.id);
+            if (queue)
+                associate_queue_to_device(d, queue);
+
             lrs_medium_release(medium);
         }
     }
