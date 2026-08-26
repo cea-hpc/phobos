@@ -110,6 +110,11 @@ struct device {
 static void associate_queue_to_device(struct device *device,
                                       struct request_queue *queue)
 {
+    if (device->queue && device->queue != queue)
+        device->queue->device = NULL;
+    if (queue->device && queue->device != device)
+        queue->device->queue = NULL;
+
     device->queue = queue;
     queue->device = device;
 }
@@ -117,8 +122,9 @@ static void associate_queue_to_device(struct device *device,
 static void remove_queue_from_device(struct device *device,
                                      struct request_queue *queue)
 {
-    device->queue = NULL;
-    if (queue->device)
+    if (device->queue == queue)
+        device->queue = NULL;
+    if (queue->device == device)
         queue->device = NULL;
 }
 
