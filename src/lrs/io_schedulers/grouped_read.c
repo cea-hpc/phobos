@@ -1482,7 +1482,7 @@ static struct lrs_dev *find_device_to_remove(struct io_scheduler *io_sched,
         }
     }
 
-    return device->device;
+    return device ? device->device : NULL;
 }
 
 static int grouped_exchange_device(struct io_scheduler *io_sched,
