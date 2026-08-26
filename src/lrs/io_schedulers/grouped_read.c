@@ -1356,16 +1356,19 @@ static int grouped_retry(struct io_scheduler *io_sched,
          * failed to load.
          */
     } else {
+        int medium_index;
+
         if (pho_id_equal(&queue_to_use->medium_id, &(*medium)->rsc.id))
             /* release the previous reference in the request container */
             lrs_medium_release(*medium);
 
-        sreq->medium_index =
-            read_req_get_medium_index(reqc, &queue_to_use->medium_id);
-    }
+        medium_index = read_req_get_medium_index(reqc,
+                                                 &queue_to_use->medium_id);
+        if (medium_index < 0)
+            return medium_index;
 
-    if (sreq->medium_index < 0)
-        return sreq->medium_index;
+        sreq->medium_index = medium_index;
+    }
 
     if (*dev)
         return 0;
