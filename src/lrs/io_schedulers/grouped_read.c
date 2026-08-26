@@ -541,8 +541,8 @@ static int exchange_device(struct io_scheduler *io_sched,
 
     free_device = find_free_device(io_sched->devices);
     if (!free_device)
-        /* No free device to give back, cannot schedule this request yet. */
-        return 0;
+        /* No free device to give back, cannot exchange. */
+        return -ENODEV;
 
     args.exchange.desired_device = device_to_exchange;
     args.exchange.unused_device = free_device;
