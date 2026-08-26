@@ -775,27 +775,6 @@ static struct device *find_device_from_lrs_dev(struct io_scheduler *io_sched,
     return NULL;
 }
 
-static int allocate_queue_if_loaded(struct io_scheduler *io_sched,
-                                    struct request_queue *queue)
-{
-    struct device *device;
-    struct lrs_dev *d;
-
-    d = search_loaded_medium(io_sched->io_sched_hdl->global_device_list, NULL,
-                             queue->medium_id.name, queue->medium_id.library);
-    /* If the device belongs to another scheduler, the request will be pushed to
-     * the queue in the hash table. The device will be associated to the queue
-     * when it is exchanged with the I/O scheduler that owns it.
-     */
-    if (!d || !(d->ld_io_request_type & io_sched->type))
-        return 0;
-
-    device = find_device_from_lrs_dev(io_sched, d);
-    associate_queue_to_device(device, queue);
-
-    return 0;
-}
-
 /**
  * Compare two queue elems using the qos and priority of their request.
  *
@@ -895,8 +874,6 @@ static int insert_request_in_medium_queue(struct io_scheduler *io_sched,
         rc = request_queue_alloc(io_sched, elem, index, &queue);
         if (rc)
             return rc;
-
-        allocate_queue_if_loaded(io_sched, queue);
     }
 
     queue_insert(queue, elem);
