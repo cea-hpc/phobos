@@ -1446,7 +1446,8 @@ static int grouped_remove_device(struct io_scheduler *io_sched,
 
         if (dev->device == device) {
             if (dev->queue)
-                dev->queue->device = NULL;
+                remove_queue_from_device(dev, dev->queue);
+
             g_ptr_array_remove_index(io_sched->devices, i);
             free(dev);
 
@@ -1505,6 +1506,10 @@ static int grouped_exchange_device(struct io_scheduler *io_sched,
 
     device_to_remove->device->ld_io_request_type &= ~io_sched->type;
     device_to_add->ld_io_request_type = io_sched->type;
+
+    if (device_to_remove->queue)
+        remove_queue_from_device(device_to_remove, device_to_remove->queue);
+
     grouped_add_device(io_sched, device_to_add);
     g_ptr_array_remove(io_sched->devices, device_to_remove);
     free(device_to_remove);
