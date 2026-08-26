@@ -639,7 +639,8 @@ static bool request_can_be_allocated(struct io_scheduler *io_sched,
     if (available_devices >= n_required)
         return true;
 
-    extra_devices = xmalloc(sizeof(*extra_devices) * n_required);
+    extra_devices = xmalloc(sizeof(*extra_devices) *
+                            reqc->req->ralloc->n_med_ids);
     dev_iter = extra_devices;
 
     for (i = 0; i < reqc->req->ralloc->n_med_ids; i++) {
