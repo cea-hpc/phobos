@@ -455,7 +455,7 @@ static void empty_incompatible_queue(struct io_scheduler *io_sched,
         if (elem->reqc->req->ralloc->n_required > num_elements)
             cancel_request(io_sched, elem);
         else
-            queue_element_free(elem, num_elements == 1);
+            queue_element_free(elem, num_elements == 0);
     }
 
     delete_queue(io_sched->private_data, queue);
