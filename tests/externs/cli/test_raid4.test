@@ -25,3 +25,55 @@ test_dir=$(dirname $(readlink -e $0))
 
 export RAID_LAYOUT=raid4
 . $test_dir/externs/cli/raid_layout_common_tests.sh
+
+function check_raid4_extent_index_xattr()
+{
+    local oid=$1
+    local addresses=($(get_extent_info "$oid" address))
+    local media=($(get_extent_mount_point "$oid"))
+
+    for (( i = 0; i < ${#addresses[@]}; i++ )); do
+        local extent="${media[i]}/${addresses[i]}"
+        local xattr_val
+        xattr_val=$(getxattr "$extent" "user.raid4.extent_index" |
+                    cut -d'=' -f2 | sed 's/"//g')
+
+        if [[ -z "$xattr_val" ]]; then
+            error "raid4.extent_index xattr not found on '$extent'"
+        fi
+
+        if (( xattr_val != i )); then
+            error "raid4.extent_index ($xattr_val) != expected ($i) on $extent"
+        fi
+    done
+}
+
+function test_raid4_extent_index_xattr()
+{
+    local oid=$FUNCNAME
+    local file=$(make_file 512K)
+
+    $valg_phobos put "$file" $oid
+    check_raid4_extent_index_xattr "$oid"
+    rm "$file"
+}
+
+function test_raid4_extent_index_xattr_split()
+{
+    local oid=$FUNCNAME
+    local file=$(make_file 2740KB)
+
+    $valg_phobos put "$file" $oid
+    check_extent_count "$oid" 6
+    check_raid4_extent_index_xattr "$oid"
+    rm "$file"
+}
+
+TESTS+=(
+    "setup_dir even; \
+     test_raid4_extent_index_xattr; \
+     cleanup_dir"
+    "setup_dir_split even; \
+     test_raid4_extent_index_xattr_split; \
+     cleanup_dir_split"
+)

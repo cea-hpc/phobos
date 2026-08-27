@@ -401,13 +401,50 @@ static GPtrArray *layout_raid4_get_extents_to_rebuild_from(
     return raid_get_extents_to_rebuild_from(lyt, 3, extent_to_rebuild);
 }
 
+static int layout_raid4_get_specific_attrs(struct pho_io_descr *iod,
+                                           struct io_adapter_module *ioa,
+                                           struct extent *extent,
+                                           struct pho_attrs *layout_md)
+{
+    const char *tmp_extent_index;
+    struct pho_attrs md;
+    int rc;
+
+    md.attr_set = NULL;
+    pho_attr_set(&md, PHO_EA_RAID4_EXTENT_INDEX_NAME, NULL);
+
+    iod->iod_attrs = md;
+    iod->iod_flags = PHO_IO_MD_ONLY;
+
+    rc = ioa_open(ioa, NULL, iod, false);
+    if (rc)
+        goto end;
+
+    tmp_extent_index = pho_attr_get(&md, PHO_EA_RAID4_EXTENT_INDEX_NAME);
+    if (tmp_extent_index == NULL)
+        LOG_GOTO(end, rc = -EINVAL,
+                 "Failed to retrieve extent index of file '%s'",
+                 iod->iod_loc->extent->address.buff);
+
+    extent->layout_idx = str2int64(tmp_extent_index);
+    if (extent->layout_idx < 0)
+        LOG_GOTO(end, rc = -EINVAL,
+                 "Invalid extent index found on '%s': '%d'",
+                 iod->iod_loc->extent->address.buff, extent->layout_idx);
+
+end:
+    pho_attrs_free(&md);
+
+    return rc;
+}
+
 static const struct pho_layout_module_ops LAYOUT_RAID4_OPS = {
     .encode = layout_raid4_encode,
     .decode = layout_raid4_decode,
     .erase = layout_raid4_erase,
     .rebuild = layout_raid4_rebuild,
     .locate = layout_raid4_locate,
-    .get_specific_attrs = NULL,
+    .get_specific_attrs = layout_raid4_get_specific_attrs,
     .get_availability = layout_raid4_get_availability,
     .get_replica_info = layout_raid4_get_replica_info,
     .get_extents_to_rebuild_from = layout_raid4_get_extents_to_rebuild_from,
