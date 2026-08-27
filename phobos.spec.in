@@ -163,18 +163,18 @@ mkdir -p %{buildroot}/%{_sharedstatedir}/phobos
 %{python_sitearch}/phobos-*-py?.?.egg-info
 %{_bindir}/phobos
 %{_sbindir}/phobosd
-%{_unitdir}/phobosd.service
-%{_sysconfdir}/ld.so.conf.d/phobos.conf
 %{_sbindir}/phobos_tape_library_test
 %{_sbindir}/phobos_tape_library_test.bash
 %{_sbindir}/phobos_tape_library_mtx_test.bash
 %{_sbindir}/phobos_tlc
-%{_unitdir}/phobos_tlc.service
 %{_sbindir}/phobos_hsm_sync_dir
 %{_sbindir}/phobos_hsm_release_dir
 %{_mandir}/man1/*
 
+%config(noreplace) %{_unitdir}/phobosd.service
+%config(noreplace) %{_unitdir}/phobos_tlc.service
 %config(noreplace) %{_sysconfdir}/phobos.conf
+%config(noreplace) %{_sysconfdir}/ld.so.conf.d/phobos.conf
 %config %{_sysconfdir}/bash_completion.d/phobos-argcomplete.sh
 %dir %{phobosdocdir}
 %doc %{phobosdocdir}/README.md
