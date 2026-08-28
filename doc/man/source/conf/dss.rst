@@ -33,3 +33,20 @@ Example:
 
     [dss]
     connect_string = dbname=phobos host=localhost user=phobos password=phobos
+
+*retry_max_seconds*
+-------------------
+
+The **retry_max_seconds** parameter defines the maximum total time in seconds
+spent retrying failed DSS requests.
+
+Retries use an exponential backoff (1s, 2s, 4s, 8s, ...).
+
+The value 0 means no retry and is the default.
+
+Example:
+
+.. code:: ini
+
+    [dss]
+    retry_max_seconds = 128

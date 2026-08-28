@@ -54,4 +54,11 @@ bool dss_tape_model_check(const char *model);
  */
 const char *get_connection_string(void);
 
+/**
+ * Retrieve the maximum total retry budget in seconds for DSS requests.
+ *
+ * \return the budget in seconds, default is 0 (no retry)
+ */
+int dss_retry_max_seconds(void);
+
 #endif

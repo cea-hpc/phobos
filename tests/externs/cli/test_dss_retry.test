@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+
+#
+#  All rights reserved (c) 2014-2026 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for DSS retry loop with DB outage recovery
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
+
+set -xe
+
+PG_SERVICE="postgresql"
+
+function setup
+{
+    setup_test_dirs
+    FLAG_FILE="${DIR_TEST_IN}/flag"
+    setup_tables
+    invoke_lrs
+    # Add a dir so the list command has something to return
+    dir_name="dir"
+    dir_path="${DIR_TEST_IN}/${dir_name}"
+    mkdir ${dir_path}
+    $phobos dir add ${dir_path}
+    $phobos dir format --unlock ${dir_path}
+    OBJ_NAME="obj_ready_dss_failure"
+    $phobos put -f dir /etc/hosts ${OBJ_NAME}
+    waive_lrs
+
+    if [ "$(gdb --version | head -n 1 | awk '{print $NF}' | cut -f1 -d'.')" -ge "16" ]; then
+        GDB_LOG_ENABLED="enabled"
+    else
+        GDB_LOG_ENABLED=""
+    fi
+}
+
+function cleanup
+{
+    systemctl restart ${PG_SERVICE}
+    drop_tables
+    cleanup_test_dirs
+}
+
+# Run phobos dir list under GDB with a breakpoint on
+# phobos_construct_obj_filter().
+# When the breakpoint hits, stop the DB so the PQexec fails and the
+# retry loop kicks in, then continue execution.
+function run_with_db_outage_on_phobos_construct_obj_filter
+{
+    local cmd_return_code_file=$1
+
+    (
+        tmp_gdb_script=$(mktemp -p ${DIR_TEST_IN} gdb_script.XXXXXX)
+        trap "rm $tmp_gdb_script" EXIT
+        cat <<EOF > "$tmp_gdb_script"
+set breakpoint pending on
+break phobos_construct_obj_filter
+commands
+shell systemctl stop ${PG_SERVICE}
+shell touch ${FLAG_FILE}
+continue
+end
+run $phobos object list
+set logging file ${cmd_return_code_file}
+set logging ${GDB_LOG_ENABLED} on
+printf "%d", \$_exitcode
+set logging ${GDB_LOG_ENABLED} off
+EOF
+
+        rm -f "${FLAG_FILE}"
+        DEBUGINFOD_URLS="" gdb -batch -x "$tmp_gdb_script" -q python3
+    )
+}
+
+# Run a phobos dir list with a DB outage triggered at
+# phobos_construct_obj_filter() time.
+# The DB is down for DOWN_TIME seconds, then restarted.
+function run_with_outage_on_phobos_construct_obj_filter
+{
+    local down_time=$1
+    local out_file=$2
+    local rc_file=$3
+
+    rm -f "${out_file}"
+
+    run_with_db_outage_on_phobos_construct_obj_filter ${rc_file} > "${out_file}" 2>&1 &
+    local phobos_pid=$!
+
+    # Wait for the DB to be stopped (GDB breakpoint hit)
+    local timeout=30
+    while [ ! -f "${FLAG_FILE}" ] && [ ${timeout} -gt 0 ]; do
+        sleep 0.5
+        timeout=$((timeout - 1))
+    done
+
+    # Wait with the DB down, then restart it
+    sleep "${down_time}"
+    systemctl start ${PG_SERVICE}
+
+    # Wait for the phobos command to complete
+    wait ${phobos_pid}
+}
+
+function test_retry_succeeds_when_outage_within_budget
+{
+    local out_file="$DIR_TEST_OUT/out_success"
+    local rc_file="$DIR_TEST_OUT/rc_success"
+
+    # Set a retry budget of 8 s (allows retries: 1+2+4 = 7 <= 8)
+    export PHOBOS_DSS_retry_max_seconds=8
+
+    # DB down for 3 s, well within the 8 s budget
+    run_with_outage_on_phobos_construct_obj_filter 3 "${out_file}" "${rc_file}"
+
+    local RC=$(cat ${rc_file})
+    if [[ "$RC" != "0" ]]; then
+        cat "${out_file}"
+        error "phobos object list should have succeeded after DB recovery (rc=$RC)"
+    fi
+
+    if ! grep -q ${OBJ_NAME} ${out_file}; then
+        cat ${out_file} || \
+        error "phobos object list output should contain the existing object"
+    fi
+
+    return 0
+}
+
+function test_retry_fails_when_outage_exceeds_budget
+{
+    local out_file="${DIR_TEST_OUT}/out_failure"
+    local rc_file="$DIR_TEST_OUT/rc_failure"
+
+    # Set a retry budget of 4 s (allows retries: 1+2 = 3 <= 4)
+    export PHOBOS_DSS_retry_max_seconds=4
+
+    # No dir needed: the command should fail before returning results
+
+    # DB down for 10 s, exceeding the 4 s budget
+    run_with_outage_on_phobos_construct_obj_filter 10 "${out_file}" "${rc_file}"
+
+    local RC=$(cat ${rc_file})
+    if [[ "$RC" == "0" ]]; then
+        cat "${out_file}"
+        error "phobos object list should have failed after retry exhausted"
+    fi
+
+    return 0
+}
+
+TEST_SETUP=setup
+TESTS=(test_retry_succeeds_when_outage_within_budget \
+       test_retry_fails_when_outage_exceeds_budget)
+TEST_CLEANUP=cleanup

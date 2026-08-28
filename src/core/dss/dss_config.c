@@ -39,10 +39,11 @@
 enum pho_cfg_params_dss {
     /* DSS parameters */
     PHO_CFG_DSS_connect_string,
+    PHO_CFG_DSS_retry_max_seconds,
 
     /* Delimiters, update when modifying options */
     PHO_CFG_DSS_FIRST = PHO_CFG_DSS_connect_string,
-    PHO_CFG_DSS_LAST  = PHO_CFG_DSS_connect_string,
+    PHO_CFG_DSS_LAST  = PHO_CFG_DSS_retry_max_seconds,
 };
 
 const struct pho_config_item cfg_dss[] = {
@@ -50,6 +51,11 @@ const struct pho_config_item cfg_dss[] = {
         .section = "dss",
         .name    = "connect_string",
         .value   = "dbname=phobos host=localhost"
+    },
+    [PHO_CFG_DSS_retry_max_seconds] = {
+        .section = "dss",
+        .name    = "retry_max_seconds",
+        .value   = "0", /* no retry by default */
     },
 };
 
@@ -137,4 +143,17 @@ bool dss_tape_model_check(const char *model)
 const char *get_connection_string(void)
 {
     return PHO_CFG_GET(cfg_dss, PHO_CFG_DSS, connect_string);
+}
+
+int dss_retry_max_seconds(void)
+{
+    static int max_seconds = -1;
+
+    if (max_seconds != -1)
+        return max_seconds;
+
+    /* fallback to 0 (no retry) on failure */
+    max_seconds = PHO_CFG_GET_INT(cfg_dss, PHO_CFG_DSS, retry_max_seconds, 0);
+
+    return max_seconds;
 }

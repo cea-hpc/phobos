@@ -26,11 +26,13 @@
 #include "config.h"
 #endif
 
+#include "dss_config.h"
 #include "dss_utils.h"
 #include "pho_common.h"
 
 #include <errno.h>
 #include <libpq-fe.h>
+#include <unistd.h>
 
 struct sqlerr_map_item {
     const char *smi_prefix;  /**< SQL error code or class (prefix) */
@@ -67,14 +69,74 @@ static const struct sqlerr_map_item sqlerr_map[] = {
 int execute(PGconn *conn, const char *request, PGresult **res,
             ExecStatusType tested)
 {
+    int max_budget = dss_retry_max_seconds();
+    int elapsed = 0;
+    int delay = 1;
+    int rc;
+
     pho_debug("Executing request: '%s'", request);
 
-    *res = PQexec(conn, request);
-    if (PQresultStatus(*res) != tested)
-        LOG_RETURN(psql_state2errno(*res), "Request failed: %s",
-                   PQresultErrorField(*res, PG_DIAG_MESSAGE_PRIMARY));
+    while (true) {
+        int remaining = delay;
 
-    return 0;
+        *res = PQexec(conn, request);
+        if (PQresultStatus(*res) == tested)
+            return 0;
+
+        rc = psql_state2errno(*res);
+
+        /* Only retry transient errors (mapped to -ECOMM by the catch-all
+         * in psql_state2errno: connection loss, serialization failure,
+         * deadlock, ...). Deterministic errors (e.g. -EEXIST from a
+         * unique constraint, -EINVAL, -ENOLCK) cannot succeed on retry.
+         */
+        if (rc != -ECOMM)
+            LOG_RETURN(rc, "Request failed: %s",
+                       PQresultErrorField(*res, PG_DIAG_MESSAGE_PRIMARY));
+
+        if (max_budget <= 0)
+            LOG_RETURN(rc, "Request failed: %s",
+                       PQresultErrorField(*res, PG_DIAG_MESSAGE_PRIMARY));
+
+        if (elapsed + delay > max_budget)
+            LOG_RETURN(rc, "Request failed after %d s of retry: %s",
+                       elapsed,
+                       PQresultErrorField(*res, PG_DIAG_MESSAGE_PRIMARY));
+
+        pho_warn("Request failed (rc=%d), retrying in %d s", rc, delay);
+
+        PQclear(*res);
+        *res = NULL;
+        elapsed += delay;
+
+        remaining = delay;
+        while (remaining > 0)
+            remaining = sleep(remaining);
+
+        if (PQstatus(conn) == CONNECTION_BAD) {
+            PQreset(conn);
+            while (PQstatus(conn) != CONNECTION_OK) {
+                pho_warn("PQreset failed, connection still down");
+
+                if (elapsed + delay > max_budget)
+                    LOG_RETURN(-ECOMM,
+                               "Connection lost, retry budget exhausted "
+                               "after %d s", elapsed);
+
+                elapsed += delay;
+                remaining = delay;
+                while (remaining > 0)
+                    remaining = sleep(remaining);
+
+                delay *= 2;
+                PQreset(conn);
+            }
+            pho_info("Connection re-established after PQreset");
+            continue;
+        }
+
+        delay *= 2;
+    }
 }
 
 int psql_state2errno(const PGresult *res)
