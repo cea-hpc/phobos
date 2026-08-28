@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+
+#
+#  All rights reserved (c) 2014-2026 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for DSS connection retry in dss_init with DB outage
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
+
+set -xe
+
+PG_SERVICE="postgresql"
+
+function setup
+{
+    setup_test_dirs
+    setup_tables
+    invoke_lrs
+    # Add a dir so the list command has something to return
+    dir_name="dir_test_conn_retry"
+    dir_path="${DIR_TEST_IN}/${dir_name}"
+    mkdir ${dir_path}
+    $phobos dir add ${dir_path}
+    $phobos dir format --unlock ${dir_path}
+    waive_lrs
+}
+
+function cleanup
+{
+    systemctl restart ${PG_SERVICE}
+    drop_tables
+    cleanup_test_dirs
+}
+
+# Run a phobos command while the DB is down, then restart the DB
+# after down_time seconds so dss_init retry succeeds.
+function run_dir_list_with_db_down_then_restart
+{
+    local down_time=$1
+    local out_file=$2
+    local rc_file=$3
+
+    rm -f "${out_file}" "${rc_file}"
+
+    systemctl stop ${PG_SERVICE}
+
+    $phobos dir list > "${out_file}" 2>&1 &
+    local phobos_pid=$!
+
+    sleep "${down_time}"
+    systemctl start ${PG_SERVICE}
+
+    set +e
+    wait ${phobos_pid}
+    echo $? > "${rc_file}"
+    set -e
+}
+
+function test_retry_succeeds_when_outage_within_budget
+{
+    local out_file="$DIR_TEST_OUT/conn_success"
+    local rc_file="$DIR_TEST_OUT/conn_rc_success"
+
+    # Set a retry budget of 8 s (allows retries: 1+2+4 = 7 <= 8)
+    export PHOBOS_DSS_retry_max_seconds=8
+
+    # DB down for 3 s, well within the 8 s budget
+    run_dir_list_with_db_down_then_restart 3 "${out_file}" "${rc_file}"
+
+    local RC=$(cat ${rc_file})
+    if [[ "$RC" != "0" ]]; then
+        cat "${out_file}"
+        error "phobos dir list should have succeeded after DB recovery (rc=$RC)"
+    fi
+
+    if ! grep -q ${dir_name} ${out_file}; then
+        cat "${out_file}"
+        error "phobos dir list output should contain the existing dir"
+    fi
+
+    return 0
+}
+
+function test_retry_fails_when_outage_exceeds_budget
+{
+    local out_file="${DIR_TEST_OUT}/conn_failure"
+    local rc_file="$DIR_TEST_OUT/conn_rc_failure"
+
+    # Set a retry budget of 4 s (allows retries: 1+2 = 3 <= 4)
+    export PHOBOS_DSS_retry_max_seconds=4
+
+    # DB stays down 6 s, exceeding the 4 s budget
+    run_dir_list_with_db_down_then_restart 6 "${out_file}" "${rc_file}"
+
+    local RC=$(cat ${rc_file})
+    if [[ "$RC" == "0" ]]; then
+        cat "${out_file}"
+        error "phobos dir list should have failed after retry budget exhausted"
+    fi
+
+    return 0
+}
+
+TEST_SETUP=setup
+TESTS=(test_retry_succeeds_when_outage_within_budget \
+       test_retry_fails_when_outage_exceeds_budget)
+TEST_CLEANUP=cleanup

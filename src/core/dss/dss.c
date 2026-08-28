@@ -114,6 +114,10 @@ static inline int check_db_version(struct dss_handle *handle)
 int dss_init(struct dss_handle *handle)
 {
     const char *conn_str;
+    int max_budget;
+    int remaining;
+    int elapsed;
+    int delay;
     int rc;
 
     /* init static config parsing */
@@ -125,15 +129,37 @@ int dss_init(struct dss_handle *handle)
     if (conn_str == NULL)
         LOG_RETURN(-EINVAL, "No connection string from config");
 
-    handle->dh_conn = PQconnectdb(conn_str);
+    max_budget = dss_retry_max_seconds();
+    elapsed = 0;
+    delay = 1;
 
-    if (PQstatus(handle->dh_conn) != CONNECTION_OK) {
+    while (true) {
+        handle->dh_conn = PQconnectdb(conn_str);
+
+        if (PQstatus(handle->dh_conn) == CONNECTION_OK)
+            break;
+
         rc = -ENOTCONN;
         pho_error(rc, "Connection to database failed: %s",
                   PQerrorMessage(handle->dh_conn));
         PQfinish(handle->dh_conn);
         handle->dh_conn = NULL;
-        return rc;
+
+        if (max_budget <= 0)
+            return rc;
+
+        if (elapsed + delay > max_budget)
+            LOG_RETURN(rc, "Connection to database failed after %d s of "
+                       "retry", elapsed);
+
+        pho_warn("Retrying DB connection in %d s", delay);
+
+        elapsed += delay;
+        remaining = delay;
+        while (remaining > 0)
+            remaining = sleep(remaining);
+
+        delay *= 2;
     }
 
     (void)PQsetNoticeProcessor(handle->dh_conn, dss_pg_logger, NULL);

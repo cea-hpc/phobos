@@ -48,6 +48,7 @@ check_SCRIPTS=acceptance.test \
               test_copy_rebuild.test \
               test_ctime_ordered_read.test \
               test_delete.test \
+              test_dss_conn_retry.test \
               test_dss_retry.test \
               test_drive_list.test \
               test_drive_lookup.test \
