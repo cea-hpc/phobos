@@ -188,8 +188,8 @@ static void fill_pho_id(struct pho_id *id, pho_resp_t *write_resp)
 static int send_write_and_release_with_rc(struct pho_comm_info *ci,
                                           int client_rc)
 {
-    struct media_info *current_info;
-    struct media_info *new_info;
+    struct media_info *current_info = NULL;
+    struct media_info *new_info = NULL;
     int rc = PHO_TEST_SUCCESS;
     size_t n_tags[1] = {0};
     struct pho_id med_id;
@@ -238,18 +238,41 @@ static int send_write_and_release_with_rc(struct pho_comm_info *ci,
 
         dss_init(&dss);
 
-        if (new_info->rsc.adm_status != PHO_RSC_ADM_ST_FAILED)
-            LOG_GOTO(out, rc = PHO_TEST_FAILURE,
-                     "Medium is not set to failed after ENOSPC error");
+        if (is_medium_global_error(client_rc)) {
+            if (new_info->fs.status != PHO_FS_STATUS_FULL) {
+                /* restore so subsequent test calls can allocate the medium */
+                new_info->fs.status = current_info->fs.status;
+                dss_media_update(&dss, new_info, new_info, 1, FS_STATUS);
+                dss_fini(&dss);
+                LOG_GOTO(out, rc = PHO_TEST_FAILURE,
+                         "Medium is not set to full after ENOSPC error");
+            }
 
-        if (current_info->stats.nb_obj != new_info->stats.nb_obj)
+            /* set the status back to make other tests pass */
+            new_info->fs.status = current_info->fs.status;
+            rc = dss_media_update(&dss, new_info, new_info, 1, FS_STATUS);
+        } else {
+            if (new_info->rsc.adm_status != PHO_RSC_ADM_ST_FAILED) {
+                new_info->rsc.adm_status = current_info->rsc.adm_status;
+                dss_media_update(&dss, new_info, new_info, 1, ADM_STATUS);
+                dss_fini(&dss);
+                LOG_GOTO(out, rc = PHO_TEST_FAILURE,
+                         "Medium is not set to failed after I/O error");
+            }
+
+            /* set the status back to make other tests pass */
+            new_info->rsc.adm_status = current_info->rsc.adm_status;
+            rc = dss_media_update(&dss, new_info, new_info, 1, ADM_STATUS);
+        }
+
+
+        if (current_info->stats.nb_obj != new_info->stats.nb_obj) {
+            dss_fini(&dss);
             LOG_GOTO(out, rc = PHO_TEST_FAILURE,
                      "Number of objects was increased but no object was "
                      "written");
+        }
 
-        /* set the status back to make other tests pass */
-        new_info->rsc.adm_status = current_info->rsc.adm_status;
-        rc = dss_media_update(&dss, new_info, new_info, 1, ADM_STATUS);
         dss_fini(&dss);
     }
 
@@ -271,7 +294,11 @@ static int test_put_io_error(void *arg)
     if (rc)
         return rc;
 
-    return send_write_and_release_with_rc(arg, -ENOSPC);
+    rc = send_write_and_release_with_rc(arg, -ENOSPC);
+    if (rc)
+        return rc;
+
+    return send_write_and_release_with_rc(arg, -EIO);
 }
 
 static int test_bad_mput(void *arg)

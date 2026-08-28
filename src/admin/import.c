@@ -52,79 +52,63 @@
 #include "io_posix_common.h"
 
 /**
- * Update media_info stats and push its new state to the DSS
- *
- * \param[in] dss           DSS's handle
- * \param[in] media_info    Medium with the stats to update
- * \param[in] size_written  Size written on the medium
- * \param[in] media_rc      If non-zero, the medium should be marked as failed
- * \param[in] fsroot        Root of the medium's filesystem
- * \param[in] nb_new_obj    Number of objects on the medium
- *
- * \return 0 if the stat retrieval and update were successfull,
- *         non-zero otherwise
- */
+* Update media_info stats and push its new state to the DSS
+*
+* \param[in] dss           DSS's handle
+* \param[in] media_info    Medium with the stats to update
+* \param[in] size_written  Size written on the medium
+* \param[in] media_rc      If non-zero, the medium should be marked as failed
+* \param[in] fsroot        Root of the medium's filesystem
+* \param[in] nb_new_obj    Number of objects on the medium
+*
+* \return 0 if the stat retrieval and update were successfull,
+*         non-zero otherwise
+*/
 static int _dev_media_update(struct dss_handle *dss,
-                             struct media_info *media_info,
-                             size_t size_written, int media_rc,
-                             const char *fsroot, long long nb_new_obj)
+                         struct media_info *media_info,
+                         size_t size_written, int media_rc,
+                         const char *fsroot, long long nb_new_obj)
 {
-    struct ldm_fs_space space = {0};
-    struct fs_adapter_module *fsa;
-    uint64_t fields = 0;
-    int rc2, rc = 0;
+struct ldm_fs_space space = {0};
+struct fs_adapter_module *fsa;
+uint64_t fields = 0;
+int rc2, rc = 0;
 
-    if (media_info->fs.status == PHO_FS_STATUS_IMPORTING && !media_rc) {
-        media_info->fs.status = (nb_new_obj == 0 ? PHO_FS_STATUS_EMPTY :
-                                                   PHO_FS_STATUS_USED);
-        fields |= FS_STATUS;
-    }
+if (media_info->fs.status == PHO_FS_STATUS_IMPORTING && !media_rc) {
+    media_info->fs.status = (nb_new_obj == 0 ? PHO_FS_STATUS_EMPTY :
+                                               PHO_FS_STATUS_USED);
+    fields |= FS_STATUS;
+}
 
-    rc = get_fs_adapter(media_info->fs.type, &fsa);
+rc = get_fs_adapter(media_info->fs.type, &fsa);
+if (rc) {
+    pho_error(rc,
+              "Invalid filesystem type for '%s' (database may be "
+              "corrupted)", fsroot);
+    media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
+    fields |= ADM_STATUS;
+} else {
+    struct pho_log log;
+    struct pho_id dev = { .family = PHO_RSC_TAPE, .name = "",
+                          .library = ""};
+
+    init_pho_log(&log, &dev, &media_info->rsc.id, PHO_LTFS_DF);
+
+    rc = ldm_fs_df(fsa, fsroot, &space, &log.message);
+    emit_log_after_action(dss, &log, PHO_LTFS_DF, rc);
     if (rc) {
-        pho_error(rc,
-                  "Invalid filesystem type for '%s' (database may be "
-                  "corrupted)", fsroot);
+        pho_error(rc, "Cannot retrieve media usage information");
         media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
         fields |= ADM_STATUS;
     } else {
-        struct pho_log log;
-        struct pho_id dev = { .family = PHO_RSC_TAPE, .name = "",
-                              .library = ""};
-
-        init_pho_log(&log, &dev, &media_info->rsc.id, PHO_LTFS_DF);
-
-        rc = ldm_fs_df(fsa, fsroot, &space, &log.message);
-        emit_log_after_action(dss, &log, PHO_LTFS_DF, rc);
-        if (rc) {
-            pho_error(rc, "Cannot retrieve media usage information");
-            media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
-            fields |= ADM_STATUS;
-        } else {
-            media_info->stats.phys_spc_used = space.spc_used;
-            media_info->stats.phys_spc_free = space.spc_avail;
-            fields |= PHYS_SPC_USED | PHYS_SPC_FREE;
-            if (media_info->stats.phys_spc_free == 0) {
-                media_info->fs.status = PHO_FS_STATUS_FULL;
-                fields |= FS_STATUS;
-            }
-        }
+        media_info->stats.phys_spc_used = space.spc_used;
+        media_info->stats.phys_spc_free = space.spc_avail;
+        fields |= PHYS_SPC_USED | PHYS_SPC_FREE;
     }
+}
 
-    if (media_rc) {
-        media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
-        fields |= ADM_STATUS;
-    } else {
-        if (nb_new_obj) {
-            media_info->stats.nb_obj = nb_new_obj;
-            fields |= NB_OBJ_ADD;
-        }
-
-        if (size_written) {
-            media_info->stats.logc_spc_used = size_written;
-            fields |= LOGC_SPC_USED_ADD;
-        }
-    }
+    media_update_status_and_stats(media_info, media_rc, size_written,
+                                  nb_new_obj, &fields);
 
     /* TODO update nb_load, nb_errors, last_load */
 

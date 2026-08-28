@@ -1011,3 +1011,41 @@ out:
 
     return rc;
 }
+
+void media_update_status_and_stats(struct media_info *media_info, int media_rc,
+                                   size_t size_written, long long nb_new_obj,
+                                   uint64_t *fields)
+{
+    if (media_rc) {
+        if (is_medium_global_error(media_rc)) {
+            media_info->fs.status = PHO_FS_STATUS_FULL;
+            *fields |= FS_STATUS;
+        } else {
+            media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
+            pho_error(media_rc,
+                      "setting medium (family '%s', name '%s', library '%s') "
+                      "to failed", rsc_family2str(media_info->rsc.id.family),
+                      media_info->rsc.id.name, media_info->rsc.id.library);
+            *fields |= ADM_STATUS;
+        }
+    } else {
+        if (media_info->stats.phys_spc_free == 0) {
+            media_info->fs.status = PHO_FS_STATUS_FULL;
+            *fields |= FS_STATUS;
+        } else if (media_info->stats.phys_spc_free > 0 &&
+                   media_info->fs.status == PHO_FS_STATUS_FULL) {
+            media_info->fs.status = PHO_FS_STATUS_USED;
+            *fields |= FS_STATUS;
+        }
+
+        if (nb_new_obj) {
+            media_info->stats.nb_obj = nb_new_obj;
+            *fields |= NB_OBJ_ADD;
+        }
+
+        if (size_written) {
+            media_info->stats.logc_spc_used = size_written;
+            *fields |= LOGC_SPC_USED_ADD;
+        }
+    }
+}

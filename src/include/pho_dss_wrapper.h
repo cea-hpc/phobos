@@ -334,4 +334,27 @@ int dss_get_full_layout_from_medium(struct dss_handle *handle,
                                     struct layout_info **layouts,
                                     int *layout_count);
 
+/**
+ * Update the status and stats of a medium from the result of the operations
+ * that were performed on it, and accumulate the update flags of the modified
+ * fields, to be pushed to the DSS with dss_media_update().
+ *
+ * A medium-global error (ENOSPC, EROFS, EDQUOT) marks the medium as full
+ * instead of failed: the medium is not defective, but it is full or became
+ * read-only. Any other error marks it as failed.
+ *
+ * The filesystem status is only updated from the free space when no error
+ * was reported: an ENOSPC may occur while statfs still reports free space,
+ * so a FULL status set from an error is not reverted to USED.
+ *
+ * @param[in,out] media_info     Medium to update the status and stats of.
+ * @param[in]     media_rc       Return code of the operations on the medium.
+ * @param[in]     size_written   Size written on the medium.
+ * @param[in]     nb_new_obj     Number of new objects on the medium.
+ * @param[in,out] fields         Media update flags to accumulate.
+ */
+void media_update_status_and_stats(struct media_info *media_info, int media_rc,
+                                   size_t size_written, long long nb_new_obj,
+                                   uint64_t *fields);
+
 #endif

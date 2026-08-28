@@ -5,6 +5,8 @@
    use of media already present and available.
  * "phobos locate" is now compatible with incomplete copies missing
    extents on some of their media.
+ * the fs_status of a medium is now set to FULL when a ENOSPC, EROFS or EDQUOT
+   errors occurs instead of FAILED.
 
 ## 3.4.0
  * WARNING: the stat dev.umount_error is changed to dev.umount_errors .

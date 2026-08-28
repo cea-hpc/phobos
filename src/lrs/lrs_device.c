@@ -963,36 +963,11 @@ static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
             media_info->stats.phys_spc_used = space.spc_used;
             media_info->stats.phys_spc_free = space.spc_avail;
             fields |= PHYS_SPC_USED | PHYS_SPC_FREE;
-
-            if (media_info->stats.phys_spc_free == 0) {
-                media_info->fs.status = PHO_FS_STATUS_FULL;
-                fields |= FS_STATUS;
-            } else if (media_info->stats.phys_spc_free > 0 &&
-                       media_info->fs.status == PHO_FS_STATUS_FULL) {
-                media_info->fs.status = PHO_FS_STATUS_USED;
-                fields |= FS_STATUS;
-            }
         }
     }
 
-    if (media_rc) {
-        media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
-        pho_error(media_rc,
-                  "setting medium (family '%s', name '%s', library '%s') to "
-                  "failed", rsc_family2str(media_info->rsc.id.family),
-                  media_info->rsc.id.name, media_info->rsc.id.library);
-        fields |= ADM_STATUS;
-    } else {
-        if (nb_new_obj) {
-            media_info->stats.nb_obj = nb_new_obj;
-            fields |= NB_OBJ_ADD;
-        }
-
-        if (size_written) {
-            media_info->stats.logc_spc_used = size_written;
-            fields |= LOGC_SPC_USED_ADD;
-        }
-    }
+    media_update_status_and_stats(media_info, media_rc, size_written,
+                                  nb_new_obj, &fields);
 
     if (groupings_to_update)
         fields |= GROUPINGS;
@@ -1040,9 +1015,12 @@ static int dev_sync(struct lrs_dev *dev)
     if (!rc) {
         increase_device_health(dev);
         increase_medium_health(dev->ld_dss_media_info);
-    } else {
+    } else if (!is_medium_global_error(rc)) {
         /* take the device mutex when health reaches 0, need to be called
          * outside lock region.
+         * Do not decrease health for medium global errors (ENOSPC, EROFS,
+         * EDQUOT): they indicate the medium is full or read-only, not
+         * defective.
          */
         decrease_device_health(dev);
         decrease_medium_health(dev, dev->ld_dss_media_info);
