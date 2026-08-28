@@ -517,14 +517,7 @@ int dss_move_object_to_deprecated(struct dss_handle *handle,
                            " SELECT * FROM moved_object",
                            oid_list->str);
 
-    pho_debug("Executing request: '%s'", clause->str);
-
-    res = PQexec(conn, clause->str);
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        rc = psql_state2errno(res);
-        pho_error(rc, "Query '%s' failed: %s", clause->str,
-                  PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
-    }
+    rc = execute(conn, clause->str, &res, PGRES_COMMAND_OK);
 
     PQclear(res);
 
@@ -595,14 +588,7 @@ int dss_move_deprecated_to_object(struct dss_handle *handle,
                            " SELECT * FROM risen_object",
                            oid_list->str);
 
-    pho_debug("Executing request: '%s'", clause->str);
-
-    res = PQexec(conn, clause->str);
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        rc = psql_state2errno(res);
-        pho_error(rc, "Query '%s' failed: %s", clause->str,
-                  PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
-    }
+    rc = execute(conn, clause->str, &res, PGRES_COMMAND_OK);
 
     PQclear(res);
 
