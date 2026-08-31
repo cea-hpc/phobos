@@ -211,6 +211,60 @@ ldconfig
 
 %changelog
 
+* Mon Aug 31 2026 - Patrice Lucas <patrice.lucas@cea.fr> - 3.4.0-1
+ - WARNING: the stat dev.umount_error is changed to dev.umount_errors .
+ - WARNING: When calling the pho_xfer_desc_clean function after a `phobos_get`
+   call will now free the node_name parameter.
+ - WARNING: phobos_getmd function signature changes. Removal of the xfer
+   completion callback and user-profile data parameter.
+ - WARNING: phobos_getmd now only populates the version and the attributes (User
+   defined metadata) fields. objid and uuid fields are no longer populated.
+ - WARNING: phobos rpms installation and upgrade no longer overwrites existing
+   sysconf and service files.
+ - Add a thread global context. This context will be used as a transparent
+   mechanism to share a dss handle through multiple Phobos API calls.
+ - Parallel IO per device are now enabled. The maximum number of parallel IO per
+   device and for each family can now be configured to more than 1. 0 means
+   unlimited.
+ - Add the "phobos copy rebuild" command to rebuild still readable copy
+ - Add retry loop with exponential backoff for DB requests
+ - Phobos_setmd is added to the API to update into the DSS the user metadata of
+   any existing object.
+ - Add the "phobos copy delete_incomplete" command to delete incomplete copies
+   and the related objects
+ - Manage partial number of extent per split
+ - The layout DSS select scalability is improved. Remove extent uuid and object
+   uuid/version select in dss_insert_layout.
+ - Adding a list of media to avoid to use is added to the write allocation of
+   the copy and rebuild operation. For copy, this means the destination copy
+   will necessarily be written on media different from the source copy. For
+   rebuild, the rebuilt extents of a split will be written on media
+   different from the other extents of that split.
+ - Allow copy list with UUID and without OID
+ - Decrease "not found obj" to debug
+ - Set the status of a media to used after a delete. After a delete --hard or
+   copy delete, set the status of a media that was full to used.
+ - Add --library option media update and set-access. Also, add a warning
+   message if a dss_update call updates nothing.
+ - Add documentation on how to handle unavailable tapes
+ - Update getmd to use uuid and version of an object
+ - Order copy to get by the readable quality of their status
+ - Add pkg-config build infrastructure
+ - Update the documentation of phobos_store.h
+ - The pho_ldm_helper format_ltfs function returns the mkltfs error code instead
+   of 1 in case of error.
+ - Apply DSS filter clause to deprecated_object. When selecting objects from
+   both tables, the filter clause was enforced to the objects but overlooked for
+   the deprecated objects.
+ - Fix dev_picker if lock_expirancy is non-null
+ - Add '-L' for '--library' option
+ - The TLC's statistics functionality has been enhanced. Add stats about
+   request duration. Distinguish success/error for TLC requests. Add doc for
+   TLC stats.
+ - Raid4 writes layout index in physical extent xattr
+ - Grouped_read: staled queues have been fixed.
+ - Grouped read: SIGSEGV crashes on drive mount failure have been fixed.
+
 * Thu Mar 26 2026 - Patrice Lucas <patrice.lucas@cea.fr> - 3.3.1-1
  - WARNING: the `--orphan` from `phobos extent list` changed to `--state`. It
    allows the filtering of the extents with their states.
