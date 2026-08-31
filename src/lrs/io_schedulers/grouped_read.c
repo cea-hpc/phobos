@@ -1343,22 +1343,14 @@ static int grouped_retry(struct io_scheduler *io_sched,
          * medium or the one that was just tried if no error occured on the
          * medium.
          */
-        if ((*medium)->health == 0) {
-            /* release the previous reference in the request container */
-            lrs_medium_release(*medium);
+        if ((*medium)->health == 0)
             sreq->medium_index = reqc->req->ralloc->n_required;
-        }
+
         /* else: we use sreq->medium_index i.e. the index of the medium that we
          * failed to load.
          */
     } else {
-        int medium_index;
-
-        if (pho_id_equal(&queue_to_use->medium_id, &(*medium)->rsc.id))
-            /* release the previous reference in the request container */
-            lrs_medium_release(*medium);
-
-        medium_index = read_req_get_medium_index(reqc,
+        int medium_index = read_req_get_medium_index(reqc,
                                                  &queue_to_use->medium_id);
         if (medium_index < 0)
             return medium_index;
@@ -1386,6 +1378,7 @@ static int grouped_retry(struct io_scheduler *io_sched,
         }
     }
 
+    lrs_medium_release(*medium);
     /* On error, always fetch DSS information since the caller doesn't know if
      * the \p medium was just allocated or not. It cannot free it.
      */
