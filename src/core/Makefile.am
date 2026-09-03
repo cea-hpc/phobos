@@ -12,9 +12,10 @@ COMM_SRC=communication/comm.c communication/comm_wrapper.c
 DSS_SRC=dss/dss.c dss/dss_lock.c dss/logs.c dss/dss_utils.c dss/resources.c \
         dss/device.c dss/dss_config.c dss/media.c dss/filters.c dss/extent.c \
         dss/deprecated.c dss/object.c dss/layout.c dss/full_layout.c \
-        dss/wrapper.c dss/copy.c
+        dss/wrapper.c dss/copy.c dss/media_stats.c
 DSS_SUBHEADERS=dss/dss_lock.h dss/logs.h dss/dss_utils.h dss/resources.h \
-        dss/device.h dss/dss_config.h dss/media.h dss/filters.h dss/extent.h \
+        dss/device.h dss/dss_config.h dss/media.h dss/media_stats.h \
+        dss/filters.h dss/extent.h \
         dss/deprecated.h dss/object.h dss/layout.h dss/full_layout.h \
         dss/copy.h
 SERIALIZER_SRC=serializer/proto_common.pb-c.c serializer/proto_lrs.pb-c.c \

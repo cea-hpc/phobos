@@ -35,6 +35,7 @@
 #include "layout.h"
 #include "logs.h"
 #include "media.h"
+#include "media_stats.h"
 #include "object.h"
 #include "resources.h"
 #include "copy.h"
@@ -69,6 +70,8 @@ static const struct dss_resource_ops *get_resource_ops(enum dss_type type)
         return &object_ops;
     case DSS_COPY:
         return &copy_ops;
+    case DSS_MEDIA_STATS:
+        return &media_stats_ops;
     default:
         return NULL;
     }

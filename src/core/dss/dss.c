@@ -595,6 +595,16 @@ int dss_media_delete(struct dss_handle *handle, struct media_info *media_list,
                            media_count, DSS_SET_DELETE);
 }
 
+int dss_media_stats_get(struct dss_handle *handle,
+                        const struct dss_filter *filter,
+                        struct media_enriched_stats **med_list, int *med_count,
+                        struct dss_sort *sort)
+{
+    return dss_generic_get(handle, DSS_MEDIA_STATS,
+                           (const struct dss_filter*[]) {filter, NULL}, 1,
+                           (void **) med_list, med_count, sort);
+}
+
 /*
  * LAYOUT FUNCTIONS
  */

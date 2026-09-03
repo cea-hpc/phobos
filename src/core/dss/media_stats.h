@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2024 CEA/DAM.
+ *  All rights reserved (c) 2014-2026 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -21,29 +21,20 @@
  */
 
 /**
- * \brief  Media resource header of Phobos's Distributed State Service.
+ * \brief  Media statistics resource header of Phobos's Distributed State
+ *         Service.
  */
 
-#ifndef _PHO_DSS_MEDIA_H
-#define _PHO_DSS_MEDIA_H
+#ifndef _PHO_DSS_MEDIA_STATS_H
+#define _PHO_DSS_MEDIA_STATS_H
 
 #include "resources.h"
 
 /**
- * The "media" operations structure.
- * Implements every function of the structure.
+ * The "media stats" operations structure.
+ * Implements every function of the structure except "insert_query",
+ * "update_query" and "delete_query".
  */
-extern const struct dss_resource_ops media_ops;
-
-/**
- * Decode the stats of a medium from a given \p json.
- *
- * \param[out] stats  The stats in which to store the decoded JSON values
- * \param[in]  json   The JSON string to decode
- *
- * \return 0 on success, -EINVAL if \p json is not a valid JSON object
- *                       negative error code otherwise
- */
-int dss_media_stats_decode(struct media_stats *stats, const char *json);
+extern const struct dss_resource_ops media_stats_ops;
 
 #endif

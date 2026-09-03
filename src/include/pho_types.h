@@ -495,6 +495,11 @@ struct media_stats {
     time_t      last_load;      /**< last time it was loaded into a drive */
 };
 
+struct media_enriched_stats {
+    struct pho_resource rsc;     /**< Identifier and administrative status */
+    struct media_stats  stats;   /**< Usage statistics */
+    enum fs_status      status;  /**< Filesystem status */
+};
 /**
  * Description of filesystem contained on a media.
  */

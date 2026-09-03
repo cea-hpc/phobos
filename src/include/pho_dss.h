@@ -52,6 +52,7 @@ enum dss_type {
     DSS_LOGS,
     DSS_FULL_LAYOUT,
     DSS_COPY,
+    DSS_MEDIA_STATS,
     DSS_LAST,
 };
 
@@ -66,6 +67,7 @@ static const char * const dss_type_names[] = {
     [DSS_LOGS] = "logs",
     [DSS_FULL_LAYOUT] = "full_layout",
     [DSS_COPY] = "copy",
+    [DSS_MEDIA_STATS] = "media_stats",
 };
 
 #define MAX_UPDATE_LOCK_TRY 5
@@ -486,6 +488,22 @@ int dss_media_get(struct dss_handle *handle, const struct dss_filter *filter,
  */
 int dss_media_delete(struct dss_handle *handle, struct media_info *media_list,
                      int media_count);
+
+/**
+ * Retrieve media statistics information from DSS.
+ *
+ * @param[in]  handle       valid connection handle
+ * @param[in]  filter       assembled DSS filtering criteria
+ * @param[out] med_list     list of retrieved items to be freed
+ *                          w/ dss_res_free()
+ * @param[out] med_count    number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_media_stats_get(struct dss_handle *handle,
+                        const struct dss_filter *filter,
+                        struct media_enriched_stats **med_list, int *med_count,
+                        struct dss_sort *sort);
 
 /**
  * Store information for one or many extents in DSS.
