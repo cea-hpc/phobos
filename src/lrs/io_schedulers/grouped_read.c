@@ -579,8 +579,13 @@ static int try_exchange_extra_devices(struct io_scheduler *io_sched,
 
         rc = exchange_device(io_sched, extra_devices[i]);
         if (rc) {
-            pho_error(rc, "Failed to exchange devices");
-            return rc;
+            if (rc == -ENODEV) {
+                pho_info("No available free devices to exchange");
+                continue;
+            } else {
+                pho_error(rc, "Failed to exchange devices");
+                return rc;
+            }
         }
 
         if (extra_devices[i]->ld_io_request_type & IO_REQ_READ) {
@@ -614,11 +619,6 @@ static int try_exchange_extra_devices(struct io_scheduler *io_sched,
 /**
  * Return true if there are enough available devices to handle \p reqc.
  *
- * \param[in] available_devices  Number of devices that are ready for scheduling
- *                               and don't have a queue associated. It is given
- *                               as a parameter to avoid recomputing it for each
- *                               request.
- *
  *  Note: available_devices is the number of devices that are "sched_ready" and
  *  don't have a queue associated to them. There is no guaranty that they are
  *  all compatible with the media of the request. This is not an issue since
@@ -626,14 +626,13 @@ static int try_exchange_extra_devices(struct io_scheduler *io_sched,
  */
 static bool request_can_be_allocated(struct io_scheduler *io_sched,
                                      struct grouped_data *data,
-                                     struct req_container *reqc,
-                                     size_t available_devices)
+                                     struct req_container *reqc)
 {
+    size_t available_devices = count_available_devices(io_sched->devices);
     size_t n_required = reqc->req->ralloc->n_required;
     struct lrs_dev **extra_devices;
     struct lrs_dev **dev_iter;
     bool res = false;
-    int rc;
     int i;
 
     if (available_devices >= n_required)
@@ -674,12 +673,8 @@ static bool request_can_be_allocated(struct io_scheduler *io_sched,
         }
     }
 
-    rc = try_exchange_extra_devices(io_sched, extra_devices,
-                                    dev_iter - extra_devices);
-    if (rc) {
-        pho_error(rc, "Failed to exchanged devices");
-        res = false;
-    }
+    try_exchange_extra_devices(io_sched, extra_devices,
+                               dev_iter - extra_devices);
 
 free_list:
     free(extra_devices);
@@ -690,8 +685,8 @@ free_list:
 static int grouped_peek_request(struct io_scheduler *io_sched,
                                 struct req_container **reqc)
 {
-    size_t available_devices = count_available_devices(io_sched->devices);
     struct grouped_data *data = io_sched->private_data;
+    size_t available_devices;
     int i;
 
     *reqc = NULL;
@@ -736,8 +731,7 @@ static int grouped_peek_request(struct io_scheduler *io_sched,
          */
         assert(g_list_length(elem->pair->used) == 0);
 
-        if (request_can_be_allocated(io_sched, data, elem->reqc,
-                                     available_devices)) {
+        if (request_can_be_allocated(io_sched, data, elem->reqc)) {
             *reqc = elem->reqc;
             data->current_elem = elem;
 
@@ -748,6 +742,7 @@ static int grouped_peek_request(struct io_scheduler *io_sched,
     /* If we are here, we didn't find any queue to use. If there are available
      * devices, try to find another queue to allocate.
      */
+    available_devices = count_available_devices(io_sched->devices);
     if (available_devices > 0) {
         /* no request allocated but some devices don't have a queue yet */
         struct request_queue *queue;
