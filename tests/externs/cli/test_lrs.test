@@ -49,6 +49,73 @@ function cleanup
     cleanup_test_dirs
 }
 
+function assert_last_load_between
+{
+    local family=$1
+    local medium=$2
+    local lower_bound=$3
+    local upper_bound=$4
+
+    local last_load_date=$($phobos "$family" list -o stats.last_load "$medium")
+    [ "$last_load_date" != "None" ] ||
+        error "last_load is not set for $family '$medium'"
+
+    local last_load=$(date +%s --date="$last_load_date")
+    (( last_load >= lower_bound && last_load <= upper_bound )) ||
+        error "last_load '$last_load' for $family '$medium' is not between" \
+              "'$lower_bound' and '$upper_bound'"
+}
+
+function test_dir_last_load_at_startup
+{
+    setup_tables
+    local dir=$(mktemp -d /tmp/test_dir_last_load.XXXXXX)
+    $phobos dir add --unlock "$dir"
+    [ "$($phobos dir list -o stats.last_load "$dir")" = "None" ] ||
+        error "last_load of dir '$dir' should be None before phobosd starts"
+
+    local lower_bound=$(date +%s)
+    PHOBOS_LRS_families="dir" invoke_lrs
+    local upper_bound=$(date +%s)
+
+    assert_last_load_between dir "$dir" "$lower_bound" "$upper_bound"
+    waive_lrs
+    rm -rf "$dir"
+}
+
+function test_dir_last_load_after_add
+{
+    setup_tables
+    PHOBOS_LRS_families="dir" invoke_lrs
+
+    local dir=$(mktemp -d /tmp/test_dir_last_load.XXXXXX)
+    local lower_bound=$(date +%s)
+    $phobos dir add --unlock "$dir"
+    local upper_bound=$(date +%s)
+
+    assert_last_load_between dir "$dir" "$lower_bound" "$upper_bound"
+    waive_lrs
+    rm -rf "$dir"
+}
+
+function test_tape_last_load_after_load
+{
+    local drive=$(get_lto_drives 6 1)
+    local tape=$(get_tapes L6 1)
+
+    setup_tables
+    invoke_daemons
+
+    $phobos drive add --unlock "$drive"
+    $phobos tape add --type lto6 "$tape"
+
+    local lower_bound=$(date +%s)
+    $phobos tape format --unlock "$tape"
+    local upper_bound=$(date +%s)
+
+    assert_last_load_between tape "$tape" "$lower_bound" "$upper_bound"
+}
+
 function test_invalid_lock_file()
 {
     trap waive_lrs EXIT
@@ -1029,6 +1096,8 @@ function test_ralloc_2_of_3_tape()
 }
 
 TESTS=(
+    "setup; test_dir_last_load_at_startup; cleanup"
+    "setup; test_dir_last_load_after_add; cleanup"
     "setup; test_invalid_lock_file; cleanup"
     "setup; test_invalid_db_schema_version; cleanup"
     "setup; test_multiple_instances; cleanup"
@@ -1062,6 +1131,7 @@ if [[ -w /dev/changer ]]; then
         "setup; test_health_device_failure; cleanup"
         "setup; test_health_format_without_tlc; cleanup"
         "setup; test_health_put_without_tlc; cleanup"
+        "setup; test_tape_last_load_after_load; cleanup"
         "setup; test_ralloc_2_of_3_tape; cleanup"
     )
 fi

@@ -533,6 +533,9 @@ int dss_media_update(struct dss_handle *handle, struct media_info *src_list,
                     medium_info->stats.phys_spc_free = 0;
             }
 
+            if (LAST_LOAD & fields)
+                medium_info->stats.last_load = dst_list[i].stats.last_load;
+
             dst_list[i].stats = medium_info->stats;
             dss_res_free(medium_info, 1);
         }

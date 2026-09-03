@@ -374,6 +374,32 @@ log:
     return 0;
 }
 
+static void sched_update_last_load(struct lrs_sched *sched,
+                                   struct lrs_dev *dev)
+{
+    struct media_info *medium = dev->ld_dss_media_info;
+    struct timespec now;
+    int rc;
+
+    if (sched->family != PHO_RSC_DIR &&
+        sched->family != PHO_RSC_RADOS_POOL)
+        return;
+
+    rc = clock_gettime(CLOCK_REALTIME, &now);
+    if (rc) {
+        pho_error(-errno, "Unable to get the media load time");
+        return;
+    }
+
+    medium->stats.last_load = now.tv_sec;
+
+    rc = dss_media_update(&sched->sched_thread.dss, medium, medium, 1,
+                          LAST_LOAD);
+    if (rc)
+        pho_error(rc, "Failed to update the last load time of medium "
+                  FMT_PHO_ID, PHO_ID(medium->rsc.id));
+}
+
 int sched_fill_dev_info(struct lrs_sched *sched, struct lib_handle *lib_hdl,
                         struct lrs_dev *dev)
 {
@@ -508,6 +534,8 @@ int sched_fill_dev_info(struct lrs_sched *sched, struct lib_handle *lib_hdl,
     } else {
         dev->ld_op_status = PHO_DEV_OP_ST_EMPTY;
     }
+
+    sched_update_last_load(sched, dev);
 
     pho_debug("Device '%s' is '%s'", lrs_dev_name(dev),
               op_status2str(dev->ld_op_status));

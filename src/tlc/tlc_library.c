@@ -33,6 +33,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "pho_cfg.h"
@@ -723,6 +724,34 @@ static void tlc_log_init(const char *drive_serial, const char *tape_label,
     log->message = json_object();
 }
 
+static void update_last_load(struct dss_handle *dss,
+                             const struct lib_descriptor *lib,
+                             const char *tape_label)
+{
+    struct media_info medium = {0};
+    struct timespec now;
+    int rc;
+
+    rc = clock_gettime(CLOCK_REALTIME, &now);
+    if (rc) {
+        pho_error(-errno, "Unable to get the tape load time");
+        return;
+    }
+
+    medium.rsc.id.family = PHO_RSC_TAPE;
+    pho_id_name_set(&medium.rsc.id, tape_label, lib->name);
+    medium.stats.last_load = now.tv_sec;
+
+    /* The tape is already physically loaded. Keep the load successful if this
+     * informational update fails, otherwise the caller's device state would
+     * no longer match the library state.
+     */
+    rc = dss_media_update(dss, &medium, &medium, 1, LAST_LOAD);
+    if (rc)
+        pho_error(rc, "Failed to update the last load time of tape "
+                  FMT_PHO_ID, PHO_ID(medium.rsc.id));
+}
+
 int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
                      const char *drive_serial, const char *tape_label,
                      json_t **json_message)
@@ -774,6 +803,7 @@ int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
     /* update element status lib cache */
     move_tape_between_element_status(source_element_status,
                                      drive_element_status);
+    update_last_load(dss, lib, tape_label);
     return 0;
 }
 

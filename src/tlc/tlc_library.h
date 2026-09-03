@@ -116,7 +116,8 @@ int tlc_library_drive_lookup(struct lib_descriptor *lib,
 /**
  * Load a medium into a drive
  *
- * @param[in]   dss             DSS handle.
+ * @param[in]   dss             DSS handle used to emit logs and update the
+ *                              medium last load time.
  * @param[in]   lib             Library descriptor.
  * @param[in]   drive_serial    Serial number of the target drive.
  * @param[in]   tape_label      Label of the target tape.

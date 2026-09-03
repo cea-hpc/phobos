@@ -972,7 +972,7 @@ static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
     if (groupings_to_update)
         fields |= GROUPINGS;
 
-    /* TODO update nb_load, nb_errors, last_load */
+    /* TODO update nb_load and nb_errors */
 
     assert(fields);
     rc2 = dss_media_update(dss, media_info, media_info, 1, fields);

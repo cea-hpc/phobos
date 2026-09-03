@@ -83,6 +83,13 @@ class Timeval(Structure): # pylint: disable=too-few-public-methods
         LIBPHOBOS.timeval2str(byref(self), tv_str)
         return tv_str.value.decode('utf-8')
 
+def time_t2str(timestamp):
+    """Convert an epoch timestamp to the date format used by the CLI."""
+    if timestamp == 0:
+        return None
+
+    return Timeval(timestamp, 0).to_string()
+
 class DSSLock(Structure): # pylint: disable=too-few-public-methods
     """Resource lock as managed by DSS."""
     _fields_ = [
@@ -536,7 +543,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'stats.phys_spc_free': self.stats.phys_spc_free,
             'stats.nb_load': self.stats.nb_load,
             'stats.nb_errors': self.stats.nb_errors,
-            'stats.last_load': self.stats.last_load
+            'stats.last_load': time_t2str(self.stats.last_load),
         }
 
     @property

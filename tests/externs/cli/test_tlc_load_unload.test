@@ -125,10 +125,19 @@ EOF
     fi
 
     # load tape into drive
+    local lower_bound=$(date +%s)
     $phobos drive load ${drive} ${tape}
+    local upper_bound=$(date +%s)
     drive_lookup_out=$($phobos drive lookup ${drive} 2>&1)
     echo ${drive_lookup_out} | grep "State: full"
     echo ${drive_lookup_out} | grep "Loaded tape id: ${tape}"
+    local last_load_date=$($phobos tape list -o stats.last_load "${tape}")
+    [ "$last_load_date" != "None" ] ||
+        error "last_load is not set for tape '${tape}'"
+    local last_load=$(date +%s --date="$last_load_date")
+    (( last_load >= lower_bound && last_load <= upper_bound )) ||
+        error "last_load '$last_load' for tape '${tape}' is not between" \
+              "'$lower_bound' and '$upper_bound'"
 
     # Unknown library
     set +e
