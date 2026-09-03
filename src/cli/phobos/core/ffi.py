@@ -394,6 +394,71 @@ class MediaStats(Structure): # pylint: disable=too-few-public-methods
         ('last_load', c_longlong)
     ]
 
+class MediaEnrichedStats(Structure, CLIManagedResourceMixin): # pylint: disable=too-few-public-methods
+    """Media enriched statistics descriptor."""
+    _fields_ = [
+        ('rsc', Resource),
+        ('stats', MediaStats),
+        ('status', c_int),
+    ]
+
+    def get_display_fields(self, max_width=None):
+        """Return a dict of available fields and optional display formatters."""
+        return {
+            'adm_status': rsc_adm_status2str,
+            'family': rsc_family2str,
+            'name': None,
+            'library': None,
+        }
+
+    def get_display_dict(self, numeric=False, max_width=None, fmt=None):
+        """Update level0 representation with nested structures content."""
+        export = super().get_display_dict(numeric, max_width, fmt)
+        export.update(self.expanded_fs_info)
+        export.update(self.expanded_stats)
+        return export
+
+    @property
+    def family(self):
+        """Wrapper to get family"""
+        return self.rsc.id.family
+
+    @property
+    def name(self):
+        """Wrapper to get medium name"""
+        return self.rsc.id.name
+
+    @property
+    def library(self):
+        """Wrapper to get library"""
+        return self.rsc.id.library
+
+    @property
+    def adm_status(self):
+        """Wrapper to get adm_status"""
+        return self.rsc.adm_status
+
+    @property
+    def expanded_fs_info(self):
+        """Wrapper to get media fs info as dict"""
+        fs_info = {
+            'fs.status': fs_status2str(self.status),
+        }
+        return fs_info
+
+    @property
+    def expanded_stats(self):
+        """Wrapper to get media stats as dict"""
+        return {
+            'stats.nb_obj': self.stats.nb_obj,
+            'stats.logc_spc_used': self.stats.logc_spc_used,
+            'stats.phys_spc_used': self.stats.phys_spc_used,
+            'stats.phys_spc_free': self.stats.phys_spc_free,
+            'stats.nb_load': self.stats.nb_load,
+            'stats.nb_errors': self.stats.nb_errors,
+            'stats.last_load': time_t2str(self.stats.last_load),
+        }
+
 class OperationFlags(Structure): # pylint: disable=too-few-public-methods
     """Media operation flags."""
     _fields_ = [

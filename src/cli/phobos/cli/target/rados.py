@@ -37,6 +37,7 @@ from phobos.cli.target.media import (MediaAddOptHandler,
                                      MediaOptHandler,
                                      MediaRenameOptHandler,
                                      MediaSetAccessOptHandler,
+                                     MediaStatsOptHandler,
                                      MediaUpdateOptHandler)
 from phobos.core.const import fs_type2str, PHO_RSC_RADOS_POOL # pylint: disable=no-name-in-module
 from phobos.core.ffi import (FSType, ResourceFamily)
@@ -74,6 +75,7 @@ class RadosPoolOptHandler(MediaOptHandler):
         MediaLocateOptHandler,
         MediaUpdateOptHandler,
         MediaRenameOptHandler,
+        MediaStatsOptHandler, # pylint: enable=duplicate-code
         RadosPoolSetAccessOptHandler,
         RadosPoolFormatOptHandler,
         ResourceDeleteOptHandler,

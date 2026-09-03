@@ -32,7 +32,8 @@ from ctypes import byref, c_int, c_void_p, c_char_p, c_bool, POINTER, Structure
 from abc import ABCMeta, abstractmethod
 
 from phobos.core.const import DSS_MEDIA # pylint: disable=no-name-in-module
-from phobos.core.ffi import (DevInfo, MediaInfo, LIBPHOBOS, ResourceFamily)
+from phobos.core.ffi import (DevInfo, MediaInfo, LIBPHOBOS, ResourceFamily,
+                             MediaEnrichedStats)
 
 # Valid filter suffix and associated operators.
 FILTER_OPERATORS = (
@@ -291,6 +292,16 @@ class DeviceManager(BaseEntityManager):
         #pylint: disable=too-many-arguments
         return LIBPHOBOS.dss_device_get(hdl, qry_filter, res, res_cnt, qry_sort)
 
+class MediaStatsManager(BaseEntityManager):
+    """Proxy to manipulate media stats."""
+    wrapped_class = MediaEnrichedStats
+    wrapped_ident = 'media'
+
+    def _dss_get(self, hdl, qry_filter, res, res_cnt, qry_sort): # pylint: disable=too-many-arguments
+        """Invoke media-stats-specific DSS get method."""
+        return LIBPHOBOS.dss_media_stats_get(hdl, qry_filter, res, res_cnt,
+                                             qry_sort)
+
 class MediaManager(BaseEntityManager):
     """Proxy to manipulate media."""
     wrapped_class = MediaInfo
@@ -397,6 +408,7 @@ class Client:
         super().__init__(*args, **kwargs)
         self.handle = None
         self.media = MediaManager(self)
+        self.media_stats = MediaStatsManager(self)
         self.devices = DeviceManager(self)
 
     def __enter__(self):

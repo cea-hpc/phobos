@@ -33,6 +33,7 @@ from phobos.cli.action.list import ListOptHandler
 from phobos.cli.action.lock import LockOptHandler
 from phobos.cli.action.rebuild import RebuildOptHandler
 from phobos.cli.action.resource_delete import ResourceDeleteOptHandler
+from phobos.cli.action.stats import StatsOptHandler
 from phobos.cli.action.unlock import UnlockOptHandler
 from phobos.cli.common import (BaseResourceOptHandler, env_error_format,
                                XferOptHandler)
@@ -45,7 +46,7 @@ from phobos.core.admin import Client as AdminClient
 from phobos.core.const import (ADM_STATUS, DELETE_ACCESS, DSS_MEDIA, GET_ACCESS, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
                                PUT_ACCESS, TAGS)
-from phobos.core.ffi import (MediaInfo, ResourceFamily)
+from phobos.core.ffi import (MediaInfo, ResourceFamily, MediaEnrichedStats)
 from phobos.output import dump_object_list
 
 
@@ -106,6 +107,22 @@ class MediaListOptHandler(ListOptHandler):
     empty: medium is formatted, no data written to it
     used: medium contains data
     full: medium is full, no more data can be written to it"""
+
+class MediaStatsOptHandler(StatsOptHandler):
+    """Specific version of the 'stats' command for media."""
+    descr = "stats all media"
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(MediaStatsOptHandler, cls).add_options(parser)
+        parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
+                            help='filter on tags (comma-separated: foo,bar)')
+
+        attr = list(MediaEnrichedStats().get_display_dict().keys())
+        attr.sort()
+        add_list_arguments(parser, attr, "name", sort_option=False,
+                           lib_option=True, status_option=True)
 
 
 class MediaLocateOptHandler(ActionOptHandler):
@@ -202,6 +219,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         MediaAddOptHandler, # pylint: disable=duplicate-code
         MediaListOptHandler,
         MediaLocateOptHandler,
+        MediaStatsOptHandler,
         MediaRebuildOptHandler,
         MediaRenameOptHandler, # pylint: disable=duplicate-code
         MediaSetAccessOptHandler,
@@ -407,6 +425,40 @@ class MediaOptHandler(BaseResourceOptHandler):
         if len(objs) > 0:
             dump_object_list(objs, attr=self.params.get('output'),
                              fmt=self.params.get('format'))
+
+    def exec_stats(self):
+        """Stats media and display results."""
+        attrs = list(MediaEnrichedStats().get_display_dict().keys())
+        check_output_attributes(attrs, self.params.get('output'), self.logger)
+
+        kwargs = {}
+        if self.params.get('tags'):
+            kwargs["tags"] = self.params.get('tags')
+
+        if self.params.get('library'):
+            kwargs["library"] = self.params.get('library')
+
+        if self.params.get('status'):
+            kwargs["adm_status"] = self.params.get('status')
+
+        objs = []
+        if self.params.get('res'):
+            uids = NodeSet.fromlist(self.params.get('res'))
+            for uid in uids:
+                curr = self.client.media_stats.get(family=self.family, id=uid,
+                                                   **kwargs)
+                if not curr:
+                    continue
+                assert len(curr) == 1
+                objs.append(curr[0])
+        else:
+            objs = list(self.client.media_stats.get(family=self.family,
+                                                    **kwargs))
+
+        if len(objs) > 0:
+            dump_object_list(objs, attr=self.params.get('output'),
+                             fmt=self.params.get('format'))
+
 
     def _set_adm_status(self, adm_status):
         """Update media.adm_status"""
