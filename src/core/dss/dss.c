@@ -536,6 +536,10 @@ int dss_media_update(struct dss_handle *handle, struct media_info *src_list,
             if (LAST_LOAD & fields)
                 medium_info->stats.last_load = dst_list[i].stats.last_load;
 
+            if (NB_ERRORS_ADD & fields)
+                medium_info->stats.nb_errors +=
+                    dst_list[i].stats.nb_errors;
+
             dst_list[i].stats = medium_info->stats;
             dss_res_free(medium_info, 1);
         }
@@ -558,6 +562,21 @@ clean:
     }
 
     return rc;
+}
+
+int dss_media_error_inc(struct dss_handle *handle,
+                        const struct pho_id *medium_id, int error_number)
+{
+    struct media_info medium = {0};
+
+    if (!error_number || is_medium_global_error(error_number) ||
+        medium_id->name[0] == '\0')
+        return 0;
+
+    pho_id_copy(&medium.rsc.id, medium_id);
+    medium.stats.nb_errors = 1;
+
+    return dss_media_update(handle, &medium, &medium, 1, NB_ERRORS_ADD);
 }
 
 int dss_media_get(struct dss_handle *handle, const struct dss_filter *filter,

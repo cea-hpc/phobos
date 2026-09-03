@@ -110,7 +110,7 @@ if (rc) {
     media_update_status_and_stats(media_info, media_rc, size_written,
                                   nb_new_obj, &fields);
 
-    /* TODO update nb_load, nb_errors, last_load */
+    /* TODO update nb_load */
 
     assert(fields);
     rc2 = dss_media_update(dss, media_info, media_info, 1, fields);

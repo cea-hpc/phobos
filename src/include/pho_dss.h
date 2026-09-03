@@ -277,10 +277,11 @@ static inline const char *dss_fields_pub2implem(const char *public_name)
 #define LIBRARY             (1<<13)
 #define GROUPINGS           (1<<14)
 #define LAST_LOAD           (1<<15)
+#define NB_ERRORS_ADD       (1<<16)
 
 #define IS_STAT(_f) ((NB_OBJ | NB_OBJ_ADD | LOGC_SPC_USED |\
                       LOGC_SPC_USED_ADD | PHYS_SPC_USED | PHYS_SPC_FREE |\
-                      LAST_LOAD) & (_f))
+                      LAST_LOAD | NB_ERRORS_ADD) & (_f))
 
 struct dss_filter {
     json_t  *df_json;
@@ -441,6 +442,22 @@ int dss_media_insert(struct dss_handle *handle, struct media_info *media_list,
 int dss_media_update(struct dss_handle *handle, struct media_info *src_list,
                      struct media_info *dst_list, int media_count,
                      uint64_t fields);
+
+/**
+ * Increment the error counter of a medium.
+ *
+ * Capacity errors (ENOSPC, EROFS and EDQUOT) do not increment the counter as
+ * they describe a full or read-only medium rather than a defective one.
+ *
+ * @param[in] handle        valid connection handle
+ * @param[in] medium_id     medium whose counter must be incremented
+ * @param[in] error_number  non-zero error encountered while accessing it
+ *
+ * @return 0 on success or when the error must not be counted, negated errno
+ *         on failure
+ */
+int dss_media_error_inc(struct dss_handle *handle,
+                        const struct pho_id *medium_id, int error_number);
 
 /**
  * Retrieve media information from DSS.

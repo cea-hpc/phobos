@@ -26,6 +26,7 @@
 #include "test_setup.h"
 #include "pho_dss.h"
 #include "pho_dss_wrapper.h"
+#include "pho_test_utils.h"
 #include "pho_type_utils.h"
 
 #include <assert.h>
@@ -166,6 +167,61 @@ static void dss_emit_logs_with_message_ok(void **state)
     json_decref(log.message);
     dss_res_free(logs, n_logs);
     dss_logs_delete(handle, NULL);
+}
+
+static long get_medium_nb_errors(struct dss_handle *dss,
+                                 const struct pho_id *medium_id)
+{
+    struct media_info *medium;
+    long nb_errors;
+    int rc;
+
+    rc = dss_one_medium_get_from_id(dss, medium_id, &medium);
+    assert_return_code(rc, -rc);
+
+    nb_errors = medium->stats.nb_errors;
+    dss_res_free(medium, 1);
+
+    return nb_errors;
+}
+
+static void dss_media_error_counter(void **state)
+{
+    struct dss_handle *dss = *state;
+    struct media_info medium;
+    struct pho_log log;
+    int rc;
+
+    create_medium(&medium, "error_counter_medium");
+    rc = dss_media_insert(dss, &medium, 1);
+    assert_return_code(rc, -rc);
+
+    rc = dss_media_error_inc(dss, &medium.rsc.id, -EIO);
+    assert_return_code(rc, -rc);
+    assert_int_equal(get_medium_nb_errors(dss, &medium.rsc.id), 1);
+
+    rc = dss_media_error_inc(dss, &medium.rsc.id, -ENOSPC);
+    assert_return_code(rc, -rc);
+    rc = dss_media_error_inc(dss, &medium.rsc.id, 0);
+    assert_return_code(rc, -rc);
+    assert_int_equal(get_medium_nb_errors(dss, &medium.rsc.id), 1);
+
+    init_pho_log(&log, &devices[0], &medium.rsc.id, PHO_DEVICE_LOAD);
+    log.message = json_pack("{s:s}", "error", "I/O failure");
+    assert_non_null(log.message);
+    emit_log_after_action(dss, &log, PHO_DEVICE_LOAD, -EIO);
+    assert_int_equal(get_medium_nb_errors(dss, &medium.rsc.id), 2);
+
+    init_pho_log(&log, &devices[0], &medium.rsc.id, PHO_DEVICE_LOAD);
+    log.message = json_pack("{s:s}", "error", "medium full");
+    assert_non_null(log.message);
+    emit_log_after_action(dss, &log, PHO_DEVICE_LOAD, -ENOSPC);
+    assert_int_equal(get_medium_nb_errors(dss, &medium.rsc.id), 2);
+
+    rc = dss_logs_delete(dss, NULL);
+    assert_return_code(rc, -rc);
+    rc = dss_media_delete(dss, &medium, 1);
+    assert_return_code(rc, -rc);
 }
 
 static void check_logs_with_filter(struct dss_handle *handle,
@@ -469,6 +525,7 @@ int main(void)
     const struct CMUnitTest dss_logs_test_cases[] = {
         cmocka_unit_test(dss_emit_logs_ok),
         cmocka_unit_test(dss_emit_logs_with_message_ok),
+        cmocka_unit_test(dss_media_error_counter),
         cmocka_unit_test(dss_logs_dump_with_filters),
         cmocka_unit_test(dss_logs_clear_with_filters),
         cmocka_unit_test(dss_medium_health_0),

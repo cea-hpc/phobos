@@ -337,6 +337,13 @@ void emit_log_after_action(struct dss_handle *dss,
                            enum operation_type action,
                            int rc)
 {
+    int rc2;
+
+    rc2 = dss_media_error_inc(dss, &log->medium, rc);
+    if (rc2)
+        pho_error(rc2, "Failed to increment the error counter of medium "
+                  FMT_PHO_ID, PHO_ID(log->medium));
+
     log->error_number = rc;
     if (rc) {
         if (log->message && json_object_size(log->message) != 0 &&
@@ -354,7 +361,6 @@ void emit_log_after_action(struct dss_handle *dss,
 
     if (should_log(log, action)) {
         GString *request;
-        int rc2;
 
         request = g_string_new("BEGIN;");
 

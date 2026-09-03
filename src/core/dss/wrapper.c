@@ -1027,6 +1027,9 @@ void media_update_status_and_stats(struct media_info *media_info, int media_rc,
                       "to failed", rsc_family2str(media_info->rsc.id.family),
                       media_info->rsc.id.name, media_info->rsc.id.library);
             *fields |= ADM_STATUS;
+
+            media_info->stats.nb_errors = 1;
+            *fields |= NB_ERRORS_ADD;
         }
     } else {
         if (media_info->stats.phys_spc_free == 0) {
