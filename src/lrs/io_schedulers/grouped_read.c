@@ -22,6 +22,7 @@
 /**
  * \brief  LRS Grouped Read I/O Scheduler: group read request per medium.
  */
+#include "grouped_read.h"
 #include "io_sched.h"
 #include "lrs_sched.h"
 #include "lrs_utils.h"
@@ -67,8 +68,6 @@
  * and freed.
  */
 
-struct request_queue;
-
 struct list_pair {
     GList *used;                 /* list of queue_element previously used */
     GList *free;                 /* list of unused queue_element */
@@ -81,30 +80,6 @@ struct queue_element {
     struct list_pair     *pair;  /* pointer to a pair of lists shared between
                                   * each queue_element of the same request.
                                   */
-};
-
-struct device;
-
-struct request_queue {
-    GQueue            *queue;  /* queue containing read queue_element */
-    struct device     *device; /* device which will handle requests from this
-                                * queue
-                                */
-    struct pho_id      medium_id; /* Id of the medium targeted by requests of
-                                   * this queue
-                                   */
-    struct media_info *medium_info;
-                           /* DSS information about the medium of this queue.
-                            * This acts as a cached information since it is
-                            * fetched when the queue is first created.
-                            * It is copied into rwalloc_params::media in
-                            * grouped_get_device_medium_pair.
-                            */
-};
-
-struct device {
-    struct lrs_dev       *device;
-    struct request_queue *queue;
 };
 
 static void associate_queue_to_device(struct device *device,
@@ -162,7 +137,7 @@ static int grouped_init(struct io_scheduler *io_sched)
     struct grouped_data *data;
     int rc;
 
-    data = xmalloc(sizeof(*data));
+    data = xcalloc(1, sizeof(*data));
 
     data->request_queues = g_hash_table_new(g_pho_id_hash, g_pho_id_equal);
     if (!data->request_queues)
@@ -1397,6 +1372,9 @@ static int grouped_retry(struct io_scheduler *io_sched,
 static void grouped_add_device(struct io_scheduler *io_sched,
                                struct lrs_dev *new_device)
 {
+    struct grouped_data *data = io_sched->private_data;
+    struct request_queue *queue;
+    struct media_info *medium;
     struct device *device;
     int i;
 
@@ -1414,6 +1392,21 @@ static void grouped_add_device(struct io_scheduler *io_sched,
     device->queue = NULL;
 
     g_ptr_array_add(io_sched->devices, device);
+
+    /* The device may join this scheduler with its medium already loaded
+     * (e.g. after a dispatch between schedulers). If a pending queue
+     * targets this medium and is not allocated to a device yet, allocate
+     * it to this device.
+     */
+    medium = atomic_dev_medium_get(new_device);
+    if (!medium)
+        return;
+
+    queue = g_hash_table_lookup(data->request_queues, &medium->rsc.id);
+    if (queue && !queue->device)
+        associate_queue_to_device(device, queue);
+
+    lrs_medium_release(medium);
 }
 
 static struct lrs_dev **grouped_get_device(struct io_scheduler *io_sched,

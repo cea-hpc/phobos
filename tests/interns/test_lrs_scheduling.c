@@ -47,6 +47,7 @@
 #include "lrs_device.h"
 #include "lrs_sched.h"
 #include "io_sched.h"
+#include "io_schedulers/grouped_read.h"
 #include "io_schedulers/schedulers.h"
 #include "pho_test_utils.h"
 
@@ -1548,6 +1549,57 @@ static void io_sched_eagain(void **data)
     g_hash_table_destroy(seen_media);
 }
 
+/* When a device that joins the grouped_read scheduler already contains the
+ * medium targeted by a pending queue, the queue must be allocated to this
+ * device right away, so that the medium is not unloaded pointlessly.
+ */
+static void io_sched_add_device_with_loaded_medium(void **data)
+{
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
+    static const char * const media_names[] = {
+        "M1",
+    };
+    GPtrArray *devices = g_ptr_array_new();
+    struct request_queue *queue;
+    struct req_container reqc;
+    struct lrs_dev device;
+    struct media_info M1;
+    struct device *dev;
+    int rc;
+
+    io_sched->global_device_list = devices;
+    create_device(&device, "test", LTO5_MODEL, NULL);
+    wrap_create_medium(&M1, media_names[0]);
+    add_media(&M1, 1);
+    create_request(&reqc, media_names, 1, 1, io_sched->lock_handle);
+    load_medium(&device, &M1);
+
+    /* Push the request before adding the device, so that the queue of M1
+     * already exists when the device joins the scheduler.
+     */
+    rc = io_sched_push_request(io_sched, &reqc);
+    assert_return_code(rc, -rc);
+
+    io_sched->read.ops.add_device(&io_sched->read, &device);
+
+    dev = g_ptr_array_index(io_sched->read.devices, 0);
+    queue = dev->queue;
+    assert_non_null(queue);
+    assert_ptr_equal(queue->device, dev);
+    assert_true(pho_id_equal(&queue->medium_id, &M1.rsc.id));
+
+    rc = io_sched_remove_request(io_sched, &reqc);
+    assert_return_code(rc, -rc);
+
+    rc = io_sched_remove_device(io_sched, &device);
+    cleanup_device(&device);
+    assert_return_code(rc, -rc);
+
+    remove_media(&M1, 1);
+    destroy_request(&reqc);
+    g_ptr_array_free(devices, true);
+}
+
 static int set_schedulers(const char *read_algo,
                           const char *write_algo,
                           const char *format_algo,
@@ -2291,6 +2343,9 @@ int main(void)
         cmocka_unit_test(io_sched_exchange_device_no_prior_repartition),
         cmocka_unit_test(io_sched_exchange_device),
     };
+    const struct CMUnitTest test_grouped_read_only[] = {
+        cmocka_unit_test(io_sched_add_device_with_loaded_medium),
+    };
     int error_count;
 
     pho_context_init();
@@ -2349,6 +2404,12 @@ int main(void)
 
     check_rc(set_schedulers("grouped_read", "fifo", "fifo", "fair_share"));
     error_count += cmocka_run_group_tests(test_device_exchange,
+                                          io_sched_setup,
+                                          io_sched_teardown);
+
+    pho_info("Starting I/O scheduler tests specific to 'grouped_read'");
+    check_rc(set_schedulers("grouped_read", "fifo", "fifo", "fair_share"));
+    error_count += cmocka_run_group_tests(test_grouped_read_only,
                                           io_sched_setup,
                                           io_sched_teardown);
 
