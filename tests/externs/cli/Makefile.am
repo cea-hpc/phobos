@@ -59,6 +59,7 @@ check_SCRIPTS=acceptance.test \
               test_fifo_max_write_per_grouping.test \
               test_file_after_put.test \
               test_format.test \
+              test_format_put_get_reuse.test \
               test_get.test \
               test_getmd.test \
               test_group_sync.sh \

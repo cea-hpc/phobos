@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:
+
+#
+#  All rights reserved (c) 2014-2026 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+# This test checks a basic format/put/get sequence, starting from an empty
+# situation: the format of 3 LTO6 tapes on 3 LTO6 drives leaves one tape
+# loaded in each drive, and the schedulers then reuse these loaded tapes as
+# they are, without any reload. The devices are dispatched to the schedulers
+# by fair_share, with no minimum and a maximum of 3 devices for read, write
+# and format, so the scheduler of the ongoing operation owns all the drives:
+# the format dedicates them to "F", the put of a raid4 object to "W" (fifo
+# write scheduler), and the get of this object to "R" (grouped_read
+# scheduler).
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
+
+################################################################################
+#                                    SETUP                                     #
+################################################################################
+
+function setup()
+{
+    export PHOBOS_IO_SCHED_TAPE_read_algo="grouped_read"
+    export PHOBOS_IO_SCHED_TAPE_write_algo="fifo"
+    export PHOBOS_IO_SCHED_TAPE_format_algo="fifo"
+    export PHOBOS_IO_SCHED_TAPE_dispatch_algo="fair_share"
+    export PHOBOS_IO_SCHED_TAPE_fair_share_lto6_min="0,0,0"
+    export PHOBOS_IO_SCHED_TAPE_fair_share_lto6_max="3,3,3"
+
+    drain_all_drives
+    setup_tables
+    invoke_daemons
+    setup_test_dirs
+    setup_dummy_files 1 1k 1
+}
+
+function cleanup()
+{
+    waive_daemons
+    drop_tables
+    drain_all_drives
+    cleanup_dummy_files
+    cleanup_test_dirs
+}
+
+################################################################################
+#                                    TESTS                                     #
+################################################################################
+
+# Build an "<address>:<value>" line per drive for the given column of
+# "phobos drive status", sorted by address
+function drive_status_map()
+{
+    local column=$1
+
+    $phobos drive status -o "address,${column}" |
+        grep -E '^\|[[:space:]]+[0-9]' |
+        awk -F'|' '{gsub(/ /, "", $2); gsub(/ /, "", $3); print $2 ":" $3}' |
+        sort
+}
+
+# Check that each drive still contains the tape it had when reference_map was
+# built, and that all the drives are dedicated to expected_scheduler ("F" for
+# format, "W" for write, "R" for read)
+function check_drives()
+{
+    local reference_map=$1
+    local expected_scheduler=$2
+    local media_map
+    local dedication_map
+    local wrong_dedication
+
+    media_map=$(drive_status_map "media")
+    if [ "$media_map" != "$reference_map" ]; then
+        error "The tapes were reloaded in other drives: '${media_map}'" \
+              "instead of '${reference_map}'"
+    fi
+
+    dedication_map=$(drive_status_map "currently_dedicated_to")
+    wrong_dedication=$(echo "$dedication_map" |
+                       grep -v ":${expected_scheduler}$" | wc -l)
+    if [ "$wrong_dedication" != "0" ]; then
+        error "The drives are not dedicated to ${expected_scheduler}:" \
+              "'${dedication_map}'"
+    fi
+}
+
+function test_format_put_get_reuse()
+{
+    local output_file="$DIR_TEST_OUT/$(basename "${FILES[0]}")"
+    local tapes=($(get_tapes L6 3 | nodeset -e))
+    local drives=($(get_lto_drives 6 3))
+    local reference_map
+    local oid=$FUNCNAME
+
+    $phobos drive add --unlock ${drives[@]}
+    $phobos tape add --type lto6 --unlock ${tapes[@]}
+
+    # The format of the 3 tapes loads one tape in each of the 3 drives, and
+    # the fair_share dispatcher dedicates all the drives to the format
+    # scheduler
+    $phobos tape format ${tapes[@]}
+
+    # Each of the 3 tapes is loaded in one of the 3 drives
+    reference_map=$(drive_status_map "media")
+    for tape in ${tapes[@]}; do
+        echo "$reference_map" | grep -q ":${tape}$" ||
+            error "Tape ${tape} is not loaded in a drive: '${reference_map}'"
+    done
+
+    check_drives "$reference_map" "F"
+
+    # The put of a raid4 object is dedicated to the write scheduler, which
+    # reuses the tapes loaded in the drives
+    $valg_phobos put -f tape --layout raid4 "${FILES[0]}" "$oid"
+
+    check_drives "$reference_map" "W"
+
+    # The get of this object is dedicated to the read scheduler
+    # (grouped_read), which also reuses the loaded tapes
+    $valg_phobos get "$oid" "$output_file"
+
+    diff "${FILES[0]}" "$output_file" ||
+        error "The content of the get differs from the original file"
+
+    check_drives "$reference_map" "R"
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Drives required for this test"
+fi
+
+TESTS=("setup; test_format_put_get_reuse; cleanup")
