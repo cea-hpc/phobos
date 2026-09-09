@@ -357,7 +357,10 @@ static int dss_generic_update(struct dss_handle *handle, enum dss_type type,
     if (rc)
         LOG_GOTO(out_cleanup, rc, "SQL request build failed");
 
-    rc = execute_and_commit_or_rollback(conn, request, &res, PGRES_COMMAND_OK);
+    rc = execute_and_commit_or_rollback(conn, request, &res,
+                                        PGRES_COMMAND_OK);
+    if (rc)
+        LOG_GOTO(out_cleanup, rc, "Unable to execute the update request");
 
     updated = strtol(PQcmdTuples(res), NULL, 10);
     if (updated == 0)
