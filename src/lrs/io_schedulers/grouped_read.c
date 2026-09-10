@@ -851,8 +851,8 @@ static inline bool cfg_ordered_grouped_read(enum rsc_family family)
         cfg_io_sched[PHO_IO_SCHED_ordered_grouped_read];
     static bool already_set[PHO_RSC_LAST] = {false};
     static bool res[PHO_RSC_LAST];
+    char *section = NULL;
     const char *value;
-    char *section;
     int rc;
 
     if (already_set[family])
@@ -862,7 +862,7 @@ static inline bool cfg_ordered_grouped_read(enum rsc_family family)
 
     rc = io_sched_cfg_section_name(family, &section);
     if (rc)
-        return res[family];
+        goto free_section;
 
     rc = pho_cfg_get_val(section, cfg_ordered_item.name, &value);
     if (rc)
