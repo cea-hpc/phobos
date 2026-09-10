@@ -41,6 +41,7 @@
 #include "pho_dss.h"
 #include "pho_dss_wrapper.h"
 #include "pho_layout.h"
+#include "pho_ref.h"
 
 #include <cmocka.h>
 
@@ -1600,6 +1601,53 @@ static void io_sched_add_device_with_loaded_medium(void **data)
     g_ptr_array_free(devices, true);
 }
 
+/* When the creation of a queue fails, the reference to the medium info
+ * acquired by fetch_and_check_medium_info must be released: the function
+ * sets an owned reference even when it returns an error. If not, the entry
+ * of the medium cache stays pinned forever.
+ */
+static void io_sched_push_medium_without_read_access(void **data)
+{
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
+    static const char * const media_names[] = {
+        "M0", "M1",
+    };
+    struct req_container reqc;
+    struct media_info media[2];
+    int rc;
+    int i;
+
+    wrap_create_medium(&media[0], media_names[0]);
+    wrap_create_medium(&media[1], media_names[1]);
+    /* M1 does not accept reads: the creation of its queue fails after
+     * fetch_and_check_medium_info has set its medium info.
+     */
+    media[1].flags.get = false;
+    add_media(media, 2);
+
+    create_request(&reqc, media_names, 2, 1, io_sched->lock_handle);
+
+    rc = io_sched_push_request(io_sched, &reqc);
+    assert_int_equal(rc, -EPERM);
+
+    /* The error path of the push must have released everything: the medium
+     * info of M1, and the queue of M0, which drops its own reference. Each
+     * cache entry must be back to the single reference of the fake DSS.
+     */
+    for (i = 0; i < 2; i++) {
+        struct pho_ref *ref;
+
+        ref = g_hash_table_lookup(
+            phobos_context()->lrs_media_cache[PHO_RSC_TAPE]->cache,
+            &media[i].rsc.id);
+        assert_non_null(ref);
+        assert_int_equal(ref->count, 1);
+    }
+
+    remove_media(media, 2);
+    destroy_request(&reqc);
+}
+
 static int set_schedulers(const char *read_algo,
                           const char *write_algo,
                           const char *format_algo,
@@ -2345,6 +2393,7 @@ int main(void)
     };
     const struct CMUnitTest test_grouped_read_only[] = {
         cmocka_unit_test(io_sched_add_device_with_loaded_medium),
+        cmocka_unit_test(io_sched_push_medium_without_read_access),
     };
     int error_count;
 

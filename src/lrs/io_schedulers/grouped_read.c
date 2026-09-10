@@ -304,6 +304,13 @@ request_queue_alloc(struct io_scheduler *io_sched,
 
     *queue = xmalloc(sizeof(**queue));
 
+    /* fetch_and_check_medium_info does not touch medium_info when the
+     * medium could not be acquired, but it sets an owned reference in it
+     * even when it fails afterwards: initialize it, so that the error path
+     * can always release it.
+     */
+    (*queue)->medium_info = NULL;
+
     rc = fetch_and_check_medium_info(io_sched->io_sched_hdl->lock_handle,
                                      elem->reqc, &(*queue)->medium_id, index,
                                      &(*queue)->medium_info);
@@ -318,6 +325,7 @@ request_queue_alloc(struct io_scheduler *io_sched,
     return 0;
 
 free_g_queue:
+    lrs_medium_release((*queue)->medium_info);
     free(*queue);
 
     return rc;
@@ -887,7 +895,6 @@ static int grouped_push_request(struct io_scheduler *io_sched,
 
     for (i = 0; i < reqc->req->ralloc->n_med_ids; i++) {
         struct queue_element *elem;
-        int rc;
 
         elem = xmalloc(sizeof(*elem));
 
