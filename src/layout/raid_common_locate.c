@@ -515,6 +515,8 @@ static int lock_extents(struct dss_handle *dss,
     int nb_new_locks = 0;
     int i, j;
 
+    memset(medium_locked, 0, sizeof(medium_locked));
+
     host = g_hash_table_lookup(hosts, hostname);
     assert(host);
 
