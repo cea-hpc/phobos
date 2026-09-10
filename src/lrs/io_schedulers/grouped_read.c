@@ -132,6 +132,9 @@ static ssize_t reqc_get_medium_index_from_medium_id(struct req_container *reqc,
     return -1;
 }
 
+static void drain_queue(struct grouped_data *data,
+                        struct request_queue *queue);
+
 static int grouped_init(struct io_scheduler *io_sched)
 {
     struct grouped_data *data;
@@ -156,6 +159,18 @@ free_data:
 static void grouped_fini(struct io_scheduler *io_sched)
 {
     struct grouped_data *data = io_sched->private_data;
+    GList *queues;
+
+    /* The requests still queued are silently dropped, without any error
+     * response, as sched_fini does with the requests of its incoming and
+     * retry queues.
+     */
+    queues = g_hash_table_get_values(data->request_queues);
+    glist_foreach(iter, queues) {
+        drain_queue(data, iter->data);
+    }
+
+    g_list_free(queues);
 
     g_hash_table_destroy(data->request_queues);
     free(data);
@@ -404,6 +419,19 @@ static void cancel_request(struct io_scheduler *io_sched,
     io_sched->io_sched_hdl->io_stats.nb_reads--;
 }
 
+/* Remove \p elem from the lists of the elements of its request and return
+ * the number of elements of this request that remain in the lists.
+ */
+static size_t remove_elem_from_pair(struct queue_element *elem)
+{
+    /* remove it from both lists, it will be in only one of them */
+    elem->pair->used = g_list_remove(elem->pair->used, elem);
+    elem->pair->free = g_list_remove(elem->pair->free, elem);
+
+    return g_list_length(elem->pair->used) +
+        g_list_length(elem->pair->free);
+}
+
 /* After a search through all the queues, we can identify which queues cannot be
  * allocated. If the scheduler doesn't have a compatible device for this queue,
  * the request cannot be allocated.
@@ -428,12 +456,7 @@ static void empty_incompatible_queue(struct io_scheduler *io_sched,
     while ((elem = g_queue_pop_tail(queue->queue)) != NULL) {
         size_t num_elements;
 
-        /* remove it from both lists, it will be in only one of them */
-        elem->pair->used = g_list_remove(elem->pair->used, elem);
-        elem->pair->free = g_list_remove(elem->pair->free, elem);
-
-        num_elements = g_list_length(elem->pair->used) +
-            g_list_length(elem->pair->free);
+        num_elements = remove_elem_from_pair(elem);
 
         if (elem->reqc->req->ralloc->n_required > num_elements)
             cancel_request(io_sched, elem);
@@ -442,6 +465,19 @@ static void empty_incompatible_queue(struct io_scheduler *io_sched,
     }
 
     delete_queue(io_sched->private_data, queue);
+}
+
+/* Free every element still queued in \p queue, then the queue itself,
+ * without answering the requests: the scheduler is being destroyed.
+ */
+static void drain_queue(struct grouped_data *data, struct request_queue *queue)
+{
+    struct queue_element *elem;
+
+    while ((elem = g_queue_pop_tail(queue->queue)) != NULL)
+        queue_element_free(elem, remove_elem_from_pair(elem) == 0);
+
+    delete_queue(data, queue);
 }
 
 static struct request_queue *

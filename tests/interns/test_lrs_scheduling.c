@@ -1648,6 +1648,54 @@ static void io_sched_push_medium_without_read_access(void **data)
     destroy_request(&reqc);
 }
 
+/* The requests still queued when the scheduler is destroyed must be freed
+ * with their queues, without keeping any reference to the medium cache.
+ */
+static void io_sched_fini_with_pending_request(void **data)
+{
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
+    static const char * const media_names[] = {
+        "M0", "M1",
+    };
+    struct req_container reqc;
+    struct media_info media[2];
+    struct pho_ref *ref;
+    int rc;
+    int i;
+
+    wrap_create_medium(&media[0], media_names[0]);
+    wrap_create_medium(&media[1], media_names[1]);
+    add_media(media, 2);
+
+    create_request(&reqc, media_names, 2, 1, io_sched->lock_handle);
+
+    rc = io_sched_push_request(io_sched, &reqc);
+    assert_return_code(rc, -rc);
+
+    /* Destroy the scheduler with the request still pending */
+    io_sched->read.ops.fini(&io_sched->read);
+
+    /* The queues must have been freed with the references to their medium
+     * info: only the reference of the fake DSS remains in each cache entry.
+     */
+    for (i = 0; i < 2; i++) {
+        ref = g_hash_table_lookup(
+            phobos_context()->lrs_media_cache[PHO_RSC_TAPE]->cache,
+            &media[i].rsc.id);
+        assert_non_null(ref);
+        assert_int_equal(ref->count, 1);
+    }
+
+    remove_media(media, 2);
+    destroy_request(&reqc);
+
+    /* Re-initialize the scheduler, so that the io_sched_fini of the group
+     * teardown does not operate on freed data.
+     */
+    rc = io_sched->read.ops.init(&io_sched->read);
+    assert_return_code(rc, -rc);
+}
+
 static int set_schedulers(const char *read_algo,
                           const char *write_algo,
                           const char *format_algo,
@@ -2394,6 +2442,7 @@ int main(void)
     const struct CMUnitTest test_grouped_read_only[] = {
         cmocka_unit_test(io_sched_add_device_with_loaded_medium),
         cmocka_unit_test(io_sched_push_medium_without_read_access),
+        cmocka_unit_test(io_sched_fini_with_pending_request),
     };
     int error_count;
 
