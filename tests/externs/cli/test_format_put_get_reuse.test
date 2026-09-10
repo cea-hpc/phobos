@@ -21,15 +21,24 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-# This test checks a basic format/put/get sequence, starting from an empty
-# situation: the format of 3 LTO6 tapes on 3 LTO6 drives leaves one tape
-# loaded in each drive, and the schedulers then reuse these loaded tapes as
-# they are, without any reload. The devices are dispatched to the schedulers
-# by fair_share, with no minimum and a maximum of 3 devices for read, write
-# and format, so the scheduler of the ongoing operation owns all the drives:
-# the format dedicates them to "F", the put of a raid4 object to "W" (fifo
-# write scheduler), and the get of this object to "R" (grouped_read
-# scheduler).
+# This file checks format/put/get sequences that reuse the tapes already
+# loaded in the drives, starting from an empty situation: the format of
+# 3 LTO6 tapes on LTO6 drives leaves one tape loaded in each drive it uses,
+# and the schedulers then reuse these loaded tapes as they are, without any
+# reload. The devices are dispatched to the schedulers by fair_share, with
+# no minimum and a maximum of 4 devices for read, write and format, so the
+# scheduler of the ongoing operation owns all the drives: the format
+# dedicates them to "F", the put of a raid4 object to "W" (fifo write
+# scheduler), and the get of this object to "R" (grouped_read scheduler).
+#
+# test_format_put_get_reuse uses 3 tapes and 3 drives, so every drive holds
+# a tape once the format is done.
+#
+# test_format_put_get_reuse_free_drive uses 3 tapes and 4 drives, so one
+# drive is still free after the format. This free drive must stay empty
+# during the get: the read scheduler has to reuse the loaded tapes instead
+# of allocating a medium of the request to the free drive, which would load
+# a tape already loaded in another drive.
 
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
@@ -49,7 +58,7 @@ function setup()
     export PHOBOS_IO_SCHED_TAPE_format_algo="fifo"
     export PHOBOS_IO_SCHED_TAPE_dispatch_algo="fair_share"
     export PHOBOS_IO_SCHED_TAPE_fair_share_lto6_min="0,0,0"
-    export PHOBOS_IO_SCHED_TAPE_fair_share_lto6_max="3,3,3"
+    export PHOBOS_IO_SCHED_TAPE_fair_share_lto6_max="4,4,4"
 
     drain_all_drives
     setup_tables
@@ -109,23 +118,35 @@ function check_drives()
     fi
 }
 
-function test_format_put_get_reuse()
+# Common body of test_format_put_get_reuse and
+# test_format_put_get_reuse_free_drive: format 3 LTO6 tapes on the given
+# number of LTO6 drives, then put and get a raid4 object. After each
+# operation, check that the tapes stayed in the drives where the format
+# loaded them, and that the drives are dedicated to the scheduler of the
+# ongoing operation. The drives left without any tape by the format (if any)
+# must stay empty until the end: the schedulers must reuse the loaded tapes
+# instead of loading one of them again in a free drive.
+function format_put_get_reuse_run()
 {
+    local nb_drives=$1
     local output_file="$DIR_TEST_OUT/$(basename "${FILES[0]}")"
     local tapes=($(get_tapes L6 3 | nodeset -e))
-    local drives=($(get_lto_drives 6 3))
+    local drives=($(get_lto_drives 6 $nb_drives))
     local reference_map
     local oid=$FUNCNAME
+
+    if [ ${#drives[@]} -ne "$nb_drives" ]; then
+        error "Only ${#drives[@]} LTO6 drives available, ${nb_drives} needed"
+    fi
 
     $phobos drive add --unlock ${drives[@]}
     $phobos tape add --type lto6 --unlock ${tapes[@]}
 
-    # The format of the 3 tapes loads one tape in each of the 3 drives, and
-    # the fair_share dispatcher dedicates all the drives to the format
-    # scheduler
+    # The format of the 3 tapes loads one tape in each of 3 drives, and the
+    # fair_share dispatcher dedicates all the drives to the format scheduler
     $phobos tape format ${tapes[@]}
 
-    # Each of the 3 tapes is loaded in one of the 3 drives
+    # Each of the 3 tapes is loaded in one of the drives
     reference_map=$(drive_status_map "media")
     for tape in ${tapes[@]}; do
         echo "$reference_map" | grep -q ":${tape}$" ||
@@ -141,7 +162,8 @@ function test_format_put_get_reuse()
     check_drives "$reference_map" "W"
 
     # The get of this object is dedicated to the read scheduler
-    # (grouped_read), which also reuses the loaded tapes
+    # (grouped_read), which reuses the loaded tapes. A free drive must not
+    # be used to load a tape that is already loaded in another drive.
     $valg_phobos get "$oid" "$output_file"
 
     diff "${FILES[0]}" "$output_file" ||
@@ -150,8 +172,21 @@ function test_format_put_get_reuse()
     check_drives "$reference_map" "R"
 }
 
+function test_format_put_get_reuse()
+{
+    format_put_get_reuse_run 3
+}
+
+function test_format_put_get_reuse_free_drive()
+{
+    format_put_get_reuse_run 4
+}
+
 if [[ ! -w /dev/changer ]]; then
     skip "Drives required for this test"
 fi
 
-TESTS=("setup; test_format_put_get_reuse; cleanup")
+TESTS=(
+    "setup; test_format_put_get_reuse; cleanup"
+    "setup; test_format_put_get_reuse_free_drive; cleanup"
+)

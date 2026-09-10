@@ -1,5 +1,9 @@
 # CHANGELOG UPDATES
 
+## Next
+ * Grouped read: queue preallocation has been improved to guarantee the
+   use of media already present and available.
+
 ## 3.4.0
  * WARNING: the stat dev.umount_error is changed to dev.umount_errors .
  * WARNING: When calling the pho_xfer_desc_clean function after a `phobos_get`

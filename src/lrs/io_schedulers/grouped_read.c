@@ -666,11 +666,13 @@ static int grouped_peek_request(struct io_scheduler *io_sched,
 
     *reqc = NULL;
 
-    /* search for a device containing a queue whose first request can be
-     * allocated
+    /* Associate each device holding a medium to the queue of this medium if
+     * the queue is not associated to a device yet. Do this for all the devices
+     * before searching for a request to allocate, so that no request is
+     * returned while one of the queues of its media is not associated to the
+     * device holding it.
      */
     for (i = 0; i < io_sched->devices->len; i++) {
-        struct queue_element *elem;
         struct media_info *medium;
         struct device *device;
 
@@ -692,6 +694,16 @@ static int grouped_peek_request(struct io_scheduler *io_sched,
                 associate_queue_to_device(device, queue);
         }
         lrs_medium_release(medium);
+    }
+
+    /* search for a device containing a queue whose first request can be
+     * allocated
+     */
+    for (i = 0; i < io_sched->devices->len; i++) {
+        struct queue_element *elem;
+        struct device *device;
+
+        device = g_ptr_array_index(io_sched->devices, i);
 
         if (!dev_is_sched_ready(device->device) || !device->queue)
             continue;
