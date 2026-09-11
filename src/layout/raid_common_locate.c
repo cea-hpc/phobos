@@ -291,8 +291,6 @@ static void set_host_extent_accessibility(GHashTable *hosts, GPtrArray *extents)
                           loc->medium->rsc.id.library,
                           loc->medium->rsc.id.name,
                           loc->hostname);
-
-                host->accessible_extents[i] = false;
             } else {
                 host->accessible_extents[i] = true;
             }
@@ -324,8 +322,10 @@ static void filter_inaccessible_extents(GHashTable *hosts, GPtrArray *extents)
         hashtable_foreach(hosts, &key, &value) {
             struct host_capabilities *host = value;
 
-            if (host->accessible_extents[i])
+            if (host->accessible_extents[i]) {
                 accessible = true;
+                break;
+            }
         }
 
         if (!accessible)
