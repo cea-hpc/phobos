@@ -2870,6 +2870,16 @@ int phobos_locate(const char *oid, const char *uuid, int version,
                  obj->uuid, obj->version, copy->copy_name, cnt);
     }
 
+    /* An incomplete copy is missing extents: it cannot be read on any
+     * host, so the object cannot be located.
+     */
+    if (copy->copy_status == PHO_COPY_STATUS_INCOMPLETE) {
+        dss_res_free(layout, cnt);
+        LOG_GOTO(clean, rc = -ENODEV,
+                 "Copy '%s' of object '%s' is incomplete",
+                 copy->copy_name, obj->uuid);
+    }
+
     /* locate media */
     rc = layout_locate(dss, layout, focus_host, hostname, nb_new_lock);
     dss_res_free(layout, cnt);

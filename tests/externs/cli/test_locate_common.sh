@@ -331,3 +331,51 @@ EOF
 
     invoke_lrs
 }
+
+# Put an object whose single copy holds two splits with repl_count=2, then
+# lose the media of the first split with "dir delete --lost": the copy is
+# left incomplete, and locating the object must fail.
+function test_locate_incomplete_copy
+{
+    local oid="oid_tlic"
+    local size="$1"
+    local IN_FILE=$(mktemp /tmp/test.pho.XXXX)
+
+    dd if=/dev/random of=$IN_FILE count=$size bs=1
+
+    $phobos put -f dir -l raid1 --lyt-params "repl_count=2" $IN_FILE $oid ||
+        error "Error while putting $oid"
+
+    rm -f $IN_FILE
+
+    # media of the copy extents, in layout order
+    local obj_media
+    obj_media=($($phobos extent list -f json -o media_name $oid |
+                 jq -r ".[0].media_name[]")) ||
+        error "Failed to list the media holding the extents of $oid"
+    if [ ${#obj_media[@]} -ne 4 ]; then
+        error "Expected 4 media for the 2 splits of $oid, got " \
+              "${#obj_media[@]}"
+    fi
+
+    # a locked medium cannot be removed, and the LRS locks the media it used
+    waive_lrs
+
+    # lose the media of the first split: the copy is left incomplete
+    $valg_phobos dir delete --lost ${obj_media[0]} ||
+        error "Error while deleting ${obj_media[0]}"
+    $valg_phobos dir delete --lost ${obj_media[1]} ||
+        error "Error while deleting ${obj_media[1]}"
+
+    invoke_lrs
+
+    # an incomplete copy cannot be located for a read
+    local locate_rc=0
+    $valg_phobos locate $oid || locate_rc=$?
+    if [ "$locate_rc" -ne 19 ]; then
+        error "Locating $oid should fail on its incomplete copy with ENODEV"\
+              " (19), got $locate_rc"
+    fi
+
+    return 0
+}

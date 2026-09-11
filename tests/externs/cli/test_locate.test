@@ -137,6 +137,32 @@ function dir_locked_splits_setup
     invoke_lrs
 }
 
+function dir_incomplete_setup
+{
+    # start with a clean/empty phobos DB but no daemon is online yet
+    setup_tables
+    invoke_lrs
+
+    export dirs="
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+    "
+
+    $phobos dir add $dirs
+    $phobos dir format --fs posix --unlock $dirs
+
+    waive_lrs
+
+    export PHOBOS_IO_fs_block_size="dir=0,tape=0"
+    for dir in $dirs; do
+        resize_medium $dir $HALF_SIZE
+    done
+
+    invoke_lrs
+}
+
 function cleanup
 {
     unset PHOBOS_STORE_default_family
@@ -495,6 +521,9 @@ TESTS=("dir_setup; \
         dir_cleanup")
 TESTS+=("dir_locked_splits_setup; \
          test_locate_locked_splits dir $FULL_SIZE; \
+         dir_cleanup")
+TESTS+=("dir_incomplete_setup; \
+         test_locate_incomplete_copy $FULL_SIZE; \
          dir_cleanup")
 
 if [[ -w /dev/changer ]]; then
