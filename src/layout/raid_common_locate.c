@@ -147,14 +147,16 @@ static void remove_extent_location(GPtrArray *extents, int index)
 static int locate_all_extents(struct dss_handle *dss,
                               struct layout_info *layout,
                               GPtrArray *extents,
-                              size_t extents_per_split)
+                              size_t n_data_extents,
+                              size_t n_parity_extents)
 {
+    size_t extents_per_split = n_data_extents + n_parity_extents;
     int rc;
     int i;
     int j;
 
     for (i = 0; i < extents->len / extents_per_split; i++) {
-        bool one_locate_succeeded = false;
+        size_t nb_located = 0;
 
         for (j = 0; j < extents_per_split; j++) {
             struct extent_location *loc;
@@ -178,12 +180,12 @@ static int locate_all_extents(struct dss_handle *dss,
                 continue;
             }
 
-            one_locate_succeeded = true;
+            nb_located++;
         }
 
-        if (!one_locate_succeeded)
+        if (nb_located < n_data_extents)
             LOG_GOTO(cleanup, rc = -ENODEV,
-                     "DSS locate failed for every extent of the split %d", i);
+                     "Not enough extents could be located for split %d", i);
 
     }
 
@@ -333,8 +335,10 @@ static void filter_inaccessible_extents(GHashTable *hosts, GPtrArray *extents)
     }
 }
 
-static bool unaccessible_split(GPtrArray *extents, size_t extents_per_split)
+static bool unaccessible_split(GPtrArray *extents, size_t n_data_extents,
+                               size_t n_parity_extents)
 {
+    size_t extents_per_split = n_data_extents + n_parity_extents;
     int i;
 
     for (i = 0; i < extents->len / extents_per_split; i++) {
@@ -346,7 +350,7 @@ static bool unaccessible_split(GPtrArray *extents, size_t extents_per_split)
                 nb_accessible++;
         }
 
-        if (nb_accessible == 0) {
+        if (nb_accessible < n_data_extents) {
             pho_error(0, "Split '%d' is not accessible", i);
             return true;
         }
@@ -634,13 +638,13 @@ int raid_locate(struct dss_handle *dss, struct layout_info *layout,
     extents = setup_extent_location(layout);
 
     rc = locate_all_extents(dss, layout, extents,
-                            n_data_extents + n_parity_extents);
+                            n_data_extents, n_parity_extents);
     if (rc)
         GOTO(clean, rc);
 
     set_host_extent_accessibility(hosts, extents);
     filter_inaccessible_extents(hosts, extents);
-    if (unaccessible_split(extents, n_data_extents + n_parity_extents))
+    if (unaccessible_split(extents, n_data_extents, n_parity_extents))
         GOTO(clean, rc = -EAGAIN);
 
     filter_host_with_partial_access(hosts, extents, n_data_extents,
