@@ -379,3 +379,56 @@ function test_locate_incomplete_copy
 
     return 0
 }
+
+# Put an object with the given layout, then lose the medium of the second
+# extent (layout_idx 1) with "dir delete --lost": the copy is left degraded,
+# with one missing extent in its single split. Locate must still succeed and
+# return a host able to read the remaining extents: the missing extent leaves
+# a trailing hole for raid1 with repl_count=2, and an interior hole for raid4.
+function test_locate_degraded_copy_run
+{
+    local layout="$1"
+    local lyt_params="$2"
+    local nb_extents="$3"
+    local oid="oid_tldc"
+    local self_hostname=$(hostname -s)
+
+    $phobos put -f dir -l $layout $lyt_params /etc/hosts $oid ||
+        error "Error while putting $oid"
+
+    # media of the copy extents, in layout order
+    local obj_media
+    obj_media=($($phobos extent list -f json -o media_name $oid |
+                 jq -r ".[0].media_name[]")) ||
+        error "Failed to list the media holding the extents of $oid"
+    if [ ${#obj_media[@]} -ne $nb_extents ]; then
+        error "Expected $nb_extents media for the extents of $oid, got " \
+              "${#obj_media[@]}"
+    fi
+
+    # a locked medium cannot be removed, and the LRS locks the media it used
+    waive_lrs
+
+    $valg_phobos dir delete --lost ${obj_media[1]} ||
+        error "Error while deleting ${obj_media[1]}"
+
+    invoke_lrs
+
+    # the remaining extents are enough to locate the object
+    locate_hostname=$($valg_phobos locate $oid) ||
+        error "Error while locating the degraded copy of $oid"
+    if [ "$locate_hostname" != "$self_hostname" ]; then
+        error "Locate on the degraded copy of $oid returned " \
+              "$locate_hostname instead of $self_hostname"
+    fi
+}
+
+function test_locate_degraded_copy_raid1
+{
+    test_locate_degraded_copy_run raid1 "--lyt-params repl_count=2" 2
+}
+
+function test_locate_degraded_copy_raid4
+{
+    test_locate_degraded_copy_run raid4 "" 3
+}

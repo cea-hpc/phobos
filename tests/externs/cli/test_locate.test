@@ -525,6 +525,12 @@ TESTS+=("dir_locked_splits_setup; \
 TESTS+=("dir_incomplete_setup; \
          test_locate_incomplete_copy $FULL_SIZE; \
          dir_cleanup")
+TESTS+=("dir_setup; \
+         test_locate_degraded_copy_raid1; \
+         dir_cleanup")
+TESTS+=("dir_setup; \
+         test_locate_degraded_copy_raid4; \
+         dir_cleanup")
 
 if [[ -w /dev/changer ]]; then
     TESTS+=("tape_setup; \

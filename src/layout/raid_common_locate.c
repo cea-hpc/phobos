@@ -120,19 +120,40 @@ static void extent_location_fini(gpointer data)
     free(loc);
 }
 
-static GPtrArray *setup_extent_location(struct layout_info *layout)
+/* Setup one location per extent of the layout. The returned array is indexed
+ * by the extent layout_idx, like the raid reader does (see
+ * raid_get_nb_split()): each split spans a contiguous range of slots, and the
+ * slot of an extent missing from a degraded copy is left NULL.
+ */
+static GPtrArray *setup_extent_location(struct layout_info *layout,
+                                        size_t extents_per_split)
 {
     GPtrArray *extents;
+    size_t last_lyt_index;
+    size_t nb_split;
+    size_t nb_slots;
     int i;
 
-    extents = g_ptr_array_new_full(layout->ext_count, extent_location_fini);
+    /* The DSS returns the extents of a copy ordered by layout_idx, so the
+     * last one carries the highest index.
+     */
+    last_lyt_index = layout->extents[layout->ext_count - 1].layout_idx;
+    nb_split = (last_lyt_index / extents_per_split) + 1;
+    nb_slots = nb_split * extents_per_split;
+
+    extents = g_ptr_array_new_full(nb_slots, extent_location_fini);
+    for (i = 0; i < nb_slots; i++)
+        g_ptr_array_add(extents, NULL);
 
     for (i = 0; i < layout->ext_count; i++) {
         struct extent_location *loc =
             xcalloc(1, sizeof(struct extent_location));
 
-        g_ptr_array_add(extents, loc);
+        pho_assert((size_t)layout->extents[i].layout_idx < nb_slots,
+                   "Layout extents are not ordered by layout_idx");
+
         loc->extent = &layout->extents[i];
+        extents->pdata[layout->extents[i].layout_idx] = loc;
     }
 
     return extents;
@@ -145,7 +166,6 @@ static void remove_extent_location(GPtrArray *extents, int index)
 }
 
 static int locate_all_extents(struct dss_handle *dss,
-                              struct layout_info *layout,
                               GPtrArray *extents,
                               size_t n_data_extents,
                               size_t n_parity_extents)
@@ -165,7 +185,12 @@ static int locate_all_extents(struct dss_handle *dss,
 
             ext_index = i * extents_per_split + j;
             loc = extents->pdata[ext_index];
-            medium_id = &layout->extents[ext_index].media;
+
+            /* missing extent of a degraded copy */
+            if (!loc)
+                continue;
+
+            medium_id = &loc->extent->media;
 
             rc = dss_medium_locate(dss, medium_id, &loc->hostname,
                                    &loc->medium);
@@ -628,16 +653,28 @@ int raid_locate(struct dss_handle *dss, struct layout_info *layout,
             LOG_RETURN(-EADDRNOTAVAIL, "Unable to get self hostname");
     }
 
+    if (layout->ext_count == 0) {
+        pho_warn("Locating a layout without any extent, "
+                 "returning the focus host '%s'", focus_host);
+        *hostname = xstrdup(focus_host);
+        *nb_new_locks = 0;
+        return 0;
+    }
+
     family = layout->extents[0].media.family;
     rc = dss_get_usable_devices(dss, family, NULL, &devices, &n_devices);
     if (rc)
         return rc;
 
-    hosts = setup_available_hosts(devices, n_devices, layout->ext_count,
+    extents = setup_extent_location(layout,
+                                    n_data_extents + n_parity_extents);
+    /* setup_available_hosts indexes accessible_extents with the extent
+     * locations, so it must be sized after the padded extents array.
+     */
+    hosts = setup_available_hosts(devices, n_devices, extents->len,
                                   focus_host);
-    extents = setup_extent_location(layout);
 
-    rc = locate_all_extents(dss, layout, extents,
+    rc = locate_all_extents(dss, extents,
                             n_data_extents, n_parity_extents);
     if (rc)
         GOTO(clean, rc);
