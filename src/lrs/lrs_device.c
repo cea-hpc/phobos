@@ -369,8 +369,10 @@ int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index, int rc,
     if (index >= handle->ldh_devices->len)
         return -ERANGE;
 
+    MUTEX_LOCK(&handle->ldh_devices_remove_mutex);
     dev = (struct lrs_dev *)g_ptr_array_remove_index_fast(handle->ldh_devices,
                                                           index);
+    MUTEX_UNLOCK(&handle->ldh_devices_remove_mutex);
 
     thread_signal_stop_on_error(&dev->ld_device_thread, rc);
     rc = thread_wait_end(&dev->ld_device_thread);
@@ -430,7 +432,9 @@ int lrs_dev_hdl_trydel(struct lrs_dev_hdl *handle, int index)
                   dev->ld_dss_dev_info->rsc.id.name,
                   dev->ld_dss_dev_info->rsc.id.library);
 
+    MUTEX_LOCK(&handle->ldh_devices_remove_mutex);
     g_ptr_array_remove_fast(handle->ldh_devices, dev);
+    MUTEX_UNLOCK(&handle->ldh_devices_remove_mutex);
     lrs_dev_info_clean(dev);
 
     return 0;
@@ -452,7 +456,9 @@ int lrs_dev_hdl_retrydel(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
         pho_error(*threadrc, "device thread '%s' terminated with error",
                   dev->ld_dss_dev_info->rsc.id.name);
 
+    MUTEX_LOCK(&handle->ldh_devices_remove_mutex);
     g_ptr_array_remove_fast(handle->ldh_devices, dev);
+    MUTEX_UNLOCK(&handle->ldh_devices_remove_mutex);
     lrs_dev_info_clean(dev);
 
     return 0;
