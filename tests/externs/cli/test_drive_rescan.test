@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+
+#
+#  All rights reserved (c) 2014-2026 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by the
+#  Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for the scsi_tape device cache refresh.
+#
+# Reproduces the field scenario where a drive is re-enumerated while phobosd
+# is running (e.g. a firmware flash followed by a SCSI rescan, as done with
+# ITDT), so the sg node phobosd resolved for the drive disappears.
+#
+# The scenario mirrors the field workflow:
+#   1. the drive is used normally (put succeeds, phobosd caches its sg node),
+#   2. the drive is locked for maintenance, as done before a firmware flash,
+#   3. the drive is re-enumerated: its SCSI device is deleted then rescanned,
+#      so its device nodes disappear and come back, possibly renamed,
+#   4. a first unlock fails while the drive is still gone: this failure is
+#      expected, but it must not wedge phobosd with a leaked device lock,
+#   5. once the drive is back, a second unlock and further I/Os must succeed
+#      without restarting phobosd.
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
+
+function setup
+{
+    setup_tables
+    drain_all_drives
+    invoke_daemons
+    setup_test_dirs
+}
+
+function cleanup
+{
+    waive_daemons
+    drop_tables
+    drain_all_drives
+    cleanup_test_dirs
+}
+
+# Wait for the tape device to be back after the SCSI rescan. The device
+# usually comes back under the same name: the kernel reassigns the lowest
+# free minor, which is the one the deletion freed.
+function wait_for_drive
+{
+    local sysfs_dev="$1"
+    local tries=0
+
+    while [[ ! -e "$sysfs_dev" ]]; do
+        tries=$((tries + 1))
+        if (( tries > 20 )); then
+            error "$sysfs_dev did not come back after the SCSI rescan"
+        fi
+        sleep 0.5
+    done
+}
+
+function test_drive_rescan
+{
+    local tape="$(get_tapes L6 1)"
+    local drive="$(get_lto_drives 6 1)"
+    local stdev="$(basename "$drive")"
+    local sysfs_dev="/sys/class/scsi_tape/$stdev"
+    local sysfs_host
+    local serial
+    local src_file="$DIR_TEST_IN/src_file"
+    local rc
+    local tries=0
+
+    # Remember which SCSI host the drive is attached to, to rescan it once
+    # the drive has been re-enumerated.
+    sysfs_host="/sys/class/scsi_host/$(readlink -f "$sysfs_dev/device" |
+                                        grep -o 'host[0-9]\+' | head -n 1)"
+
+    $phobos drive add --unlock "$drive"
+    $phobos tape add -t lto6 "$tape"
+    $phobos tape format --unlock "$tape"
+
+    dd if=/dev/urandom of="$src_file" bs=1k count=1 &>/dev/null
+    $phobos put -f tape "$src_file" rescan_obj1
+
+    serial=$($phobos drive list -o name "$drive")
+
+    # Lock the drive for maintenance, as done before a firmware flash: phobosd
+    # stops managing it, but keeps its device cache, which is about to become
+    # stale. 'drive lock' replies before phobosd is done cleaning up the
+    # device (umount, DSS lock release): wait for the cleanup to complete
+    # before re-enumerating the drive, so the umount does not fail on the
+    # device disappearing under it.
+    $phobos drive lock "$serial"
+
+    while [[ "$($phobos drive list -o lock_hostname "$drive")" != "None" ]]; do
+        tries=$((tries + 1))
+        if (( tries > 30 )); then
+            error "phobosd did not release the device lock after drive lock"
+        fi
+        sleep 1
+    done
+
+    # Re-enumerate the drive: its st and sg device nodes disappear, as after
+    # a firmware flash that requires a rescan.
+    echo 1 > "$sysfs_dev/device/delete"
+
+    # First unlock attempt while the drive is gone: the device lookup in
+    # phobosd fails, first on the stale cache entry, then on the refreshed
+    # cache since the drive is really absent. This failure is expected and
+    # proves the bug condition is reached; what matters is that it must not
+    # leave a leaked DSS device lock behind.
+    set +e
+    $phobos drive unlock "$serial"
+    rc=$?
+    set -e
+    if (( rc == 0 )); then
+        error "unlock unexpectedly succeeded while the drive is absent"
+    fi
+
+    # The drive comes back with the rescan, under the same or a new name.
+    echo "- - -" > "$sysfs_host/scan"
+    wait_for_drive "$sysfs_dev"
+
+    # Second unlock attempt: phobosd must refresh its device cache, resolve
+    # the drive through its current device node and take over the device
+    # lock, all without a restart.
+    $phobos drive unlock "$serial" ||
+        error "drive unlock must succeed after re-enumeration"
+
+    # The drive is fully operational again.
+    $phobos put -f tape "$src_file" rescan_obj2 ||
+        error "put must succeed after re-enumeration"
+
+    $phobos get rescan_obj1 $DIR_TEST_OUT/file ||
+        error "get of the object written before re-enumeration must succeed"
+    $phobos get rescan_obj2 $DIR_TEST_OUT/file2 ||
+        error "get of the object written after re-enumeration must succeed"
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Library required for this test"
+fi
+
+TESTS=("setup; test_drive_rescan; cleanup")

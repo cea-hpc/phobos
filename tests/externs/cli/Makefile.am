@@ -53,6 +53,7 @@ check_SCRIPTS=acceptance.test \
               test_drive_list.test \
               test_drive_lookup.test \
               test_drive_migrate.test \
+              test_drive_rescan.test \
               test_drive_scsi_release.test \
               test_extent_list.test \
               test_fair_share.test \
