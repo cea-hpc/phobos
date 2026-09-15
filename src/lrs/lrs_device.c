@@ -354,7 +354,7 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
     rc = dss_lock_take_ownership(&sched->sched_thread.dss, DSS_DEVICE, dev_list,
                                  dev_count);
     if (rc)
-        lrs_dev_hdl_del(handle, handle->ldh_devices->len, rc, sched);
+        lrs_dev_hdl_del(handle, handle->ldh_devices->len - 1, rc, sched);
 
 free_list:
     dss_res_free(dev_list, dev_count);
