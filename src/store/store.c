@@ -2452,6 +2452,14 @@ static int delete_one_incomplete_copy(struct dss_handle *dss,
         char *locate_hostname;
 
         target.xt_objid = xstrdup(layout->oid);
+
+        /* Nothing is hard deleted on the media of a tape copy: no need to
+         * locate it, clean it up systematically.
+         */
+        if (layout->ext_count != 0 &&
+            layout->extents[0].media.family == PHO_RSC_TAPE)
+            goto hard_delete;
+
         rc = layout_locate(dss, layout, hostname, &locate_hostname,
                            &nb_new_lock);
         if (rc) {
@@ -2510,6 +2518,7 @@ static int delete_one_incomplete_copy(struct dss_handle *dss,
 
     }
 
+hard_delete:
     /* hard delete the copy/object */
     if (dry_run) {
         if (same_object_copy_count > 1)

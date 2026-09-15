@@ -63,6 +63,18 @@ function setup_tape
     $phobos tape format --unlock $medium
 }
 
+function setup_tape_raid4
+{
+    setup_tables
+    invoke_daemons
+
+    setup_test_dirs
+    setup_dummy_files 1 1k 1
+
+    drives="$(get_lto_drives 6 3)"
+    $phobos drive add --unlock $drives
+}
+
 function cleanup_dir
 {
     waive_lrs
@@ -308,6 +320,105 @@ function test_tape_hard_delete_after_soft_delete
     fi
 }
 
+function test_tape_delete_incomplete
+{
+    local prefix=$(generate_prefix_id)
+    local oid0=${prefix}_id.0
+    local oid1=${prefix}_id.1
+    local copy_count
+    local media
+    local nb
+
+    media=($(get_tapes L6 4 | nodeset -e))
+
+    # ${media[0]} and ${media[1]} are common to both objects, ${media[2]} is
+    # dedicated to $oid0 and ${media[3]} to $oid1
+    $phobos tape add -t lto6 --tags "obj0,obj1" ${media[0]} ${media[1]}
+    $phobos tape add -t lto6 --tags "obj0" ${media[2]}
+    $phobos tape add -t lto6 --tags "obj1" ${media[3]}
+    $phobos tape format --unlock ${media[@]}
+
+    $phobos put -f tape --layout raid4 --tags "obj0" "${FILES[0]}" $oid0 ||
+        error "Object $oid0 should be put"
+    $phobos put -f tape --layout raid4 --tags "obj1" "${FILES[0]}" $oid1 ||
+        error "Object $oid1 should be put"
+
+    # Unload the tapes, so that the LRS restart does not interact with the
+    # media anymore and the lock of the other host is kept
+    for drive in ${drives}; do
+        $phobos drive unload ${drive}
+    done
+
+    waive_daemons
+
+    # Remove the 2 media that are common to both copies: each copy becomes
+    # incomplete, with its last extent on its own dedicated tape
+    $valg_phobos tape delete --lost ${media[0]} ${media[1]} ||
+        error "Deletion of ${media[0]} and ${media[1]} should have succeeded"
+
+    copy_count="$($phobos copy list -o all | grep incomplete | wc -l)"
+    ((copy_count == 2)) ||
+        error "Both copies should be incomplete"
+
+    # Make the remaining tape of $oid0 look like it is possessed by another
+    # host, as the locate of a delete could see it, while the remaining tape
+    # of $oid1 stays unlocked
+    $PSQL << EOF
+    insert into lock (type, id, hostname, owner)
+    values ('media'::lock_type,
+            (select id || '_' || library from media where id = '${media[2]}'),
+            'other_host', 1)
+    on conflict (type, id) do update
+        set hostname = 'other_host', owner = 1, is_weak = FALSE
+EOF
+
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM lock WHERE hostname='other_host';")
+    if [ $nb -ne 1 ]; then
+        error "Failed to lock the remaining tape as another host"
+    fi
+
+    invoke_daemons
+
+    # The LRS cannot take the lock of the other host back on the remaining
+    # tape of $oid0, which stays in the library
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM lock WHERE hostname='other_host';")
+    if [ $nb -ne 1 ]; then
+        error "The lock of the other host should have survived the LRS restart"
+    fi
+
+    # Nothing is hard deleted on the media of a tape copy: the incomplete
+    # copies are cleaned up systematically, whether their remaining medium is
+    # possessed by another host or not
+    $valg_phobos copy delete --all-incomplete --all-incomplete-delay-second 0 ||
+        error "The incomplete copies should have been deleted"
+
+    [ -z "$($phobos object list $oid0)" ] ||
+        error "Object $oid0 should not be listed, because deleted"
+    [ -z "$($phobos object list --deprecated-only $oid0)" ] ||
+        error "Object $oid0 should not be listed as deprecated, because hard "\
+              "deleted"
+    [ -z "$($phobos object list $oid1)" ] ||
+        error "Object $oid1 should not be listed, because deleted"
+    [ -z "$($phobos object list --deprecated-only $oid1)" ] ||
+        error "Object $oid1 should not be listed as deprecated, because hard "\
+              "deleted"
+
+    copy_count="$($phobos copy list | wc -l)"
+    ((copy_count == 0)) ||
+        error "The copies should not be listed, because deleted"
+
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM layout;")
+    if [ $nb -ne 0 ]; then
+        error "The layouts of the incomplete copies should have been deleted"
+    fi
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM extent WHERE state='orphan';")
+    if [ $nb -ne 2 ]; then
+        error "The last extents on tape should have been set to orphan"
+    fi
+
+    return 0
+}
+
 function test_dir_hard_delete_with_copies()
 {
     export PHOBOS_STORE_default_family="dir"
@@ -351,5 +462,6 @@ TESTS=(
 
 if [[ -w /dev/changer ]]; then
     TESTS+=("setup_tape; test_tape_hard_delete; cleanup_tape"
-            "setup_tape; test_tape_hard_delete_after_soft_delete; cleanup_tape")
+            "setup_tape; test_tape_hard_delete_after_soft_delete; cleanup_tape"
+            "setup_tape_raid4; test_tape_delete_incomplete; cleanup_tape")
 fi
