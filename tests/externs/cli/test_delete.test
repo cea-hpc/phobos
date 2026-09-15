@@ -65,6 +65,29 @@ function setup_dir_raid4
     $phobos dir format --fs posix --unlock ${dirs[@]}
 }
 
+function setup_dir_raid1
+{
+    setup_tables
+    invoke_lrs
+
+    setup_test_dirs
+    setup_dummy_files 1 1k 1025
+
+    # The media are smaller than the object, so that it is written on
+    # several splits, with one extent per medium
+    dirs=(
+        $(make_tmp_fs 1M)
+        $(make_tmp_fs 1M)
+        $(make_tmp_fs 1M)
+        $(make_tmp_fs 1M)
+        $(make_tmp_fs 1M)
+        $(make_tmp_fs 1M)
+    )
+
+    $phobos dir add ${dirs[@]}
+    $phobos dir format --fs posix --unlock ${dirs[@]}
+}
+
 function setup_tape
 {
     setup_tables
@@ -96,6 +119,20 @@ function setup_tape_raid4
 function cleanup_dir
 {
     waive_lrs
+
+    cleanup_dummy_files
+    cleanup_test_dirs
+
+    drop_tables
+}
+
+function cleanup_dir_raid1
+{
+    waive_lrs
+
+    for dir in ${dirs[@]}; do
+        cleanup_tmp_fs "$dir"
+    done
 
     cleanup_dummy_files
     cleanup_test_dirs
@@ -436,6 +473,113 @@ EOF
     return 0
 }
 
+function media_lock_count_should_be
+{
+    local medium=$1
+    local lock_host=$2
+    local expected_count=$3
+    local count
+
+    count=$($PSQL -t -A -c "SELECT COUNT(*) FROM lock
+                         WHERE type = 'media'::lock_type
+                           AND hostname = '$lock_host'
+                           AND id = (SELECT id || '_' || library
+                                     FROM media WHERE id = '$medium');")
+    if [ "$count" -ne "$expected_count" ]; then
+        error "Medium '$medium' should have $expected_count lock(s) of host "\
+              "'$lock_host', got $count"
+    fi
+}
+
+function test_dir_delete_incomplete_rollback
+{
+    local prefix=$(generate_prefix_id)
+    local oid=${prefix}_id
+    local copy_count
+    local obj_media
+    local nb
+
+    $phobos put -f dir --layout raid1 --lyt-params "repl_count=3" \
+        "${FILES[0]}" $oid || error "Object $oid should be put"
+
+    # The extents 0, 1 and 2 are the first split of each replica, and the
+    # extents 3, 4 and 5 the second split of each replica
+    obj_media=($($phobos extent list -f json -o media_name $oid |
+                 jq -r ".[0].media_name[]"))
+    (( ${#obj_media[@]} == 6 )) ||
+        error "The copy should have 6 extents, one per medium"
+
+    waive_lrs
+
+    # Remove the media of the second split: the copy becomes incomplete,
+    # with one remaining extent on each of ${obj_media[0]}, ${obj_media[1]}
+    # and ${obj_media[2]}
+    $valg_phobos dir delete --lost ${obj_media[3]} ${obj_media[4]} \
+                             ${obj_media[5]} ||
+        error "Deletion of the media of the second split should have "\
+              "succeeded"
+
+    copy_count="$($phobos copy list -o all | grep incomplete | wc -l)"
+    ((copy_count == 1)) || error "The copy should be incomplete"
+
+    # Simulate a previous locate of this host, which took a lock on
+    # ${obj_media[0]} that the reservation will only refresh, while
+    # ${obj_media[1]} stays unlocked, so that the reservation takes a new
+    # lock on it, and make ${obj_media[2]} a medium of another host, which
+    # locks it as its own LRS would do, so that the reservation fails on it
+    $PSQL << EOF
+    insert into lock (type, id, hostname, owner)
+    values ('media'::lock_type,
+            (select id || '_' || library from media
+               where id = '${obj_media[0]}'),
+            '$host', 1)
+    on conflict (type, id) do update
+        set hostname = '$host', owner = 1, is_weak = TRUE;
+    update device set host = 'other_host' where path = '${obj_media[2]}';
+    insert into lock (type, id, hostname, owner)
+    values ('media'::lock_type,
+            (select id || '_' || library from media
+               where id = '${obj_media[2]}'),
+            'other_host', 1)
+    on conflict (type, id) do update
+        set hostname = 'other_host', owner = 1, is_weak = FALSE
+EOF
+
+    # The reservation fails on ${obj_media[2]}, which belongs to another
+    # host: the copy is skipped and the command fails. Only the lock newly
+    # taken on ${obj_media[1]} is released, while the preexisting lock on
+    # ${obj_media[0]} is kept
+    $valg_phobos copy delete --all-incomplete --all-incomplete-delay-second 0 &&
+        error "The incomplete copy deletion should have failed on the medium "\
+              "of another host"
+
+    [ -z "$($phobos object list $oid)" ] &&
+        error "Object $oid should still be listed, its medium is possessed "\
+              "by another host"
+    [ -z "$($phobos object list --deprecated-only $oid)" ] ||
+        error "Object $oid should not be listed as deprecated"
+
+    copy_count="$($phobos copy list -o all | grep incomplete | wc -l)"
+    ((copy_count == 1)) ||
+        error "The incomplete copy should not have been deleted"
+
+    media_lock_count_should_be "${obj_media[0]}" "$host" 1
+    media_lock_count_should_be "${obj_media[1]}" "$host" 0
+    media_lock_count_should_be "${obj_media[2]}" other_host 1
+
+    # a layout row is stored per extent of the copy
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM layout;")
+    if [ $nb -ne 3 ]; then
+        error "The layouts of the copy should not have been deleted"
+    fi
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM extent;")
+    if [ $nb -ne 3 ]; then
+        error "The extents of the copy should not have been deleted"
+    fi
+
+    return 0
+}
+
 function test_tape_delete_incomplete
 {
     local prefix=$(generate_prefix_id)
@@ -575,6 +719,7 @@ TESTS=(
     "setup_dir; test_dir_hard_delete_deprec_only; cleanup_dir"
     "setup_dir; test_dir_hard_delete_with_copies; cleanup_dir"
     "setup_dir_raid4; test_dir_delete_incomplete; cleanup_dir"
+    "setup_dir_raid1; test_dir_delete_incomplete_rollback; cleanup_dir_raid1"
 )
 
 if [[ -w /dev/changer ]]; then
