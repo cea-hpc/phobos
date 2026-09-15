@@ -39,6 +39,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <net/if.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -97,7 +98,7 @@ struct drive_map_entry {
 
 /**
  * List of available drives.
- * FIXME Not thread safe
+ * Access is serialized by phobos_context()->ldm_dev_scsi_tape_mutex.
  */
 static struct slist_entry *drive_cache;
 
@@ -468,6 +469,8 @@ out_close:
 /**
  * Returns the drive that matches the given name (st or sg name)
  * by searching in the drive cache.
+ *
+ * The caller must hold phobos_context()->ldm_dev_scsi_tape_mutex.
  */
 static const struct drive_map_entry *scsi_tape_dev_info(const char *name)
 {
@@ -504,11 +507,18 @@ static const struct drive_map_entry *scsi_tape_dev_info(const char *name)
 /**
  * Returns the drive that matches the given serial number by searching
  * in the drive cache.
+ *
+ * If the serial is not found, or the cached sg node no longer exists (e.g.
+ * after a drive re-enumeration following a firmware flash or a SCSI rescan),
+ * the cache is refreshed once and the lookup is retried. This makes the
+ * mapping self-healing without requiring a daemon restart.
  */
 static int scsi_tape_dev_lookup(const char *serial, char *path,
                                 size_t path_size)
 {
+    pthread_mutex_t *mutex = &phobos_context()->ldm_dev_scsi_tape_mutex;
     struct drive_map_entry *dme;
+    bool refreshed = false;
 
     ENTRY;
 
@@ -516,20 +526,42 @@ static int scsi_tape_dev_lookup(const char *serial, char *path,
         LOG_RETURN(-ENAMETOOLONG, "Device name '%s' > %d char long",
                    serial, MAX_SERIAL - 1);
 
+    MUTEX_LOCK(mutex);
+
     if (drive_cache == NULL) {
         pho_debug("No information available in cache: loading...");
         scsi_tape_map_load();
     }
 
+retry:
     dme = list_find(drive_cache, serial, match_serial);
     if (dme != NULL) {
-        pho_debug("Found device ST=/dev/%s SG=/dev/%s matching serial '%s'",
-                  dme->st_devname, dme->sg_devname, serial);
         /* LTFS 2.4 needs path to sg device */
         snprintf(path, path_size, "/dev/%s", dme->sg_devname);
-        return 0;
+
+        /* The cached sg node may be stale after a re-enumeration: verify it
+         * still exists before returning it.
+         */
+        if (access(path, F_OK) == 0) {
+            pho_debug("Found device ST=/dev/%s SG=/dev/%s matching serial "
+                      "'%s'", dme->st_devname, dme->sg_devname, serial);
+            MUTEX_UNLOCK(mutex);
+            return 0;
+        }
+
+        pho_debug("Cached path '%s' for serial '%s' is stale: refreshing...",
+                  path, serial);
+    } else {
+        pho_debug("Serial '%s' not found in cache: refreshing...", serial);
     }
 
+    if (!refreshed) {
+        refreshed = true;
+        scsi_tape_map_load();
+        goto retry;
+    }
+
+    MUTEX_UNLOCK(mutex);
     return -ENOENT;
 }
 
@@ -541,6 +573,7 @@ static int scsi_tape_dev_query(const char *dev_path, struct ldm_dev_state *lds)
 {
     const struct drive_map_entry    *dme;
     const char                      *dev_short;
+    pthread_mutex_t *mutex = &phobos_context()->ldm_dev_scsi_tape_mutex;
     ENTRY;
 
     /* Make sure the device exists before we do any string manipulation
@@ -556,9 +589,20 @@ static int scsi_tape_dev_query(const char *dev_path, struct ldm_dev_state *lds)
         dev_short++;
 
     /* get serial and model from driver mapping */
+    MUTEX_LOCK(mutex);
     dme = scsi_tape_dev_info(dev_short);
-    if (!dme)
+    if (!dme) {
+        /* The device may have been re-enumerated since the cache was loaded:
+         * refresh it once and retry before giving up.
+         */
+        pho_debug("Device '%s' not found in cache: refreshing...", dev_short);
+        scsi_tape_map_load();
+        dme = scsi_tape_dev_info(dev_short);
+    }
+    if (!dme) {
+        MUTEX_UNLOCK(mutex);
         return -ENOENT;
+    }
 
     /* Free any preexisting serial and model */
     free(lds->lds_serial);
@@ -569,6 +613,7 @@ static int scsi_tape_dev_query(const char *dev_path, struct ldm_dev_state *lds)
     lds->lds_model = xstrdup(dme->model);
     lds->lds_serial = xstrdup(dme->serial);
 
+    MUTEX_UNLOCK(mutex);
     return 0;
 }
 
@@ -589,6 +634,8 @@ int pho_module_register(void *module, void *context)
 
     self->desc = DEV_ADAPTER_SCSI_TAPE_MODULE_DESC;
     self->ops = &DEV_ADAPTER_SCSI_TAPE_OPS;
+
+    pthread_mutex_init(&phobos_context()->ldm_dev_scsi_tape_mutex, NULL);
 
     return 0;
 }
