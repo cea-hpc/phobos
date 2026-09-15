@@ -58,6 +58,9 @@ static struct module_desc DEV_ADAPTER_SCSI_TAPE_MODULE_DESC = {
 /* Driver name to access /sys/class tree of scsi tape */
 #define DRIVER_NAME "scsi_tape"
 
+/* Driver name to access /sys/class tree of scsi generic devices */
+#define SG_DRIVER_NAME "scsi_generic"
+
 /* Maximum serial size (including trailing zero) */
 #define MAX_SERIAL  48
 
@@ -102,11 +105,20 @@ struct drive_map_entry {
  */
 static struct slist_entry *drive_cache;
 
+/** Build the path of a sysfs attribute of a device listed under the given
+ * device class, e.g. /sys/class/scsi_tape/st0/device/model.
+ */
+static void build_class_sys_path(const char *class_name, const char *name,
+                                 const char *attr, char *dst_path, size_t n)
+{
+    snprintf(dst_path, n, "/sys/class/%s/%s/%s", class_name, name, attr);
+    dst_path[n - 1] = '\0';
+}
+
 static void build_sys_path(const char *name, const char *attr, char *dst_path,
                            size_t n)
 {
-    snprintf(dst_path, n, "/sys/class/%s/%s/%s", DRIVER_NAME, name, attr);
-    dst_path[n - 1] = '\0';
+    build_class_sys_path(DRIVER_NAME, name, attr, dst_path, n);
 }
 
 /** Read the given attribute for the given device name */
@@ -145,16 +157,19 @@ out_close:
  * Read serial number from SCSI INQUIRY response page x80
  * (Unit Serial Number Inquiry Page).
  *
- * @param st_devname SCSI device name as it appears under /sys/class/scsi_tape,
- *                   e.g. "st0".
+ * @param class_name sysfs class the device is listed under, "scsi_tape"
+ *                   for a st name or "scsi_generic" for a sg name.
+ * @param dev_name   SCSI device name as it appears under
+ *                   /sys/class/<class_name>, e.g. "st0" or "sg3".
  * @param attrname   Path of a page80 pseudo-file in sysclass (e.g. vpd_pg80),
- *                   relative to /sys/class/<driver>/<dev_name>.
+ *                   relative to /sys/class/<class_name>/<dev_name>.
  * @param info       Output string.
  * @param info_size  Max size of the output string.
  *
  * @return 0 on success, -errno on error.
  */
-static int read_page80_serial(const char *st_devname, const char *attrname,
+static int read_page80_serial(const char *class_name, const char *dev_name,
+                              const char *attrname,
                               char *info, size_t info_size)
 {
 #define SCSI_PAGE80_HEADER_SIZE 4
@@ -186,7 +201,8 @@ static int read_page80_serial(const char *st_devname, const char *attrname,
     /* Allocate a temporary buffer to read the page 0x80. */
     buffer = xcalloc(1, BUFF_SIZE);
 
-    build_sys_path(st_devname, attrname, spath, sizeof(spath));
+    build_class_sys_path(class_name, dev_name, attrname, spath,
+                         sizeof(spath));
 
     fd = open(spath, O_RDONLY);
     if (fd < 0) {
@@ -223,12 +239,53 @@ static int read_page80_serial(const char *st_devname, const char *attrname,
     /* copy the serial number */
     memcpy(info, buffer + SCSI_PAGE80_HEADER_SIZE + i, len - i);
 
-    pho_debug("Device '%s': %s='%s'", st_devname, attrname, info);
+    pho_debug("Device '%s': %s='%s'", dev_name, attrname, info);
 
 out_close:
     free(buffer);
     close(fd);
     return rc;
+}
+
+/**
+ * Check that the device behind the given sysfs class node (e.g. "st0" under
+ * scsi_tape, "sg3" under scsi_generic) still reports the given serial number
+ * through its VPD page 0x80.
+ *
+ * This is used to detect stale cache entries after a SCSI re-enumeration:
+ * device minor numbers are assigned on a lowest-free basis, so a node name
+ * may still exist after a re-enumeration while belonging to another drive
+ * that took the freed minor. Only the unit serial number proves the
+ * identity of the device behind a given node name.
+ *
+ * The kernel caches the VPD pages at device scan time and serves them from
+ * memory, so this is a plain sysfs read: no SCSI command is issued to the
+ * drive and a hung device cannot delay the caller.
+ *
+ * @param class_name  sysfs class of the node ("scsi_tape" or
+ *                    "scsi_generic").
+ * @param dev_name    name of the node within the class (e.g. "st0", "sg3").
+ * @param serial      expected unit serial number.
+ *
+ * @return true if the node exists and reports the expected serial number.
+ */
+static bool node_matches_serial(const char *class_name, const char *dev_name,
+                                const char *serial)
+{
+    char cur_serial[MAX_SERIAL] = {0};
+    int rc;
+
+    /* -1: always keep room for the NUL terminator of the parsed serial */
+    rc = read_page80_serial(class_name, dev_name, SYS_DEV_PAGE80, cur_serial,
+                            sizeof(cur_serial) - 1);
+    if (rc) {
+        pho_debug("Cannot read VPD serial of '%s' under %s: %s; considering "
+                  "the cached entry as stale", dev_name, class_name,
+                  strerror(-rc));
+        return false;
+    }
+
+    return strcmp(cur_serial, serial) == 0;
 }
 
 /** Indicate if the given name is a valid sg device */
@@ -301,8 +358,8 @@ static int cache_load_from_name(const char *st_devname)
 
     memcpy(dinfo->st_devname, st_devname, namelen + 1);
 
-    rc = read_page80_serial(st_devname, SYS_DEV_PAGE80, dinfo->serial,
-                            sizeof(dinfo->serial));
+    rc = read_page80_serial(DRIVER_NAME, st_devname, SYS_DEV_PAGE80,
+                            dinfo->serial, sizeof(dinfo->serial));
     if (rc)
         goto err_free;
 
@@ -508,10 +565,12 @@ static const struct drive_map_entry *scsi_tape_dev_info(const char *name)
  * Returns the drive that matches the given serial number by searching
  * in the drive cache.
  *
- * If the serial is not found, or the cached sg node no longer exists (e.g.
- * after a drive re-enumeration following a firmware flash or a SCSI rescan),
- * the cache is refreshed once and the lookup is retried. This makes the
- * mapping self-healing without requiring a daemon restart.
+ * If the serial is not found, or the cached sg node no longer exists or no
+ * longer belongs to the requested drive (e.g. after a drive re-enumeration
+ * following a firmware flash or a SCSI rescan, where the freed minor
+ * numbers can be reused by another drive), the cache is refreshed once and
+ * the lookup is retried. This makes the mapping self-healing without
+ * requiring a daemon restart.
  */
 static int scsi_tape_dev_lookup(const char *serial, char *path,
                                 size_t path_size)
@@ -539,18 +598,29 @@ retry:
         /* LTFS 2.4 needs path to sg device */
         snprintf(path, path_size, "/dev/%s", dme->sg_devname);
 
-        /* The cached sg node may be stale after a re-enumeration: verify it
-         * still exists before returning it.
+        /* The cached sg node may be stale after a re-enumeration: it may
+         * have disappeared or, worse, have been reused by another drive
+         * that took the freed minor number. Its mere existence does not
+         * prove that it still belongs to the requested drive: also verify
+         * the identity of the device behind the node through its VPD unit
+         * serial (page 0x80).
+         *
+         * The identity check is done on the sg side on purpose: st and sg
+         * minor numbers are assigned independently, so the st node of the
+         * cache entry could still be valid while the sg node we are about
+         * to return already belongs to another device.
          */
-        if (access(path, F_OK) == 0) {
+        if (access(path, F_OK) == 0
+            && node_matches_serial(SG_DRIVER_NAME, dme->sg_devname, serial)) {
             pho_debug("Found device ST=/dev/%s SG=/dev/%s matching serial "
                       "'%s'", dme->st_devname, dme->sg_devname, serial);
             MUTEX_UNLOCK(mutex);
             return 0;
         }
 
-        pho_debug("Cached path '%s' for serial '%s' is stale: refreshing...",
-                  path, serial);
+        pho_debug("Cached sg node '%s' for serial '%s' is gone or was "
+                  "reassigned to another drive: refreshing...",
+                  dme->sg_devname, serial);
     } else {
         pho_debug("Serial '%s' not found in cache: refreshing...", serial);
     }
@@ -591,7 +661,27 @@ static int scsi_tape_dev_query(const char *dev_path, struct ldm_dev_state *lds)
     /* get serial and model from driver mapping */
     MUTEX_LOCK(mutex);
     dme = scsi_tape_dev_info(dev_short);
-    if (!dme) {
+    if (dme != NULL) {
+        /* The cache entry may be stale after a re-enumeration: the queried
+         * node may have been reused by another drive. Returning the cached
+         * serial would silently bypass the check_dev_info() safety net of
+         * the caller, which compares the serial returned here with the one
+         * from the DSS: both would come from the same stale entry and the
+         * comparison would wrongly pass. Verify the identity of the device
+         * behind the queried node through its VPD unit serial before
+         * trusting the entry.
+         */
+        /* st and sg nodes live under different sysfs classes */
+        const char *class_name = is_st_device(dev_short) ? DRIVER_NAME
+                                                         : SG_DRIVER_NAME;
+
+        if (!node_matches_serial(class_name, dev_short, dme->serial)) {
+            pho_debug("Node '%s' no longer matches its cached serial '%s': "
+                      "refreshing...", dev_short, dme->serial);
+            scsi_tape_map_load();
+            dme = scsi_tape_dev_info(dev_short);
+        }
+    } else {
         /* The device may have been re-enumerated since the cache was loaded:
          * refresh it once and retry before giving up.
          */
