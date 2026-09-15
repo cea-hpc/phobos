@@ -47,6 +47,24 @@ function setup_dir
     $phobos dir format --fs posix --unlock ${dirs[@]}
 }
 
+function setup_dir_raid4
+{
+    setup_tables
+    invoke_lrs
+
+    setup_test_dirs
+    setup_dummy_files 1 1k 1
+
+    dirs=("$DIR_TEST_IN/tmp1" "$DIR_TEST_IN/tmp2" "$DIR_TEST_IN/tmp3" \
+          "$DIR_TEST_IN/tmp4")
+
+    mkdir ${dirs[@]}
+    $phobos dir add --tags "obj0" ${dirs[0]}
+    $phobos dir add --tags "obj0,obj1" ${dirs[1]} ${dirs[2]}
+    $phobos dir add --tags "obj1" ${dirs[3]}
+    $phobos dir format --fs posix --unlock ${dirs[@]}
+}
+
 function setup_tape
 {
     setup_tables
@@ -320,6 +338,104 @@ function test_tape_hard_delete_after_soft_delete
     fi
 }
 
+function test_dir_delete_incomplete
+{
+    local prefix=$(generate_prefix_id)
+    local oid0=${prefix}_id.0
+    local oid1=${prefix}_id.1
+    local oid0_paths
+    local oid1_paths
+    local copy_count
+    local nb
+    local path
+
+    $phobos put -f dir --layout raid4 --tags "obj0" "${FILES[0]}" $oid0 ||
+        error "Object $oid0 should be put"
+    $phobos put -f dir --layout raid4 --tags "obj1" "${FILES[0]}" $oid1 ||
+        error "Object $oid1 should be put"
+
+    waive_lrs
+
+    # Both copies become incomplete, each keeping a single extent: on
+    # ${dirs[0]} for $oid0, on ${dirs[3]} for $oid1
+    $valg_phobos dir delete --lost ${dirs[1]} ${dirs[2]} ||
+        error "Deletion of ${dirs[1]} and ${dirs[2]} should have succeeded"
+
+    copy_count="$($phobos copy list -o all | grep incomplete | wc -l)"
+    ((copy_count == 2)) ||
+        error "Both copies should be incomplete"
+
+    # Make ${dirs[3]} a medium of another host, which locks it as its own LRS
+    # would do, so that the reservation of the last medium of $oid1 fails
+    $PSQL << EOF
+    update device set host = 'other_host' where path = '${dirs[3]}';
+    insert into lock (type, id, hostname, owner)
+    values ('media'::lock_type,
+            (select id || '_' || library from media where id = '${dirs[3]}'),
+            'other_host', 1)
+    on conflict (type, id) do update
+        set hostname = 'other_host', owner = 1, is_weak = FALSE
+EOF
+
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM lock WHERE hostname='other_host';")
+    if [ $nb -ne 1 ]; then
+        error "Failed to lock ${dirs[3]} as another host"
+    fi
+
+    oid0_paths="$($phobos extent list -o address $oid0)"
+    oid1_paths="$($phobos extent list -o address $oid1)"
+
+    invoke_lrs
+
+    # The medium of $oid1 is possessed by another host: its copy cannot be
+    # reserved and the command fails. The copy of $oid0 is still cleaned up,
+    # as its medium is local
+    $valg_phobos copy delete --all-incomplete --all-incomplete-delay-second 0 &&
+        error "The incomplete copy deletion should have failed on the medium "\
+              "of another host"
+
+    [ -z "$($phobos object list $oid0)" ] ||
+        error "Object $oid0 should not be listed, because deleted"
+    [ -z "$($phobos object list --deprecated-only $oid0)" ] ||
+        error "Object $oid0 should not be listed as deprecated, because hard "\
+              "deleted"
+
+    # the extent address is relative to the medium it is written on
+    for path in $oid0_paths; do
+        path=$(echo $path | cut -d"'" -f2)
+        if [ -f "${dirs[0]}/$path" ]; then
+            error "The extent of $oid0 should have been hard deleted"
+        fi
+    done
+
+    [ -z "$($phobos object list $oid1)" ] &&
+        error "Object $oid1 should still be listed, its medium is possessed "\
+              "by another host"
+    [ -z "$($phobos object list --deprecated-only $oid1)" ] ||
+        error "Object $oid1 should not be listed as deprecated"
+
+    copy_count="$($phobos copy list -o all | grep incomplete | wc -l)"
+    ((copy_count == 1)) ||
+        error "Only the copy of $oid1 should remain incomplete"
+
+    for path in $oid1_paths; do
+        path=$(echo $path | cut -d"'" -f2)
+        [ -f "${dirs[3]}/$path" ] ||
+            error "The extent of $oid1 should not have been deleted"
+    done
+
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM layout;")
+    if [ $nb -ne 1 ]; then
+        error "Only the layout of $oid1 should remain"
+    fi
+    nb=$($PSQL -t -c "SELECT COUNT(*) FROM extent;")
+    if [ $nb -ne 1 ]; then
+        error "Only the extent of $oid1 should remain"
+    fi
+
+    return 0
+}
+
 function test_tape_delete_incomplete
 {
     local prefix=$(generate_prefix_id)
@@ -458,6 +574,7 @@ TESTS=(
     "setup_dir; test_dir_hard_delete_deprec; cleanup_dir"
     "setup_dir; test_dir_hard_delete_deprec_only; cleanup_dir"
     "setup_dir; test_dir_hard_delete_with_copies; cleanup_dir"
+    "setup_dir_raid4; test_dir_delete_incomplete; cleanup_dir"
 )
 
 if [[ -w /dev/changer ]]; then

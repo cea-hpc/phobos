@@ -2378,6 +2378,110 @@ clean:
     return 0;
 }
 
+/**
+ * Preventively reserve all the media that hold the extents of the copy, as
+ * the delete would do: the locks this host already owns are only refreshed,
+ * while a weak locate lock is created on the unlocked media. The LRS will
+ * convert these reservations to hard locks to run the delete.
+ *
+ * @param[in]   dss         DSS handle to use.
+ * @param[in]   layout      layout of the copy to reserve the media of.
+ * @param[in]   hostname    host that will run the hard delete.
+ *
+ * @return 0 on success, a negative error code otherwise. On failure, only
+ *         the locks that were created are released: the locks that already
+ *         existed before the reservation are kept.
+ */
+static int reserve_del_locks(struct dss_handle *dss,
+                             const struct layout_info *layout,
+                             const char *hostname)
+{
+    struct media_info medium = {0};
+    struct pho_id *new_lock_ids;
+    struct pho_id *media_ids;
+    struct pho_lock lock;
+    int nb_new_lock = 0;
+    int nb_media = 0;
+    int rc;
+    int i;
+    int j;
+
+    if (layout->ext_count == 0)
+        return 0;
+
+    media_ids = xmalloc(layout->ext_count * sizeof(*media_ids));
+    new_lock_ids = xmalloc(layout->ext_count * sizeof(*new_lock_ids));
+
+    for (i = 0; i < layout->ext_count; i++) {
+        medium.rsc.id = layout->extents[i].media;
+
+        /* the same medium may hold several extents of the copy */
+        for (j = 0; j < nb_media; j++) {
+            if (pho_id_equal(&media_ids[j], &medium.rsc.id))
+                break;
+        }
+        if (j < nb_media)
+            continue;
+
+        media_ids[nb_media++] = medium.rsc.id;
+
+        rc = dss_lock_status(dss, DSS_MEDIA, &medium, 1, &lock);
+        if (rc == -ENOLCK) {
+            rc = dss_lock_weak(dss, DSS_MEDIA, &medium, 1, hostname, true);
+            if (rc) {
+                pho_warn("Failed to preventively lock the medium ('%s', "
+                         "'%s'): %s", medium.rsc.id.library,
+                         medium.rsc.id.name, strerror(-rc));
+                goto release_new_locks;
+            }
+
+            new_lock_ids[nb_new_lock++] = medium.rsc.id;
+        } else if (rc == 0) {
+            if (strcmp(lock.hostname, hostname)) {
+                pho_warn("Medium ('%s', '%s') is locked by the host '%s', "
+                         "the copy cannot be deleted on this host",
+                         medium.rsc.id.library, medium.rsc.id.name,
+                         lock.hostname);
+                pho_lock_clean(&lock);
+                rc = -EEXIST;
+                goto release_new_locks;
+            }
+
+            pho_lock_clean(&lock);
+
+            rc = dss_lock_refresh(dss, DSS_MEDIA, &medium, 1, true);
+            if (rc) {
+                pho_warn("Failed to refresh the lock of the medium ('%s', "
+                         "'%s'): %s", medium.rsc.id.library,
+                         medium.rsc.id.name, strerror(-rc));
+                goto release_new_locks;
+            }
+        } else {
+            goto release_new_locks;
+        }
+    }
+
+    free(new_lock_ids);
+    free(media_ids);
+    return 0;
+
+release_new_locks:
+    for (j = 0; j < nb_new_lock; j++) {
+        int rc2;
+
+        medium.rsc.id = new_lock_ids[j];
+        rc2 = dss_unlock(dss, DSS_MEDIA, &medium, 1, false);
+        if (rc2)
+            pho_warn("Failed to release the lock preventively taken on the "
+                     "medium ('%s', '%s'): %s", medium.rsc.id.library,
+                     medium.rsc.id.name, strerror(-rc2));
+    }
+
+    free(new_lock_ids);
+    free(media_ids);
+    return rc;
+}
+
 static int delete_one_incomplete_copy(struct dss_handle *dss,
                                       const char *hostname,
                                       struct copy_info *incomplete_copy,
@@ -2393,7 +2497,6 @@ static int delete_one_incomplete_copy(struct dss_handle *dss,
     char *target_uuid;
     int layout_count;
     char *copy_name;
-    int nb_new_lock;
     int rc;
 
     /* Checked if this copy is the last one of the object */
@@ -2422,7 +2525,7 @@ static int delete_one_incomplete_copy(struct dss_handle *dss,
     dss_res_free(same_object_copy_list, same_object_copy_count);
     assert(same_object_copy_count >= 1);
 
-    /* Checked if the copy is located on current host */
+    /* Get the layout of the copy, to handle the media of its extents */
     rc = dss_filter_build(&layout_filter,
                           "{\"$AND\": ["
                               "{\"DSS::LYT::object_uuid\": \"%s\"},"
@@ -2449,36 +2552,25 @@ static int delete_one_incomplete_copy(struct dss_handle *dss,
     assert(layout_count == 1 || layout_count == 0);
 
     if (layout_count == 1) {
-        char *locate_hostname;
-
         target.xt_objid = xstrdup(layout->oid);
 
         /* Nothing is hard deleted on the media of a tape copy: no need to
-         * locate it, clean it up systematically.
+         * reserve them, clean it up systematically.
          */
         if (layout->ext_count != 0 &&
             layout->extents[0].media.family == PHO_RSC_TAPE)
             goto hard_delete;
 
-        rc = layout_locate(dss, layout, hostname, &locate_hostname,
-                           &nb_new_lock);
+        /* The extents of the copy will be hard deleted from these media:
+         * preventively reserve all of them.
+         */
+        rc = reserve_del_locks(dss, layout, hostname);
         if (rc) {
             incomplete_copy_error(rc, incomplete_copy,
-                                  "we failed to locate the full layout");
+                                  "we failed to reserve all the media of the "
+                                  "copy");
             goto clean_layout;
         }
-
-        if (strcmp(hostname, locate_hostname)) {
-            pho_warn("Incomplete copy '%s' of "
-                     "object_uuid '%s' and version '%d' is skipped because "
-                     "we locate it on the host '%s'",
-                     incomplete_copy->copy_name, incomplete_copy->object_uuid,
-                     incomplete_copy->version, locate_hostname);
-            free(locate_hostname);
-            goto clean_layout;
-        }
-
-        free(locate_hostname);
     } else { /* layout_count == 0 */
         /* incomplete copy without any extent, got OID directly from object */
         rc = get_oid_from_incomplete_copy(dss, incomplete_copy,
