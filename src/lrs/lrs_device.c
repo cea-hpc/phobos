@@ -308,6 +308,34 @@ static void lrs_dev_info_clean(struct lrs_dev *dev)
     free(dev);
 }
 
+/**
+ * Sync the in-memory lock info of a device with the DSS lock row that was
+ * just taken for it. The device info was read from the DSS before the lock
+ * was taken and does not reflect this ownership: without this sync,
+ * dev_cleanup_on_error() would leave the lock row behind if the device
+ * thread dies before reaching a terminal state, and the device could not be
+ * re-added until the daemon is restarted.
+ */
+static void dev_sync_lock_info(struct lrs_sched *sched, struct lrs_dev *dev)
+{
+    const struct pho_id *dev_id = lrs_dev_id(dev);
+    int rc;
+
+    pho_lock_clean(&dev->ld_dss_dev_info->lock);
+    rc = dss_lock_status(&sched->sched_thread.dss, DSS_DEVICE,
+                         dev->ld_dss_dev_info, 1, &dev->ld_dss_dev_info->lock);
+    if (rc == -ENOLCK)
+        /* the lock row was just taken and has already been removed */
+        return;
+    if (rc)
+        pho_error(rc,
+                  "unable to get DSS lock status of device (family '%s', name "
+                  "'%s', library '%s'), its lock will not be released on "
+                  "device error",
+                  rsc_family2str(dev_id->family), dev_id->name,
+                  dev_id->library);
+}
+
 int lrs_dev_hdl_add(struct lrs_sched *sched,
                     struct lrs_dev_hdl *handle,
                     const char *name, const char *library)
@@ -355,6 +383,8 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
                                  dev_count);
     if (rc)
         lrs_dev_hdl_del(handle, handle->ldh_devices->len - 1, rc, sched);
+    else
+        dev_sync_lock_info(sched, dev);
 
 free_list:
     dss_res_free(dev_list, dev_count);
@@ -497,6 +527,8 @@ int lrs_dev_hdl_load(struct lrs_sched *sched, struct lrs_dev_hdl *handle)
         if (rc2) {
             lrs_dev_hdl_del(handle, handle->ldh_devices->len - 1, rc2, sched);
             rc = rc ? : rc2;
+        } else {
+            dev_sync_lock_info(sched, dev);
         }
     }
 
@@ -2307,8 +2339,27 @@ static void dev_cleanup_on_error(struct lrs_dev *device)
 
     clean_tosync_array(device, device->ld_device_thread.status);
 
-    if (dev_is_failed(device))
+    if (dev_is_failed(device)) {
         fail_release_device(device);
+    } else if (device->ld_dss_dev_info->lock.hostname) {
+        /* The device thread terminated with an error before reaching a
+         * terminal state (e.g. an initialization failure left it EMPTY rather
+         * than FAILED). Release the DSS device lock so the device can be
+         * retried without leaking a strong lock row.
+         */
+        int rc = dss_device_release(&device->ld_device_thread.dss,
+                                    device->ld_dss_dev_info);
+
+        if (rc) {
+            const struct pho_id *dev_id = lrs_dev_id(device);
+
+            pho_error(rc,
+                      "unable to release DSS lock of device (family '%s', "
+                      "name '%s', library '%s') during error cleanup",
+                      rsc_family2str(dev_id->family), dev_id->name,
+                      dev_id->library);
+        }
+    }
 }
 
 static void dev_thread_end(struct lrs_dev *device)
