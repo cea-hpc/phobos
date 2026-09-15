@@ -1766,11 +1766,9 @@ static int sched_device_retry_lock(struct lrs_sched *sched, const char *name,
 {
     int rc;
 
-    rc = lrs_dev_hdl_retrydel(&sched->devices, dev_ptr);
+    rc = lrs_dev_hdl_retrydel(&sched->devices, dev_ptr, sched);
     if (rc)
         return rc;
-
-    io_sched_remove_device(&sched->io_sched_hdl, dev_ptr);
 
     pho_verb("Removed locked device (name '%s', library '%s') from the local "
              "memory", name, library);
@@ -1797,12 +1795,11 @@ static int sched_device_lock(struct lrs_sched *sched, const char *name,
 
         if (!strcmp(name, dev->ld_dss_dev_info->rsc.id.name) &&
             !strcmp(library, dev->ld_dss_dev_info->rsc.id.library)) {
-            rc = lrs_dev_hdl_trydel(&sched->devices, i);
+            rc = lrs_dev_hdl_trydel(&sched->devices, i, sched);
             if (rc == -EAGAIN) {
                 *dev_ptr = dev;
                 return rc;
             }
-            io_sched_remove_device(&sched->io_sched_hdl, dev);
 
             if (!rc)
                 pho_verb("Removed locked device (name '%s', library '%s') from "

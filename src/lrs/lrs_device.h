@@ -537,12 +537,15 @@ int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index, int rc,
  *
  * \param[in]   handle      Device handle.
  * \param[in]   index       Index of the device to remove from the list.
+ * \param[in]   sched       reference to the scheduler that owns the device
+ *                          handle
  *
  * \return                  0 on success,
  *                         -EAGAIN if the thread is still busy,
  *                         -errno on failure.
  */
-int lrs_dev_hdl_trydel(struct lrs_dev_hdl *handle, int index);
+int lrs_dev_hdl_trydel(struct lrs_dev_hdl *handle, int index,
+                       struct lrs_sched *sched);
 
 /**
  * Retry to remove a device thread context.
@@ -551,12 +554,15 @@ int lrs_dev_hdl_trydel(struct lrs_dev_hdl *handle, int index);
  *
  * \param[in]   handle      Device handle.
  * \param[in]   dev         Device to remove from the list.
+ * \param[in]   sched       reference to the scheduler that owns the device
+ *                          handle
  *
  * \return                  0 on success,
  *                         -EAGAIN if the thread is still busy,
  *                         -errno on failure.
  */
-int lrs_dev_hdl_retrydel(struct lrs_dev_hdl *handle, struct lrs_dev *dev);
+int lrs_dev_hdl_retrydel(struct lrs_dev_hdl *handle, struct lrs_dev *dev,
+                         struct lrs_sched *sched);
 
 /**
  * Load all the devices that are attributed to this LRS from the DSS

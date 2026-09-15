@@ -390,7 +390,8 @@ int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index, int rc,
     return 0;
 }
 
-int lrs_dev_hdl_trydel(struct lrs_dev_hdl *handle, int index)
+int lrs_dev_hdl_trydel(struct lrs_dev_hdl *handle, int index,
+                       struct lrs_sched *sched)
 {
     struct timespec wait_for_fast_del = {
         .tv_sec = 0,
@@ -435,12 +436,14 @@ int lrs_dev_hdl_trydel(struct lrs_dev_hdl *handle, int index)
     MUTEX_LOCK(&handle->ldh_devices_remove_mutex);
     g_ptr_array_remove_fast(handle->ldh_devices, dev);
     MUTEX_UNLOCK(&handle->ldh_devices_remove_mutex);
+    io_sched_remove_device(&sched->io_sched_hdl, dev);
     lrs_dev_info_clean(dev);
 
     return 0;
 }
 
-int lrs_dev_hdl_retrydel(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
+int lrs_dev_hdl_retrydel(struct lrs_dev_hdl *handle, struct lrs_dev *dev,
+                         struct lrs_sched *sched)
 {
     int *threadrc;
     int rc;
@@ -459,6 +462,7 @@ int lrs_dev_hdl_retrydel(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
     MUTEX_LOCK(&handle->ldh_devices_remove_mutex);
     g_ptr_array_remove_fast(handle->ldh_devices, dev);
     MUTEX_UNLOCK(&handle->ldh_devices_remove_mutex);
+    io_sched_remove_device(&sched->io_sched_hdl, dev);
     lrs_dev_info_clean(dev);
 
     return 0;
