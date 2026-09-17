@@ -2030,6 +2030,10 @@ static void sched_write_alloc_add_threshold(struct lrs_sched *sched,
 {
     pho_resp_write_t *wresp = respc->resp->walloc;
 
+    /* A write alloc request can be rescheduled on -EAGAIN and pass here
+     * several times: release the threshold of a previous attempt.
+     */
+    free(wresp->threshold);
     wresp->threshold = xmalloc(sizeof(*wresp->threshold));
     pho_sync_threshold__init(wresp->threshold);
 

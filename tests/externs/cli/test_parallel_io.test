@@ -87,12 +87,10 @@ function cleanup_tape()
     cleanup
 }
 
-# Execute a put command but sleep after having get the booking
+# Execute a put command and hold it after having got the booking, until the
+# go file is created.
 function writer_sleep_after_recv_alloc
 {
-    local sleep_duration=$1
-    shift
-
     (
         tmp_gdb_script=$(mktemp)
         trap "rm $tmp_gdb_script" EXIT
@@ -101,7 +99,7 @@ set breakpoint pending on
 break raid_writer_split_setup
 commands
 shell touch ${DIR_TEST_IN}/${!#}
-shell sleep ${sleep_duration}
+shell timeout 20 bash -c 'until [ -f ${DIR_TEST_IN}/go ]; do sleep 1; done'
 continue
 end
 run $phobos $*
@@ -133,8 +131,9 @@ function test_parallel_io()
 
             # starting IOs
             pids=()
+            rm -f "${DIR_TEST_IN}/go"
             for io in `seq 0 ${highest_io}`; do
-                writer_sleep_after_recv_alloc 6 put -f ${family} ${FILES[0]} \
+                writer_sleep_after_recv_alloc put -f ${family} ${FILES[0]} \
                     obj_${nb_parallel}_${highest_io}_${io} &
                 pids+=("$!")
                 sleep 1
@@ -167,6 +166,9 @@ function test_parallel_io()
                 error "nb_ongoing_io stat must be ${nb_parallel_running_io}," \
                     "we get ${stat_nb_io}"
             fi
+
+            # releasing the IOs
+            touch ${DIR_TEST_IN}/go
 
             # waiting the end of IOs
             for io in `seq 0 ${highest_io}`; do
@@ -206,7 +208,7 @@ function test_dir_unlimited_parallel_io()
     invoke_lrs
 
     for i in `seq 1 ${NB_IO}`; do
-        writer_sleep_after_recv_alloc 4 put -f dir ${FILES[0]} \
+        writer_sleep_after_recv_alloc put -f dir ${FILES[0]} \
             obj_unlimited_$i &
         pids+=("$!")
     done
@@ -226,6 +228,9 @@ function test_dir_unlimited_parallel_io()
     if [[ "${stat_nb_io}" != "${NB_IO}" ]]; then
         error "nb_ongoing_io stat must be ${NB_IO}, we get ${stat_nb_io}"
     fi
+
+    # releasing the IOs
+    touch ${DIR_TEST_IN}/go
 
     # waiting the end of IOs
     for i in `seq 1 ${NB_IO}`; do
@@ -256,7 +261,7 @@ function test_dir_parallel_io_grouping_on_dir()
     invoke_lrs
 
     for i in `seq 1 ${NB_IO}`; do
-        writer_sleep_after_recv_alloc 4 put -f dir --grouping my_group \
+        writer_sleep_after_recv_alloc put -f dir --grouping my_group \
             ${FILES[0]} obj_unlimited_grouping_on_dir_$i &
         pids+=("$!")
     done
@@ -277,6 +282,9 @@ function test_dir_parallel_io_grouping_on_dir()
         error "nb_ongoing_io stat must be 1 with grouping, we get ${stat_nb_io}"
     fi
 
+    # releasing the IOs
+    touch ${DIR_TEST_IN}/go
+
     # waiting the end of IOs
     for i in `seq 1 ${NB_IO}`; do
         wait ${pids[${i}]}
@@ -288,8 +296,9 @@ function test_dir_parallel_io_grouping_on_dir()
     invoke_lrs
 
     pids=()
+    rm -f ${DIR_TEST_IN}/go
     for i in `seq 1 ${NB_IO}`; do
-        writer_sleep_after_recv_alloc 4 put -f dir --grouping my_group \
+        writer_sleep_after_recv_alloc put -f dir --grouping my_group \
             ${FILES[0]} obj_unlimited_no_grouping_on_dir_$i &
         pids+=("$!")
     done
