@@ -27,6 +27,15 @@
  * phobos_hsm_release_dir command deletes copies of object with extents on this
  * dir to decrease the fill rate under the lower threshold.
  *
+ * If the fill rate of the dir is not above the higher threshold and the
+ * specific higher threshold is strictly lower than the higher threshold, the
+ * same purge logic is applied to the fill rate computed on the space occupied
+ * by the extents of the source copy only: the purge starts when this specific
+ * fill rate is above the specific higher threshold and decreases it under the
+ * specific lower threshold. A specific higher threshold greater than or equal
+ * to the higher threshold (its default value is 100) is systematically
+ * ignored, so that only the higher and lower thresholds apply.
+ *
  * To be deleted, a "to release" copy must have an existing backend copy.
  *
  * The older copies are deleted first.
@@ -36,8 +45,10 @@
  *
  * The "source_copy_name" and "destination_copy_name" are two mandatory command
  * line parameters.
- * The "dir_release_higher_threshold", "dir_release_lower_threshold" and
- * "release_delay_second" are config file parameters.
+ * The "dir_release_higher_threshold", "dir_release_lower_threshold",
+ * "dir_release_specific_higher_threshold",
+ * "dir_release_specific_lower_threshold" and "release_delay_second" are
+ * config file parameters.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -46,6 +57,7 @@
 
 #include <errno.h>
 #include <getopt.h>
+#include <glib.h>
 #include <jansson.h>
 #include <limits.h>
 #include <stdbool.h>
@@ -65,6 +77,20 @@
 #include "pho_type_utils.h"
 
 #include "hsm_common.h"
+
+/**
+ * A copy selected to be released: the object owning the copy and the size of
+ * the extent to release.
+ */
+struct release_candidate {
+    struct object_info *obj;
+    ssize_t extent_size;
+};
+
+static void release_candidate_clear(gpointer candidate)
+{
+    object_info_free(((struct release_candidate *)candidate)->obj);
+}
 
 static void print_usage(void)
 {
@@ -93,8 +119,16 @@ static void print_usage(void)
            "\n"
            "The 'source_copy_name' and 'destination_copy_name' are two "
            "mandatory command line parameters.\n"
-           "The 'dir_release_higher_threshold', 'dir_release_lower_threshold' "
-           "and 'release_delay_second' are config file parameters.\n"
+           "The 'dir_release_higher_threshold', 'dir_release_lower_threshold', "
+           "'dir_release_specific_higher_threshold', "
+           "'dir_release_specific_lower_threshold' and "
+           "'release_delay_second' are config file parameters.\n"
+           "If the fill rate of the dir does not exceed the higher threshold "
+           "and the specific higher threshold is strictly lower than the "
+           "higher threshold, the fill rate of the dir computed on the space "
+           "occupied by the extents of the source copy only is checked: if it "
+           "exceeds the specific higher threshold, it is decreased under the "
+           "specific lower threshold.\n"
            "If the '-d/--delete' option is set, new copies written on STDOUT "
            "are sequentially deleted.\n"
            "\n"
@@ -250,80 +284,52 @@ static int set_torelease_ctime(const char *hsm_cfg_section_name,
  *  example: ""2025-09-26 18:17:07.548048", always 26 characters
  */
 
-static int set_higher_threshold(const char *hsm_cfg_section_name,
-                                int *higher_threshold)
+/**
+ * Get a threshold parameter from the given config section, falling back to
+ * its default value when it is not set, and check that it is a percentage
+ * integer between min_threshold and max_threshold. When not NULL,
+ * explicitly_set reports whether the parameter was set in the config, as
+ * opposed to the fallback to its default value.
+ */
+static int get_hsm_threshold(const char *hsm_cfg_section_name,
+                             enum pho_cfg_params_hsm threshold_param,
+                             int min_threshold,
+                             int max_threshold,
+                             const char *threshold_constraint,
+                             int *threshold,
+                             bool *explicitly_set)
 {
-    const char *higher_threshold_string;
+    const struct pho_config_item *threshold_item = &cfg_hsm[threshold_param];
+    const char *threshold_string;
+    int64_t threshold_value;
     int rc;
 
-    rc = pho_cfg_get_val(hsm_cfg_section_name,
-                         cfg_hsm[PHO_CFG_HSM_dir_release_higher_threshold].name,
-                         &higher_threshold_string);
+    if (explicitly_set)
+        *explicitly_set = false;
+
+    rc = pho_cfg_get_val(hsm_cfg_section_name, threshold_item->name,
+                         &threshold_string);
     if (rc == -ENODATA) {
-        pho_warn("No %s value in the config section '%s', we use the default "
-                 "value '%s'",
-                 cfg_hsm[PHO_CFG_HSM_dir_release_higher_threshold].name,
-                 hsm_cfg_section_name,
-                 cfg_hsm[PHO_CFG_HSM_dir_release_higher_threshold].value);
-        higher_threshold_string =
-            cfg_hsm[PHO_CFG_HSM_dir_release_higher_threshold].value;
+        pho_debug("No %s value in the config section '%s', we use the default "
+                  "value '%s'", threshold_item->name, hsm_cfg_section_name,
+                  threshold_item->value);
+        threshold_string = threshold_item->value;
     } else if (rc) {
         LOG_RETURN(rc, "Unable to get %s in the config section '%s'",
-                   cfg_hsm[PHO_CFG_HSM_dir_release_higher_threshold].name,
-                   hsm_cfg_section_name);
+                   threshold_item->name, hsm_cfg_section_name);
+    } else if (explicitly_set) {
+        *explicitly_set = true;
     }
 
-    *higher_threshold = atoi(higher_threshold_string);
-    if (*higher_threshold < 1 || *higher_threshold > 100) {
+    threshold_value = str2int64(threshold_string);
+    if (threshold_value < min_threshold || threshold_value > max_threshold)
         LOG_RETURN(-EINVAL,
-                 "The %d%% dir_release_higher_threshold configuration value is "
-                 "invalid and must be a percentage integer between 1 and 100, "
-                 "strictly higher than dir_release_lower_threshold.",
-                 *higher_threshold);
-    }
+                   "The '%s' %s configuration value is invalid and must be a "
+                   "percentage integer between %d and %d, %s",
+                   threshold_string, threshold_item->name, min_threshold,
+                   max_threshold, threshold_constraint);
 
-    if (*higher_threshold == 100)
-        pho_warn("dir_release_higher_threshold is set to 100%%, no release "
-                 "will happen.");
-
-    return 0;
-}
-
-static int set_lower_threshold(const char *hsm_cfg_section_name,
-                               int *lower_threshold)
-{
-    const char *lower_threshold_string;
-    int rc;
-
-    rc = pho_cfg_get_val(hsm_cfg_section_name,
-                         cfg_hsm[PHO_CFG_HSM_dir_release_lower_threshold].name,
-                         &lower_threshold_string);
-    if (rc == -ENODATA) {
-        pho_warn("No %s value in the config section '%s', we use the default "
-                 "value '%s'",
-                 cfg_hsm[PHO_CFG_HSM_dir_release_lower_threshold].name,
-                 hsm_cfg_section_name,
-                 cfg_hsm[PHO_CFG_HSM_dir_release_lower_threshold].value);
-        lower_threshold_string =
-            cfg_hsm[PHO_CFG_HSM_dir_release_lower_threshold].value;
-    } else if (rc) {
-        LOG_RETURN(rc, "Unable to get %s in the config section '%s'",
-                   cfg_hsm[PHO_CFG_HSM_dir_release_lower_threshold].name,
-                   hsm_cfg_section_name);
-    }
-
-    *lower_threshold = atoi(lower_threshold_string);
-    if (*lower_threshold < 0 || *lower_threshold > 99) {
-        LOG_RETURN(rc = -EINVAL,
-                  "The %d%% dir_release_lower_threshold configuration value is "
-                  "invalid and must be a percentage integer between 0 and 99, "
-                  "strictly lower than dir_release_higher_threshold.",
-                  *lower_threshold);
-    }
-
-    if (*lower_threshold == 0)
-        pho_warn("dir_release_lower_threshold is set to 0%%. If a purge "
-                 "starts, every selectable copy will be released.");
+    *threshold = threshold_value;
 
     return 0;
 }
@@ -331,12 +337,16 @@ static int set_lower_threshold(const char *hsm_cfg_section_name,
 int main(int argc, char **argv)
 {
     char torelease_ctime_string[CTIME_STRING_LENGTH + 1] = {0};
+    bool specific_higher_explicitly_set = false;
     struct timeval torelease_ctime = {0};
     char *hsm_cfg_section_name = NULL;
     struct dev_info *dev_list = NULL;
+    int specific_lower_threshold = 0;
+    int specific_higher_threshold;
     const char *hostname = NULL;
     struct dss_filter filter;
     struct hsm_params params;
+    bool specific_threshold;
     struct dss_handle dss;
     int higher_threshold;
     int lower_threshold;
@@ -377,19 +387,82 @@ int main(int argc, char **argv)
     pho_info("Checking new object copies to release older than %s",
              torelease_ctime_string);
 
-    rc = set_higher_threshold(hsm_cfg_section_name, &higher_threshold);
+    rc = get_hsm_threshold(hsm_cfg_section_name,
+                           PHO_CFG_HSM_dir_release_higher_threshold, 1, 100,
+                           "strictly higher than dir_release_lower_threshold.",
+                           &higher_threshold, NULL);
     if (rc)
         goto dss_end;
 
-    rc = set_lower_threshold(hsm_cfg_section_name, &lower_threshold);
+    if (higher_threshold == 100)
+        pho_warn("dir_release_higher_threshold is set to 100%%, no general "
+                 "release will happen.");
+
+    rc = get_hsm_threshold(hsm_cfg_section_name,
+                           PHO_CFG_HSM_dir_release_lower_threshold, 0, 99,
+                           "strictly lower than dir_release_higher_threshold.",
+                           &lower_threshold, NULL);
     if (rc)
         goto dss_end;
+
+    if (lower_threshold == 0)
+        pho_warn("dir_release_lower_threshold is set to 0%%. If a purge "
+                 "starts, every selectable copy will be released.");
 
     if (lower_threshold > higher_threshold) {
         pho_warn("dir_release_lower_threshold %d%% is upper than "
                  "dir_release_higher_threshold %d%%, no release will happen.",
                  lower_threshold, higher_threshold);
         goto dss_end;
+    }
+
+    rc = get_hsm_threshold(hsm_cfg_section_name,
+                           PHO_CFG_HSM_dir_release_specific_higher_threshold,
+                           1, 100,
+                           "strictly lower than dir_release_higher_threshold "
+                           "to be taken into account.",
+                           &specific_higher_threshold,
+                           &specific_higher_explicitly_set);
+    if (rc)
+        goto dss_end;
+
+    rc = get_hsm_threshold(hsm_cfg_section_name,
+                           PHO_CFG_HSM_dir_release_specific_lower_threshold,
+                           0, 99,
+                           "strictly lower than "
+                           "dir_release_specific_higher_threshold.",
+                           &specific_lower_threshold, NULL);
+    if (rc)
+        goto dss_end;
+
+    if (specific_lower_threshold == 0)
+        pho_warn("dir_release_specific_lower_threshold is set to 0%%. If a "
+                 "purge starts, every selectable copy will be released.");
+
+    /*
+     * The specific thresholds are only used when the specific higher
+     * threshold is strictly lower than the higher threshold: a
+     * dir_release_specific_higher_threshold of 100 (the default) or any
+     * value not strictly lower than dir_release_higher_threshold keeps the
+     * preexisting behavior of the command.
+     */
+    specific_threshold = specific_higher_threshold < higher_threshold;
+    if (specific_threshold) {
+        if (specific_lower_threshold > specific_higher_threshold) {
+            pho_warn("dir_release_specific_lower_threshold %d%% is upper than "
+                     "dir_release_specific_higher_threshold %d%%, no specific "
+                     "release will happen.", specific_lower_threshold,
+                     specific_higher_threshold);
+            specific_threshold = false;
+        }
+    } else if (specific_higher_explicitly_set) {
+        pho_warn("dir_release_specific_higher_threshold %d%% is not strictly "
+                 "lower than dir_release_higher_threshold %d%% and is "
+                 "ignored", specific_higher_threshold, higher_threshold);
+    } else {
+        pho_debug("dir_release_specific_higher_threshold %d%% is not strictly "
+                  "lower than dir_release_higher_threshold %d%% and is "
+                  "ignored", specific_higher_threshold, higher_threshold);
     }
 
     rc = open_error_log_file(hsm_cfg_section_name, &params.error_log_file);
@@ -418,20 +491,28 @@ int main(int argc, char **argv)
         goto log_end;
 
     for (i = 0; i < dev_count; i++) {
+        bool specific_threshold_crossed = false;
         struct dev_adapter_module *dev_adapter;
+        double specific_higher_bytes = 0;
         struct media_info *medium_info;
+        double specific_lower_bytes = 0;
+        GArray *candidate_list = NULL;
         struct fs_adapter_module *fsa;
         struct lib_drv_info drv_info;
+        ssize_t size_to_release = 0;
         struct dss_sort sort = {0};
         struct extent *extent_list;
         struct ldm_fs_space fs_spc;
         struct lib_handle lib_hdl;
-        ssize_t size_to_release;
+        ssize_t specific_used = 0;
         char fsroot[PATH_MAX];
         json_t *error_message;
         double fill_threshold;
+        double dir_capacity;
         int extent_count;
+        bool purge_now;
         int j;
+        int m;
 
         /* get drive from lib */
         rc = get_lib_adapter(PHO_LIB_DUMMY, &lib_hdl.ld_module);
@@ -487,11 +568,12 @@ int main(int argc, char **argv)
             continue;
         }
 
-        fill_threshold = ((double) fs_spc.spc_used /
-                          ((double)fs_spc.spc_used + (double)fs_spc.spc_avail))
-                         * (double)100;
+        dir_capacity = (double)fs_spc.spc_used + (double)fs_spc.spc_avail;
+        fill_threshold = (double)fs_spc.spc_used / dir_capacity * (double)100;
 
-        if (fill_threshold < higher_threshold) {
+        purge_now = fill_threshold >= higher_threshold;
+
+        if (!purge_now && !specific_threshold) {
             pho_debug("current fill threshold %lf%% of dir "FMT_PHO_ID" is "
                       "inferior to higher threshold %d%%",
                       fill_threshold, PHO_ID(dev_list[i].rsc.id),
@@ -499,32 +581,76 @@ int main(int argc, char **argv)
             continue;
         }
 
-        size_to_release = (ssize_t)((double)fs_spc.spc_used -
-                                    (double)lower_threshold *
-                                    ((double)fs_spc.spc_used +
-                                     (double)fs_spc.spc_avail) / (double)100);
-        pho_info("%zd bytes must be released from dir "FMT_PHO_ID", its "
-                 "current threshold %lf%% is greater than the higher threshold "
-                 "%d%% and must be reduced to lower threshold %d%%",
-                 size_to_release, PHO_ID(dev_list[i].rsc.id), fill_threshold,
-                 higher_threshold, lower_threshold);
+        if (purge_now) {
+            size_to_release = (ssize_t)((double)fs_spc.spc_used -
+                                        (double)lower_threshold *
+                                        dir_capacity / (double)100);
+            pho_info("%zd bytes must be released from dir "FMT_PHO_ID", its "
+                     "current threshold %lf%% is greater than the higher "
+                     "threshold %d%% and must be reduced to lower threshold "
+                     "%d%%",
+                     size_to_release, PHO_ID(dev_list[i].rsc.id),
+                     fill_threshold, higher_threshold, lower_threshold);
+        } else {
+            /*
+             * A degenerate statvfs, with no total space, would set the
+             * specific higher threshold to 0: the first extent of the
+             * source copy would cross it, and the whole space occupied by
+             * the extents of the source copy would be released at once.
+             * Skip the dir, as no threshold can be computed from it.
+             */
+            if (dir_capacity <= 0) {
+                pho_warn("Skipping dir "FMT_PHO_ID": degenerate statvfs",
+                         PHO_ID(dev_list[i].rsc.id));
+                continue;
+            }
+
+            /*
+             * The fill rate of the dir does not exceed the higher threshold:
+             * compute the limit of the space occupied by the extents of the
+             * source copy, to be compared while scanning the extents of
+             * this dir, and the budget to bring it back under the specific
+             * lower threshold.
+             */
+            specific_higher_bytes = (double)specific_higher_threshold *
+                                    dir_capacity / (double)100;
+            specific_lower_bytes = (double)specific_lower_threshold *
+                                   dir_capacity / (double)100;
+        }
 
 
         /* getting extents of the dir */
-        rc = dss_filter_build(&filter,
-                              "{\"$AND\": ["
-                              "  {\"DSS::EXT::medium_family\": \"%s\"},"
-                              "  {\"DSS::EXT::medium_id\": \"%s\"},"
-                              "  {\"DSS::EXT::medium_library\": \"%s\"},"
-                              "  {\"DSS::EXT::state\": \"%s\"},"
-                              "  {\"$LTE\": "
-                              "    {\"DSS::EXT::creation_time\": \"%s\"}}"
-                              "]}",
-                              rsc_family2str(PHO_RSC_DIR),
-                              drv_info.ldi_medium_id.name,
-                              dev_list[i].rsc.id.library,
-                              extent_state2str(PHO_EXT_ST_SYNC),
-                              torelease_ctime_string);
+        if (purge_now)
+            rc = dss_filter_build(&filter,
+                                  "{\"$AND\": ["
+                                  "  {\"DSS::EXT::medium_family\": \"%s\"},"
+                                  "  {\"DSS::EXT::medium_id\": \"%s\"},"
+                                  "  {\"DSS::EXT::medium_library\": \"%s\"},"
+                                  "  {\"DSS::EXT::state\": \"%s\"},"
+                                  "  {\"$LTE\": "
+                                  "    {\"DSS::EXT::creation_time\": \"%s\"}}"
+                                  "]}",
+                                  rsc_family2str(PHO_RSC_DIR),
+                                  drv_info.ldi_medium_id.name,
+                                  dev_list[i].rsc.id.library,
+                                  extent_state2str(PHO_EXT_ST_SYNC),
+                                  torelease_ctime_string);
+        else
+            /*
+             * In the specific threshold mode, all the extents of the dir
+             * are scanned: the ones that are not selectable for release
+             * still count in the specific fill rate, their eligibility is
+             * checked while scanning.
+             */
+            rc = dss_filter_build(&filter,
+                                  "{\"$AND\": ["
+                                  "  {\"DSS::EXT::medium_family\": \"%s\"},"
+                                  "  {\"DSS::EXT::medium_id\": \"%s\"},"
+                                  "  {\"DSS::EXT::medium_library\": \"%s\"}"
+                                  "]}",
+                                  rsc_family2str(PHO_RSC_DIR),
+                                  drv_info.ldi_medium_id.name,
+                                  dev_list[i].rsc.id.library);
         if (rc)
             goto close_lib_hdl;
 
@@ -536,11 +662,27 @@ int main(int argc, char **argv)
         if (rc)
             goto close_lib_hdl;
 
+        if (!purge_now) {
+            candidate_list = g_array_new(FALSE, FALSE,
+                                         sizeof(struct release_candidate));
+            g_array_set_clear_func(candidate_list, release_candidate_clear);
+        }
+
         /* check release copy */
-        for (j = 0; j < extent_count && size_to_release > 0; j++) {
+        for (j = 0; j < extent_count; j++) {
             struct layout_info *layout_list;
             int layout_count;
             int k;
+
+            /*
+             * In the general threshold mode, the scan stops once enough
+             * bytes have been released. In the specific threshold mode, all
+             * the extents of the dir are scanned, as the space occupied by
+             * the extents of the source copy is only fully known at the end
+             * of the scan.
+             */
+            if (purge_now && size_to_release <= 0)
+                break;
 
             rc = dss_filter_build(&filter,
                                   "{\"$AND\": ["
@@ -556,6 +698,32 @@ int main(int argc, char **argv)
             dss_filter_free(&filter);
             if (rc)
                 continue;
+
+            if (!purge_now) {
+                /*
+                 * All the extents of the source copy count in the specific
+                 * fill rate, whether they are selectable for release or
+                 * not.
+                 */
+                if (layout_count > 0) {
+                    specific_used += extent_list[j].size;
+
+                    if ((double)specific_used >= specific_higher_bytes)
+                        specific_threshold_crossed = true;
+                }
+
+                /* check extent state and release copy window time */
+                if (extent_list[j].state != PHO_EXT_ST_SYNC ||
+                    extent_list[j].creation_time.tv_sec >
+                        torelease_ctime.tv_sec ||
+                    (extent_list[j].creation_time.tv_sec ==
+                        torelease_ctime.tv_sec &&
+                     extent_list[j].creation_time.tv_usec >
+                        torelease_ctime.tv_usec)) {
+                    dss_res_free(layout_list, layout_count);
+                    continue;
+                }
+            }
 
             /* check backend copy */
             for (k = 0; k < layout_count; k++) {
@@ -613,13 +781,65 @@ int main(int argc, char **argv)
                 if (rc)
                     continue;
 
-                rc = release_copy(obj, &params);
-                object_info_free(obj);
-                if (!rc)
-                    size_to_release -= extent_list[j].size;
+                if (purge_now) {
+                    rc = release_copy(obj, &params);
+                    object_info_free(obj);
+                    if (!rc)
+                        size_to_release -= extent_list[j].size;
+                } else {
+                    /*
+                     * A copy with several extents on the same dir is pushed
+                     * once per extent: the first delete frees all of them,
+                     * and the next attempts fail and are handled like any
+                     * other delete error (logged, not accounted).
+                     */
+                    struct release_candidate candidate = {
+                        .obj = obj,
+                        .extent_size = extent_list[j].size,
+                    };
+
+                    g_array_append_val(candidate_list, candidate);
+                }
             }
 
             dss_res_free(layout_list, layout_count);
+        }
+
+        if (!purge_now) {
+            if (specific_threshold_crossed) {
+                size_to_release = specific_used -
+                                  (ssize_t)specific_lower_bytes;
+                pho_info("%zd bytes occupied by the extents of the source "
+                         "copy '%s' must be released from dir "FMT_PHO_ID", "
+                         "their current threshold %lf%% is greater than the "
+                         "specific higher threshold %d%% and must be reduced "
+                         "to specific lower threshold %d%%",
+                         size_to_release, params.source_copy_name,
+                         PHO_ID(dev_list[i].rsc.id),
+                         (double)specific_used / dir_capacity * (double)100,
+                         specific_higher_threshold,
+                         specific_lower_threshold);
+
+                for (m = 0; m < candidate_list->len && size_to_release > 0;
+                     m++) {
+                    struct release_candidate *candidate =
+                        &g_array_index(candidate_list,
+                                       struct release_candidate, m);
+
+                    rc = release_copy(candidate->obj, &params);
+                    if (!rc)
+                        size_to_release -= candidate->extent_size;
+                }
+            } else {
+                pho_debug("current specific fill threshold %lf%% of dir "
+                          FMT_PHO_ID" is inferior to specific higher "
+                          "threshold %d%%",
+                          (double)specific_used / dir_capacity * (double)100,
+                          PHO_ID(dev_list[i].rsc.id),
+                          specific_higher_threshold);
+            }
+
+            g_array_free(candidate_list, TRUE);
         }
 
         dss_res_free(extent_list, extent_count);

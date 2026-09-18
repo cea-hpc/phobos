@@ -133,7 +133,7 @@ function check_copy()
     done
 }
 
-function check_hsm_release_dir()
+function setup_hsm_release_objects()
 {
     # object to release
     $phobos put --metadata k1=v1,other=other --tags to_release \
@@ -167,17 +167,52 @@ EOF
     $phobos put --tags to_release --copy-name other ${FILES[0]} other_copy
     $phobos copy create --tags for_sync other_copy copy_synced
 
-    sleep 2
-    date_to_release=$(date +%s)
-    sleep 2
-
     # object too young to be released
     $phobos put --tags to_release --copy-name copy_to_release \
         ${FILES[0]} too_young
     $phobos copy create --tags for_sync too_young copy_synced
 
+    # Pin the creation time of the extents of the old release candidates a
+    # few hours in the past, in their creation order, so that they are
+    # always older than the release delay below, whatever the time the
+    # release tool takes to start and run, whereas too_young, just created,
+    # always stays younger than it.
+    release_delay_second=3600
+    $PSQL << EOF
+UPDATE extent SET creation_time = now() - interval '4 hours'
+ WHERE extent_uuid IN (SELECT extent_uuid FROM layout
+                        WHERE copy_name = 'copy_to_release' AND
+                              object_uuid = (SELECT object_uuid FROM object
+                                              WHERE oid = 'to_release'));
+UPDATE extent SET creation_time = now() - interval '3 hours'
+ WHERE extent_uuid IN (SELECT extent_uuid FROM layout
+                        WHERE copy_name = 'copy_to_release' AND
+                              object_uuid = (SELECT object_uuid
+                                               FROM deprecated_object
+                                              WHERE oid = 'deprec_to_release'));
+UPDATE extent SET creation_time = now() - interval '2 hours'
+ WHERE extent_uuid IN (SELECT extent_uuid FROM layout
+                        WHERE copy_name = 'copy_to_release' AND
+                              object_uuid = (SELECT object_uuid FROM object
+                                              WHERE oid = 'last_to_release'));
+EOF
+    local pinned_extents
+    pinned_extents=$($PSQL -t -A -c "SELECT count(*) FROM extent
+                                      WHERE creation_time < now() - interval '1 hour'")
+    ((pinned_extents == 3)) ||
+        error "The extents of to_release, deprec_to_release and" \
+              "last_to_release must be the only ones older than one hour," \
+              "whereas we count ${pinned_extents}"
+
     # We have 6 extents of 100M each on the dir_to_release_1G : current fill
-    # rate is 60% .
+    # rate is 60% . The old enough release candidates are to_release,
+    # deprec_to_release and last_to_release, with too_young excluded by the
+    # release_delay_second parameter.
+}
+
+function check_hsm_release_dir()
+{
+    setup_hsm_release_objects
 
     # dry-run phobos_hsm_release_dir with a too high threshold
     export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="99"
@@ -209,16 +244,13 @@ EOF
 
     # run phobos_hsm_release_dir
 
-    # 4 extents are candidates to be released : to_release, deprec_to_release,
-    # last_to_release, too_young
+    # 3 extents are candidates to be released : to_release, deprec_to_release
+    # and last_to_release, the extents pinned in the past by the setup
     #
-    # 2 extents can not be released : not_synced and other_copy
-    # We exclude too_young from the release with the release_delay_second condition.
+    # 3 extents can not be released : not_synced, other_copy and too_young
     # We exclude the last_to_release with the dir_release_lower_threshold
     # condition.
 
-    current=$(date +%s)
-    ((release_delay_second = current - date_to_release))
     export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_release_delay_second="${release_delay_second}"
     export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="55"
     export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_lower_threshold="45"
@@ -233,6 +265,210 @@ EOF
     check_copy other_host copy_to_release copy_synced
     check_copy other_copy other copy_synced
     check_copy too_young copy_to_release copy_synced
+}
+
+# Run a specific threshold release scenario with the specific higher and
+# lower thresholds given as first and second arguments: the release of the
+# objects given as next arguments is checked first in a dry-run, then
+# achieved with -d, and every released object is checked to hold only its
+# destination copy at the end. The setup objects are expected to be old
+# enough to be released.
+function run_specific_threshold_release()
+{
+    local specific_higher_threshold="$1"
+    local specific_lower_threshold="$2"
+    local released_oids=("${@:3}")
+    local delete_count
+    local oid
+
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_release_delay_second="${release_delay_second}"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_specific_higher_threshold="${specific_higher_threshold}"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_specific_lower_threshold="${specific_lower_threshold}"
+
+    # dry-run phobos_hsm_release_dir
+    dry_run_log=$($valg_phobos_hsm_release_dir copy_to_release copy_synced)
+    delete_count=$(echo "${dry_run_log}" | grep -c "DELETE" || true)
+    ((delete_count == ${#released_oids[@]})) ||
+        error "dry-run must show ${#released_oids[@]} releases," \
+              "whereas we get ${delete_count}"
+    for oid in "${released_oids[@]}"; do
+        (echo "${dry_run_log}" | grep "DELETE" | grep "\"${oid}\"") ||
+            error "dry-run must show a release of ${oid}"
+    done
+
+    # run phobos_hsm_release_dir
+    run_log=$($valg_phobos_hsm_release_dir -d copy_to_release copy_synced 2>&1)
+
+    for oid in "${released_oids[@]}"; do
+        check_copy "${oid}" copy_synced
+    done
+}
+
+function check_hsm_release_dir_specific_threshold()
+{
+    setup_hsm_release_objects
+
+    # The general fill rate of the dir_to_release_1G is about 60%: with a
+    # general higher threshold of 99%, only the specific thresholds can
+    # trigger a purge. The 3 old enough candidates occupy about 30% of the
+    # dir, and the extents of the source copy, selectable for release or
+    # not, occupy about 50%.
+
+    # a specific higher threshold greater than or equal to the general
+    # higher threshold, like the default value of 100, is ignored: no
+    # release happens
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="99"
+    dry_run_log=$($valg_phobos_hsm_release_dir copy_to_release copy_synced)
+    (echo "${dry_run_log}" | grep "DELETE") &&
+        error "Specific threshold above the general threshold must be ignored"
+
+    # with a specific higher threshold of 90%, the specific fill rate of
+    # about 50% does not cross it, although the dir holds 3 old release
+    # candidates and the specific lower threshold of 15% leaves a positive
+    # space to release: no release happens
+    run_specific_threshold_release 90 15
+
+    # a specific lower threshold of 27%, upper than the specific higher
+    # threshold of 25%, disables the specific release: no release happens
+    run_specific_threshold_release 25 27
+
+    # not released
+    check_copy to_release copy_to_release copy_synced
+    check_copy deprec_to_release copy_to_release copy_synced
+    check_copy last_to_release copy_to_release copy_synced
+
+    # with a specific higher threshold of 25% and a specific lower threshold
+    # of 15%, the threshold is crossed at the last old candidate, but the
+    # space to release to get back under the specific lower threshold is
+    # greater than the about 30% of the dir occupied by the 3 old
+    # candidates: the purge releases all of them in a best effort
+    run_specific_threshold_release 25 15 \
+        to_release deprec_to_release last_to_release
+
+    # not released
+    check_copy not_synced copy_to_release
+    check_copy other_host copy_to_release copy_synced
+    check_copy other_copy other copy_synced
+    check_copy too_young copy_to_release copy_synced
+
+    return 0
+}
+
+function check_hsm_release_dir_specific_threshold_unselectable()
+{
+    setup_hsm_release_objects
+
+    # The extents of the source copy that are not selectable for release
+    # count in the specific fill rate: the source copy occupies about 50%
+    # of the dir (3 old enough candidates, not_synced without a backend
+    # copy and too_young), and with a specific higher threshold of 35% and
+    # a specific lower threshold of 15%, the threshold is crossed by the
+    # unselectable extent of not_synced: the purge releases all the 3 old
+    # candidates and keeps the unselectable ones.
+    run_specific_threshold_release 35 15 \
+        to_release deprec_to_release last_to_release
+
+    # not released
+    check_copy not_synced copy_to_release
+    check_copy other_host copy_to_release copy_synced
+    check_copy other_copy other copy_synced
+    check_copy too_young copy_to_release copy_synced
+}
+
+function check_hsm_release_dir_specific_threshold_lower_zero()
+{
+    setup_hsm_release_objects
+
+    # With a specific higher threshold of 10%, crossed at the first extent
+    # of the source copy, and a specific lower threshold of 0%, the space
+    # to release is the whole space occupied by the extents of the source
+    # copy: every selectable copy is released, in a best effort as the
+    # unselectable extents of not_synced and too_young can not be released.
+    run_specific_threshold_release 10 0 \
+        to_release deprec_to_release last_to_release
+
+    # not released
+    check_copy not_synced copy_to_release
+    check_copy other_host copy_to_release copy_synced
+    check_copy other_copy other copy_synced
+    check_copy too_young copy_to_release copy_synced
+}
+
+function check_hsm_release_dir_general_threshold_precedence()
+{
+    setup_hsm_release_objects
+
+    # When the fill rate of the dir, about 60%, exceeds the general higher
+    # threshold, the general purge takes precedence over the specific one,
+    # even when the specific thresholds are armed and crossed: with a
+    # general lower threshold of 45%, the general purge stops after 2
+    # releases, whereas the specific purge would release the 3 old
+    # candidates to get the space occupied by the extents of the source
+    # copy under the specific lower threshold of 15%.
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="50"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_lower_threshold="45"
+    run_specific_threshold_release 25 15 to_release deprec_to_release
+
+    # not released
+    check_copy last_to_release copy_to_release copy_synced
+    check_copy not_synced copy_to_release
+    check_copy other_host copy_to_release copy_synced
+    check_copy other_copy other copy_synced
+    check_copy too_young copy_to_release copy_synced
+}
+
+function check_hsm_release_dir_specific_threshold_invalid()
+{
+    # a malformed specific higher threshold fails the command and the
+    # faulty value is named in the error
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_specific_higher_threshold="7O"
+    invalid_log=$($valg_phobos_hsm_release_dir copy_to_release copy_synced 2>&1 || true)
+    (echo "${invalid_log}" | grep "'7O'") ||
+        error "The malformed specific higher threshold '7O' must fail the " \
+              "command and be named in the error"
+
+    # a malformed specific lower threshold fails the command too, even when
+    # the specific higher threshold does not arm the specific mode, as both
+    # specific thresholds are always parsed
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_specific_higher_threshold="100"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_specific_lower_threshold="l5"
+    invalid_log=$($valg_phobos_hsm_release_dir copy_to_release copy_synced 2>&1 || true)
+    (echo "${invalid_log}" | grep "'l5'") ||
+        error "The malformed specific lower threshold 'l5' must fail the " \
+              "command and be named in the error"
+
+    # a malformed general lower threshold fails the command too, as every
+    # threshold is parsed the same way
+    unset PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_specific_higher_threshold
+    unset PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_specific_lower_threshold
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_lower_threshold="9O"
+    invalid_log=$($valg_phobos_hsm_release_dir copy_to_release copy_synced 2>&1 || true)
+    (echo "${invalid_log}" | grep "'9O'") ||
+        error "The malformed general lower threshold '9O' must fail the " \
+              "command and be named in the error"
+
+    # an out-of-range specific higher threshold fails the command with a
+    # non-zero exit code and the faulty value is named in the error
+    unset PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_lower_threshold
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_specific_higher_threshold="101"
+    invalid_rc=0
+    invalid_log=$($valg_phobos_hsm_release_dir copy_to_release copy_synced 2>&1) || invalid_rc=$?
+    ((invalid_rc != 0)) ||
+        error "The out-of-range specific higher threshold '101' must fail " \
+              "the command"
+    (echo "${invalid_log}" | grep "'101'") ||
+        error "The out-of-range specific higher threshold '101' must be " \
+              "named in the error"
+
+    # an out-of-range specific lower threshold fails the command too
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_specific_higher_threshold="25"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_specific_lower_threshold="100"
+    invalid_log=$($valg_phobos_hsm_release_dir copy_to_release copy_synced 2>&1 || true)
+    (echo "${invalid_log}" | grep "'100'") ||
+        error "The out-of-range specific lower threshold '100' must fail " \
+              "the command and be named in the error"
+
+    return 0
 }
 
 function log_on_error()
@@ -263,5 +499,10 @@ function log_on_error()
 TESTS=(
     "check_hsm_release_dir_opt;"
     "setup; check_hsm_release_dir; cleanup"
+    "setup; check_hsm_release_dir_specific_threshold; cleanup"
+    "setup; check_hsm_release_dir_specific_threshold_unselectable; cleanup"
+    "setup; check_hsm_release_dir_specific_threshold_lower_zero; cleanup"
+    "setup; check_hsm_release_dir_general_threshold_precedence; cleanup"
+    "setup; check_hsm_release_dir_specific_threshold_invalid; cleanup"
     "setup; log_on_error; cleanup"
 )

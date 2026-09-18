@@ -18,6 +18,9 @@
    with the ongoing IOs of a device when nb_max_parallel_io is not 1 for
    its family. It no longer waits for their end, and the device stays
    selectable while a synchronization is pending.
+ * HSM release: add specific fill thresholds on the source copy extents,
+   used only when dir_release_specific_higher_threshold is strictly lower
+   than dir_release_higher_threshold.
 
 ## 3.4.0
  * WARNING: the stat dev.umount_error is changed to dev.umount_errors .

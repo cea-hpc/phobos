@@ -66,6 +66,16 @@ const struct pho_config_item cfg_hsm[] = {
         .name    = "dir_release_lower_threshold",
         .value   = "80",
     },
+    [PHO_CFG_HSM_dir_release_specific_higher_threshold] = {
+        .section = "hsm",
+        .name    = "dir_release_specific_higher_threshold",
+        .value   = "100",
+    },
+    [PHO_CFG_HSM_dir_release_specific_lower_threshold] = {
+        .section = "hsm",
+        .name    = "dir_release_specific_lower_threshold",
+        .value   = "80",
+    },
     [PHO_CFG_HSM_error_log_path] = {
         .section = "hsm",
         .name    = "error_log_path",

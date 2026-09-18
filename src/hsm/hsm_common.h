@@ -37,6 +37,8 @@ enum pho_cfg_params_hsm {
     PHO_CFG_HSM_release_delay_second,
     PHO_CFG_HSM_dir_release_higher_threshold,
     PHO_CFG_HSM_dir_release_lower_threshold,
+    PHO_CFG_HSM_dir_release_specific_higher_threshold,
+    PHO_CFG_HSM_dir_release_specific_lower_threshold,
     PHO_CFG_HSM_error_log_path,
 
     /* Delimiters, update when modifying options */
