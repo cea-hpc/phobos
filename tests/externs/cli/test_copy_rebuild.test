@@ -476,8 +476,76 @@ function test_copy_rebuild_raid4_split_all_missing_xor
     test_copy_rebuild_impl raid4 2 2 5
 }
 
+function test_copy_rebuild_invalid_extent_idx
+{
+    $phobos put -f dir -l raid1 --lyt-params repl_count=2 "$INPUT_FILE" oid
+
+    $valg_phobos copy rebuild oid source --extent-idx=-1,0 &&
+        error "phobos copy rebuild should have failed"
+
+    $valg_phobos copy rebuild oid source -e 0,50 &&
+        error "phobos copy rebuild should have failed"
+
+    $valg_phobos copy rebuild oid source -e 0,aa &&
+        error "phobos copy rebuild should have failed"
+
+    exit 0
+}
+
+function test_copy_rebuild_duplicate_extent_idx
+{
+    $phobos put -f dir -l raid1 --lyt-params repl_count=3 "$INPUT_FILE" oid
+
+    local initial_media=($(get_extent_info oid source media_name))
+
+    waive_lrs
+    $phobos dir delete --lost "${initial_media[1]}"
+    invoke_lrs
+
+    copy_status_should_be oid source readable
+
+    # Duplicated extent indexes must only be rebuilt once
+    $valg_phobos copy rebuild oid source -e 1,1
+
+    copy_status_should_be oid source complete
+
+    local extent_count=$(copy_extent_count oid source)
+    if (( extent_count != 3 )); then
+        error "There should be 3 extents after rebuild, got $extent_count"
+    fi
+
+    $phobos dir lock ${initial_media[0]} ${initial_media[2]}
+    $phobos get oid "$DIR_TEST_OUT/out"
+
+    diff -q "$INPUT_FILE" "$DIR_TEST_OUT/out" ||
+        error "Get output should match the original object"
+}
+
+function test_copy_rebuild_all_present_extents
+{
+    $phobos put -f dir -l raid1 --lyt-params repl_count=3 "$INPUT_FILE" oid
+
+    local initial_media=($(get_extent_info oid source media_name))
+
+    waive_lrs
+    $phobos dir delete --lost "${initial_media[2]}"
+    invoke_lrs
+
+    copy_status_should_be oid source readable
+
+    # Rebuilding all the present extents of a split would leave no extent to
+    # read the data from
+    $valg_phobos copy rebuild oid source -e 0,1 &&
+        error "Phobos copy rebuild should have failed"
+
+    exit 0
+}
+
 TESTS=("setup; test_copy_rebuild_complete_incomplete; cleanup"
-       "setup_avoid; test_copy_rebuild_raid1_avoid_medium; cleanup")
+       "setup_avoid; test_copy_rebuild_raid1_avoid_medium; cleanup"
+       "setup; test_copy_rebuild_invalid_extent_idx; cleanup"
+       "setup; test_copy_rebuild_duplicate_extent_idx; cleanup"
+       "setup; test_copy_rebuild_all_present_extents; cleanup")
 
 ################################################################################
 ##############################       RAID1      ################################

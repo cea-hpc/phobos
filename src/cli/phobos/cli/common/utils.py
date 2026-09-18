@@ -24,6 +24,7 @@ Phobos CLI utilities
 from argparse import ArgumentTypeError
 from ctypes import byref, c_int, c_long, c_bool, pointer
 import datetime
+import argparse
 import os
 from shlex import shlex
 import sys
@@ -263,3 +264,26 @@ def uncase_fstype(choices):
                 return choices[key]
         return choice
     return find_choice
+
+def positive_int_list(value):
+    """
+    Split a string into a list of int, and check if the values are greater than
+    or equal to zero. Duplicated values are removed.
+    """
+    int32_max = 2**31 - 1
+
+    try:
+        values = [int(i) for i in value.split(",")]
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            "Values must be integer seperated by commas"
+        ) from None
+
+    for i in values:
+        if not 0 <= i <= int32_max:
+            raise argparse.ArgumentTypeError(
+                f"Values must be between 0 and {int32_max}"
+            )
+
+    # Drop the duplicated values
+    return list(dict.fromkeys(values))

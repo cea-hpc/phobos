@@ -33,7 +33,8 @@ from phobos.cli.action.rebuild import RebuildOptHandler
 from phobos.cli.common import env_error_format, XferOptHandler
 from phobos.cli.common.args import add_put_arguments, add_object_arguments
 from phobos.cli.common.utils import (check_output_attributes, create_put_params,
-                                     get_params_status, get_scope)
+                                     get_params_status, get_scope,
+                                     positive_int_list)
 from phobos.core.const import DSS_OBJ_ALIVE #pylint: disable=no-name-in-module
 from phobos.core.ffi import CopyInfo
 from phobos.core.store import (DelParams, GetParams, UtilClient, XferPutParams,
@@ -134,6 +135,12 @@ class CopyRebuildHandler(RebuildOptHandler):
 
         parser.add_argument('oid', help='targeted object')
         parser.add_argument('copy', help='name of the copy to rebuild')
+        parser.add_argument('-e', '--extent-idx',
+                            type=positive_int_list,
+                            help='comma-separated list of the indexes of the '
+                                 'extents to rebuild (e.g. 0,2). If not set, '
+                                 'all the missing extents of the copy are '
+                                 'rebuilt')
         add_object_arguments(parser)
 
 
@@ -261,6 +268,7 @@ class CopyOptHandler(XferOptHandler):
         copy = self.params.get('copy')
         deprec = self.params.get('deprecated')
         deprec_only = self.params.get('deprecated_only')
+        extents_idx = self.params.get('extent_idx')
         uuid = self.params.get('uuid')
         version = self.params.get('version')
 
@@ -272,7 +280,7 @@ class CopyOptHandler(XferOptHandler):
         get_params = XferGetParams(GetParams(copy_name=copy,
                                              node_name=None,
                                              scope=scope))
-        params = XferRebuildParams(get_params, put_params)
+        params = XferRebuildParams(get_params, put_params, extents_idx)
 
         try:
             client.copy_rebuild(oid, uuid, version, params)

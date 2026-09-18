@@ -12,6 +12,8 @@
    on that media.
  * Add the "phobos <media> stats" command to retrieve statistics usage for each
    media.
+ * Add "--extent-idx" to "phobos copy rebuild" to rebuild a list of specifics
+   extents
 
 ## 3.4.0
  * WARNING: the stat dev.umount_error is changed to dev.umount_errors .

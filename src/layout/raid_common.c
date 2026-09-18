@@ -164,6 +164,21 @@ static size_t split_src_layout_n_extent(struct layout_info *layout,
     return n_extent;
 }
 
+/* Check if an index is in the extent list to rebuild */
+static bool layout_idx_in_extent_list(struct pho_data_processor *proc,
+                                      size_t layout_idx)
+{
+    const int *extents_idx = proc->xfer->xd_params.rebuild.extents_idx;
+    size_t n_extents = proc->xfer->xd_params.rebuild.n_extents;
+
+    for (int i = 0; i < n_extents; i++) {
+        if (extents_idx[i] == layout_idx)
+            return true;
+    }
+
+    return false;
+}
+
 bool rebuilder_validate_extent_list(struct pho_data_processor *proc,
                                     size_t n_data_extents,
                                     size_t n_parity_extents)
@@ -183,6 +198,7 @@ bool rebuilder_validate_extent_list(struct pho_data_processor *proc,
     while (current_split * n_extents_per_split <= max_layout_idx) {
         size_t first_layout_idx = current_split * n_extents_per_split;
         size_t first_excluded_idx = (current_split + 1) * n_extents_per_split;
+        size_t listed_present = 0;
         size_t found = 0;
         size_t present;
 
@@ -190,19 +206,20 @@ bool rebuilder_validate_extent_list(struct pho_data_processor *proc,
                                             n_data_extents + n_parity_extents);
 
         for (int i = 0; i < n_extents_idx; i++) {
-            if (extents_idx[i] >= first_layout_idx &&
-                extents_idx[i] < first_excluded_idx) {
-                found++;
+            if (extents_idx[i] < 0 || extents_idx[i] > max_layout_idx)
+                return false;
 
-                /*
-                 * If only the data extents remain in this split, they cannot
-                 * be rebuilt because they are required as reconstruction input.
-                 */
-                if (present == n_data_extents &&
-                    extent_from_layout_idx(layout->extents, layout->ext_count,
-                                           extents_idx[i]))
-                    return false;
-            }
+            if (extents_idx[i] >= first_layout_idx &&
+                extents_idx[i] < first_excluded_idx)
+                found++;
+        }
+
+        /* Present extents of this split that are requested for rebuild */
+        for (size_t idx = first_layout_idx; idx < first_excluded_idx; idx++) {
+            if (extent_from_layout_idx(layout->extents, layout->ext_count,
+                                       idx) &&
+                layout_idx_in_extent_list(proc, idx))
+                listed_present++;
         }
 
         /*
@@ -210,6 +227,14 @@ bool rebuilder_validate_extent_list(struct pho_data_processor *proc,
          * extents.
          */
         if (found > n_parity_extents)
+            return false;
+
+        /*
+         * The extents requested for rebuild are excluded from the
+         * reconstruction sources: at least n_data_extents present extents
+         * must remain to read from in each split.
+         */
+        if (present - listed_present < n_data_extents)
             return false;
 
         current_split++;
@@ -736,21 +761,6 @@ static size_t current_split_rebuild_n_extent(struct pho_data_processor *proc,
         return 0;
 
     return n_extents_per_split - n_extents;
-}
-
-/* Check if an index is in the extent list to rebuild */
-static bool layout_idx_in_extent_list(struct pho_data_processor *proc,
-                                      size_t layout_idx)
-{
-    const int *extents_idx = proc->xfer->xd_params.rebuild.extents_idx;
-    size_t n_extents = proc->xfer->xd_params.rebuild.n_extents;
-
-    for (int i = 0; i < n_extents; i++) {
-        if (extents_idx[i] == layout_idx)
-            return true;
-    }
-
-    return false;
 }
 
 static bool rebuilder_can_read_extent(struct pho_data_processor *proc,
