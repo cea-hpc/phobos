@@ -95,13 +95,15 @@ int rebuild_copy(struct rebuild_extent *rebuild_extent);
  * @param[in]     layouts   All the layouts on \p med
  * @param[in]     n_layout  The number of layouts
  * @param[in/out] sched     Rebuild scheduler
+ * @param[in/out] skipped   Boolean if an extents to rebuild has been skipped
  *
  * @return 0 on success, negated errno on failure
  */
 int collect_rebuild_extents_and_frequency(struct pho_id *med,
                                           struct layout_info *layouts,
                                           int n_layout,
-                                          struct rebuild_scheduler *sched);
+                                          struct rebuild_scheduler *sched,
+                                          bool *skipped);
 
 /**
  * Group rebuild extents by the media needed to rebuild them.

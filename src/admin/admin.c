@@ -2955,6 +2955,7 @@ int phobos_admin_media_rebuild(struct admin_handle *adm, struct media_info *med,
 {
     struct layout_info *layouts;
     struct dss_filter filter;
+    bool skipped = false;
     int n_layout;
     int rc = 0;
     int i;
@@ -2990,11 +2991,12 @@ int phobos_admin_media_rebuild(struct admin_handle *adm, struct media_info *med,
         sched = rebuild_scheduler_new();
 
         rc = collect_rebuild_extents_and_frequency(&med[i].rsc.id, layouts,
-                                                   n_layout, sched);
+                                                   n_layout, sched, &skipped);
         if (rc) {
             pho_error(rc, "Failed to compute frequency of occurrence of each "
                       "media");
             rebuild_scheduler_free(sched);
+            dss_res_free(layouts, n_layout);
             return rc;
         }
 
@@ -3012,6 +3014,7 @@ int phobos_admin_media_rebuild(struct admin_handle *adm, struct media_info *med,
                 if (rc) {
                     pho_error(rc, "Failed to rebuild an extents");
                     rebuild_scheduler_free(sched);
+                    dss_res_free(layouts, n_layout);
                     return rc;
                 }
             }
@@ -3021,5 +3024,5 @@ int phobos_admin_media_rebuild(struct admin_handle *adm, struct media_info *med,
         dss_res_free(layouts, n_layout);
     }
 
-    return rc;
+    return skipped ? -ENODATA : rc;
 }

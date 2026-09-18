@@ -82,7 +82,6 @@ static int rebuild_extent_init(struct rebuild_extent *rebuild_extent,
     memset(rebuild_extent, 0, sizeof(*rebuild_extent));
 
     rebuild_extent->layout = layout;
-    rebuild_extent->avail_extents = g_ptr_array_new();
     rebuild_extent->extent_to_rebuild = extent_to_rebuild;
 
     rc = layout_get_replica_info(layout, &rebuild_extent->n_data_extents,
@@ -117,7 +116,8 @@ static void compute_frequency(GPtrArray *avail_extents, GHashTable *frequency)
 int collect_rebuild_extents_and_frequency(struct pho_id *med,
                                           struct layout_info *layouts,
                                           int n_layout,
-                                          struct rebuild_scheduler *sched)
+                                          struct rebuild_scheduler *sched,
+                                          bool *skipped)
 {
     int rc;
 
@@ -134,6 +134,16 @@ int collect_rebuild_extents_and_frequency(struct pho_id *med,
             rc = rebuild_extent_init(&rebuild_extent, layout, extent);
             if (rc)
                 return rc;
+
+            if (rebuild_extent.avail_extents->len <
+                rebuild_extent.n_data_extents) {
+                *skipped = true;
+                pho_error(-ENODATA, "Cannot rebuild extent of object '%s' on "
+                          FMT_PHO_ID": not enough extents to read from, "
+                          "skipped", layout->oid, PHO_ID(*med));
+                g_ptr_array_free(rebuild_extent.avail_extents, true);
+                continue;
+            }
 
             compute_frequency(rebuild_extent.avail_extents, sched->frequency);
             g_array_append_val(sched->extents_to_rebuild, rebuild_extent);

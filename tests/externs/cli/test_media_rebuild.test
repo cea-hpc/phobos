@@ -307,10 +307,37 @@ function test_media_rebuild_read_media_max_frequency
     fi
 }
 
+function test_media_rebuild_impossible()
+{
+    $phobos dir lock ${DIRS[2]}
+
+    # oid1 on DIRS[0] and DIRS[1]
+    $phobos put -f dir -l raid1 --lyt-params=repl_count=2 $INPUT_FILE oid1
+    $phobos dir lock ${DIRS[1]}
+
+    # oid2 on DIRS[0]
+    $phobos put -f dir -l raid1 --lyt-params=repl_count=1 $INPUT_FILE oid2
+
+    $phobos dir unlock ${DIRS[1]} ${DIRS[2]}
+
+    set +e
+    output="$($valg_phobos dir rebuild ${DIRS[0]} 2>&1)"
+    rc=$?
+    set -e
+    echo "$output" | grep "Cannot rebuild extent of object 'oid2'"
+
+    if [[ $rc != 61 ]]; then
+        error "phobos dir rebuild should have failed with ENODATA"
+    fi
+
+    check_number_extent ${DIRS[0]} 1 ${DIRS[2]} 1
+}
+
 TESTS=("setup; test_media_rebuild_raid1; cleanup"
        "setup; test_media_rebuild_empty_medium; cleanup"
        "setup 2; test_media_rebuild_no_writable_medium; cleanup"
        "setup 4; test_media_rebuild_raid4; cleanup"
        "setup 5; test_media_rebuild_different_read_media; cleanup"
        "setup 5; test_media_rebuild_read_media_max_frequency; cleanup"
-       "setup; test_media_rebuild_order_creation_time; cleanup")
+       "setup; test_media_rebuild_order_creation_time; cleanup"
+       "setup; test_media_rebuild_impossible; cleanup")
