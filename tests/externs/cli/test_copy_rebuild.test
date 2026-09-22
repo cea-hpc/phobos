@@ -541,11 +541,28 @@ function test_copy_rebuild_all_present_extents
     exit 0
 }
 
+function test_copy_rebuild_corrupted_source
+{
+    $phobos put -f dir -l raid1 --lyt-params repl_count=2 "$INPUT_FILE" oid
+
+    local addresses=($(get_extent_info oid source address))
+    local media=($(get_extent_info oid source media_name))
+
+    # Corrupt the extent 0, the rebuild of the extent 1 will fail on it
+    echo "a" >> "${media[0]}/${addresses[0]}"
+
+    $valg_phobos copy rebuild oid source -e 1 &&
+        error "Rebuild from a corrupted extent should have failed"
+
+    exit 0
+}
+
 TESTS=("setup; test_copy_rebuild_complete_incomplete; cleanup"
        "setup_avoid; test_copy_rebuild_raid1_avoid_medium; cleanup"
        "setup; test_copy_rebuild_invalid_extent_idx; cleanup"
        "setup; test_copy_rebuild_duplicate_extent_idx; cleanup"
-       "setup; test_copy_rebuild_all_present_extents; cleanup")
+       "setup; test_copy_rebuild_all_present_extents; cleanup"
+       "setup; test_copy_rebuild_corrupted_source; cleanup")
 
 ################################################################################
 ##############################       RAID1      ################################
