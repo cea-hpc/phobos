@@ -1478,6 +1478,8 @@ int raid_reader_processor_step(struct pho_data_processor *proc,
     /* manage error */
     if (resp && pho_response_is_error(resp)) {
         proc->xfer->xd_rc = resp->error->rc;
+        proc->xfer->xd_targets[proc->current_target].xt_rc =
+            resp->error->rc;
         proc->done = true;
         LOG_RETURN(proc->xfer->xd_rc,
                    "%s %d received error %s to last request",
@@ -1535,9 +1537,6 @@ int raid_reader_processor_step(struct pho_data_processor *proc,
     if (split_ended)
         rc = raid_reader_split_fini(proc);
 
-    if (rc && !proc->xfer->xd_targets[proc->current_target].xt_rc)
-        proc->xfer->xd_targets[proc->current_target].xt_rc = rc;
-
 release:
     if (!rc && split_ended && is_rebuilder(proc))
         has_next_split_to_read = raid_seek_next_missing_split(proc,
@@ -1574,6 +1573,14 @@ release:
         (*n_reqs)++;
         proc->need_alloc_response_to_read = true;
    }
+
+    if (rc) {
+        if (proc->xfer->xd_rc == 0)
+            proc->xfer->xd_rc = rc;
+
+        if (!proc->xfer->xd_targets[proc->current_target].xt_rc)
+            proc->xfer->xd_targets[proc->current_target].xt_rc = rc;
+    }
 
    return rc;
 }
@@ -2057,6 +2064,17 @@ int raid_writer_processor_step(struct pho_data_processor *proc,
                 rc = context->mocks.mock_failure_after_second_partial_release();
         } else {
             proc->need_alloc_response_to_write = false;
+
+            /*
+             * If the target already failed, do not write anything on the
+             * allocated media: release them.
+             */
+            if (proc->xfer->xd_targets[proc->current_target].xt_rc != 0) {
+                stop_io = true;
+                rc = proc->xfer->xd_targets[proc->current_target].xt_rc;
+                goto check_for_release;
+            }
+
             rc = raid_writer_split_setup(proc);
         }
 
@@ -2464,6 +2482,7 @@ int raid_rebuilder_processor_step(struct pho_data_processor *proc,
         raid_writer_rebuilder_build_allocation_req(proc, *reqs,
                                  io_context->rebuild.current_split_extent_size +
                                  io_context->rebuild.extent_remainder);
+        proc->need_alloc_response_to_write = true;
 
         goto set_target_rc;
     }
@@ -2490,6 +2509,17 @@ int raid_rebuilder_processor_step(struct pho_data_processor *proc,
             goto set_target_rc;
 
         proc->need_alloc_response_to_write = false;
+
+        /*
+         * If the target already failed, do not write anything on the
+         * allocated media: release them.
+         */
+        if (proc->xfer->xd_targets[proc->current_target].xt_rc != 0) {
+            stop_io = true;
+            rc = proc->xfer->xd_targets[proc->current_target].xt_rc;
+            goto check_for_release;
+        }
+
         rc = raid_rebuilder_split_setup(proc);
         if (rc)
             goto check_for_release;

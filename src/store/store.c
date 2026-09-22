@@ -452,6 +452,16 @@ static int processor_communicate(struct pho_data_processor *proc,
     if (response_kind < 0)
         LOG_RETURN(-EPROTO, "Unable to get response kind to chose processor");
 
+    /*
+     * An allocation response, even an error one, ends the wait for the
+     * allocation: the store only ends a failed xfer once no allocation
+     * response is in flight.
+     */
+    if (response_kind == PHO_REQUEST_KIND__RQ_READ)
+        proc->need_alloc_response_to_read = false;
+    else if (response_kind == PHO_REQUEST_KIND__RQ_WRITE)
+        proc->need_alloc_response_to_write = false;
+
     if (is_eraser(proc)) {
         /* an eraser needs no io */
         return step_and_send_requests(proc->eraser_ops->step, comm, enc_id,
@@ -1791,9 +1801,19 @@ static int store_lrs_response_process(struct phobos_handle *pho,
 
     rc = processor_communicate(proc, &pho->comm, resp, resp->req_id);
 
-    /* Success or failure final callback */
-    if (rc || proc->done)
+    /*
+     * Success or failure final callback. On error, do not end the xfer
+     * while an allocation response is still in flight: the processor
+     * needs it to release the media it reserved. Its error is saved in
+     * the xfer descriptor and returned when the xfer ends.
+     */
+    if ((rc || proc->done) &&
+        !proc->need_alloc_response_to_read &&
+        !proc->need_alloc_response_to_write)
         store_end_xfer(pho, resp->req_id, rc);
+    else if (rc)
+        /* Let the dispatch loop run until the xfer can be ended. */
+        rc = 0;
 
     if (rc)
         pho_error(rc, "Error while sending response to layout for %s %d",
