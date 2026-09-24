@@ -249,6 +249,14 @@ pairs for each family. The specified value must be between **0** and
 **2^32**. **0** means unlimited. The default value is **1** for each family.
 You are strongly advised to let the default value 1 for the tape family.
 
+When this value is not **1**, the synchronization of a medium is parallel:
+it is performed concurrently with the ongoing IOs of its device, which do
+not delay it, and the device can still be selected for new IOs while a
+synchronization is pending. Otherwise, a pending synchronization blocks the
+device: it waits for the end of the ongoing IOs and the device cannot be
+selected until it is done. In both cases, a running synchronization holds
+the device: the releases and the dispatch of new IOs on it wait for its end.
+
 If this parameter is not specified, Phobos defaults to the following:
 **nb_max_parallel_io = tape=1,dir=1,rados_pool=1**.
 

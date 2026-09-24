@@ -656,11 +656,14 @@ static void set_tosync_stats(struct dev_stats *stats,
     pho_stat_set(stats->tosync_extents, sync_params->tosync_nb_extents);
 }
 
-static void clean_tosync_array(struct lrs_dev *dev, int rc)
+/* Flush the given sync requests with the given return code: mark them done
+ * or in error, queue the corresponding client responses and free them.
+ *
+ * Must be called with a lock on \p dev .
+ */
+static void flush_tosync_array(struct lrs_dev *dev, GPtrArray *tosync_array,
+                               int rc)
 {
-    GPtrArray *tosync_array = dev->ld_sync_params.tosync_array;
-
-    MUTEX_LOCK(&dev->ld_mutex);
     while (tosync_array->len) {
         struct sub_request *req = tosync_array->pdata[tosync_array->len - 1];
         struct tosync_medium *tosync_medium =
@@ -704,6 +707,16 @@ static void clean_tosync_array(struct lrs_dev *dev, int rc)
 
         sub_request_free(req);
     }
+}
+
+/* Flush the pending sync requests with the given return code and reset the
+ * pending synchronization parameters.
+ *
+ * Must be called with a lock on \p dev .
+ */
+static void flush_and_reset_tosync(struct lrs_dev *dev, int rc)
+{
+    flush_tosync_array(dev, dev->ld_sync_params.tosync_array, rc);
 
     /* sync operation acknowledgement */
     dev->ld_sync_params.tosync_size = 0;
@@ -712,9 +725,17 @@ static void clean_tosync_array(struct lrs_dev *dev, int rc)
     dev->ld_sync_params.oldest_tosync.tv_nsec = 0;
     dev->ld_sync_params.groupings_to_update = false;
     dev->ld_needs_sync = false;
+    dev->ld_sync_blocking = false;
 
     /* Update statistics */
     set_tosync_stats(&dev->stats, &dev->ld_sync_params);
+}
+
+static void clean_tosync_array(struct lrs_dev *dev, int rc)
+{
+    MUTEX_LOCK(&dev->ld_mutex);
+
+    flush_and_reset_tosync(dev, rc);
 
     MUTEX_UNLOCK(&dev->ld_mutex);
 }
@@ -857,21 +878,42 @@ static void remove_canceled_sync(struct lrs_dev *dev)
 static void check_needs_sync(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
 {
     struct sync_params *sync_params = &dev->ld_sync_params;
+    GPtrArray *tosync_array = sync_params->tosync_array;
+    bool sync_blocking;
+    bool needs_sync;
+    guint i;
 
     MUTEX_LOCK(&dev->ld_mutex);
 
-    dev->ld_needs_sync = sync_params->tosync_array->len > 0 &&
-                      (sync_params->tosync_array->len >= handle->sync_nb_req ||
-                       is_past(add_timespec(&sync_params->oldest_tosync,
-                                            &handle->sync_time_ms)) ||
-                       sync_params->tosync_size >= handle->sync_wsize_kb);
-    dev->ld_needs_sync |= (!running && sync_params->tosync_array->len > 0);
-    dev->ld_needs_sync |= (thread_is_stopping(&dev->ld_device_thread) &&
-                           sync_params->tosync_array->len > 0);
-    /* Trigger a sync on error. We won't do a sync but the status of the device
-     * and medium will be updated accordingly by dev_sync.
+    needs_sync = tosync_array->len > 0 &&
+                 (tosync_array->len >= handle->sync_nb_req ||
+                  is_past(add_timespec(&sync_params->oldest_tosync,
+                                       &handle->sync_time_ms)) ||
+                  sync_params->tosync_size >= handle->sync_wsize_kb);
+
+    /* A partial release requires an immediate sync, so that the client can
+     * resume its IO on a synchronized medium without waiting for the
+     * thresholds.
      */
-    dev->ld_needs_sync |= (dev->ld_last_client_rc != 0);
+    for (i = 0; i < tosync_array->len && !needs_sync; i++) {
+        struct sub_request *req_tosync = tosync_array->pdata[i];
+
+        needs_sync = req_tosync->reqc->req->release->partial;
+    }
+
+    /* Trigger a sync on error. We won't do a sync but the status of the
+     * device and medium will be updated accordingly by dev_sync. On client
+     * error, LRS shutdown or device thread stop, this blocks the scheduling
+     * of new IOs even when the medium sync is parallel.
+     */
+    sync_blocking = (!running && tosync_array->len > 0) ||
+                    (thread_is_stopping(&dev->ld_device_thread) &&
+                     tosync_array->len > 0) ||
+                    dev->ld_last_client_rc != 0;
+
+    dev->ld_needs_sync = needs_sync || sync_blocking;
+    dev->ld_sync_blocking = sync_blocking;
+
     MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
@@ -982,18 +1024,38 @@ static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
     return rc;
 }
 
-/* Sync dev, update the media in the DSS, and flush tosync_array */
+/* Sync dev, update the media in the DSS, and flush the synchronized
+ * tosync requests.
+ *
+ * The device lock is held during the whole operation, whatever the family
+ * of the device: the scheduler and the communication thread must not run
+ * against the device until its medium state is synchronized and committed
+ * to the DSS, or they would skip this medium (it is not schedulable while
+ * ld_needs_sync is set) and spread the writes elsewhere, defeating the
+ * scheduling policies (e.g. fifo_max_write_per_grouping). The releases
+ * received meanwhile remain pending: pushed under the device lock, they
+ * wait for the end of this sync and are synchronized by the next one.
+ */
 static int dev_sync(struct lrs_dev *dev)
 {
     struct sync_params *sync_params = &dev->ld_sync_params;
+    int client_rc;
     int rc = 0;
     int rc2;
 
     MUTEX_LOCK(&dev->ld_mutex);
 
+    /* Consume the last client error: it will be propagated to the
+     * synchronized requests and to the medium state below. An error
+     * received meanwhile is left for the next sync.
+     */
+    client_rc = dev->ld_last_client_rc;
+    dev->ld_last_client_rc = 0;
+
     /* Do not sync on error as we don't know what happened on the tape. */
-    if (dev->ld_last_client_rc == 0) {
+    if (client_rc == 0) {
         rc = medium_sync(dev);
+
         if (!rc) {
             /* Increments statistics */
             pho_stat_incr(dev->stats.total_tosync_size,
@@ -1002,16 +1064,17 @@ static int dev_sync(struct lrs_dev *dev)
                           sync_params->tosync_nb_extents);
         }
     } else {
-        rc = dev->ld_last_client_rc;
+        rc = client_rc;
     }
 
     rc2 = lrs_dev_media_update(dev, sync_params->tosync_size, rc,
                                sync_params->tosync_nb_extents,
                                sync_params->groupings_to_update);
 
-    dev->ld_last_client_rc = 0;
+    flush_and_reset_tosync(dev, rc);
 
     MUTEX_UNLOCK(&dev->ld_mutex);
+
     if (!rc) {
         increase_device_health(dev);
         increase_medium_health(dev->ld_dss_media_info);
@@ -1035,8 +1098,6 @@ static int dev_sync(struct lrs_dev *dev)
                   dev->ld_dss_media_info->rsc.id.library);
     }
 
-    clean_tosync_array(dev, rc);
-
     return dev_is_failed(dev) ? rc : 0;
 }
 
@@ -1045,6 +1106,7 @@ int dev_umount(struct lrs_dev *dev)
     struct fs_adapter_module *fsa;
     struct dss_handle *dss;
     struct pho_log log;
+    int rc2;
     int rc;
 
     ENTRY;
@@ -1071,6 +1133,26 @@ int dev_umount(struct lrs_dev *dev)
                    rsc_family2str(dev->ld_dss_media_info->rsc.id.family),
                    dev->ld_dss_media_info->rsc.id.name,
                    dev->ld_dss_media_info->rsc.id.library, dev->ld_dev_path);
+
+    /* The pending sync requests are acknowledged by the unmount itself: as
+     * no other sync will run on the medium once unmounted, its state is
+     * updated in the DSS now, like a sync would do.
+     */
+    MUTEX_LOCK(&dev->ld_mutex);
+    if (dev->ld_sync_params.tosync_array->len > 0) {
+        rc2 = lrs_dev_media_update(dev, dev->ld_sync_params.tosync_size, 0,
+                                   dev->ld_sync_params.tosync_nb_extents,
+                                   dev->ld_sync_params.groupings_to_update);
+        if (rc2)
+            pho_error(rc2,
+                      "Failed to update the state in the DSS of the medium "
+                      "(family '%s', name '%s', library '%s') before "
+                      "unmounting it",
+                      rsc_family2str(dev->ld_dss_media_info->rsc.id.family),
+                      dev->ld_dss_media_info->rsc.id.name,
+                      dev->ld_dss_media_info->rsc.id.library);
+    }
+    MUTEX_UNLOCK(&dev->ld_mutex);
 
     rc = ldm_fs_umount(fsa, dev->ld_dev_path, dev->ld_mnt_path, &log.message);
     emit_log_after_action(dss, &log, PHO_LTFS_UMOUNT, rc);
@@ -1958,27 +2040,53 @@ out_free:
 }
 
 /**
- * Manage a format request at device thread end.
+ * Manage a sub request pending at device thread end.
  *
- * If format_request:
+ * For a format request:
  *     if error with corresponding medium loaded,
  *         send a response error and free the format request,
  *     else
  *         request medium DSS lock and free the format request medium info,
  *         requeue the request with releasing the format.
+ *
+ * For a read/write sub request, fail it like a sub request error: it is
+ * requeued on another device when possible, else an error response is sent
+ * to the client. Such a pending sub request only exists when the medium
+ * sync is parallel, as a sub request may be scheduled while the device
+ * thread is synchronizing the medium.
  */
-static void cancel_pending_format(struct lrs_dev *device)
+static void cancel_pending_sub_request(struct lrs_dev *device)
 {
-    struct req_container *format_request;
+    struct sub_request *sub_request = device->ld_sub_request;
     int rc = 0;
 
-    if (!device->ld_sub_request)
+    if (!sub_request)
         return;
 
-    format_request = device->ld_sub_request->reqc;
+    if (!pho_request_is_format(sub_request->reqc->req)) {
+        bool sub_request_requeued = false;
+        bool cancel = false;
+
+        handle_rwalloc_sub_request_result(
+            device, sub_request,
+            device->ld_device_thread.status ?
+            device->ld_device_thread.status : -ESHUTDOWN,
+            &sub_request_requeued, &cancel);
+
+        MUTEX_LOCK(&device->ld_mutex);
+        device->ld_sub_request = NULL;
+        if (!sub_request_requeued) {
+            /* do not free reqc in sub_request_free */
+            sub_request->reqc = NULL;
+            sub_request_free(sub_request);
+        }
+        MUTEX_UNLOCK(&device->ld_mutex);
+
+        return;
+    }
 
     if (device->ld_device_thread.status &&
-        !format_request->params.format.medium_to_format) {
+        !sub_request->reqc->params.format.medium_to_format) {
         /*
          * A NULL medium_to_format field in the format request means the medium
          * has been transfered to the device.
@@ -1987,13 +2095,13 @@ static void cancel_pending_format(struct lrs_dev *device)
                              device->ld_dss_media_info);
         queue_error_response(device->ld_response_queue,
                              device->ld_device_thread.status,
-                             format_request);
+                             sub_request->reqc);
 
         sub_request_free(device->ld_sub_request);
     } else {
-        if (format_request->params.format.medium_to_format) {
+        if (sub_request->reqc->params.format.medium_to_format) {
             struct media_info *medium_to_format =
-                format_request->params.format.medium_to_format;
+                sub_request->reqc->params.format.medium_to_format;
 
             format_medium_remove(device->ld_ongoing_format, medium_to_format);
             rc = dss_medium_release(&device->ld_device_thread.dss,
@@ -2021,7 +2129,7 @@ static void cancel_pending_format(struct lrs_dev *device)
             }
 
             lrs_medium_release(medium_to_format);
-            format_request->params.format.medium_to_format = NULL;
+            sub_request->reqc->params.format.medium_to_format = NULL;
         } else {
             format_medium_remove(device->ld_ongoing_format,
                                  device->ld_dss_media_info);
@@ -2029,10 +2137,11 @@ static void cancel_pending_format(struct lrs_dev *device)
 
         if (!rc) {
             /* TODO: use sched error queue */
-            tsqueue_push(device->sched_req_queue, format_request);
+            tsqueue_push(device->sched_req_queue, sub_request->reqc);
             free(device->ld_sub_request);
         } else {
-            queue_error_response(device->ld_response_queue, rc, format_request);
+            queue_error_response(device->ld_response_queue, rc,
+                                 sub_request->reqc);
 
             sub_request_free(device->ld_sub_request);
         }
@@ -2198,7 +2307,7 @@ static void dev_thread_end(struct lrs_dev *device)
         MUTEX_UNLOCK(&device->ld_mutex);
     }
 
-    cancel_pending_format(device);
+    cancel_pending_sub_request(device);
 
     if (!device->ld_device_thread.status) {
         int rc = dev_cleanup_medium_at_stop(device);
@@ -2253,6 +2362,8 @@ static void *lrs_dev_thread(void *tdata)
     thread = &device->ld_device_thread;
 
     while (!thread_is_stopped(thread)) {
+        bool drain_ongoing_io;
+        bool parallel_sync = dev_is_parallel_sync(device);
         int rc = 0;
 
         if (device->ld_sub_request &&
@@ -2275,13 +2386,13 @@ static void *lrs_dev_thread(void *tdata)
             thread->state = THREAD_STOPPED;
         }
 
-        if (!g_hash_table_size(device->ld_ongoing_io) &&
-            device->ld_needs_sync) {
-            if (dev_perform_sync(device, thread))
-                goto end_thread;
-        }
-
-        if (device->ld_sub_request && !device->ld_needs_sync) {
+        /* Handle the pending sub request before running a new medium sync,
+         * so that the scheduled IOs are not delayed by successive syncs when
+         * the sync is parallel. On error or shutdown, the sync handler is
+         * run first, as the medium state must be updated before any new IO.
+         */
+        if (device->ld_sub_request && !device->ld_sync_blocking &&
+            (parallel_sync || !device->ld_needs_sync)) {
             pho_req_t *req = device->ld_sub_request->reqc->req;
 
             if (pho_request_is_format(req))
@@ -2309,7 +2420,28 @@ static void *lrs_dev_thread(void *tdata)
             }
         }
 
-        if (!thread_is_stopped(thread)) {
+        drain_ongoing_io = !g_hash_table_size(device->ld_ongoing_io);
+
+        /* The medium is synchronized concurrently with the ongoing IOs when
+         * the sync is parallel. Otherwise, the sync waits for their end, as
+         * it does on error or shutdown, to drain the device before its final
+         * state update.
+         */
+        if (device->ld_needs_sync &&
+            (drain_ongoing_io ||
+             (parallel_sync && !device->ld_sync_blocking))) {
+            if (dev_perform_sync(device, thread))
+                goto end_thread;
+        }
+
+        /* Do not wait for a signal when a sub request is waiting to be
+         * handled: it may have been pushed while the device thread was
+         * synchronizing the medium, and a thread signal is lost when the
+         * thread is not waiting for it.
+         */
+        if (!thread_is_stopped(thread) &&
+            !(device->ld_sub_request && !device->ld_sync_blocking &&
+              parallel_sync)) {
             rc = dev_wait_for_signal(device);
             if (rc < 0) {
                 const struct pho_id *dev_id = lrs_dev_id(device);

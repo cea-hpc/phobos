@@ -14,6 +14,10 @@
    media.
  * Add "--extent-idx" to "phobos copy rebuild" to rebuild a list of specifics
    extents
+ * Parallel IO: the medium synchronization is now performed concurrently
+   with the ongoing IOs of a device when nb_max_parallel_io is not 1 for
+   its family. It no longer waits for their end, and the device stays
+   selectable while a synchronization is pending.
 
 ## 3.4.0
  * WARNING: the stat dev.umount_error is changed to dev.umount_errors .

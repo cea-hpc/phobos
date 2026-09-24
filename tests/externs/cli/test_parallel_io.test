@@ -327,12 +327,159 @@ function test_dir_parallel_io_grouping_on_dir()
 }
 
 
+function get_dev_stat() #stat_name #family
+{
+    $valg_phobos stats dev.$1 --tags family=$2 |
+        awk '{print $(NF)}' | cut -d '=' -f 2
+}
+
+# Wait up to 30 seconds for a dev stat to reach the given value
+function wait_dev_stat() #stat_name #family #expected_value
+{
+    local stat_name=$1
+    local family=$2
+    local expected_value=$3
+    local waited=0
+
+    while [ "$(get_dev_stat $stat_name $family)" != "$expected_value" ] &&
+          (( waited < 30 )); do
+        sleep 1
+        ((waited++)) || true
+    done
+
+    [ "$(get_dev_stat $stat_name $family)" = "$expected_value" ]
+}
+
+# Start a put that holds its booking until the go file is created, and wait
+# for its booking to be received. The pid of the put is stored in the
+# HELD_PUT_PID variable.
+function start_held_put() #family #obj_id
+{
+    local family=$1
+    local obj_id=$2
+    local waited=0
+
+    rm -f "${DIR_TEST_IN}/go"
+    writer_sleep_after_recv_alloc put -f ${family} ${FILES[0]} ${obj_id} &
+    HELD_PUT_PID=$!
+
+    while [ ! -f "${DIR_TEST_IN}/${obj_id}" ]; do
+        if (( waited >= 60 )); then
+            error "booking of the held put of ${obj_id} not received"
+        fi
+        sleep 1
+        ((waited++)) || true
+    done
+}
+
+# Release the put started by start_held_put and wait for its completion
+function release_held_put()
+{
+    touch "${DIR_TEST_IN}/go"
+    wait ${HELD_PUT_PID} || error "held put failed"
+}
+
+# When the family allows parallel IOs, the medium sync is parallel: this put
+# completes while the IO of another put, held after its booking, is still
+# ongoing. Without the parallel sync, the release of this put would wait for
+# the end of the held IO before the medium synchronization and its response.
+function test_sync_parallel_with_ongoing_io() #family #nb_max_parallel_io
+{
+    local family=$1
+    local nb_parallel=$2
+
+    export PHOBOS_LRS_nb_max_parallel_io="${family}=${nb_parallel}"
+    # every release asks for an immediate sync. The families of the LRS are
+    # restricted to the tested one, as the sync thresholds must be set for
+    # every initialized family.
+    export PHOBOS_LRS_sync_nb_req="${family}=1"
+    export PHOBOS_LRS_families="${family}"
+    waive_lrs
+    invoke_lrs
+
+    start_held_put ${family} obj_sync_par_hold
+
+    $phobos put -f ${family} ${FILES[0]} obj_sync_par_done ||
+        error "the put did not complete while another IO is ongoing"
+
+    [ "$(get_dev_stat nb_ongoing_io ${family})" = "1" ] ||
+        error "the held IO must still be ongoing"
+    if ! wait_dev_stat tosync_count ${family} 0; then
+        error "a sync is still pending after the completed put"
+    fi
+    [ "$(get_dev_stat effective_sync ${family})" -ge "1" ] ||
+        error "no sync was performed during the ongoing held IO"
+
+    release_held_put
+
+    if ! wait_dev_stat tosync_count ${family} 0; then
+        error "a sync is still pending at the end of the test"
+    fi
+    [ "$(get_dev_stat nb_ongoing_io ${family})" = "0" ] ||
+        error "no more IO must be ongoing at the end of the test"
+}
+
+# The partial releases of a multi-object put each wait for the
+# synchronization of the medium before the next object is written: with the
+# parallel sync, the whole put completes while the IO of another put, held
+# after its booking, is still ongoing.
+function test_dir_sync_parallel_mput()
+{
+    local nb_obj=10
+    local obj_list=${DIR_TEST_IN}/sync_mput_obj_list
+    local i
+
+    export PHOBOS_LRS_nb_max_parallel_io="dir=2"
+    # every release of the multi-object put asks for an immediate sync. The
+    # families of the LRS are restricted to dir, as the sync thresholds must
+    # be set for every initialized family.
+    export PHOBOS_LRS_sync_nb_req="dir=1"
+    export PHOBOS_LRS_families="dir"
+    waive_lrs
+    invoke_lrs
+
+    rm -f ${obj_list}
+    for i in `seq 1 ${nb_obj}`; do
+        echo "${FILES[0]} obj_sync_mput_${i} -" >> ${obj_list}
+    done
+
+    start_held_put dir obj_sync_mput_hold
+
+    $phobos put -f dir --file ${obj_list} ||
+        error "the multi-object put did not complete while another IO is" \
+              "ongoing"
+
+    [ "$(get_dev_stat nb_ongoing_io dir)" = "1" ] ||
+        error "the held IO must still be ongoing"
+    if ! wait_dev_stat tosync_count dir 0; then
+        error "a sync is still pending after the completed put"
+    fi
+    [ "$(get_dev_stat effective_sync dir)" -ge "${nb_obj}" ] ||
+        error "the syncs of the partial releases were not all performed" \
+              "during the ongoing held IO"
+
+    release_held_put
+
+    for i in `seq 1 ${nb_obj}`; do
+        $phobos get obj_sync_mput_${i} ${DIR_TEST_OUT}/out_sync_mput ||
+            error "get of obj_sync_mput_${i} failed"
+        cmp ${FILES[0]} ${DIR_TEST_OUT}/out_sync_mput ||
+            error "obj_sync_mput_${i} is corrupted"
+        rm -f ${DIR_TEST_OUT}/out_sync_mput
+    done
+}
+
+
 TESTS=(
     "setup_dir; test_parallel_io dir; cleanup_dir"
     "setup_dir; test_dir_unlimited_parallel_io; cleanup_dir"
     "setup_dir; test_dir_parallel_io_grouping_on_dir; cleanup_dir"
+    "setup_dir; test_sync_parallel_with_ongoing_io dir 2; cleanup_dir"
+    "setup_dir; test_sync_parallel_with_ongoing_io dir 0; cleanup_dir"
+    "setup_dir; test_dir_sync_parallel_mput; cleanup_dir"
 )
 
 if [[ -w /dev/changer ]]; then
     TESTS+=("setup_tape; test_parallel_io tape; cleanup_tape")
+    TESTS+=("setup_tape; test_sync_parallel_with_ongoing_io tape 2; cleanup_tape")
 fi

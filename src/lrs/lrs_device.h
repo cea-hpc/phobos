@@ -302,6 +302,15 @@ struct lrs_dev {
          * partial goes back to the ld_ongoing_io hash table.
          */
     atomic_bool          ld_needs_sync;         /**< medium needs to be sync */
+    atomic_bool          ld_sync_blocking;      /**< a sync is required to
+                                                  *  update the medium state
+                                                  *  on client error, LRS
+                                                  *  shutdown or thread stop:
+                                                  *  it blocks the scheduling
+                                                  *  of new IOs even when the
+                                                  *  medium sync is parallel
+                                                  *  (see dev_is_parallel_sync)
+                                                  */
     struct thread_info   ld_device_thread;      /**< thread handling the actions
                                                   * executed on the device
                                                   */
@@ -417,10 +426,11 @@ static __thread unsigned int nb_max_parallel_io[] = {
     [PHO_RSC_RADOS_POOL] = DEFAULT_NB_MAX_PARALLEL_IO,
 };
 
-static inline bool dev_is_full_ongoing_io(struct lrs_dev *dev)
+/* Get the maximum number of parallel IO of a family, from the local
+ * thread-cached configuration.
+ */
+static inline unsigned int dev_nb_max_parallel_io(enum rsc_family family)
 {
-    enum rsc_family family = dev->ld_dss_dev_info->rsc.id.family;
-
     if (!nb_max_parallel_io_set[family]) {
         int rc;
 
@@ -436,19 +446,43 @@ static inline bool dev_is_full_ongoing_io(struct lrs_dev *dev)
         nb_max_parallel_io_set[family] = true;
     }
 
+    return nb_max_parallel_io[family];
+}
+
+static inline bool dev_is_full_ongoing_io(struct lrs_dev *dev)
+{
+    unsigned int nb_max = dev_nb_max_parallel_io(
+        dev->ld_dss_dev_info->rsc.id.family);
+
     /* unlimited case */
-    if (nb_max_parallel_io[family] == 0)
+    if (nb_max == 0)
         return false;
 
     return (g_hash_table_size(dev->ld_ongoing_io) +
             g_hash_table_size(dev->ld_ongoing_partial_io_waiting_sync)) >=
-           nb_max_parallel_io[family];
+           nb_max;
+}
+
+/* The medium of a device is synchronized concurrently with its ongoing IOs
+ * when the family of the device allows more than one parallel IO (0 meaning
+ * unlimited): the sync does not wait for their end and the device can be
+ * selected while a sync is pending. Otherwise, a pending sync blocks the
+ * device until the end of its ongoing IOs. In both cases the device lock is
+ * held during the whole sync: the releases and the dispatch of new IOs on
+ * the device wait for its end.
+ */
+static inline bool dev_is_parallel_sync(struct lrs_dev *dev)
+{
+    return dev_nb_max_parallel_io(dev->ld_dss_dev_info->rsc.id.family) !=
+           DEFAULT_NB_MAX_PARALLEL_IO;
 }
 
 static inline bool dev_is_sched_ready(struct lrs_dev *dev)
 {
     return dev && thread_is_running(&dev->ld_device_thread) &&
-           !dev->ld_needs_sync && !dev->ld_sub_request &&
+           (!dev->ld_needs_sync ||
+            (dev_is_parallel_sync(dev) && !dev->ld_sync_blocking)) &&
+           !dev->ld_sub_request &&
            !dev->ld_ongoing_scheduled && !dev_is_failed(dev) &&
            (dev->ld_dss_dev_info->rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED) &&
            !dev_is_full_ongoing_io(dev);
