@@ -617,6 +617,33 @@ function test_tape_rename_lib_with_extent()
     fi
 }
 
+################################################################################
+#                          TEST MEDIA WITH QUOTE CHARS                         #
+################################################################################
+
+function test_media_quote_chars()
+{
+    local dir=$(mktemp -d "$PWD/pho'media.XXXX")
+
+    $valg_phobos dir add --unlock "$dir"
+    $valg_phobos dir format --fs POSIX --unlock "$dir"
+    $valg_phobos dir list "$dir" | grep "$dir"
+
+    $phobos put -f dir /etc/hosts oid_quote_media
+    $phobos get oid_quote_media /tmp/gotten_obj && rm /tmp/gotten_obj
+
+    $valg_phobos dir lock "$dir"
+    $valg_phobos dir unlock "$dir"
+
+    $phobos delete --hard oid_quote_media
+
+    # the LRS holds the device lock while it is running
+    waive_lrs
+    $valg_phobos dir delete "$dir"
+
+    rm -rf "$dir"
+}
+
 TESTS=("setup_dir; \
             test_put_update_dir; \
             test_set_access_bad_syntax; \
@@ -632,6 +659,7 @@ TESTS=("setup_dir; \
        "setup; test_dir_add_path; cleanup"
        "setup_dir; test_put_update_dir_path; cleanup_dir"
        "setup_dir; test_put_update_dir_relative_path; cleanup_dir"
+       "setup_dir; test_media_quote_chars; cleanup_dir"
        "setup_dir; test_dir_rename_lib_with_extent; cleanup_dir"
        "setup_dir_bis; \
             test_dir_list_library; \

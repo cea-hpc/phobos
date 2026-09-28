@@ -103,7 +103,7 @@ static void insert_string(struct dss_handle *handle, GString *query,
     char *esc_val;
 
     esc_str = xmalloc(esc_len);
-    PQescapeStringConn(handle->dh_conn, esc_str, string, esc_len, NULL);
+    PQescapeStringConn(handle->dh_conn, esc_str, string, strlen(string), NULL);
 
     switch (type) {
     case STRVAL_INDEX:

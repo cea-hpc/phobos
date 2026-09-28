@@ -604,16 +604,34 @@ int dss_update_extent_migrate(struct dss_handle *handle, const char *old_uuid,
                               const char *new_uuid)
 {
     GString *request = g_string_new("BEGIN;");
+    char *esc_new_uuid = NULL;
+    char *esc_old_uuid = NULL;
     int rc = 0;
 
+    esc_new_uuid = dss_char4sql(handle->dh_conn, new_uuid);
+    if (esc_new_uuid == NULL) {
+        rc = -EINVAL;
+        goto free_str;
+    }
+
+    esc_old_uuid = dss_char4sql(handle->dh_conn, old_uuid);
+    if (esc_old_uuid == NULL) {
+        rc = -EINVAL;
+        goto free_str;
+    }
+
     g_string_append_printf(request,
-        "UPDATE layout SET extent_uuid = '%s' WHERE extent_uuid = '%s';"
-        "UPDATE extent SET state = 'orphan' WHERE extent_uuid = '%s';"
-        "UPDATE extent SET state = 'sync' WHERE extent_uuid = '%s';",
-        new_uuid, old_uuid, old_uuid, new_uuid);
+        "UPDATE layout SET extent_uuid = %s WHERE extent_uuid = %s;"
+        "UPDATE extent SET state = 'orphan' WHERE extent_uuid = %s;"
+        "UPDATE extent SET state = 'sync' WHERE extent_uuid = %s;",
+        esc_new_uuid, esc_old_uuid, esc_old_uuid, esc_new_uuid);
 
     rc = execute_and_commit_or_rollback(handle->dh_conn, request, NULL,
                                         PGRES_COMMAND_OK);
+
+free_str:
+    free_dss_char4sql(esc_new_uuid);
+    free_dss_char4sql(esc_old_uuid);
     g_string_free(request, true);
     return rc;
 }
@@ -631,9 +649,19 @@ int dss_update_extent_state(struct dss_handle *handle, const char **uuids,
     g_string_append_printf(request, "UPDATE extent SET state = '%s' WHERE ",
                            extent_state2str(state));
 
-    for (i = 0; i < num_uuids; ++i)
-        g_string_append_printf(request, "extent_uuid = '%s'%s", uuids[i],
+    for (i = 0; i < num_uuids; ++i) {
+        char *uuid = dss_char4sql(handle->dh_conn, uuids[i]);
+
+        if (uuid == NULL) {
+            rc = -EINVAL;
+            goto req_free;
+        }
+
+        g_string_append_printf(request, "extent_uuid = %s%s", uuid,
                                i == num_uuids - 1 ? ";" : " OR ");
+
+        free_dss_char4sql(uuid);
+    }
 
     rc = execute_and_commit_or_rollback(handle->dh_conn, request, NULL,
                                         PGRES_COMMAND_OK);
@@ -646,7 +674,21 @@ req_free:
 static int check_orphan(struct dss_handle *handle, const struct pho_id *tape)
 {
     GString *request = g_string_new("BEGIN;");
+    char *src_library = NULL;
+    char *medium_id = NULL;
     int rc = 0;
+
+    medium_id = dss_char4sql(handle->dh_conn, tape->name);
+    if (medium_id == NULL) {
+        rc = -EINVAL;
+        goto free_str;
+    }
+
+    src_library = dss_char4sql(handle->dh_conn, tape->library);
+    if (src_library == NULL) {
+        rc = -EINVAL;
+        goto free_str;
+    }
 
     g_string_append_printf(request,
         "UPDATE extent SET state = 'orphan' "
@@ -654,12 +696,16 @@ static int check_orphan(struct dss_handle *handle, const struct pho_id *tape)
         "  SELECT extent.extent_uuid FROM extent "
         "    LEFT JOIN layout ON extent.extent_uuid = layout.extent_uuid "
         "  WHERE layout.extent_uuid IS NULL AND "
-        "    extent.medium_id = '%s' AND extent.medium_family = '%s' AND "
-        "    extent.medium_library = '%s');",
-        tape->name, rsc_family2str(tape->family), tape->library);
+        "    extent.medium_id = %s AND extent.medium_family = '%s' AND "
+        "    extent.medium_library = %s);",
+        medium_id, rsc_family2str(tape->family), src_library);
 
     rc = execute_and_commit_or_rollback(handle->dh_conn, request, NULL,
                                         PGRES_COMMAND_OK);
+
+free_str:
+    free_dss_char4sql(medium_id);
+    free_dss_char4sql(src_library);
     g_string_free(request, true);
     return rc;
 }
@@ -667,7 +713,21 @@ static int check_orphan(struct dss_handle *handle, const struct pho_id *tape)
 int dss_update_gc_for_tape(struct dss_handle *handle, const struct pho_id *tape)
 {
     GString *request = g_string_new("BEGIN;");
+    char *src_library = NULL;
+    char *medium_id = NULL;
     int rc = 0;
+
+    medium_id = dss_char4sql(handle->dh_conn, tape->name);
+    if (medium_id == NULL) {
+        rc = -EINVAL;
+        goto free_str;
+    }
+
+    src_library = dss_char4sql(handle->dh_conn, tape->library);
+    if (src_library == NULL) {
+        rc = -EINVAL;
+        goto free_str;
+    }
 
     g_string_append_printf(request,
         "WITH objects AS ("
@@ -676,8 +736,8 @@ int dss_update_gc_for_tape(struct dss_handle *handle, const struct pho_id *tape)
         "    SELECT object_uuid FROM layout"
         "    INNER JOIN ("
         "      SELECT extent_uuid FROM extent"
-        "      WHERE medium_id = '%s' AND medium_family = '%s' AND"
-        "            medium_library = '%s'"
+        "      WHERE medium_id = %s AND medium_family = '%s' AND"
+        "            medium_library = %s"
         "    ) AS inner_table USING (extent_uuid)"
         "    WHERE object_uuid = layout.object_uuid"
         "     AND version = layout.version"
@@ -688,10 +748,14 @@ int dss_update_gc_for_tape(struct dss_handle *handle, const struct pho_id *tape)
         "  SELECT 1 FROM objects"
         "  WHERE object_uuid = layout.object_uuid"
         "   AND version = layout.version"
-        ");", tape->name, rsc_family2str(tape->family), tape->library);
+        ");", medium_id, rsc_family2str(tape->family), src_library);
 
     rc = execute_and_commit_or_rollback(handle->dh_conn, request, NULL,
                                         PGRES_COMMAND_OK);
+
+free_str:
+    free_dss_char4sql(medium_id);
+    free_dss_char4sql(src_library);
     g_string_free(request, true);
     if (rc)
         return rc;

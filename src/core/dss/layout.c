@@ -239,25 +239,56 @@ static int layout_select_query(GString **conditions, int n_conditions,
 static int layout_delete_query(PGconn *conn, void *void_layout, int item_cnt,
                                GString *request)
 {
-    (void) conn;
+    int rc = 0;
 
     for (int i = 0; i < item_cnt; ++i) {
         struct layout_info *layout = ((struct layout_info *) void_layout) + i;
+        char *object_uuid = NULL;
+        char *extent_uuid = NULL;
+        char *copy_name = NULL;
+
+        object_uuid = dss_char4sql(conn, layout->uuid);
+        if (object_uuid == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        copy_name = dss_char4sql(conn, layout->copy_name);
+        if (copy_name == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
 
         g_string_append_printf(request,
                                "DELETE FROM layout"
-                               " WHERE object_uuid = '%s'"
-                               "  AND version = '%d' AND copy_name = '%s'%s",
-                               layout->uuid, layout->version,
-                               layout->copy_name,
+                               " WHERE object_uuid = %s"
+                               "  AND version = '%d' AND copy_name = %s%s",
+                               object_uuid, layout->version, copy_name,
                                layout->ext_count ? " AND (" : "");
 
-        for (int j = 0; j < layout->ext_count; j++)
-            g_string_append_printf(request, "extent_uuid = '%s'%s",
-                                   layout->extents[j].uuid,
+        for (int j = 0; j < layout->ext_count; j++) {
+            extent_uuid = dss_char4sql(conn, layout->extents[j].uuid);
+            if (extent_uuid == NULL) {
+                rc = -EINVAL;
+                goto free_info;
+            }
+
+            g_string_append_printf(request, "extent_uuid = %s%s", extent_uuid,
                                    j + 1 < layout->ext_count ? " OR " : "");
 
+            free_dss_char4sql(extent_uuid);
+            extent_uuid = NULL;
+        }
+
         g_string_append_printf(request, "%s;", layout->ext_count ? ")" : "");
+
+free_info:
+        free_dss_char4sql(extent_uuid);
+        free_dss_char4sql(copy_name);
+        free_dss_char4sql(object_uuid);
+
+        if (rc)
+            return rc;
     }
 
     return 0;

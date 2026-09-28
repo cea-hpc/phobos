@@ -45,6 +45,8 @@
 static int device_insert_query(PGconn *conn, void *void_dev, int item_cnt,
                                int64_t fields, GString *request)
 {
+    int rc = 0;
+
     (void) fields;
 
     g_string_append(
@@ -55,25 +57,64 @@ static int device_insert_query(PGconn *conn, void *void_dev, int item_cnt,
 
     for (int i = 0; i < item_cnt; ++i) {
         struct dev_info *device = ((struct dev_info *) void_dev) + i;
-        char *model;
+        char *src_library = NULL;
+        char *device_path = NULL;
+        char *device_host = NULL;
+        char *device_id = NULL;
+        char *model = NULL;
 
         model = dss_char4sql(conn, device->rsc.model);
-        if (!model)
-            return -EINVAL;
+        if (model == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        device_id = dss_char4sql(conn, device->rsc.id.name);
+        if (device_id == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        src_library = dss_char4sql(conn, device->rsc.id.library);
+        if (src_library == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        device_host = dss_char4sql(conn, device->host);
+        if (device_host == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        device_path = dss_char4sql(conn, device->path);
+        if (device_path == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
 
         g_string_append_printf(request,
-                               "('%s', %s, '%s', '%s', '%s', '%s', '%s')",
+                               "('%s', %s, %s, %s, %s, '%s', %s)",
                                rsc_family2str(device->rsc.id.family),
                                model,
-                               device->rsc.id.name, device->rsc.id.library,
-                               device->host,
+                               device_id,
+                               src_library,
+                               device_host,
                                rsc_adm_status2str(device->rsc.adm_status),
-                               device->path);
+                               device_path);
 
         if (i < item_cnt - 1)
             g_string_append(request, ", ");
 
+free_info:
         free_dss_char4sql(model);
+        free_dss_char4sql(device_id);
+        free_dss_char4sql(src_library);
+        free_dss_char4sql(device_host);
+        free_dss_char4sql(device_path);
+
+        if (rc)
+            return rc;
     }
 
     g_string_append(request, ";");
@@ -105,24 +146,46 @@ static struct dss_field FIELDS[] = {
 static int device_update_query(PGconn *conn, void *src_dev, void *dst_dev,
                                int item_cnt, int64_t fields, GString *request)
 {
+    int rc = 0;
+
     for (int i = 0; i < item_cnt; ++i) {
         struct dev_info *src = ((struct dev_info *) src_dev) + i;
         struct dev_info *dst = ((struct dev_info *) dst_dev) + i;
         GString *sub_request = g_string_new(NULL);
+        char *src_library = NULL;
+        char *device_id = NULL;
 
         g_string_append(sub_request, "UPDATE device SET ");
 
         update_fields(conn, dst, fields, FIELDS, 3, sub_request);
 
+        device_id = dss_char4sql(conn, src->rsc.id.name);
+        if (device_id == NULL) {
+            rc = -EINVAL;
+            goto free_sub_request;
+        }
+
+        src_library = dss_char4sql(conn, src->rsc.id.library);
+        if (src_library == NULL) {
+            rc = -EINVAL;
+            goto free_sub_request;
+        }
+
         g_string_append_printf(sub_request,
-                               " WHERE family = '%s' AND id = '%s' AND "
-                               "library = '%s'; ",
+                               " WHERE family = '%s' AND id = %s AND "
+                               "library = %s; ",
                                rsc_family2str(src->rsc.id.family),
-                               src->rsc.id.name,
-                               src->rsc.id.library);
+                               device_id, src_library);
 
         g_string_append(request, sub_request->str);
+
+free_sub_request:
         g_string_free(sub_request, true);
+        free_dss_char4sql(device_id);
+        free_dss_char4sql(src_library);
+
+        if (rc)
+            return rc;
     }
 
     return 0;
@@ -159,17 +222,37 @@ static int device_select_query(GString **conditions, int n_conditions,
 static int device_delete_query(PGconn *conn, void *void_dev, int item_cnt,
                                GString *request)
 {
-    (void) conn;
+    int rc = 0;
 
     for (int i = 0; i < item_cnt; ++i) {
         struct dev_info *device = ((struct dev_info *) void_dev) + i;
+        char *src_library = NULL;
+        char *device_id = NULL;
+
+        device_id = dss_char4sql(conn, device->rsc.id.name);
+        if (device_id == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        src_library = dss_char4sql(conn, device->rsc.id.library);
+        if (src_library == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
 
         g_string_append_printf(request,
                                "DELETE FROM device WHERE family = '%s' AND "
-                               "id = '%s' AND library = '%s'; ",
+                               "id = %s AND library = %s; ",
                                rsc_family2str(device->rsc.id.family),
-                               device->rsc.id.name,
-                               device->rsc.id.library);
+                               device_id, src_library);
+
+free_info:
+        free_dss_char4sql(device_id);
+        free_dss_char4sql(src_library);
+
+        if (rc)
+            return rc;
     }
 
     return 0;

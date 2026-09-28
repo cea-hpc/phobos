@@ -46,10 +46,7 @@
 static int logs_insert_query(PGconn *conn, void *void_log, int item_cnt,
                              int64_t fields, GString *request)
 {
-    unsigned int escape_len;
-    char *escape_string;
-    char *message;
-    int rc;
+    int rc = 0;
 
     (void) fields;
 
@@ -62,26 +59,57 @@ static int logs_insert_query(PGconn *conn, void *void_log, int item_cnt,
 
     for (int i = 0; i < item_cnt; ++i) {
         struct pho_log *log = ((struct pho_log *) void_log) + i;
+        char *escaped_message = NULL;
+        char *device_library = NULL;
+        char *medium_name = NULL;
+        char *device_name = NULL;
+        char *message = NULL;
 
         message = json_dumps(log->message, 0);
         if (!message)
             LOG_RETURN(rc = -ENOMEM, "Failed to dump log message as json");
 
-        escape_len = strlen(message) * 2 + 1;
-        escape_string = xmalloc(escape_len);
+        escaped_message = dss_char4sql(conn, message);
+        if (escaped_message == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
 
-        PQescapeStringConn(conn, escape_string, message, escape_len, NULL);
+        device_name = dss_char4sql(conn, log->device.name);
+        if (device_name == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        medium_name = dss_char4sql(conn, log->medium.name);
+        if (medium_name == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        device_library = dss_char4sql(conn, log->device.library);
+        if (device_library == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
 
         g_string_append_printf(
             request,
-            "('%s', '%s', '%s', '%s', %d, '%s', '%s')",
-            rsc_family2str(log->device.family), log->device.name,
-            log->medium.name, log->device.library, log->error_number,
-            operation_type2str(log->cause), escape_string
+            "('%s', %s, %s, %s, %d, '%s', %s)",
+            rsc_family2str(log->device.family), device_name,
+            medium_name, device_library, log->error_number,
+            operation_type2str(log->cause), escaped_message
         );
 
+free_info:
         free(message);
-        free(escape_string);
+        free_dss_char4sql(escaped_message);
+        free_dss_char4sql(device_name);
+        free_dss_char4sql(medium_name);
+        free_dss_char4sql(device_library);
+
+        if (rc)
+            return rc;
 
         if (i < item_cnt - 1)
             g_string_append(request, ", ");

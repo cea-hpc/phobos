@@ -217,6 +217,8 @@ out_free:
 static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
                               int64_t fields, GString *request)
 {
+    int rc = 0;
+
     (void) fields;
 
     g_string_append(
@@ -247,44 +249,64 @@ static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
                        medium->rsc.model);
 
         medium_name = dss_char4sql(conn, medium->rsc.id.name);
-        if (medium_name == NULL)
+        if (medium_name == NULL) {
+            rc = -EINVAL;
             goto free_info;
+        }
 
         library = dss_char4sql(conn, medium->rsc.id.library);
-        if (library == NULL)
+        if (library == NULL) {
+            rc = -EINVAL;
             goto free_info;
+        }
 
         fs_label = dss_char4sql(conn, medium->fs.label);
-        if (fs_label == NULL)
+        if (fs_label == NULL) {
+            rc = -EINVAL;
             goto free_info;
+        }
 
         model = dss_char4sql(conn, medium->rsc.model);
-        if (model == NULL)
+        if (model == NULL) {
+            rc = -EINVAL;
             goto free_info;
+        }
 
         tmp_stats = dss_media_stats_encode(medium->stats);
-        if (tmp_stats == NULL)
+        if (tmp_stats == NULL) {
+            rc = -EINVAL;
             goto free_info;
+        }
 
         stats = dss_char4sql(conn, tmp_stats);
-        if (stats == NULL)
+        if (stats == NULL) {
+            rc = -EINVAL;
             goto free_info;
+        }
 
         tmp_tags = dss_string_array_encode(&medium->tags);
-        if (tmp_tags == NULL)
+        if (tmp_tags == NULL) {
+            rc = -EINVAL;
             goto free_info;
+        }
 
         tags = dss_char4sql(conn, tmp_tags);
-        if (tags == NULL)
+        if (tags == NULL) {
+            rc = -EINVAL;
             goto free_info;
+        }
 
         tmp_groupings = dss_string_array_encode(&medium->groupings);
-        if (tmp_tags == NULL)
+        if (tmp_groupings == NULL) {
+            rc = -EINVAL;
             goto free_info;
+        }
 
         groupings = dss_char4sql(conn, tmp_groupings);
-        if (tags == NULL)
+        if (groupings == NULL) {
+            rc = -EINVAL;
             goto free_info;
+        }
 
         g_string_append_printf(
             sub_request,
@@ -316,12 +338,16 @@ free_info:
         free_dss_char4sql(library);
         free_dss_char4sql(fs_label);
         free_dss_char4sql(model);
-        free(stats);
-        free(tags);
-        free(groupings);
+        free_dss_char4sql(stats);
+        free_dss_char4sql(tags);
+        free_dss_char4sql(groupings);
         free(tmp_stats);
         free(tmp_tags);
         free(tmp_groupings);
+        g_string_free(sub_request, TRUE);
+
+        if (rc)
+            return rc;
     }
 
     g_string_append(request, ";");
@@ -496,6 +522,8 @@ static int media_update_query(PGconn *conn, void *src_med, void *dst_med,
                               int item_cnt, int64_t update_fields,
                               GString *request)
 {
+    int rc = 0;
+
     if (update_fields == 0)
         return -EINVAL;
 
@@ -504,7 +532,9 @@ static int media_update_query(PGconn *conn, void *src_med, void *dst_med,
         struct media_info *dst = ((struct media_info *) dst_med) + i;
         GString *sub_request = g_string_new(NULL);
         int64_t fields = update_fields;
-        int rc;
+        char *src_library = NULL;
+        char *medium_id = NULL;
+        char *library = NULL;
 
         g_string_append_printf(sub_request, "UPDATE media SET ");
 
@@ -525,21 +555,21 @@ static int media_update_query(PGconn *conn, void *src_med, void *dst_med,
             rc = append_label_update_request(conn, sub_request, dst,
                                              (fields ^= FS_LABEL) != 0);
             if (rc)
-                return rc;
+                goto free_sub_request;
         }
 
         if (TAGS & fields) {
             rc = append_tags_update_request(conn, sub_request, dst,
                                             (fields ^= TAGS) != 0);
             if (rc)
-                return rc;
+                goto free_sub_request;
         }
 
         if (GROUPINGS & fields) {
             rc = append_groupings_update_request(conn, sub_request, dst,
                                                  (fields ^= GROUPINGS) != 0);
             if (rc)
-                return rc;
+                goto free_sub_request;
         }
 
         if (PUT_ACCESS & fields)
@@ -560,26 +590,51 @@ static int media_update_query(PGconn *conn, void *src_med, void *dst_med,
                                   bool2sqlbool(dst->flags.delete),
                                   (fields ^= DELETE_ACCESS) != 0);
 
-        if (LIBRARY & fields)
-            append_update_request(sub_request,
-                                  "library = '%s'",
-                                  dst->rsc.id.library,
+        if (LIBRARY & fields) {
+            library = dss_char4sql(conn, dst->rsc.id.library);
+            if (library == NULL) {
+                rc = -EINVAL;
+                goto free_sub_request;
+            }
+
+            append_update_request(sub_request, "library = %s", library,
                                   (fields ^= LIBRARY) != 0);
+        }
 
         if (IS_STAT(fields)) {
             rc = append_stat_update_request(conn, sub_request, dst, false);
             if (rc)
-                return rc;
+                goto free_sub_request;
+        }
+
+        medium_id = dss_char4sql(conn, src->rsc.id.name);
+        if (medium_id == NULL) {
+            rc = -EINVAL;
+            goto free_sub_request;
+        }
+
+        src_library = dss_char4sql(conn, src->rsc.id.library);
+        if (src_library == NULL) {
+            rc = -EINVAL;
+            goto free_sub_request;
         }
 
         g_string_append_printf(sub_request,
-                               " WHERE family = '%s' AND id = '%s' AND "
-                               "library = '%s';",
+                               " WHERE family = '%s' AND id = %s AND "
+                               "library = %s;",
                                rsc_family2str(src->rsc.id.family),
-                               src->rsc.id.name, src->rsc.id.library);
+                               medium_id, src_library);
 
         g_string_append(request, sub_request->str);
+
+free_sub_request:
         g_string_free(sub_request, true);
+        free_dss_char4sql(medium_id);
+        free_dss_char4sql(src_library);
+        free_dss_char4sql(library);
+
+        if (rc)
+            return rc;
     }
 
     return 0;
@@ -612,16 +667,37 @@ static int media_select_query(GString **conditions, int n_conditions,
 static int media_delete_query(PGconn *conn, void *void_med, int item_cnt,
                               GString *request)
 {
-    (void) conn;
+    int rc = 0;
 
     for (int i = 0; i < item_cnt; ++i) {
         struct media_info *medium = ((struct media_info *) void_med) + i;
+        char *src_library = NULL;
+        char *medium_id = NULL;
+
+        medium_id = dss_char4sql(conn, medium->rsc.id.name);
+        if (medium_id == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        src_library = dss_char4sql(conn, medium->rsc.id.library);
+        if (src_library == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
 
         g_string_append_printf(request,
                                "DELETE FROM media WHERE family = '%s' AND "
-                               "id = '%s' AND library = '%s'; ",
+                               "id = %s AND library = %s; ",
                                rsc_family2str(medium->rsc.id.family),
-                               medium->rsc.id.name, medium->rsc.id.library);
+                               medium_id, src_library);
+
+free_info:
+        free_dss_char4sql(medium_id);
+        free_dss_char4sql(src_library);
+
+        if (rc)
+            return rc;
     }
 
     return 0;

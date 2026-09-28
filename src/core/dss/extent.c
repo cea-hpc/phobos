@@ -112,6 +112,8 @@ out_free:
 static int extent_insert_query(PGconn *conn, void *void_extent, int item_cnt,
                                int64_t fields, GString *request)
 {
+    int rc = 0;
+
     if (fields & INSERT_OBJECT)
         g_string_append(
             request,
@@ -129,49 +131,109 @@ static int extent_insert_query(PGconn *conn, void *void_extent, int item_cnt,
 
     for (int i = 0; i < item_cnt; ++i) {
         struct extent *extent = ((struct extent *) void_extent) + i;
-        GString *info;
-        char *hash;
+        char creation_time_str[PHO_TIMEVAL_MAX_LEN] = "";
+        char *creation_time = NULL;
+        char *medium_id = NULL;
+        char *hash_str = NULL;
+        char *info_str = NULL;
+        char *address = NULL;
+        char *library = NULL;
+        GString *info = NULL;
+        char *uuid = NULL;
+        char *hash = NULL;
 
         info = g_string_new("");
         pho_attrs_to_json(&extent->info, info, JSON_COMPACT);
 
         hash = dss_extent_hash_encode(extent);
         if (hash == NULL) {
-            g_string_free(info, TRUE);
-            return -EINVAL;
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        uuid = dss_char4sql(conn, extent->uuid);
+        if (uuid == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        medium_id = dss_char4sql(conn, extent->media.name);
+        if (medium_id == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        library = dss_char4sql(conn, extent->media.library);
+        if (library == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        address = dss_char4sql(conn, extent->address.buff);
+        if (address == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        hash_str = dss_char4sql(conn, hash);
+        if (hash_str == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        info_str = dss_char4sql(conn, info->str);
+        if (info_str == NULL) {
+            rc = -EINVAL;
+            goto free_info;
         }
 
         if (fields & INSERT_OBJECT) {
             g_string_append_printf(request,
-                                   "('%s', '%s', %ld, %ld, '%s', '%s', '%s', "
-                                   "'%s', '%s', '%s')",
-                                   extent->uuid,
+                                   "(%s, '%s', %ld, %ld, '%s', %s, %s, "
+                                   "%s, %s, %s)",
+                                   uuid,
                                    extent_state2str(extent->state),
                                    extent->size, extent->offset,
                                    rsc_family2str(extent->media.family),
-                                   extent->media.name, extent->media.library,
-                                   extent->address.buff, hash, info->str);
+                                   medium_id, library,
+                                   address, hash_str, info_str);
         } else {
-            char creation_time_str[PHO_TIMEVAL_MAX_LEN] = "";
-
             timeval2str(&extent->creation_time, creation_time_str);
+
+            creation_time = dss_char4sql(conn, creation_time_str);
+            if (creation_time == NULL) {
+                rc = -EINVAL;
+                goto free_info;
+            }
+
             g_string_append_printf(request,
-                                   "('%s', '%s', %ld, %ld, '%s', '%s', '%s', "
-                                   "'%s', '%s', '%s', '%s')",
-                                   extent->uuid,
+                                   "(%s, '%s', %ld, %ld, '%s', %s, %s, "
+                                   "%s, %s, %s, %s)",
+                                   uuid,
                                    extent_state2str(extent->state),
                                    extent->size, extent->offset,
                                    rsc_family2str(extent->media.family),
-                                   extent->media.name, extent->media.library,
-                                   extent->address.buff, hash, info->str,
-                                   creation_time_str);
+                                   medium_id, library,
+                                   address, hash_str, info_str,
+                                   creation_time);
         }
 
         if (i < item_cnt - 1)
             g_string_append(request, ", ");
 
-        g_string_free(info, TRUE);
+free_info:
+        free_dss_char4sql(creation_time);
+        free_dss_char4sql(medium_id);
+        free_dss_char4sql(hash_str);
+        free_dss_char4sql(info_str);
+        free_dss_char4sql(address);
+        free_dss_char4sql(library);
+        free_dss_char4sql(uuid);
         free(hash);
+        g_string_free(info, TRUE);
+
+        if (rc)
+            return rc;
     }
 
     g_string_append(request, ";");
@@ -182,25 +244,63 @@ static int extent_insert_query(PGconn *conn, void *void_extent, int item_cnt,
 static int extent_update_query(PGconn *conn, void *src_extent, void *dst_extent,
                                int item_cnt, int64_t fields, GString *request)
 {
+    int rc = 0;
+
     (void) fields;
-    (void) conn;
 
     for (int i = 0; i < item_cnt; ++i) {
         struct extent *src = ((struct extent *) src_extent) + i;
         struct extent *dst = ((struct extent *) dst_extent) + i;
+        char *medium_id = NULL;
+        char *src_uuid = NULL;
+        char *address = NULL;
+        char *library = NULL;
+
+        medium_id = dss_char4sql(conn, dst->media.name);
+        if (medium_id == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        library = dss_char4sql(conn, dst->media.library);
+        if (library == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        address = dss_char4sql(conn, dst->address.buff);
+        if (address == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        src_uuid = dss_char4sql(conn, src->uuid);
+        if (src_uuid == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
 
         g_string_append_printf(
             request,
             "UPDATE extent SET state = '%s', medium_family = '%s', "
-            "medium_id = '%s', medium_library = '%s', address = '%s' "
-            "WHERE extent_uuid = '%s';",
+            "medium_id = %s, medium_library = %s, address = %s "
+            "WHERE extent_uuid = %s;",
             extent_state2str(dst->state),
             rsc_family2str(dst->media.family),
-            dst->media.name,
-            dst->media.library,
-            dst->address.buff,
-            src->uuid
+            medium_id,
+            library,
+            address,
+            src_uuid
         );
+
+free_info:
+        free_dss_char4sql(src_uuid);
+        free_dss_char4sql(address);
+        free_dss_char4sql(library);
+        free_dss_char4sql(medium_id);
+
+        if (rc)
+            return rc;
     }
 
     return 0;
@@ -229,14 +329,26 @@ static int extent_select_query(GString **conditions, int n_conditions,
 static int extent_delete_query(PGconn *conn, void *void_extent, int item_cnt,
                                GString *request)
 {
-    (void) conn;
+    int rc = 0;
 
     for (int i = 0; i < item_cnt; ++i) {
         struct extent *extent = ((struct extent *) void_extent) + i;
+        char *uuid = dss_char4sql(conn, extent->uuid);
+
+        if (uuid == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
 
         g_string_append_printf(request,
-                               "DELETE FROM extent WHERE extent_uuid = '%s';",
-                               extent->uuid);
+                               "DELETE FROM extent WHERE extent_uuid = %s;",
+                               uuid);
+
+free_info:
+        free_dss_char4sql(uuid);
+
+        if (rc)
+            return rc;
     }
 
     return 0;

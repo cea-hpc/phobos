@@ -38,6 +38,20 @@ static struct extent EXT = {
     .media.name = "/mnt/source",
     .media.library = "legacy",
     .address.buff = "blablabla",
+    .uuid = "uuid1",
+    .with_xxh128 = false,
+    .with_md5 = false,
+    .creation_time.tv_sec = 0,
+    .creation_time.tv_usec = 0,
+};
+
+static struct extent EXT_QUOTE = {
+    .state = PHO_EXT_ST_PENDING,
+    .media.family = PHO_RSC_DIR,
+    .media.name = "/mnt/d'essai",
+    .media.library = "l'ib",
+    .address.buff = "addr'essai",
+    .uuid = "uuid'essai",
     .with_xxh128 = false,
     .with_md5 = false,
     .creation_time.tv_sec = 0,
@@ -51,6 +65,19 @@ static int de_simple_setup(void **state)
 
     /* insert the extent */
     rc = dss_extent_insert(handle, &EXT, 1, DSS_SET_INSERT);
+    if (rc)
+        return -1;
+
+    return 0;
+}
+
+static int de_quote_setup(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    int rc;
+
+    /* insert the extent with quote chars in its fields */
+    rc = dss_extent_insert(handle, &EXT_QUOTE, 1, DSS_SET_INSERT);
     if (rc)
         return -1;
 
@@ -102,10 +129,50 @@ static void de_simple_ok(void **state)
     dss_res_free(ext_res, ext_cnt);
 }
 
+static void de_quote_chars(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    struct dss_filter filter;
+    struct extent *ext_res;
+    int ext_cnt;
+    int rc;
+
+    /* retrieve the extent through a filter on its quoted medium id */
+    rc = dss_filter_build(&filter, "{\"DSS::EXT::medium_id\": \"%s\"}",
+                          EXT_QUOTE.media.name);
+    assert_return_code(rc, -rc);
+    rc = dss_extent_get(handle, &filter, &ext_res, &ext_cnt, NULL);
+    assert_return_code(rc, -rc);
+    assert_int_equal(ext_cnt, 1);
+    assert_memory_equal(ext_res->uuid, EXT_QUOTE.uuid,
+                        strlen(EXT_QUOTE.uuid) + 1);
+    assert_memory_equal(ext_res->media.name, EXT_QUOTE.media.name,
+                        strlen(EXT_QUOTE.media.name) + 1);
+    assert_memory_equal(ext_res->media.library, EXT_QUOTE.media.library,
+                        strlen(EXT_QUOTE.media.library) + 1);
+    assert_memory_equal(ext_res->address.buff, EXT_QUOTE.address.buff,
+                        strlen(EXT_QUOTE.address.buff) + 1);
+
+    /* update the extent state through its quoted uuid */
+    ext_res->state = PHO_EXT_ST_SYNC;
+    rc = dss_extent_update(handle, ext_res, ext_res, ext_cnt);
+    assert_return_code(rc, -rc);
+    dss_res_free(ext_res, ext_cnt);
+
+    /* check the update went through */
+    rc = dss_extent_get(handle, &filter, &ext_res, &ext_cnt, NULL);
+    dss_filter_free(&filter);
+    assert_return_code(rc, -rc);
+    assert_int_equal(ext_cnt, 1);
+    assert_int_equal(ext_res->state, PHO_EXT_ST_SYNC);
+    dss_res_free(ext_res, ext_cnt);
+}
+
 int main(void)
 {
     const struct CMUnitTest dss_extent_cases[] = {
         cmocka_unit_test_setup_teardown(de_simple_ok, de_simple_setup, NULL),
+        cmocka_unit_test_setup_teardown(de_quote_chars, de_quote_setup, NULL),
     };
 
     pho_context_init();

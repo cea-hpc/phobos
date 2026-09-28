@@ -169,7 +169,7 @@ static void append_escaped_to_id(PGconn *conn, const char *string, GString *id)
     escape_len = strlen(string) * 2 + 1;
     escape_string = xmalloc(escape_len);
 
-    PQescapeStringConn(conn, escape_string, string, escape_len, NULL);
+    PQescapeStringConn(conn, escape_string, string, strlen(string), NULL);
     g_string_append(id, escape_string);
     free(escape_string);
 }
@@ -675,9 +675,18 @@ int dss_lock_media_clean(struct dss_handle *handle,
         g_string_append(ids, "''");
     } else {
         for (i = 0; i < media_cnt; ++i) {
-            g_string_append_printf(ids, "'%s'", media[i].rsc.id.name);
+            char *medium_id = dss_char4sql(conn, media[i].rsc.id.name);
+
+            if (medium_id == NULL) {
+                rc = -EINVAL;
+                goto free_ids;
+            }
+
+            g_string_append(ids, medium_id);
             if (i + 1 < media_cnt)
                 g_string_append(ids, ", ");
+
+            free_dss_char4sql(medium_id);
         }
     }
 
@@ -686,6 +695,8 @@ int dss_lock_media_clean(struct dss_handle *handle,
     rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
 
     PQclear(res);
+
+free_ids:
     g_string_free(request, true);
     g_string_free(ids, true);
 
@@ -698,6 +709,7 @@ int dss_lock_clean_select(struct dss_handle *handle,
 {
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
+    char *escaped_hostname = NULL;
     bool and_clause = false;
     PGresult *res;
     int rc = 0;
@@ -705,13 +717,30 @@ int dss_lock_clean_select(struct dss_handle *handle,
 
     ENTRY;
 
+    if (lock_hostname) {
+        escaped_hostname = dss_char4sql(conn, lock_hostname);
+        if (escaped_hostname == NULL) {
+            rc = -EINVAL;
+            goto free_str;
+        }
+    }
+
     g_string_printf(request, "DELETE FROM lock WHERE ");
 
     if (n_ids > 0) {
         g_string_append_printf(request, "(");
-        for (i = 0; i < n_ids - 1; ++i)
-            g_string_append_printf(request, "id = '%s' OR ", lock_ids[i]);
-        g_string_append_printf(request, " id = '%s')", lock_ids[n_ids - 1]);
+        for (i = 0; i < n_ids; ++i) {
+            char *lock_id = dss_char4sql(conn, lock_ids[i]);
+
+            if (lock_id == NULL) {
+                rc = -EINVAL;
+                goto free_str;
+            }
+
+            g_string_append_printf(request, "id = %s%s", lock_id,
+                                   i + 1 < n_ids ? " OR " : ")");
+            free_dss_char4sql(lock_id);
+        }
         and_clause = true;
     }
 
@@ -736,7 +765,7 @@ int dss_lock_clean_select(struct dss_handle *handle,
         if (and_clause)
             g_string_append_printf(request, " AND ");
 
-        g_string_append_printf(request, " hostname = '%s' ", lock_hostname);
+        g_string_append_printf(request, " hostname = %s ", escaped_hostname);
     }
 
     g_string_append_printf(request, " RETURNING *;");
@@ -745,6 +774,9 @@ int dss_lock_clean_select(struct dss_handle *handle,
     pho_info("%d lock(s) cleaned.", PQntuples(res));
 
     PQclear(res);
+
+free_str:
+    free_dss_char4sql(escaped_hostname);
     g_string_free(request, true);
 
     return rc;

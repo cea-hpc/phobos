@@ -99,21 +99,44 @@ static struct dss_field FIELDS[] = {
 static int copy_update_query(PGconn *conn, void *src_copy, void *dst_copy,
                              int item_cnt, int64_t fields, GString *request)
 {
+    int rc = 0;
+
     for (int i = 0; i < item_cnt; ++i) {
         struct copy_info *src = ((struct copy_info *) src_copy) + i;
         struct copy_info *dst = ((struct copy_info *) dst_copy) + i;
         GString *sub_request = g_string_new(NULL);
+        char *object_uuid = NULL;
+        char *copy_name = NULL;
 
         g_string_append(sub_request, " UPDATE copy SET ");
 
         update_fields(conn, dst, fields, FIELDS, 2, sub_request);
 
+        object_uuid = dss_char4sql(conn, src->object_uuid);
+        if (object_uuid == NULL) {
+            rc = -EINVAL;
+            goto free_sub_request;
+        }
+
+        copy_name = dss_char4sql(conn, src->copy_name);
+        if (copy_name == NULL) {
+            rc = -EINVAL;
+            goto free_sub_request;
+        }
+
         g_string_append_printf(sub_request,
-                               " WHERE object_uuid = '%s' AND version = '%d'"
-                               " AND copy_name = '%s';", src->object_uuid,
-                               src->version, src->copy_name);
+                               " WHERE object_uuid = %s AND version = '%d'"
+                               " AND copy_name = %s;", object_uuid,
+                               src->version, copy_name);
         g_string_append(request, sub_request->str);
+
+free_sub_request:
         g_string_free(sub_request, true);
+        free_dss_char4sql(object_uuid);
+        free_dss_char4sql(copy_name);
+
+        if (rc)
+            return rc;
     }
 
     return 0;
@@ -140,16 +163,36 @@ static int copy_select_query(GString **conditions, int n_conditions,
 static int copy_delete_query(PGconn *conn, void *void_copy, int item_cnt,
                              GString *request)
 {
-    (void) conn;
+    int rc = 0;
 
     for (int i = 0; i < item_cnt; ++i) {
         struct copy_info *copy = ((struct copy_info *) void_copy) + i;
+        char *object_uuid = NULL;
+        char *copy_name = NULL;
+
+        object_uuid = dss_char4sql(conn, copy->object_uuid);
+        if (object_uuid == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        copy_name = dss_char4sql(conn, copy->copy_name);
+        if (copy_name == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
 
         g_string_append_printf(request,
-                               "DELETE FROM copy WHERE object_uuid = '%s'"
-                               " AND version = '%d' AND copy_name = '%s';",
-                               copy->object_uuid, copy->version,
-                               copy->copy_name);
+                               "DELETE FROM copy WHERE object_uuid = %s"
+                               " AND version = '%d' AND copy_name = %s;",
+                               object_uuid, copy->version, copy_name);
+
+free_info:
+        free_dss_char4sql(object_uuid);
+        free_dss_char4sql(copy_name);
+
+        if (rc)
+            return rc;
     }
 
     return 0;
