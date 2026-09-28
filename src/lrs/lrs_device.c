@@ -316,7 +316,7 @@ static void lrs_dev_info_clean(struct lrs_dev *dev)
  * thread dies before reaching a terminal state, and the device could not be
  * re-added until the daemon is restarted.
  */
-static void dev_sync_lock_info(struct lrs_sched *sched, struct lrs_dev *dev)
+static void dev_get_lock_info(struct lrs_sched *sched, struct lrs_dev *dev)
 {
     const struct pho_id *dev_id = lrs_dev_id(dev);
     int rc;
@@ -384,7 +384,7 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
     if (rc)
         lrs_dev_hdl_del(handle, handle->ldh_devices->len - 1, rc, sched);
     else
-        dev_sync_lock_info(sched, dev);
+        dev_get_lock_info(sched, dev);
 
 free_list:
     dss_res_free(dev_list, dev_count);
@@ -527,9 +527,10 @@ int lrs_dev_hdl_load(struct lrs_sched *sched, struct lrs_dev_hdl *handle)
         if (rc2) {
             lrs_dev_hdl_del(handle, handle->ldh_devices->len - 1, rc2, sched);
             rc = rc ? : rc2;
-        } else {
-            dev_sync_lock_info(sched, dev);
+            continue;
         }
+
+        dev_get_lock_info(sched, dev);
     }
 
     if (handle->ldh_devices->len == 0)
@@ -2310,9 +2311,9 @@ static void fail_release_device(struct lrs_dev *dev)
  */
 static void dev_cleanup_on_error(struct lrs_dev *device)
 {
-    if (device->ld_dss_media_info) {
-        int rc;
+    int rc;
 
+    if (device->ld_dss_media_info) {
         if (device->ld_dss_media_info->lock.hostname) {
             rc = dss_medium_release(&device->ld_device_thread.dss,
                                     device->ld_dss_media_info);
@@ -2347,17 +2348,14 @@ static void dev_cleanup_on_error(struct lrs_dev *device)
          * than FAILED). Release the DSS device lock so the device can be
          * retried without leaking a strong lock row.
          */
-        int rc = dss_device_release(&device->ld_device_thread.dss,
-                                    device->ld_dss_dev_info);
-
+        rc = dss_device_release(&device->ld_device_thread.dss,
+                                device->ld_dss_dev_info);
         if (rc) {
             const struct pho_id *dev_id = lrs_dev_id(device);
 
             pho_error(rc,
-                      "unable to release DSS lock of device (family '%s', "
-                      "name '%s', library '%s') during error cleanup",
-                      rsc_family2str(dev_id->family), dev_id->name,
-                      dev_id->library);
+                      "unable to release DSS lock of device " FMT_PHO_ID
+                      " during error cleanup", PHO_ID(*dev_id));
         }
     }
 }

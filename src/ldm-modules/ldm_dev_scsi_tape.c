@@ -101,7 +101,7 @@ struct drive_map_entry {
 
 /**
  * List of available drives.
- * Access is serialized by phobos_context()->ldm_dev_scsi_tape_mutex.
+ * Protected by phobos_context()->ldm_dev_scsi_tape_lock.
  */
 static struct slist_entry *drive_cache;
 
@@ -163,8 +163,8 @@ out_close:
  *                   /sys/class/<class_name>, e.g. "st0" or "sg3".
  * @param attrname   Path of a page80 pseudo-file in sysclass (e.g. vpd_pg80),
  *                   relative to /sys/class/<class_name>/<dev_name>.
- * @param info       Output string.
- * @param info_size  Max size of the output string.
+ * @param info       Output string, NUL-terminated on success.
+ * @param info_size  Size of the output buffer, including the NUL terminator.
  *
  * @return 0 on success, -errno on error.
  */
@@ -211,8 +211,12 @@ static int read_page80_serial(const char *class_name, const char *dev_name,
     }
 
     nread = read(fd, buffer, BUFF_SIZE);
-    if (nread <= 0)
+    if (nread < 0)
         LOG_GOTO(out_close, rc = -errno, "Cannot read %s in '%s'", attrname,
+                 spath);
+
+    if (nread < SCSI_PAGE80_HEADER_SIZE)
+        LOG_GOTO(out_close, rc = -EINTR, "Incomplete page header in '%s'",
                  spath);
 
     if (buffer[1] != (char)0x80)
@@ -220,7 +224,7 @@ static int read_page80_serial(const char *class_name, const char *dev_name,
         LOG_GOTO(out_close, rc = -EINVAL, "Invalid page code %#hhx != 0x80",
                  buffer[1]);
 
-    len = buffer[3];
+    len = (unsigned char)buffer[3];
 
     /* Make sure we read all the serial number.
      * Short read is not expected in that case.
@@ -233,11 +237,12 @@ static int read_page80_serial(const char *class_name, const char *dev_name,
     for (i = 0; i < len && buffer[i+SCSI_PAGE80_HEADER_SIZE] == '\0'; i++)
         ;
 
-    if (info_size < len - i)
+    if (info_size < (size_t)(len - i) + 1)
         LOG_GOTO(out_close, rc = -ENOBUFS, "Target buffer too small");
 
     /* copy the serial number */
     memcpy(info, buffer + SCSI_PAGE80_HEADER_SIZE + i, len - i);
+    info[len - i] = '\0';
 
     pho_debug("Device '%s': %s='%s'", dev_name, attrname, info);
 
@@ -272,16 +277,15 @@ out_close:
 static bool node_matches_serial(const char *class_name, const char *dev_name,
                                 const char *serial)
 {
-    char cur_serial[MAX_SERIAL] = {0};
+    char cur_serial[MAX_SERIAL];
     int rc;
 
-    /* -1: always keep room for the NUL terminator of the parsed serial */
     rc = read_page80_serial(class_name, dev_name, SYS_DEV_PAGE80, cur_serial,
-                            sizeof(cur_serial) - 1);
+                            sizeof(cur_serial));
     if (rc) {
-        pho_debug("Cannot read VPD serial of '%s' under %s: %s; considering "
-                  "the cached entry as stale", dev_name, class_name,
-                  strerror(-rc));
+        pho_error(rc, "Cannot read VPD serial of '%s' under %s, "
+                  "considering the cached entry as stale", dev_name,
+                  class_name);
         return false;
     }
 
@@ -524,115 +528,112 @@ out_close:
 }
 
 /**
- * Returns the drive that matches the given name (st or sg name)
- * by searching in the drive cache.
+ * Copy information about a drive identified by serial or device path.
  *
- * The caller must hold phobos_context()->ldm_dev_scsi_tape_mutex.
+ * Readers share the cache lock. A missing or stale entry triggers one reload
+ * under the write lock, followed by the same path and serial checks. Copy the
+ * entry before unlocking so a concurrent reload cannot invalidate the result.
+ *
+ * @param id         Serial number if by_serial is true, device path otherwise.
+ * @param by_serial  Whether to search by serial instead of st/sg device name.
+ * @param info       Copy of the validated cache entry on success.
+ *
+ * @return 0 on success, -errno on failure.
  */
-static const struct drive_map_entry *scsi_tape_dev_info(const char *name)
+static int scsi_tape_dev_info(const char *id, bool by_serial,
+                              struct drive_map_entry *info)
 {
-    struct drive_map_entry *dme;
+    pthread_rwlock_t *lock = &phobos_context()->ldm_dev_scsi_tape_lock;
+    const struct drive_map_entry *dme;
+    const char *name = id;
+    bool refreshed = false;
+    char path[PATH_MAX];
+    int rc;
 
-    if (strlen(name) >= IFNAMSIZ) {
-        pho_error(-ENAMETOOLONG, "Device name '%s' > %d char long",
-                  name, IFNAMSIZ - 1);
-        return NULL;
+    if (!by_serial) {
+        name = strrchr(id, '/');
+        name = name ? name + 1 : id;
     }
 
-    if (drive_cache == NULL) {
-        pho_debug("No information available in cache: loading...");
-        scsi_tape_map_load();
+    if (strlen(name) >= (by_serial ? MAX_SERIAL : IFNAMSIZ))
+        LOG_RETURN(-ENAMETOOLONG, "Device identifier '%s' is too long", name);
+
+    rc = pthread_rwlock_rdlock(lock);
+    if (rc)
+        return -rc;
+
+retry:
+    if (by_serial) {
+        dme = list_find(drive_cache, name, match_serial);
+    } else {
+        dme = list_find(drive_cache, name, match_st);
+        if (!dme)
+            dme = list_find(drive_cache, name, match_sg);
     }
 
-    /* The user can specify either an "sg" or "st" device
-     * first try to match "st", then "sg".
-     */
-    dme = list_find(drive_cache, name, match_st);
-    if (!dme)
-        dme = list_find(drive_cache, name, match_sg);
+    if (dme) {
+        const char *dev_name = by_serial ? dme->sg_devname : name;
+        const char *class_name = is_st_device(dev_name) ? DRIVER_NAME
+                                                       : SG_DRIVER_NAME;
+        const char *dev_path = id;
 
-    if (dme != NULL) {
-        pho_debug("Found device '%s': serial='%s', model='%s',",
-                  name, dme->serial, dme->model);
-        return dme;
+        if (by_serial) {
+            /* LTFS 2.4 needs the sg node. Its minor number is assigned
+             * independently of the st node, so verify the sg identity.
+             */
+            snprintf(path, sizeof(path), "/dev/%s", dev_name);
+            dev_path = path;
+        }
+
+        if (access(dev_path, F_OK) == 0 &&
+            node_matches_serial(class_name, dev_name, dme->serial)) {
+            *info = *dme;
+            rc = 0;
+            goto out_unlock;
+        }
     }
 
-    pho_info("Device '%s' not found in scsi_tape device cache", name);
-    return NULL;
+    if (refreshed) {
+        rc = -ENOENT;
+        goto out_unlock;
+    }
+
+    pthread_rwlock_unlock(lock);
+    rc = pthread_rwlock_wrlock(lock);
+    if (rc)
+        return -rc;
+
+    pho_debug("Device '%s' missing or stale in cache: reloading...", id);
+    rc = scsi_tape_map_load();
+    if (rc)
+        goto out_unlock;
+
+    refreshed = true;
+    goto retry;
+
+out_unlock:
+    pthread_rwlock_unlock(lock);
+    return rc;
 }
 
-/**
- * Returns the drive that matches the given serial number by searching
- * in the drive cache.
- *
- * If the serial is not found, or the cached sg node no longer exists or no
- * longer belongs to the requested drive (e.g. after a drive re-enumeration
- * following a firmware flash or a SCSI rescan, where the freed minor
- * numbers can be reused by another drive), the cache is refreshed once and
- * the lookup is retried. This makes the mapping self-healing without
- * requiring a daemon restart.
- */
+/** Return the sg device path of the drive with the given serial number. */
 static int scsi_tape_dev_lookup(const char *serial, char *path,
                                 size_t path_size)
 {
-    pthread_mutex_t *mutex = &phobos_context()->ldm_dev_scsi_tape_mutex;
-    struct drive_map_entry *dme;
-    bool refreshed = false;
+    struct drive_map_entry info;
+    int rc;
 
     ENTRY;
 
-    if (strlen(serial) >= MAX_SERIAL)
-        LOG_RETURN(-ENAMETOOLONG, "Device name '%s' > %d char long",
-                   serial, MAX_SERIAL - 1);
+    rc = scsi_tape_dev_info(serial, true, &info);
+    if (rc)
+        return rc;
 
-    MUTEX_LOCK(mutex);
+    rc = snprintf(path, path_size, "/dev/%s", info.sg_devname);
+    if (rc >= path_size)
+        LOG_RETURN(-ENOBUFS, "Target buffer too small for device path");
 
-    if (drive_cache == NULL) {
-        pho_debug("No information available in cache: loading...");
-        scsi_tape_map_load();
-    }
-
-retry:
-    dme = list_find(drive_cache, serial, match_serial);
-    if (dme != NULL) {
-        /* LTFS 2.4 needs path to sg device */
-        snprintf(path, path_size, "/dev/%s", dme->sg_devname);
-
-        /* The cached sg node may be stale after a re-enumeration: it may
-         * have disappeared or, worse, have been reused by another drive
-         * that took the freed minor number. Its mere existence does not
-         * prove that it still belongs to the requested drive: also verify
-         * the identity of the device behind the node through its VPD unit
-         * serial (page 0x80).
-         *
-         * The identity check is done on the sg side on purpose: st and sg
-         * minor numbers are assigned independently, so the st node of the
-         * cache entry could still be valid while the sg node we are about
-         * to return already belongs to another device.
-         */
-        if (access(path, F_OK) == 0
-            && node_matches_serial(SG_DRIVER_NAME, dme->sg_devname, serial)) {
-            pho_debug("Found device ST=/dev/%s SG=/dev/%s matching serial "
-                      "'%s'", dme->st_devname, dme->sg_devname, serial);
-            MUTEX_UNLOCK(mutex);
-            return 0;
-        }
-
-        pho_debug("Cached sg node '%s' for serial '%s' is gone or was "
-                  "reassigned to another drive: refreshing...",
-                  dme->sg_devname, serial);
-    } else {
-        pho_debug("Serial '%s' not found in cache: refreshing...", serial);
-    }
-
-    if (!refreshed) {
-        refreshed = true;
-        scsi_tape_map_load();
-        goto retry;
-    }
-
-    MUTEX_UNLOCK(mutex);
-    return -ENOENT;
+    return 0;
 }
 
 /**
@@ -641,58 +642,17 @@ retry:
  */
 static int scsi_tape_dev_query(const char *dev_path, struct ldm_dev_state *lds)
 {
-    const struct drive_map_entry    *dme;
-    const char                      *dev_short;
-    pthread_mutex_t *mutex = &phobos_context()->ldm_dev_scsi_tape_mutex;
+    struct drive_map_entry info;
+    int rc;
+
     ENTRY;
 
-    /* Make sure the device exists before we do any string manipulation
-     * on its path. */
     if (access(dev_path, F_OK))
         LOG_RETURN(-errno, "Cannot access '%s'", dev_path);
 
-    /* extract basename(device)*/
-    dev_short = strrchr(dev_path, '/');
-    if (dev_short == NULL)
-        dev_short = dev_path;
-    else
-        dev_short++;
-
-    /* get serial and model from driver mapping */
-    MUTEX_LOCK(mutex);
-    dme = scsi_tape_dev_info(dev_short);
-    if (dme != NULL) {
-        /* The cache entry may be stale after a re-enumeration: the queried
-         * node may have been reused by another drive. Returning the cached
-         * serial would silently bypass the check_dev_info() safety net of
-         * the caller, which compares the serial returned here with the one
-         * from the DSS: both would come from the same stale entry and the
-         * comparison would wrongly pass. Verify the identity of the device
-         * behind the queried node through its VPD unit serial before
-         * trusting the entry.
-         */
-        /* st and sg nodes live under different sysfs classes */
-        const char *class_name = is_st_device(dev_short) ? DRIVER_NAME
-                                                         : SG_DRIVER_NAME;
-
-        if (!node_matches_serial(class_name, dev_short, dme->serial)) {
-            pho_debug("Node '%s' no longer matches its cached serial '%s': "
-                      "refreshing...", dev_short, dme->serial);
-            scsi_tape_map_load();
-            dme = scsi_tape_dev_info(dev_short);
-        }
-    } else {
-        /* The device may have been re-enumerated since the cache was loaded:
-         * refresh it once and retry before giving up.
-         */
-        pho_debug("Device '%s' not found in cache: refreshing...", dev_short);
-        scsi_tape_map_load();
-        dme = scsi_tape_dev_info(dev_short);
-    }
-    if (!dme) {
-        MUTEX_UNLOCK(mutex);
-        return -ENOENT;
-    }
+    rc = scsi_tape_dev_info(dev_path, false, &info);
+    if (rc)
+        return rc;
 
     /* Free any preexisting serial and model */
     free(lds->lds_serial);
@@ -700,10 +660,9 @@ static int scsi_tape_dev_query(const char *dev_path, struct ldm_dev_state *lds)
 
     memset(lds, 0, sizeof(*lds));
     lds->lds_family = PHO_RSC_TAPE;
-    lds->lds_model = xstrdup(dme->model);
-    lds->lds_serial = xstrdup(dme->serial);
+    lds->lds_model = xstrdup(info.model);
+    lds->lds_serial = xstrdup(info.serial);
 
-    MUTEX_UNLOCK(mutex);
     return 0;
 }
 
@@ -725,7 +684,7 @@ int pho_module_register(void *module, void *context)
     self->desc = DEV_ADAPTER_SCSI_TAPE_MODULE_DESC;
     self->ops = &DEV_ADAPTER_SCSI_TAPE_OPS;
 
-    pthread_mutex_init(&phobos_context()->ldm_dev_scsi_tape_mutex, NULL);
+    pthread_rwlock_init(&phobos_context()->ldm_dev_scsi_tape_lock, NULL);
 
     return 0;
 }

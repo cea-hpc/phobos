@@ -87,7 +87,6 @@ function test_drive_rescan
     local serial
     local src_file="$DIR_TEST_IN/src_file"
     local rc
-    local tries=0
 
     # Remember which SCSI host the drive is attached to, to rescan it once
     # the drive has been re-enumerated.
@@ -109,15 +108,7 @@ function test_drive_rescan
     # device (umount, DSS lock release): wait for the cleanup to complete
     # before re-enumerating the drive, so the umount does not fail on the
     # device disappearing under it.
-    $phobos drive lock "$serial"
-
-    while [[ "$($phobos drive list -o lock_hostname "$drive")" != "None" ]]; do
-        tries=$((tries + 1))
-        if (( tries > 30 )); then
-            error "phobosd did not release the device lock after drive lock"
-        fi
-        sleep 1
-    done
+    $phobos drive lock --wait "$serial"
 
     # Re-enumerate the drive: its st and sg device nodes disappear, as after
     # a firmware flash that requires a rescan.
@@ -135,6 +126,10 @@ function test_drive_rescan
     if (( rc == 0 )); then
         error "unlock unexpectedly succeeded while the drive is absent"
     fi
+
+    # Check the DSS lock was released even though the unlock failed.
+    [[ "$($phobos drive list -o lock_hostname "$serial")" == "None" ]] ||
+        error "DSS device lock for '$serial' leaked after failed drive unlock"
 
     # The drive comes back with the rescan, under the same or a new name.
     echo "- - -" > "$sysfs_host/scan"

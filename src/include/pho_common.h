@@ -654,8 +654,8 @@ struct phobos_global_context {
     bool log_dev_output;
     /** Mutex to serialize library SCSI requests */
     pthread_mutex_t ldm_lib_scsi_mutex;
-    /** Mutex to serialize SCSI tape device cache access */
-    pthread_mutex_t ldm_dev_scsi_tape_mutex;
+    /** Read/write lock protecting the SCSI tape device cache */
+    pthread_rwlock_t ldm_dev_scsi_tape_lock;
     /** Media cache used by the LRS to share the media between threads and avoid
      * too many DSS requests.
      */

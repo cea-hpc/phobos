@@ -245,8 +245,10 @@ static int sysfs_find_st_by_serial(const char *serial, char *st_name,
             continue;
 
         if (sysfs_read_st_serial(ent->d_name, cur_serial,
-                                 sizeof(cur_serial)) == 0
-            && strcmp(cur_serial, serial) == 0) {
+                                 sizeof(cur_serial)) != 0)
+            continue;
+
+        if (strcmp(cur_serial, serial) == 0) {
             name_len = strlen(ent->d_name);
 
             /* ensure final '\0' fits in the target buffer, as done in
@@ -270,6 +272,8 @@ static int sysfs_find_st_by_serial(const char *serial, char *st_name,
 /** Write a string to a sysfs attribute (device deletion, host rescan...). */
 static int sysfs_write(const char *path, const char *data)
 {
+    size_t len = strlen(data);
+    ssize_t nwritten;
     int fd;
     int rc = 0;
 
@@ -277,8 +281,11 @@ static int sysfs_write(const char *path, const char *data)
     if (fd < 0)
         return -errno;
 
-    if (write(fd, data, strlen(data)) != (ssize_t)strlen(data))
+    nwritten = write(fd, data, len);
+    if (nwritten < 0)
         rc = -errno;
+    else if ((size_t)nwritten != len)
+        rc = -EIO;
 
     close(fd);
     return rc;
@@ -417,9 +424,10 @@ static int wait_for_dev_node(const char *dev_path)
 /** Extract the sg index from an sg path, e.g. "/dev/sg5" -> 5, or -1. */
 static int sg_path_index(const char *sg_path)
 {
+    char suffix;
     int idx;
 
-    if (sscanf(sg_path, "/dev/sg%d", &idx) != 1)
+    if (sscanf(sg_path, "/dev/sg%d%c", &idx, &suffix) != 1)
         return -1;
 
     return idx;
