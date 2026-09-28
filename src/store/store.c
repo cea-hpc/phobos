@@ -646,7 +646,7 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
 
             rc = dss_object_insert(dss, &obj, 1, DSS_SET_INSERT);
             if (rc)
-                LOG_GOTO(out_filt, rc,
+                LOG_GOTO(out_unlock, rc,
                          "dss_object_insert failed for objid:'%s'",
                          xfer->xt_objid);
 
@@ -681,8 +681,9 @@ out_update:
         LOG_GOTO(out_unlock, rc, "dss_filter_build failed");
 
     rc = dss_object_get(dss, &filter, &obj_res, &obj_cnt, NULL);
+    dss_filter_free(&filter);
     if (rc)
-        LOG_GOTO(out_filt, rc, "Cannot fetch objid:'%s'", xfer->xt_objid);
+        LOG_GOTO(out_unlock, rc, "Cannot fetch objid:'%s'", xfer->xt_objid);
 
     copy.object_uuid = obj_res->uuid;
     copy.version = obj_res->version;
@@ -698,9 +699,6 @@ out_update:
 
 out_res:
     dss_res_free(obj_res, 1);
-
-out_filt:
-    dss_filter_free(&filter);
 
 out_unlock:
     rc2 = dss_unlock(dss, DSS_OBJECT, &obj, 1, false);

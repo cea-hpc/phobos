@@ -269,18 +269,34 @@ void dss_res_free(void *item_list, int item_cnt)
     free(item_list - sizeof(*ctn_bool));
 }
 
+/* Detect unbalanced dss filter lifecycle: each successful build must be
+ * matched by exactly one free, otherwise the tested code leaks or
+ * double-frees a filter.
+ */
+static int filter_build_count;
+static int filter_free_count;
+
 int dss_filter_build(struct dss_filter *filter, const char *fmt, ...)
 {
+    int rc = (int)mock();
+
     (void)filter, (void)fmt;
 
-    return (int)mock();
+    if (rc == 0)
+        filter_build_count++;
+
+    return rc;
 }
 
 void dss_filter_free(struct dss_filter *filter)
 {
     (void)filter;
 
-    return;
+    if (filter_free_count >= filter_build_count)
+        fail_msg("dss_filter_free called more often than successful "
+                 "dss_filter_build");
+
+    filter_free_count++;
 }
 
 /** Tests for object_md_save */
