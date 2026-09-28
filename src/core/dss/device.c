@@ -97,16 +97,14 @@ static inline const char *_get_library(void *dev)
 }
 
 static struct dss_field FIELDS[] = {
-    { DSS_DEVICE_UPDATE_ADM_STATUS, "adm_status = '%s'", _get_adm_status },
-    { DSS_DEVICE_UPDATE_HOST, "host = '%s'", _get_host },
-    { DSS_DEVICE_UPDATE_LIBRARY, "library = '%s'", _get_library },
+    { DSS_DEVICE_UPDATE_ADM_STATUS, "adm_status = %s", _get_adm_status },
+    { DSS_DEVICE_UPDATE_HOST, "host = %s", _get_host },
+    { DSS_DEVICE_UPDATE_LIBRARY, "library = %s", _get_library },
 };
 
 static int device_update_query(PGconn *conn, void *src_dev, void *dst_dev,
                                int item_cnt, int64_t fields, GString *request)
 {
-    (void) conn;
-
     for (int i = 0; i < item_cnt; ++i) {
         struct dev_info *src = ((struct dev_info *) src_dev) + i;
         struct dev_info *dst = ((struct dev_info *) dst_dev) + i;
@@ -114,7 +112,7 @@ static int device_update_query(PGconn *conn, void *src_dev, void *dst_dev,
 
         g_string_append(sub_request, "UPDATE device SET ");
 
-        update_fields(dst, fields, FIELDS, 3, sub_request);
+        update_fields(conn, dst, fields, FIELDS, 3, sub_request);
 
         g_string_append_printf(sub_request,
                                " WHERE family = '%s' AND id = '%s' AND "
@@ -158,8 +156,11 @@ static int device_select_query(GString **conditions, int n_conditions,
     return 0;
 }
 
-static int device_delete_query(void *void_dev, int item_cnt, GString *request)
+static int device_delete_query(PGconn *conn, void *void_dev, int item_cnt,
+                               GString *request)
 {
+    (void) conn;
+
     for (int i = 0; i < item_cnt; ++i) {
         struct dev_info *device = ((struct dev_info *) void_dev) + i;
 

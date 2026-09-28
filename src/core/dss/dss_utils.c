@@ -189,16 +189,18 @@ cleanup:
     return rc;
 }
 
-void update_fields(void *resource, int64_t fields_to_update,
+void update_fields(PGconn *conn, void *resource, int64_t fields_to_update,
                    struct dss_field *fields, int fields_count, GString *request)
 {
     for (int j = 0; j < fields_count; ++j) {
         struct dss_field *field = &fields[j];
 
         if (fields_to_update & field->byte_value) {
+            char *field_value = dss_char4sql(conn,
+                                             field->get_value(resource));
 
-            g_string_append_printf(request, field->query_value,
-                                   field->get_value(resource));
+            g_string_append_printf(request, field->query_value, field_value);
+            free_dss_char4sql(field_value);
             fields_to_update ^= field->byte_value;
             if (fields_to_update != 0)
                 g_string_append(request, ",");

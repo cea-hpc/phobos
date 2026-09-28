@@ -119,8 +119,8 @@ int get_select_query(enum dss_type type, GString **conditions, int n_conditions,
     return resource_ops->select_query(conditions, n_conditions, request, sort);
 }
 
-int get_delete_query(enum dss_type type, void *void_resource, int item_count,
-                     GString *request)
+int get_delete_query(enum dss_type type, PGconn *conn, void *void_resource,
+                     int item_count, GString *request)
 {
     const struct dss_resource_ops *resource_ops = get_resource_ops(type);
 
@@ -129,7 +129,8 @@ int get_delete_query(enum dss_type type, void *void_resource, int item_count,
 
     assert(resource_ops->delete_query != NULL);
 
-    return resource_ops->delete_query(void_resource, item_count, request);
+    return resource_ops->delete_query(conn, void_resource, item_count,
+                                      request);
 }
 
 int create_resource(enum dss_type type, struct dss_handle *handle,

@@ -43,6 +43,8 @@ static int deprecated_insert_query(PGconn *conn, void *void_deprecated,
                                    int item_cnt, int64_t fields,
                                    GString *request)
 {
+    int rc = 0;
+
     (void) fields;
 
     g_string_append(
@@ -54,6 +56,10 @@ static int deprecated_insert_query(PGconn *conn, void *void_deprecated,
     for (int i = 0; i < item_cnt; ++i) {
         struct object_info *object =
             ((struct object_info *) void_deprecated) + i;
+        char *grouping = NULL;
+        char *user_md = NULL;
+        char *uuid = NULL;
+        char *oid = NULL;
 
         if (object->uuid == NULL)
             LOG_RETURN(-EINVAL, "Object uuid cannot be NULL");
@@ -61,21 +67,45 @@ static int deprecated_insert_query(PGconn *conn, void *void_deprecated,
         if (object->version < 1)
             LOG_RETURN(-EINVAL, "Object version must be strictly positive");
 
-        if (object->grouping)
-            g_string_append_printf(request,
-                                   "('%s', '%s', %d, '%s', '%s', '%ld')",
-                                   object->oid, object->uuid,
-                                   object->version, object->user_md,
-                                   object->grouping, object->size);
-        else
-            g_string_append_printf(request,
-                                   "('%s', '%s', %d, '%s', NULL, '%ld')",
-                                   object->oid, object->uuid,
-                                   object->version, object->user_md,
-                                   object->size);
+        oid = dss_char4sql(conn, object->oid);
+        if (oid == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        uuid = dss_char4sql(conn, object->uuid);
+        if (uuid == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        user_md = dss_char4sql(conn, object->user_md);
+        if (user_md == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        grouping = dss_char4sql(conn, object->grouping);
+        if (grouping == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        g_string_append_printf(request, "(%s, %s, %d, %s, %s, '%ld')",
+                               oid, uuid, object->version, user_md,
+                               grouping, object->size);
 
         if (i < item_cnt - 1)
             g_string_append(request, ", ");
+
+free_info:
+        free_dss_char4sql(grouping);
+        free_dss_char4sql(user_md);
+        free_dss_char4sql(uuid);
+        free_dss_char4sql(oid);
+
+        if (rc)
+            return rc;
     }
 
     g_string_append(request, ";");
@@ -89,32 +119,45 @@ static inline const char *_get_user_md(void *object)
 }
 
 static struct dss_field FIELDS[] = {
-    { DSS_OBJECT_UPDATE_USER_MD, "user_md = '%s'", _get_user_md },
-    { DSS_OBJECT_UPDATE_OID, "oid = '%s'", get_oid },
+    { DSS_OBJECT_UPDATE_USER_MD, "user_md = %s", _get_user_md },
+    { DSS_OBJECT_UPDATE_OID, "oid = %s", get_oid },
 };
 
 static int deprecated_update_query(PGconn *conn, void *src_deprecated,
                                    void *dst_deprecated, int item_cnt,
                                    int64_t fields, GString *request)
 {
-    (void) conn;
+    int rc = 0;
 
     for (int i = 0; i < item_cnt; ++i) {
         struct object_info *src = ((struct object_info *) src_deprecated) + i;
         struct object_info *dst = ((struct object_info *) dst_deprecated) + i;
 
         GString *sub_request = g_string_new(NULL);
+        char *src_uuid = NULL;
 
         g_string_append(sub_request, "UPDATE deprecated_object SET ");
 
-        update_fields(dst, fields, FIELDS, 2, sub_request);
+        update_fields(conn, dst, fields, FIELDS, 2, sub_request);
+
+        src_uuid = dss_char4sql(conn, src->uuid);
+        if (src_uuid == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
 
         g_string_append_printf(sub_request,
-                               " WHERE object_uuid = '%s' AND version = %d;",
-                               src->uuid, src->version);
+                               " WHERE object_uuid = %s AND version = %d;",
+                               src_uuid, src->version);
 
         g_string_append(request, sub_request->str);
+
+free_info:
         g_string_free(sub_request, true);
+        free_dss_char4sql(src_uuid);
+
+        if (rc)
+            return rc;
     }
 
     return 0;
@@ -138,17 +181,31 @@ static int deprecated_select_query(GString **conditions, int n_conditions,
     return 0;
 }
 
-static int deprecated_delete_query(void *void_deprecated, int item_cnt,
-                                   GString *request)
+static int deprecated_delete_query(PGconn *conn, void *void_deprecated,
+                                   int item_cnt, GString *request)
 {
+    int rc = 0;
+
     for (int i = 0; i < item_cnt; ++i) {
         struct object_info *object =
             ((struct object_info *) void_deprecated) + i;
+        char *uuid = dss_char4sql(conn, object->uuid);
+
+        if (uuid == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
 
         g_string_append_printf(request,
                                "DELETE FROM deprecated_object"
-                               " WHERE object_uuid = '%s' AND version = '%d';",
-                               object->uuid, object->version);
+                               " WHERE object_uuid = %s AND version = '%d';",
+                               uuid, object->version);
+
+free_info:
+        free_dss_char4sql(uuid);
+
+        if (rc)
+            return rc;
     }
 
     return 0;

@@ -168,10 +168,31 @@ function test_getmd_no_id()
     $valg_phobos delete $oid || error "Delete operation failed"
 }
 
+function test_getmd_quote_chars()
+{
+    # the CLI metadata parser (shlex posix) requires quotes in the value
+    # to be backslash-escaped, but getmd prints them back unescaped
+    local md="path=/mnt/d\'essai/fichier"
+    local expected="path=/mnt/d'essai/fichier"
+    local oid="test_getmd_oid'with'quotes"
+
+    $phobos put --family dir --metadata "$md" /etc/hosts "$oid" ||
+        error "Put with quote chars in oid and metadata failed"
+
+    local output=$($valg_phobos getmd "$oid") ||
+        error "Getmd operation failed"
+    if [[ ! "$output" == "$expected" ]]; then
+        error "Metadata mismatch: expected '$expected', got '$output'"
+    fi
+
+    $valg_phobos delete "$oid" || error "Delete operation failed"
+}
+
 TESTS=("setup; \
         test_getmd; \
         test_getmd_version; \
         test_getmd_uuid; \
         test_getmd_no_id; \
+        test_getmd_quote_chars; \
         cleanup")
 

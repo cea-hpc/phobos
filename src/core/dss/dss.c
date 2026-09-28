@@ -314,7 +314,7 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
                               INSERT_FULL_OBJECT, request);
         break;
     case DSS_SET_DELETE:
-        rc = get_delete_query(type, item_list, item_cnt, request);
+        rc = get_delete_query(type, conn, item_list, item_cnt, request);
         break;
     default:
         LOG_GOTO(out_cleanup, rc = -ENOTSUP,

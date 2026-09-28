@@ -187,6 +187,69 @@ static void check_omg_fails_with_rc(struct test_state *state,
     clean_state_xfer(state);
 }
 
+static void check_obj_md(struct dss_handle *dss, const char *oid,
+                         const char *expected_user_md)
+{
+    struct object_info *objs = NULL;
+    struct dss_filter filter;
+    int obj_cnt = 0;
+    int rc;
+
+    rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}", oid);
+    assert_return_code(rc, -rc);
+
+    rc = dss_object_get(dss, &filter, &objs, &obj_cnt, NULL);
+    dss_filter_free(&filter);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(obj_cnt, 1);
+    assert_string_equal(objs[0].oid, oid);
+    assert_string_equal(objs[0].user_md, expected_user_md);
+
+    dss_res_free(objs, obj_cnt);
+}
+
+static void check_obj_md_gone(struct dss_handle *dss, const char *oid)
+{
+    struct object_info *objs = NULL;
+    struct dss_filter filter;
+    int obj_cnt = 0;
+    int rc;
+
+    rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}", oid);
+    assert_return_code(rc, -rc);
+
+    rc = dss_object_get(dss, &filter, &objs, &obj_cnt, NULL);
+    dss_filter_free(&filter);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(obj_cnt, 0);
+
+    dss_res_free(objs, obj_cnt);
+}
+
+static void check_deprecated_obj_md(struct dss_handle *dss, const char *oid,
+                                    const char *expected_user_md)
+{
+    struct object_info *objs = NULL;
+    struct dss_filter filter;
+    int obj_cnt = 0;
+    int rc;
+
+    rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}", oid);
+    assert_return_code(rc, -rc);
+
+    rc = dss_deprecated_object_get(dss, &filter, &objs, &obj_cnt, NULL);
+    dss_filter_free(&filter);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(obj_cnt, 1);
+    assert_string_equal(objs[0].oid, oid);
+    assert_string_equal(objs[0].user_md, expected_user_md);
+
+    dss_res_free(objs, obj_cnt);
+}
+
 /*
  * Table's State:
  *
@@ -245,12 +308,83 @@ static void omg_enoent(void **void_state)
     check_omg_fails_with_rc(state, NULL, "uuid-missing", 0, -ENOENT);
 }
 
+/*
+ * Object oids and user metadata may contain single quotes (e.g. the full
+ * path of a file archived by the HSM copytool). Check that they are stored
+ * and read back as-is through every object metadata write path.
+ */
+static void omg_quote_chars(void **void_state)
+{
+    struct test_state *state = (struct test_state *)*void_state;
+    char *quote_md = "{\"path\": \"/mnt/d'essai/fichier\"}";
+    struct object_info renamed = {0};
+    struct object_info obj = {0};
+    int rc;
+
+    /* insert of a new object, as done by a put without overwrite */
+    obj.oid = "oid'new";
+    obj.user_md = quote_md;
+
+    rc = dss_object_insert(state->dss, &obj, 1, DSS_SET_INSERT);
+    assert_return_code(rc, -rc);
+
+    check_obj_md(state->dss, "oid'new", quote_md);
+
+    /* update of the user metadata, as done by setmd */
+    obj.user_md = "{\"path\": \"/mnt/l'autre/fichier\"}";
+
+    rc = dss_object_update(state->dss, &obj, &obj, 1,
+                           DSS_OBJECT_UPDATE_USER_MD);
+    assert_return_code(rc, -rc);
+
+    check_obj_md(state->dss, "oid'new", obj.user_md);
+
+    /* full insert, as done by a put with overwrite */
+    obj.oid = "oid'full";
+    obj.uuid = "uuid'full";
+    obj.version = 1;
+    obj.user_md = quote_md;
+
+    rc = dss_object_insert(state->dss, &obj, 1, DSS_SET_FULL_INSERT);
+    assert_return_code(rc, -rc);
+
+    check_obj_md(state->dss, "oid'full", quote_md);
+
+    /* rename, as done by the object rename command */
+    renamed.oid = "oid'ren";
+    renamed.uuid = "uuid'full";
+
+    rc = dss_object_update(state->dss, &obj, &renamed, 1,
+                           DSS_OBJECT_UPDATE_OID);
+    assert_return_code(rc, -rc);
+
+    check_obj_md(state->dss, "oid'ren", quote_md);
+
+    /* delete of an object with a quoted oid */
+    rc = dss_object_delete(state->dss, &renamed, 1);
+    assert_return_code(rc, -rc);
+
+    check_obj_md_gone(state->dss, "oid'ren");
+
+    /* deprecated insert, as done by admin import */
+    obj.oid = "oid'dep";
+    obj.uuid = "uuid'dep";
+    obj.version = 1;
+    obj.user_md = quote_md;
+
+    rc = dss_deprecated_object_insert(state->dss, &obj, 1);
+    assert_return_code(rc, -rc);
+
+    check_deprecated_obj_md(state->dss, "oid'dep", quote_md);
+}
+
 int main(void)
 {
     const struct CMUnitTest object_md_save_test_cases[] = {
         cmocka_unit_test(omg_alive_object),
         cmocka_unit_test(omg_deprecated_object),
         cmocka_unit_test(omg_enoent),
+        cmocka_unit_test(omg_quote_chars),
     };
     struct pho_xfer_target target = {0};
 

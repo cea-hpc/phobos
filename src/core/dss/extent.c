@@ -226,9 +226,11 @@ static int extent_select_query(GString **conditions, int n_conditions,
     return 0;
 }
 
-static int extent_delete_query(void *void_extent, int item_cnt,
+static int extent_delete_query(PGconn *conn, void *void_extent, int item_cnt,
                                GString *request)
 {
+    (void) conn;
+
     for (int i = 0; i < item_cnt; ++i) {
         struct extent *extent = ((struct extent *) void_extent) + i;
 

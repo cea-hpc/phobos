@@ -149,7 +149,7 @@ static inline const char *get_oid(void *object)
     return ((struct object_info *) object)->oid;
 }
 
-void update_fields(void *resource, int64_t fields_to_update,
+void update_fields(PGconn *conn, void *resource, int64_t fields_to_update,
                    struct dss_field *fields, int fields_count,
                    GString *request);
 

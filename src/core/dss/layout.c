@@ -99,6 +99,8 @@ out_free:
 static int layout_insert_query(PGconn *conn, void *void_layout, int item_cnt,
                                int64_t fields, GString *request)
 {
+    int rc = 0;
+
     (void) fields;
 
     g_string_append(
@@ -109,15 +111,37 @@ static int layout_insert_query(PGconn *conn, void *void_layout, int item_cnt,
 
     for (int i = 0; i < item_cnt; ++i) {
         struct layout_info *layout = ((struct layout_info *) void_layout) + i;
+        char *copy_name = NULL;
+        char *uuid = NULL;
+
+        uuid = dss_char4sql(conn, layout->uuid);
+        if (uuid == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        copy_name = dss_char4sql(conn, layout->copy_name);
+        if (copy_name == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
 
         for (int j = 0; j < layout->ext_count; ++j) {
             struct extent *extent = &layout->extents[j];
+            char *extent_uuid = dss_char4sql(conn, extent->uuid);
+
+            if (extent_uuid == NULL) {
+                rc = -EINVAL;
+                goto free_info;
+            }
 
             g_string_append_printf(
-                request, "('%s', %d, '%s', %d, '%s')",
-                layout->uuid, layout->version, extent->uuid,
-                extent->layout_idx, layout->copy_name
+                request, "(%s, %d, %s, %d, %s)",
+                uuid, layout->version, extent_uuid,
+                extent->layout_idx, copy_name
             );
+
+            free_dss_char4sql(extent_uuid);
 
             if (j < layout->ext_count - 1)
                 g_string_append(request, ", ");
@@ -125,27 +149,61 @@ static int layout_insert_query(PGconn *conn, void *void_layout, int item_cnt,
 
         if (i < item_cnt - 1)
             g_string_append(request, ", ");
+
+free_info:
+        free_dss_char4sql(copy_name);
+        free_dss_char4sql(uuid);
+
+        if (rc)
+            return rc;
     }
 
     g_string_append(request, ";");
 
     for (int i = 0; i < item_cnt; ++i) {
         struct layout_info *layout = ((struct layout_info *) void_layout) + i;
-        char *layout_description;
+        char *layout_description = NULL;
+        char *copy_name = NULL;
+        char *uuid = NULL;
+        char *desc = NULL;
 
         layout_description = dss_layout_desc_encode(&layout->layout_desc);
         if (!layout_description)
             LOG_RETURN(-EINVAL, "JSON layout desc encoding error");
 
+        desc = dss_char4sql(conn, layout_description);
+        if (desc == NULL) {
+            rc = -EINVAL;
+            goto free_lyt_info;
+        }
+
+        uuid = dss_char4sql(conn, layout->uuid);
+        if (uuid == NULL) {
+            rc = -EINVAL;
+            goto free_lyt_info;
+        }
+
+        copy_name = dss_char4sql(conn, layout->copy_name);
+        if (copy_name == NULL) {
+            rc = -EINVAL;
+            goto free_lyt_info;
+        }
+
         g_string_append_printf(
             request,
-            "UPDATE copy SET lyt_info = '%s' WHERE "
-            "object_uuid = '%s' AND version = %d AND copy_name = '%s';",
-            layout_description, layout->uuid, layout->version,
-            layout->copy_name
+            "UPDATE copy SET lyt_info = %s WHERE "
+            "object_uuid = %s AND version = %d AND copy_name = %s;",
+            desc, uuid, layout->version, copy_name
         );
 
+free_lyt_info:
         free(layout_description);
+        free_dss_char4sql(copy_name);
+        free_dss_char4sql(uuid);
+        free_dss_char4sql(desc);
+
+        if (rc)
+            return rc;
     }
 
     return 0;
@@ -178,9 +236,11 @@ static int layout_select_query(GString **conditions, int n_conditions,
     return 0;
 }
 
-static int layout_delete_query(void *void_layout, int item_cnt,
+static int layout_delete_query(PGconn *conn, void *void_layout, int item_cnt,
                                GString *request)
 {
+    (void) conn;
+
     for (int i = 0; i < item_cnt; ++i) {
         struct layout_info *layout = ((struct layout_info *) void_layout) + i;
 

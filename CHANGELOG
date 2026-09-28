@@ -21,6 +21,9 @@
  * HSM release: add specific fill thresholds on the source copy extents,
    used only when dir_release_specific_higher_threshold is strictly lower
    than dir_release_higher_threshold.
+ * Object oids, user metadata, groupings and copy names are now escaped in
+   the SQL requests, so that quotes in them (e.g. an apostrophe in a full
+   path) no longer make puts, setmd, renames and deletes fail.
 
 ## 3.4.0
  * WARNING: the stat dev.umount_error is changed to dev.umount_errors .

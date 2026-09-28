@@ -609,8 +609,11 @@ static int media_select_query(GString **conditions, int n_conditions,
     return 0;
 }
 
-static int media_delete_query(void *void_med, int item_cnt, GString *request)
+static int media_delete_query(PGconn *conn, void *void_med, int item_cnt,
+                              GString *request)
 {
+    (void) conn;
+
     for (int i = 0; i < item_cnt; ++i) {
         struct media_info *medium = ((struct media_info *) void_med) + i;
 

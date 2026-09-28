@@ -110,7 +110,7 @@ static int logs_select_query(GString **conditions, int n_conditions,
     return 0;
 }
 
-static int logs_delete_query(void *void_log_filter, int item_cnt,
+static int logs_delete_query(PGconn *conn, void *void_log_filter, int item_cnt,
                              GString *request)
 {
     /* The delete can be conditionned on multiple fields which are only known
@@ -119,6 +119,7 @@ static int logs_delete_query(void *void_log_filter, int item_cnt,
      */
     GString *conditions = void_log_filter;
 
+    (void) conn;
     (void) item_cnt;
 
     g_string_append(request, "DELETE FROM logs");

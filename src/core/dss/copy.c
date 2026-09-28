@@ -40,6 +40,8 @@
 static int copy_insert_query(PGconn *conn, void *void_copy, int item_cnt,
                              int64_t fields, GString *request)
 {
+    int rc = 0;
+
     (void) fields;
 
     g_string_append(request,
@@ -48,6 +50,8 @@ static int copy_insert_query(PGconn *conn, void *void_copy, int item_cnt,
 
     for (int i = 0; i < item_cnt; ++i) {
         struct copy_info *copy = ((struct copy_info *) void_copy) + i;
+        char *object_uuid = NULL;
+        char *copy_name = NULL;
 
         if (copy->object_uuid == NULL)
             LOG_RETURN(-EINVAL, "Copy object_uuid cannot be NULL");
@@ -58,26 +62,43 @@ static int copy_insert_query(PGconn *conn, void *void_copy, int item_cnt,
         if (copy->copy_name == NULL)
             LOG_RETURN(-EINVAL, "Copy name cannot be NULL");
 
-        g_string_append_printf(request, "('%s', '%d', '%s', '%s')%s",
-                               copy->object_uuid, copy->version,
-                               copy->copy_name,
+        object_uuid = dss_char4sql(conn, copy->object_uuid);
+        if (object_uuid == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        copy_name = dss_char4sql(conn, copy->copy_name);
+        if (copy_name == NULL) {
+            rc = -EINVAL;
+            goto free_info;
+        }
+
+        g_string_append_printf(request, "(%s, '%d', %s, '%s')%s",
+                               object_uuid, copy->version,
+                               copy_name,
                                copy_status2str(copy->copy_status),
                                i < item_cnt - 1 ? ", " : ";");
+
+free_info:
+        free_dss_char4sql(object_uuid);
+        free_dss_char4sql(copy_name);
+
+        if (rc)
+            return rc;
     }
 
     return 0;
 }
 
 static struct dss_field FIELDS[] = {
-    { DSS_COPY_UPDATE_ACCESS_TIME, "access_time = '%s'", get_access_time },
-    { DSS_COPY_UPDATE_COPY_STATUS, "copy_status = '%s'", get_copy_status },
+    { DSS_COPY_UPDATE_ACCESS_TIME, "access_time = %s", get_access_time },
+    { DSS_COPY_UPDATE_COPY_STATUS, "copy_status = %s", get_copy_status },
 };
 
 static int copy_update_query(PGconn *conn, void *src_copy, void *dst_copy,
                              int item_cnt, int64_t fields, GString *request)
 {
-    (void) conn;
-
     for (int i = 0; i < item_cnt; ++i) {
         struct copy_info *src = ((struct copy_info *) src_copy) + i;
         struct copy_info *dst = ((struct copy_info *) dst_copy) + i;
@@ -85,7 +106,7 @@ static int copy_update_query(PGconn *conn, void *src_copy, void *dst_copy,
 
         g_string_append(sub_request, " UPDATE copy SET ");
 
-        update_fields(dst, fields, FIELDS, 2, sub_request);
+        update_fields(conn, dst, fields, FIELDS, 2, sub_request);
 
         g_string_append_printf(sub_request,
                                " WHERE object_uuid = '%s' AND version = '%d'"
@@ -116,8 +137,11 @@ static int copy_select_query(GString **conditions, int n_conditions,
     return 0;
 }
 
-static int copy_delete_query(void *void_copy, int item_cnt, GString *request)
+static int copy_delete_query(PGconn *conn, void *void_copy, int item_cnt,
+                             GString *request)
 {
+    (void) conn;
+
     for (int i = 0; i < item_cnt; ++i) {
         struct copy_info *copy = ((struct copy_info *) void_copy) + i;
 
