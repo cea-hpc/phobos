@@ -600,7 +600,7 @@ int main(int argc, char **argv)
         if (rc2) {
             update_sync = false;
             rc = rc ? : rc2;
-            continue;
+            goto close_lib_hdl;
         }
 
         rc2 = dss_filter_build(&filter,
@@ -686,7 +686,8 @@ int main(int argc, char **argv)
                     continue;
                 }
 
-                rc = dss_copy_get(&dss, &filter, &copy_list, &copy_count, NULL);
+                rc2 = dss_copy_get(&dss, &filter, &copy_list, &copy_count,
+                                   NULL);
                 dss_filter_free(&filter);
                 if (rc2) {
                     update_sync = false;
@@ -803,10 +804,10 @@ log_end:
     fclose(params.error_log_file);
 
 dss_end:
-    if (params.grouping) {
+    if (grouping_queue)
         g_queue_free(grouping_queue);
+    if (grouping_hashtable)
         g_hash_table_unref(grouping_hashtable);
-    }
 
     dss_fini(&dss);
     free(hsm_cfg_section_name);

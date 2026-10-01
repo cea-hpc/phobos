@@ -351,6 +351,7 @@ int main(int argc, char **argv)
     int higher_threshold;
     int lower_threshold;
     int dev_count = 0;
+    int rc2;
     int rc;
     int i;
 
@@ -529,24 +530,25 @@ int main(int argc, char **argv)
 
         rc = ldm_lib_drive_lookup(&lib_hdl, dev_list[i].rsc.id.name, &drv_info);
         if (rc)
-            continue;
+            goto close_lib_hdl;
 
         /* get dev path */
         rc = get_dev_adapter(dev_list[i].rsc.id.family, &dev_adapter);
         if (rc)
-            continue;
+            goto close_lib_hdl;
 
         rc = ldm_dev_lookup(dev_adapter, dev_list[i].rsc.id.name, fsroot,
                             sizeof(fsroot));
+        if (rc)
+            goto close_lib_hdl;
 
         /* get fs adapter */
         rc = dss_one_medium_get_from_id(&dss, &drv_info.ldi_medium_id,
                                         &medium_info);
         if (rc) {
-            dss_res_free(medium_info, 1);
             pho_warn("Unable to get medium info of dir "FMT_PHO_ID,
                      PHO_ID(dev_list[i].rsc.id));
-            continue;
+            goto close_lib_hdl;
         }
 
         rc = get_fs_adapter(medium_info->fs.type, &fsa);
@@ -554,7 +556,7 @@ int main(int argc, char **argv)
         if (rc) {
             pho_error(rc, "Unable to get fs adapter of dir "FMT_PHO_ID,
                       PHO_ID(dev_list[i].rsc.id));
-            continue;
+            goto close_lib_hdl;
         }
 
         /* get fill rate */
@@ -565,7 +567,7 @@ int main(int argc, char **argv)
                 error_message = NULL;
             }
 
-            continue;
+            goto close_lib_hdl;
         }
 
         dir_capacity = (double)fs_spc.spc_used + (double)fs_spc.spc_avail;
@@ -578,7 +580,7 @@ int main(int argc, char **argv)
                       "inferior to higher threshold %d%%",
                       fill_threshold, PHO_ID(dev_list[i].rsc.id),
                       higher_threshold);
-            continue;
+            goto close_lib_hdl;
         }
 
         if (purge_now) {
@@ -602,7 +604,7 @@ int main(int argc, char **argv)
             if (dir_capacity <= 0) {
                 pho_warn("Skipping dir "FMT_PHO_ID": degenerate statvfs",
                          PHO_ID(dev_list[i].rsc.id));
-                continue;
+                goto close_lib_hdl;
             }
 
             /*
@@ -844,9 +846,11 @@ int main(int argc, char **argv)
 
         dss_res_free(extent_list, extent_count);
 close_lib_hdl:
-        rc = ldm_lib_close(&lib_hdl);
-        if (rc)
-            pho_error(rc, "Failed to close dir library handle");
+        rc2 = ldm_lib_close(&lib_hdl);
+        if (rc2) {
+            pho_error(rc2, "Failed to close dir library handle");
+            rc = rc ? : rc2;
+        }
     }
 
     dss_res_free(dev_list, dev_count);
