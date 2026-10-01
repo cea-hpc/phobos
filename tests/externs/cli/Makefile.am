@@ -83,6 +83,7 @@ check_SCRIPTS=acceptance.test \
               test_mput_no_split.test \
               test_object_list.test \
               test_parallel_io.test \
+              test_partial_release_multi_dir.test \
               test_phobos_tape_library_test.sh \
               test_ping.test \
               test_put.test \

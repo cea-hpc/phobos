@@ -689,6 +689,15 @@ static void flush_tosync_array(struct lrs_dev *dev, GPtrArray *tosync_array,
 
         is_tosync_ended = is_request_tosync_ended(req->reqc);
 
+        if (req->reqc->req->release->partial) {
+            if (!req->reqc->params.release.rc) {
+                move_ongoing_io(dev->ld_ongoing_partial_io_waiting_sync,
+                                dev->ld_ongoing_io, req->reqc->socket_id);
+            } else {
+                dev_clean_io(dev, req->reqc->socket_id);
+            }
+        }
+
         MUTEX_UNLOCK(&req->reqc->mutex);
 
         if (should_send_error)
@@ -697,9 +706,6 @@ static void flush_tosync_array(struct lrs_dev *dev, GPtrArray *tosync_array,
         if (is_tosync_ended) {
             if (!req->reqc->params.release.rc) {
                 queue_release_response(dev->ld_response_queue, req->reqc);
-                if (req->reqc->req->release->partial)
-                    move_ongoing_io(dev->ld_ongoing_partial_io_waiting_sync,
-                                    dev->ld_ongoing_io, req->reqc->socket_id);
             }
         } else {
             req->reqc = NULL;   /* only the last device free reqc */
@@ -858,6 +864,13 @@ static void remove_canceled_sync(struct lrs_dev *dev)
 
             tosync_medium->status = SUB_REQUEST_CANCEL;
             is_tosync_ended = is_request_tosync_ended(req_tosync->reqc);
+
+            /* No sync will run for this canceled medium: clean the waiting
+             * IO of a partial release, as flush_tosync_array does on error.
+             * Full releases are already cleaned at reception.
+             */
+            if (req_tosync->reqc->req->release->partial)
+                dev_clean_io(dev, req_tosync->reqc->socket_id);
         }
 
         MUTEX_UNLOCK(&req_tosync->reqc->mutex);
@@ -2019,7 +2032,9 @@ out_free:
         g_hash_table_insert(dev->ld_ongoing_io, GINT_TO_POINTER(socket_id),
                             grouping);
         pho_stat_set(dev->stats.nb_ongoing_io,
-                     g_hash_table_size(dev->ld_ongoing_io));
+                     g_hash_table_size(dev->ld_ongoing_io) +
+                     g_hash_table_size(
+                         dev->ld_ongoing_partial_io_waiting_sync));
         grouping = NULL;
     }
 

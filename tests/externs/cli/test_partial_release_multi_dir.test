@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+
+#
+#  All rights reserved (c) 2014-2026 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for put --file command with partial release on multi dir
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
+. $test_dir/utils.sh
+
+################################################################################
+#                                    SETUP                                     #
+################################################################################
+
+function setup()
+{
+    # We enforce partial release and sync.
+    export PHOBOS_LRS_families="dir"
+    export PHOBOS_LRS_sync_nb_req="dir=1"
+    export PHOBOS_STORE_default_family="dir"
+
+    setup_tables
+    invoke_lrs
+    setup_test_dirs
+
+    FILES=(
+           $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+           $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+           $(mktemp $DIR_TEST_IN/test.pho.XXXX)
+          )
+
+    dd if=/dev/urandom of="${FILES[0]}" bs=1KB count=1
+    dd if=/dev/urandom of="${FILES[1]}" bs=1KB count=1
+    dd if=/dev/urandom of="${FILES[2]}" bs=1KB count=1
+
+    MPUT_FILE="$DIR_TEST_IN/mput_no_split"
+    for i in 0 1 2; do
+        local object="${FILES[$i]} obj_${i} -"
+        echo "$object" >> ${MPUT_FILE}
+    done
+
+}
+
+function setup_dir_raid1()
+{
+    setup
+
+    export PHOBOS_STORE_default_layout="raid1"
+    export PHOBOS_LAYOUT_RAID1_repl_count=2
+
+    DIRS=(
+          $(mktemp -d $DIR_TEST_IN/test.pho.XXXX)
+          $(mktemp -d $DIR_TEST_IN/test.pho.XXXX)
+         )
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
+function setup_dir_raid4()
+{
+    setup
+
+    export PHOBOS_STORE_default_layout="raid4"
+
+    DIRS=(
+          $(mktemp -d $DIR_TEST_IN/test.pho.XXXX)
+          $(mktemp -d $DIR_TEST_IN/test.pho.XXXX)
+          $(mktemp -d $DIR_TEST_IN/test.pho.XXXX)
+         )
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
+function cleanup() {
+    waive_lrs
+    drop_tables
+    cleanup_test_dirs
+}
+
+################################################################################
+#                              TEST PARTIAL RELEASE MULTI DIR                  #
+################################################################################
+
+function test_partial_release_multi_dir()
+{
+    $valg_phobos put --file ${MPUT_FILE} ||
+         error "phobos put --file should success"
+
+    for i in 0 1 2; do
+        $phobos get obj_${i} $DIR_TEST_OUT/obj_${i} ||
+            error "Getting back obj_${i} should success"
+        diff ${FILES[$i]} $DIR_TEST_OUT/obj_${i} ||
+            error "We do not get back the good obj_${i} content"
+    done
+}
+
+TESTS=("setup_dir_raid1; test_partial_release_multi_dir; cleanup"
+       "setup_dir_raid4; test_partial_release_multi_dir; cleanup")

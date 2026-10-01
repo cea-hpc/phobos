@@ -349,20 +349,33 @@ struct lrs_dev {
     struct dev_stats    stats; /**< exported device stats */
 };
 
+/**
+ * Move one ongoing IO from one hash table to another
+ *
+ * No-op if the socket entry is absent: it may have been cleaned on client
+ * disconnect, or already moved for another sub_request of the same socket.
+ *
+ * Should be called with locked mutex on dev.
+ */
 static inline void move_ongoing_io(GHashTable *from, GHashTable *into,
                                    int socket_id)
 {
     gpointer orig_socket_id;
     gpointer orig_grouping;
 
-    assert(g_hash_table_lookup_extended(from, GINT_TO_POINTER(socket_id),
-                                        &orig_socket_id, &orig_grouping));
+    if (!g_hash_table_lookup_extended(from, GINT_TO_POINTER(socket_id),
+                                      &orig_socket_id, &orig_grouping))
+        return;
+
     g_hash_table_steal(from, GINT_TO_POINTER(socket_id));
     g_hash_table_insert(into, orig_socket_id, orig_grouping);
 }
 
 /**
  * Clean one ongoing IO
+ *
+ * The nb_ongoing_io stat counts both ongoing and waiting-sync IOs, like
+ * dev_is_full_ongoing_io.
  *
  * Should be called with locked mutex on dev.
  */
@@ -371,9 +384,10 @@ static inline void dev_clean_io(struct lrs_dev *dev, int socket_id)
     if (!g_hash_table_remove(dev->ld_ongoing_io, GINT_TO_POINTER(socket_id)))
         g_hash_table_remove(dev->ld_ongoing_partial_io_waiting_sync,
                             GINT_TO_POINTER(socket_id));
-    else
-        pho_stat_set(dev->stats.nb_ongoing_io,
-                     g_hash_table_size(dev->ld_ongoing_io));
+
+    pho_stat_set(dev->stats.nb_ongoing_io,
+                 g_hash_table_size(dev->ld_ongoing_io) +
+                 g_hash_table_size(dev->ld_ongoing_partial_io_waiting_sync));
 }
 
 static inline bool dev_is_failed(struct lrs_dev *dev)
