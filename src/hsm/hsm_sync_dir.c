@@ -42,6 +42,7 @@
 #include <errno.h>
 #include <getopt.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -465,6 +466,49 @@ end:
     return rc;
 }
 
+/**
+ * Return the max_synced_extent_count_per_device from config or a negative
+ * value on error.
+ *
+ * 0 is the default value. A value of 0 or lower means no cap.
+ */
+static int64_t get_max_synced_extent_count_per_device(
+    const char *hsm_cfg_section_name)
+{
+    const char *max_synced_extent_count_per_device_string;
+    int64_t max_synced_extent_count_per_device;
+    int rc;
+
+    rc = pho_cfg_get_val(
+             hsm_cfg_section_name,
+             cfg_hsm[PHO_CFG_HSM_max_synced_extent_count_per_device].name,
+             &max_synced_extent_count_per_device_string);
+    if (rc == -ENODATA) {
+        pho_warn("No max_synced_extent_count_per_device value in config "
+                 "section '%s', we get default value '%s'",
+                 hsm_cfg_section_name,
+                 cfg_hsm[PHO_CFG_HSM_max_synced_extent_count_per_device].value);
+        max_synced_extent_count_per_device_string =
+            cfg_hsm[PHO_CFG_HSM_max_synced_extent_count_per_device].value;
+    } else if (rc) {
+        LOG_RETURN(-EINVAL,
+                   "Unable to get max_synced_extent_count_per_device for "
+                   "config section '%s'", hsm_cfg_section_name);
+    }
+
+    max_synced_extent_count_per_device =
+        str2int64(max_synced_extent_count_per_device_string);
+    if (max_synced_extent_count_per_device == INT64_MIN)
+        LOG_RETURN(-EINVAL,
+                   "Unable to get a valid integer "
+                   "max_synced_extent_count_per_device for config section '%s'",
+                   hsm_cfg_section_name);
+    else if (max_synced_extent_count_per_device < 0)
+        return 0;
+
+    return max_synced_extent_count_per_device;
+}
+
 int main(int argc, char **argv)
 {
     /* Hashtable of grouping_to_sync (also stored into grouping_queue to track
@@ -477,13 +521,16 @@ int main(int argc, char **argv)
      * ctime
      */
     GQueue *grouping_queue = NULL;
+    char new_synced_ctime_string[CTIME_STRING_LENGTH + 1] = {0};
     char synced_ctime_string[CTIME_STRING_LENGTH + 1] = {0};
     char tosync_ctime_string[CTIME_STRING_LENGTH + 1] = {0};
+    struct timeval new_synced_ctime = {0};
     const char *synced_ctime_path = NULL;
     char *hsm_cfg_section_name = NULL;
     struct timeval synced_ctime = {0};
     struct timeval tosync_ctime = {0};
     struct dev_info *dev_list = NULL;
+    int64_t max_synced_extent_count;
     const char *hostname = NULL;
     struct dss_filter filter;
     struct hsm_params params;
@@ -517,6 +564,13 @@ int main(int argc, char **argv)
         goto dss_end;
     }
 
+    max_synced_extent_count =
+        get_max_synced_extent_count_per_device(hsm_cfg_section_name);
+    if (max_synced_extent_count < 0) {
+        rc = (int)max_synced_extent_count;
+        goto dss_end;
+    }
+
     /* Setting time window */
     rc = set_synced_ctime(&synced_ctime, hsm_cfg_section_name,
                           &synced_ctime_path);
@@ -529,6 +583,11 @@ int main(int argc, char **argv)
         goto dss_end;
 
     timeval2str(&tosync_ctime, tosync_ctime_string);
+    /* Synced ctime to record if this execution succeeds: the end of the
+     * checked time window, or an earlier extent creation time if the scan
+     * of a device was stopped by the max_synced_extent_count_per_device cap.
+     */
+    new_synced_ctime = tosync_ctime;
     if (tosync_ctime.tv_sec < synced_ctime.tv_sec ||
         (tosync_ctime.tv_sec == synced_ctime.tv_sec &&
             tosync_ctime.tv_usec < synced_ctime.tv_usec))
@@ -573,6 +632,7 @@ int main(int argc, char **argv)
     /* target extent for each device dir */
     for (i = 0; i < dev_count; i++) {
         struct lib_drv_info drv_info;
+        int synced_extent_count = 0;
         struct dss_sort sort = {0};
         struct extent *extent_list;
         struct lib_handle lib_hdl;
@@ -637,7 +697,11 @@ int main(int argc, char **argv)
         }
 
         /* check source copy */
-        for (j = 0; j < extent_count; j++) {
+        for (j = 0;
+             j < extent_count &&
+             (max_synced_extent_count == 0 ||
+              synced_extent_count < max_synced_extent_count);
+             j++) {
             struct layout_info *layout_list;
             int layout_count;
             int k;
@@ -758,16 +822,37 @@ int main(int argc, char **argv)
                             update_sync = false;
                             rc = rc ? : rc2;
                         }
+
+                        synced_extent_count++;
                     } else {
                         add_object_to_sync(object_list, grouping_queue,
                                            grouping_hashtable);
+                        synced_extent_count++;
                     }
+
                 }
 
                 dss_res_free(object_list, object_count);
             }
 
             dss_res_free(layout_list, layout_count);
+        }
+
+        /* The scan of this device was stopped by the cap (the loop only
+         * exits with j < extent_count in that case): only advance the
+         * synced ctime up to the creation time of the last checked extent,
+         * so that the remaining, more recent, extents are checked by the
+         * next executions.
+         */
+        if (j < extent_count) {
+            const struct timeval *last_checked_ctime =
+                &extent_list[j - 1].creation_time;
+
+            /* keep the oldest creation time of the capped devices */
+            if (new_synced_ctime.tv_sec > last_checked_ctime->tv_sec ||
+                (new_synced_ctime.tv_sec == last_checked_ctime->tv_sec &&
+                 new_synced_ctime.tv_usec > last_checked_ctime->tv_usec))
+                new_synced_ctime = *last_checked_ctime;
         }
 
         dss_res_free(extent_list, extent_count);
@@ -795,7 +880,8 @@ close_lib_hdl:
 
     /* update synced ctime */
     if (update_sync) {
-        rc2 = update_synced_ctime(synced_ctime_path, tosync_ctime_string);
+        timeval2str(&new_synced_ctime, new_synced_ctime_string);
+        rc2 = update_synced_ctime(synced_ctime_path, new_synced_ctime_string);
         if (rc2)
             rc = rc ? : rc2;
     }

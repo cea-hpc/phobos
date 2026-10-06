@@ -83,6 +83,33 @@ Example:
     [hsm "source_copy_name" "destination_copy_name"]
     sync_delay_second = 3600
 
+*max_synced_extent_count_per_device*
+-------------------------------------
+
+The max_synced_extent_count_per_device parameter is the maximum number of
+extents that phobos_hsm_sync_dir syncs on each dir device at each execution.
+Only the extents whose object is actually synced count toward this limit: the
+extents whose object already has a destination copy are checked but do not
+consume it.
+
+When this limit is reached on a dir device, the remaining extents of this
+device in the time window are not checked during this execution: they are
+postponed to the next executions of the command. The last synced time is
+then only advanced up to the creation time of the last extent checked on
+the dir devices that reached their limit, at the oldest of these creation
+times, so that the postponed extents are checked again.
+
+This parameter must be an integer value. A value of 0, which is the default,
+or any lower value, means that the number of extents synced per device is
+not limited.
+
+Example:
+
+.. code:: ini
+
+    [hsm "source_copy_name" "destination_copy_name"]
+    max_synced_extent_count_per_device = 1000
+
 *Release delay*
 -----------------
 

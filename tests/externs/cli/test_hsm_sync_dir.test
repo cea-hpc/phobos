@@ -250,9 +250,147 @@ function grouping_sync()
     return 0
 }
 
+function check_synced_ctime_value()
+{
+    local expected_ctime=$1
+    local synced_ctime
+
+    if [ ! -f "${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}" ]; then
+        error "synced_ctime_file must be created by the sync"
+    fi
+
+    synced_ctime=$(cat ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path})
+
+    if [[ "${synced_ctime}" != "${expected_ctime}" ]]; then
+        error "synced_ctime_file must contain '${expected_ctime}' and not " \
+              "'${synced_ctime}'"
+    fi
+}
+
+function check_nb_sync_copy()
+{
+    local expected_nb=$1
+    local oid=$2
+    local nb
+
+    if [ -z "${oid}" ]; then
+        nb=$($phobos copy list --copy-name sync -o uuid | wc -l)
+    else
+        nb=$($phobos copy list --copy-name sync -o copy_name ${oid} | wc -l)
+    fi
+
+    if (( nb != expected_nb )); then
+        error "expected ${expected_nb} sync copies for '${oid:-all objects}', " \
+              "got ${nb}"
+    fi
+}
+
+function capped_sync()
+{
+    # 3 objects on dir1, with increasing extent creation times
+    $phobos put --tags dir1 ${FILES[0]} obj_cap_a
+    sleep 0.1
+    $phobos put --tags dir1 ${FILES[0]} obj_cap_b
+    sleep 0.1
+    $phobos put --tags dir1 ${FILES[0]} obj_cap_c
+
+    # extent creation times, to check the content of the synced ctime file
+    # (strip the ['...'] list decoration of the extent list output, keeping
+    # the space inside the timestamps)
+    local ctime_a ctime_b
+    ctime_a=$($phobos extent list -o creation_time obj_cap_a | tr -d "'[]")
+    ctime_b=$($phobos extent list -o creation_time obj_cap_b | tr -d "'[]")
+
+    # cap the number of synced extents to 1 per dir device and per run
+    export PHOBOS_HSM_SOURCE_SYNC_max_synced_extent_count_per_device=1
+
+    # first run: only the oldest object of dir1 is synced, the synced ctime
+    # only advances up to the creation time of its extent
+    rm -f ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
+    $valg_phobos_hsm_sync_dir -c source sync
+    check_nb_sync_copy 1
+    check_nb_sync_copy 1 obj_cap_a
+    check_nb_sync_copy 0 obj_cap_b
+    check_synced_ctime_value "${ctime_a}"
+
+    # second run: obj_cap_a is checked again without consuming the cap,
+    # only obj_cap_b is synced
+    $valg_phobos_hsm_sync_dir -c source sync
+    check_nb_sync_copy 2
+    check_nb_sync_copy 1 obj_cap_b
+    check_nb_sync_copy 0 obj_cap_c
+    check_synced_ctime_value "${ctime_b}"
+
+    # third run: the last object is synced
+    $valg_phobos_hsm_sync_dir -c source sync
+    check_nb_sync_copy 3
+    check_nb_sync_copy 1 obj_cap_c
+
+    # last run: nothing left to sync
+    $valg_phobos_hsm_sync_dir -c source sync
+    check_nb_sync_copy 3
+
+    unset PHOBOS_HSM_SOURCE_SYNC_max_synced_extent_count_per_device
+
+    return 0
+}
+
+function capped_sync_several_dirs()
+{
+    # 3 objects on dir1 then 3 objects on dir2, with increasing extent
+    # creation times
+    $phobos put --tags dir1 ${FILES[0]} obj_d1_a
+    sleep 0.1
+    $phobos put --tags dir1 ${FILES[0]} obj_d1_b
+    sleep 0.1
+    $phobos put --tags dir1 ${FILES[0]} obj_d1_c
+    sleep 0.1
+    $phobos put --tags dir2 ${FILES[0]} obj_d2_a
+    sleep 0.1
+    $phobos put --tags dir2 ${FILES[0]} obj_d2_b
+    sleep 0.1
+    $phobos put --tags dir2 ${FILES[0]} obj_d2_c
+
+    # extent creation times of the dir1 objects, to check the content of
+    # the synced ctime file: when several dirs reach the cap, it must only
+    # advance up to the oldest of the creation times of their last checked
+    # extents
+    local ctime_d1_a ctime_d1_b
+    ctime_d1_a=$($phobos extent list -o creation_time obj_d1_a | tr -d "'[]")
+    ctime_d1_b=$($phobos extent list -o creation_time obj_d1_b | tr -d "'[]")
+
+    # cap the number of synced extents to 1 per dir device and per run
+    export PHOBOS_HSM_SOURCE_SYNC_max_synced_extent_count_per_device=1
+
+    # first run: the oldest object of each dir is synced
+    rm -f ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
+    $valg_phobos_hsm_sync_dir -c source sync
+    check_nb_sync_copy 2
+    check_synced_ctime_value "${ctime_d1_a}"
+
+    # second run: the next object of each dir is synced
+    $valg_phobos_hsm_sync_dir -c source sync
+    check_nb_sync_copy 4
+    check_synced_ctime_value "${ctime_d1_b}"
+
+    # third run: the last object of each dir is synced
+    $valg_phobos_hsm_sync_dir -c source sync
+    check_nb_sync_copy 6
+
+    # last run: nothing left to sync
+    $valg_phobos_hsm_sync_dir -c source sync
+    check_nb_sync_copy 6
+
+    unset PHOBOS_HSM_SOURCE_SYNC_max_synced_extent_count_per_device
+
+    return 0
+}
+
 TESTS=(
     "check_hsm_sync_dir_opt;"
     "setup; check_hsm_sync_dir; cleanup"
     "setup; no_synced_time_and_log_on_error; cleanup"
     "setup; grouping_sync; cleanup"
+    "setup; capped_sync; cleanup"
+    "setup; capped_sync_several_dirs; cleanup"
 )

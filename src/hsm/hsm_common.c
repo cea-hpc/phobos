@@ -81,6 +81,11 @@ const struct pho_config_item cfg_hsm[] = {
         .name    = "error_log_path",
         .value   = "/var/lib/phobos/hsm_error",
     },
+    [PHO_CFG_HSM_max_synced_extent_count_per_device] = {
+        .section = "hsm",
+        .name    = "max_synced_extent_count_per_device",
+        .value   = "0",
+    },
 };
 
 int open_error_log_file(const char *hsm_cfg_section_name, FILE **error_log_file)

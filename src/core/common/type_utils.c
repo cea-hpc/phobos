@@ -431,6 +431,7 @@ static int any_str2timeval(const char *format, const char *tv_str,
         LOG_RETURN(-EINVAL, "Object timestamp '%s' is not well formatted",
                    tv_str);
 
+    tmp_tm.tm_isdst = -1;    /* let mktime resolve DST from the TZ rules */
     tv->tv_sec = mktime(&tmp_tm);
     tv->tv_usec = 0;
     if (*usec_ptr == '.') {

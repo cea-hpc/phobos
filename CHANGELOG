@@ -1,5 +1,10 @@
 # CHANGELOG UPDATES
 
+## Next
+ * HSM sync: add the max_synced_extent_count_per_device parameter to limit
+   the number of extents synced per dir device and per execution, the
+   remaining ones being postponed to the next executions.
+
 ## 3.4.1
  * Grouped read: queue preallocation has been improved to guarantee the
    use of media already present and available.
