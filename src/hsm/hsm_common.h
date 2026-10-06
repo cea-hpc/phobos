@@ -41,10 +41,11 @@ enum pho_cfg_params_hsm {
     PHO_CFG_HSM_dir_release_specific_lower_threshold,
     PHO_CFG_HSM_error_log_path,
     PHO_CFG_HSM_max_synced_extent_count_per_device,
+    PHO_CFG_HSM_max_synced_object_bytes_per_device,
 
     /* Delimiters, update when modifying options */
     PHO_CFG_HSM_FIRST = PHO_CFG_HSM_synced_ctime_path,
-    PHO_CFG_HSM_LAST  = PHO_CFG_HSM_max_synced_extent_count_per_device,
+    PHO_CFG_HSM_LAST  = PHO_CFG_HSM_max_synced_object_bytes_per_device,
 };
 
 extern const struct pho_config_item cfg_hsm[];

@@ -386,6 +386,56 @@ function capped_sync_several_dirs()
     return 0
 }
 
+function capped_sync_kb()
+{
+    # 3 objects of 1 KB on dir1, with increasing extent creation times
+    $phobos put --tags dir1 ${FILES[0]} obj_kb_a
+    sleep 0.1
+    $phobos put --tags dir1 ${FILES[0]} obj_kb_b
+    sleep 0.1
+    $phobos put --tags dir1 ${FILES[0]} obj_kb_c
+
+    # extent creation times, to check the content of the synced ctime file
+    local ctime_b ctime_d
+    ctime_b=$($phobos extent list -o creation_time obj_kb_b | tr -d "'[]")
+
+    # cap the total size of the objects synced to 2048 bytes per dir
+    # device and per run
+    export PHOBOS_HSM_SOURCE_SYNC_max_synced_object_bytes_per_device=2048
+
+    # first run: the two oldest objects (1024 bytes each) are synced, the
+    # synced ctime only advances up to the creation time of the second one
+    rm -f ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
+    $valg_phobos_hsm_sync_dir -c source sync
+    check_nb_sync_copy 2
+    check_nb_sync_copy 1 obj_kb_a
+    check_nb_sync_copy 1 obj_kb_b
+    check_nb_sync_copy 0 obj_kb_c
+    check_synced_ctime_value "${ctime_b}"
+
+    # second run: the last object is synced
+    $valg_phobos_hsm_sync_dir -c source sync
+    check_nb_sync_copy 3
+    check_nb_sync_copy 1 obj_kb_c
+
+    # with both caps set, the extent count cap stops the scan first
+    $phobos put --tags dir1 ${FILES[0]} obj_kb_d
+    sleep 0.1
+    $phobos put --tags dir1 ${FILES[0]} obj_kb_e
+    ctime_d=$($phobos extent list -o creation_time obj_kb_d | tr -d "'[]")
+    export PHOBOS_HSM_SOURCE_SYNC_max_synced_extent_count_per_device=1
+    $valg_phobos_hsm_sync_dir -c source sync
+    check_nb_sync_copy 4
+    check_nb_sync_copy 1 obj_kb_d
+    check_nb_sync_copy 0 obj_kb_e
+    check_synced_ctime_value "${ctime_d}"
+
+    unset PHOBOS_HSM_SOURCE_SYNC_max_synced_object_bytes_per_device
+    unset PHOBOS_HSM_SOURCE_SYNC_max_synced_extent_count_per_device
+
+    return 0
+}
+
 TESTS=(
     "check_hsm_sync_dir_opt;"
     "setup; check_hsm_sync_dir; cleanup"
@@ -393,4 +443,5 @@ TESTS=(
     "setup; grouping_sync; cleanup"
     "setup; capped_sync; cleanup"
     "setup; capped_sync_several_dirs; cleanup"
+    "setup; capped_sync_kb; cleanup"
 )

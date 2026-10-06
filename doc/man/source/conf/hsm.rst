@@ -110,6 +110,34 @@ Example:
     [hsm "source_copy_name" "destination_copy_name"]
     max_synced_extent_count_per_device = 1000
 
+*max_synced_object_bytes_per_device*
+------------------------------------
+
+The max_synced_object_bytes_per_device parameter is the maximum total size,
+in bytes, of the objects that phobos_hsm_sync_dir syncs on each dir device
+at each execution. Only the objects actually synced count toward this
+limit, each of them counted once even if several of their extents are
+checked on the device. The limit is checked before each new sync, so the
+total synced size can exceed it by at most the size of the last synced
+object.
+
+This parameter behaves like max_synced_extent_count_per_device: when it is
+reached on a dir device, the remaining extents of this device in the time
+window are not checked during this execution and are postponed to the next
+executions of the command, the last synced time being only advanced up to
+the creation time of the last extent checked. Both limits can be set at the
+same time, the first one reached stops the scan.
+
+This parameter must be an integer value. A value of 0, which is the
+default, or any lower value, means that the synced size is not limited.
+
+Example:
+
+.. code:: ini
+
+    [hsm "source_copy_name" "destination_copy_name"]
+    max_synced_object_bytes_per_device = 1073741824
+
 *Release delay*
 -----------------
 
