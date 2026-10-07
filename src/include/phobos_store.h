@@ -354,6 +354,28 @@ void phobos_init_without_dss(void);
 void phobos_fini(void);
 
 /**
+ * Get the value of a configuration parameter in a given section.
+ *
+ * The parameter is searched in the process environment first
+ * (PHOBOS_<SECTION>_<name>), then in the local configuration file.
+ *
+ * The returned value is owned by Phobos: it must not be modified nor freed,
+ * and it is only valid until phobos_fini() is called.
+ *
+ * @param[in]   section  Name of the section to look for the parameter.
+ * @param[in]   name     Name of the parameter to read.
+ * @param[out]  value    Value of the parameter.
+ *
+ * @return                  0 on success,
+ *                          -ENODATA if the parameter is not found,
+ *                          -errno on failure.
+ *
+ * This must be called after phobos_init.
+ */
+int phobos_get_cfg_val(const char *section, const char *name,
+                       const char **value);
+
+/**
  * Put files to the object store with minimal overhead.
  *
  * Each Xfer descriptor must describe a PUT operation and provide one or more

@@ -27,6 +27,7 @@
 #endif
 
 #include "pho_cfg.h"
+#include "phobos_store.h"
 #include "pho_test_utils.h"
 #include "pho_common.h"
 #include <libgen.h>
@@ -90,27 +91,33 @@ static int populate_env(void)
     return 0;
 }
 
-static int test(void *hint)
-{
-    struct test_item *item;
-    int               rc;
+struct cfg_get_val_args {
+    int (*get_val)(const char *section, const char *name, const char **value);
+    struct test_item *items;
+};
 
-    for (item = (struct test_item *)hint; item->variable != NULL; item++) {
+static int test_cfg_get_val(void *hint)
+{
+    struct cfg_get_val_args *args = hint;
+    struct test_item        *item;
+    int                      rc;
+
+    for (item = args->items; item->variable != NULL; item++) {
         const char *val = NULL;
 
-        rc = pho_cfg_get_val(item->section, item->variable, &val);
+        rc = args->get_val(item->section, item->variable, &val);
 
         /* if value is NULL: -ENODATA is expected */
         if (item->value == NULL) {
             if (rc != -ENODATA) {
                 int rc2 = rc ? rc : -EINVAL;
-                pho_error(rc2, "pho_cfg_get_val(%s, %s, ...): -ENODATA "
+                pho_error(rc2, "get_val(%s, %s, ...): -ENODATA "
                                "expected (got %d)", item->section,
                           item->variable, rc);
                 return rc2;
             }
         } else if (rc) {
-            pho_error(rc, "pho_cfg_get_val(%s, %s, ...) returned error "
+            pho_error(rc, "get_val(%s, %s, ...) returned error "
                           "%d", item->section, item->variable, rc);
             return rc;
         } else {
@@ -281,6 +288,42 @@ static int test_get_bool(void *param)
     return 0;
 }
 
+/** Check that phobos_get_cfg_val loads the config file if it is not already */
+static int test_api_cfg_lazy_load(void *hint)
+{
+    const char *val = NULL;
+    int rc;
+
+    pho_cfg_local_fini();
+
+    rc = pho_cfg_get_val("dss", "connect_string", &val);
+    if (rc != -ENODATA) {
+        rc = rc ? : -EINVAL;
+        pho_error(rc, "pho_cfg_get_val should return -ENODATA once the "
+                      "config is released");
+        return rc;
+    }
+
+    if (setenv("PHOBOS_CFG_FILE", "test.cfg", 1)) {
+        pho_error(errno, "setenv failed");
+        return -errno;
+    }
+
+    rc = phobos_get_cfg_val("dss", "connect_string", &val);
+    if (rc)
+        return rc;
+
+    if (strcmp(val, "dbname = phobos")) {
+        pho_error(-EINVAL, "unexpected value for 'dss'::'connect_string': "
+                           "'%s' != 'dbname = phobos'", val);
+        return -EINVAL;
+    }
+
+    unsetenv("PHOBOS_CFG_FILE");
+
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     static const char * const expected_items[] = {
@@ -288,6 +331,13 @@ int main(int argc, char **argv)
         "param2",
         "param3",
     };
+    struct cfg_get_val_args cfg_env_args = {pho_cfg_get_val, test_env_items};
+    struct cfg_get_val_args cfg_file_args = {pho_cfg_get_val,
+                                             test_file_items};
+    struct cfg_get_val_args api_env_args = {phobos_get_cfg_val,
+                                            test_env_items};
+    struct cfg_get_val_args api_file_args = {phobos_get_cfg_val,
+                                             test_file_items};
     struct csv_test_data td;
     int rc;
 
@@ -295,9 +345,9 @@ int main(int argc, char **argv)
     test_env_initialize();
 
     pho_run_test("Test 1: get variables before anything is set",
-             test, test_env_items, PHO_TEST_FAILURE);
+             test_cfg_get_val, &cfg_env_args, PHO_TEST_FAILURE);
     pho_run_test("Test 2: get variables before anything is set",
-             test, test_file_items, PHO_TEST_FAILURE);
+             test_cfg_get_val, &cfg_file_args, PHO_TEST_FAILURE);
 
     if (test_cfg_lvl(&test_env_items[1], PHO_CFG_LEVEL_PROCESS)) {
         pho_info("test_cfg_lvl in process before anything is set should have "
@@ -323,8 +373,8 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    pho_run_test("Test 3: get variables from env", test, test_env_items,
-             PHO_TEST_SUCCESS);
+    pho_run_test("Test 3: get variables from env", test_cfg_get_val,
+             &cfg_env_args, PHO_TEST_SUCCESS);
 
     if (!test_cfg_lvl(&test_env_items[1], PHO_CFG_LEVEL_PROCESS)) {
         pho_info("valid test_cfg_lvl test in process level should have "
@@ -332,8 +382,8 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    pho_run_test("Test 4: get variables from config file (before init)", test,
-             test_file_items, PHO_TEST_FAILURE);
+    pho_run_test("Test 4: get variables from config file (before init)",
+             test_cfg_get_val, &cfg_file_args, PHO_TEST_FAILURE);
 
 
     /* try with bad cfg first */
@@ -343,9 +393,13 @@ int main(int argc, char **argv)
              (pho_unit_test_t)pho_cfg_init_local, "test.cfg", PHO_TEST_SUCCESS);
 
     pho_run_test("Test 7: get variables from config file (after init)",
-             test, test_file_items, PHO_TEST_SUCCESS);
+             test_cfg_get_val, &cfg_file_args, PHO_TEST_SUCCESS);
     pho_run_test("Test 8: get variables from env (after loading file)",
-             test, test_env_items, PHO_TEST_SUCCESS);
+             test_cfg_get_val, &cfg_env_args, PHO_TEST_SUCCESS);
+    pho_run_test("Test 16: get variables from config file through the API",
+             test_cfg_get_val, &api_file_args, PHO_TEST_SUCCESS);
+    pho_run_test("Test 17: get variables from env through the API",
+             test_cfg_get_val, &api_env_args, PHO_TEST_SUCCESS);
 
     if (!test_cfg_lvl(&test_file_items[1], PHO_CFG_LEVEL_LOCAL)) {
         pho_info("valid test_cfg_lvl in local level should have suceeded");
@@ -430,6 +484,9 @@ int main(int argc, char **argv)
 
     pho_run_test("Test 15: get boolean param", test_get_bool, NULL,
                  PHO_TEST_SUCCESS);
+
+    pho_run_test("Test 18: lazy config loading through the API",
+             test_api_cfg_lazy_load, NULL, PHO_TEST_SUCCESS);
 
     pho_info("CFG: All tests succeeded");
     exit(EXIT_SUCCESS);

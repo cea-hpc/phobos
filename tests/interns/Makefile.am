@@ -83,7 +83,7 @@ test_attrs_LDADD=$(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_attrs_CFLAGS=$(AM_CFLAGS) -I..
 
 test_cfg_SOURCES=test_cfg.c
-test_cfg_LDADD=$(TESTS_LIB) $(TESTS_LIB_DEPS)
+test_cfg_LDADD=$(STORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_cfg_CFLAGS=$(AM_CFLAGS) -I..
 
 test_common_SOURCES=test_common.c

@@ -8,6 +8,8 @@
    the total size of the objects synced per dir device and per execution.
  * HSM release: a warning is now logged when a dir device does not hold
    enough releasable data to get back under its lower release threshold.
+ * Add phobos_get_cfg_val() to the store API, to read the value of a
+   configuration parameter in a given section.
 
 ## 3.4.1
  * Grouped read: queue preallocation has been improved to guarantee the

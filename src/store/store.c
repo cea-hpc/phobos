@@ -122,6 +122,19 @@ void phobos_fini(void)
     pho_context_fini();
 }
 
+int phobos_get_cfg_val(const char *section, const char *name,
+                       const char **value)
+{
+    int rc;
+
+    /* Ensure conf is loaded */
+    rc = pho_cfg_init_local(NULL);
+    if (rc && rc != -EALREADY)
+        return rc;
+
+    return pho_cfg_get_val(section, name, value);
+}
+
 /**
  * Get a representative return code for the whole batch.
  * Used to provide other layers with indications about how things ended,
