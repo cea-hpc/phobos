@@ -267,6 +267,24 @@ function check_hsm_release_dir()
     check_copy too_young copy_to_release copy_synced
 }
 
+function check_hsm_release_dir_not_enough_warning()
+{
+    setup_hsm_release_objects
+
+    # With a lower threshold of 0, the space to release is the whole space
+    # used on the dir, whereas only the 3 old candidates are selectable:
+    # a warning must be logged on the bytes still to release.
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_release_delay_second="${release_delay_second}"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="50"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_lower_threshold="0"
+    dry_run_log=$($valg_phobos_hsm_release_dir copy_to_release copy_synced 2>&1)
+
+    (echo "${dry_run_log}" | grep "We do not find enough data to release") ||
+        error "A warning must be logged when not enough data can be released"
+
+    return 0
+}
+
 # Run a specific threshold release scenario with the specific higher and
 # lower thresholds given as first and second arguments: the release of the
 # objects given as next arguments is checked first in a dry-run, then
@@ -499,6 +517,7 @@ function log_on_error()
 TESTS=(
     "check_hsm_release_dir_opt;"
     "setup; check_hsm_release_dir; cleanup"
+    "setup; check_hsm_release_dir_not_enough_warning; cleanup"
     "setup; check_hsm_release_dir_specific_threshold; cleanup"
     "setup; check_hsm_release_dir_specific_threshold_unselectable; cleanup"
     "setup; check_hsm_release_dir_specific_threshold_lower_zero; cleanup"

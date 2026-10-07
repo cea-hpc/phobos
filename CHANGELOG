@@ -6,6 +6,8 @@
    remaining ones being postponed to the next executions.
  * HSM sync: add the max_synced_object_bytes_per_device parameter to limit
    the total size of the objects synced per dir device and per execution.
+ * HSM release: a warning is now logged when a dir device does not hold
+   enough releasable data to get back under its lower release threshold.
 
 ## 3.4.1
  * Grouped read: queue preallocation has been improved to guarantee the

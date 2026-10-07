@@ -844,6 +844,12 @@ int main(int argc, char **argv)
             g_array_free(candidate_list, TRUE);
         }
 
+        if (size_to_release > 0) {
+            pho_warn("We do not find enough data to release on dir "
+                     FMT_PHO_ID" . We still have %zd size bytes to release.",
+                     PHO_ID(dev_list[i].rsc.id), size_to_release);
+        }
+
         dss_res_free(extent_list, extent_count);
 close_lib_hdl:
         rc2 = ldm_lib_close(&lib_hdl);
