@@ -337,6 +337,15 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['logs', 'dump', '--start', '1234-01-01',
                                  '--end', '1234-01-'], code=2)
 
+    def test_cli_config_command(self):
+        """test valid and invalid config command lines."""
+        self.check_cmdline_valid(['config', 'get', 'section', 'param'])
+        self.check_cmdline_exit(['config'], code=2)
+        self.check_cmdline_exit(['config', 'get'], code=2)
+        self.check_cmdline_exit(['config', 'get', 'section'], code=2)
+        self.check_cmdline_exit(['config', 'set', 'section', 'param'],
+                                code=2)
+
 
 class BasicExecutionTest(unittest.TestCase):
     """Base execution of the CLI."""
@@ -375,6 +384,31 @@ class BasicExecutionTest(unittest.TestCase):
         with output_intercept() as (stdout, stderr):
             self.pho_execute(*args, **kwargs)
         return stdout.getvalue(), stderr.getvalue()
+
+
+class ConfigGetTest(BasicExecutionTest):
+    """Test the config get command."""
+
+    def test_config_get(self):
+        """Get a parameter value from the configuration file."""
+        stdout, _ = self.pho_execute_capture(
+            ['config', 'get', 'store', 'default_tape_library'])
+        self.assertEqual(stdout, 'legacy\n')
+
+    def test_config_get_env(self):
+        """The environment has priority over the configuration file."""
+        os.environ['PHOBOS_CFGCLI_envparam'] = 'from_env'
+        try:
+            stdout, _ = self.pho_execute_capture(
+                ['config', 'get', 'cfgcli', 'envparam'])
+        finally:
+            del os.environ['PHOBOS_CFGCLI_envparam']
+        self.assertEqual(stdout, 'from_env\n')
+
+    def test_config_get_missing(self):
+        """Getting an undefined parameter exits with ENODATA."""
+        self.pho_execute(['config', 'get', 'no_section', 'no_param'],
+                         code=errno.ENODATA)
 
 
 class MediaAddTest(BasicExecutionTest):

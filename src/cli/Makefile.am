@@ -35,6 +35,7 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/cli/common/exec.py \
 	   phobos/cli/common/utils.py \
 	   phobos/cli/target/__init__.py \
+	   phobos/cli/target/config.py \
 	   phobos/cli/target/copy.py \
 	   phobos/cli/target/device.py \
 	   phobos/cli/target/dir.py \

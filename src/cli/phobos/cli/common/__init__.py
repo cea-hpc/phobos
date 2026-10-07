@@ -289,7 +289,7 @@ class PhobosActionContext:
         try:
             cfg.load_file(cpath)
         except IOError as exc:
-            if exc.errno in (errno.ENOENT, errno.EALREADY):
+            if cpath is None and exc.errno in (errno.ENOENT, errno.EALREADY):
                 return
             raise
 

@@ -51,12 +51,14 @@ def get_val(section, name, default=RAISE_ERROR):
     default value has been provided.
     """
     cfg_value = c_char_p()
-    ret = LIBPHOBOS.pho_cfg_get_val(section.encode('utf-8'),
-                                    name.encode('utf-8'), byref(cfg_value))
+    ret = LIBPHOBOS.phobos_get_cfg_val(section.encode('utf-8'),
+                                       name.encode('utf-8'), byref(cfg_value))
     if ret != 0:
         if default is RAISE_ERROR:
-            raise KeyError(f"No value in cfg for section '{section}',"
-                           f"key '{name}', rc='{os.strerror(-ret)}'")
+            if ret == -errno.ENODATA:
+                raise KeyError(f"No value in cfg for section '{section}',"
+                               f"key '{name}', rc='{os.strerror(-ret)}'")
+            raise IOError(-ret, os.strerror(-ret))
         return default
     return cfg_value.value.decode('utf-8') # pylint: disable=no-member
 

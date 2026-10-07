@@ -31,6 +31,7 @@ actions.
 import sys
 
 from phobos.cli.common import PhobosActionContext
+from phobos.cli.target.config import ConfigOptHandler
 from phobos.cli.target.copy import CopyOptHandler
 from phobos.cli.target.dir import DirOptHandler
 from phobos.cli.target.drive import DriveOptHandler
@@ -54,6 +55,7 @@ from phobos.cli.target.tlc import TLCOptHandler
 
 HANDLERS = [
     # Resource interfaces
+    ConfigOptHandler,
     CopyOptHandler,
     DirOptHandler,
     DriveOptHandler,
