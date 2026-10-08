@@ -53,6 +53,17 @@ void pho_attrs_free(struct pho_attrs *md);
 /** Copy an attribute list in another */
 int pho_attrs_copy(const struct pho_attrs *src, struct pho_attrs *dst);
 
+/**
+ * Sanitize the attribute set: replace the keys and the values that are not
+ * valid UTF-8 with copies where each invalid byte is substituted with the
+ * Unicode replacement character U+FFFD. NULL values (removal markers) are
+ * kept as is. This is a no-op if all the keys and the values are already
+ * valid UTF-8.
+ *
+ * @param[in,out]   md      The attribute set to sanitize.
+ */
+void pho_attrs_make_valid(struct pho_attrs *md);
+
 /** remove an attr from the an attribute set */
 void pho_attr_remove(struct pho_attrs *md, const char *key);
 

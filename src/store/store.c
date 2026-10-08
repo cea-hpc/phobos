@@ -2031,7 +2031,18 @@ static int phobos_xfer(struct pho_xfer_desc *xfers, size_t n,
                        pho_completion_cb_t cb, void *udata)
 {
     struct phobos_handle pho;
+    size_t i;
+    size_t j;
     int rc;
+
+    /* The keys and the values of the user metadata must be valid UTF-8, as
+     * they are serialized to JSON to be attached to the stored objects.
+     * Sanitize them silently: each invalid byte is replaced with the
+     * Unicode replacement character U+FFFD.
+     */
+    for (i = 0; i < n; i++)
+        for (j = 0; j < xfers[i].xd_ntargets; j++)
+            pho_attrs_make_valid(&xfers[i].xd_targets[j].xt_attrs);
 
     rc = store_init(&pho, xfers, n, cb, udata);
     if (rc)
@@ -2259,6 +2270,8 @@ int phobos_setmd(struct pho_xfer_desc *xfers, size_t num_xfers)
             xfers[i].xd_rc = -EINVAL;
             LOG_GOTO(CLEAN, -EINVAL, "setmd: objid must be set");
         }
+
+        pho_attrs_make_valid(&xd_target->xt_attrs);
 
         rc2 = pho_attrs_to_json(&xd_target->xt_attrs, md_repr, 0);
         if (rc2) {

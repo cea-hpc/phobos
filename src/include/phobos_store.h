@@ -47,6 +47,26 @@
 struct pho_xfer_desc;
 
 /**
+ * Input strings of the API entries of this header must be valid UTF-8: the
+ * database and the metadata attached to the stored objects only handle
+ * UTF-8.
+ *
+ * The keys and the values of the user metadata (the xt_attrs fields) are
+ * silently sanitized when they enter the API: each of their invalid bytes
+ * is replaced with the Unicode replacement character U+FFFD. The sanitized
+ * form is what gets stored, and, as the sanitization is deterministic and
+ * applied by every API entry, passing the same input string again addresses
+ * the same stored data.
+ *
+ * To store raw (non textual) data in a metadata value, encode it first in
+ * a UTF-8 compatible representation, e.g. hexadecimal or base64, as the
+ * sanitization would otherwise replace its non-UTF-8 bytes with U+FFFD.
+ *
+ * Any other input string that is not valid UTF-8 cannot be stored nor
+ * queried: the operation fails with an explicit error.
+ */
+
+/**
  * Xfer behavior flags.
  *
  * The exact meaning of each flag depends on the operation to which it is
@@ -274,6 +294,10 @@ struct pho_xfer_desc {
  * Xfer target.
  *
  * This structure carries all the information for one object.
+ *
+ * The keys and the values of xt_attrs must be valid UTF-8: invalid bytes
+ * are silently replaced with the Unicode replacement character U+FFFD (see
+ * the note on input strings at the top of this header).
  */
 struct pho_xfer_target {
     const char       *xt_objid;   /**< Object ID to PUT/GET/GETMD/SETMD/DEL/

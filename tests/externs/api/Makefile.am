@@ -50,7 +50,8 @@ check_PROGRAMS=phobos_put_copy \
                test_stats \
                test_store \
                test_store_retry \
-               test_undelete
+               test_undelete \
+               test_utf8_user_md
 
 check_SCRIPTS=test_bad_comm.sh \
               test_concurrency.test \
@@ -68,6 +69,7 @@ check_SCRIPTS=test_bad_comm.sh \
               test_scsi.test \
               test_store_retry.sh \
               test_undelete.sh \
+              test_utf8_user_md.test \
               test_stats.sh
 
 if RADOS_ENABLED
@@ -165,6 +167,10 @@ test_store_retry_CFLAGS=$(TESTS_INCLUDE)
 test_undelete_SOURCES=test_undelete.c
 test_undelete_LDADD=$(STORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_undelete_CFLAGS=$(TESTS_INCLUDE)
+
+test_utf8_user_md_SOURCES=test_utf8_user_md.c
+test_utf8_user_md_LDADD=$(STORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
+test_utf8_user_md_CFLAGS=$(TESTS_INCLUDE)
 
 test_stats_SOURCES=test_stats.c
 test_stats_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)

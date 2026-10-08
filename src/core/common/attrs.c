@@ -109,6 +109,46 @@ static int dump_to_gstring(const char *buffer, size_t size, void *data)
     return 0;
 }
 
+/** Sanitize an attribute set: replace the keys and the values that are not
+ * valid UTF-8 with copies where each invalid byte is substituted with the
+ * Unicode replacement character U+FFFD. NULL values (removal markers) are
+ * kept as is. This is a no-op if all the keys and the values are already
+ * valid UTF-8.
+ */
+void pho_attrs_make_valid(struct pho_attrs *md)
+{
+    bool all_valid = true;
+    GHashTableIter iter;
+    GHashTable *valid;
+    gpointer key;
+    gpointer value;
+
+    if (md == NULL || md->attr_set == NULL)
+        return;
+
+    g_hash_table_iter_init(&iter, md->attr_set);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        if (!g_utf8_validate(key, -1, NULL) ||
+            (value != NULL && !g_utf8_validate(value, -1, NULL))) {
+            all_valid = false;
+            break;
+        }
+    }
+
+    if (all_valid)
+        return;
+
+    valid = g_hash_table_new_full(g_str_hash, g_str_equal, free, free);
+    g_hash_table_iter_init(&iter, md->attr_set);
+    while (g_hash_table_iter_next(&iter, &key, &value))
+        g_hash_table_insert(valid, g_utf8_make_valid(key, -1),
+                            value != NULL ? g_utf8_make_valid(value, -1)
+                                          : NULL);
+
+    g_hash_table_destroy(md->attr_set);
+    md->attr_set = valid;
+}
+
 static int attr_json_dump_cb(const char *key, const char *value, void *udata)
 {
     return json_object_set_new((json_t *)udata, key, json_string(value));

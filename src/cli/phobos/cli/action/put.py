@@ -43,12 +43,19 @@ class PutOptHandler(ActionOptHandler):
                             help='Copy name for this object instance')
 
         parser.add_argument('-m', '--metadata',
-                            help='Comma-separated list of key=value')
+                            help='Comma-separated list of key=value. Keys '
+                                 'and values must be valid UTF-8: invalid '
+                                 'bytes are silently replaced with the '
+                                 'Unicode replacement character (U+FFFD). '
+                                 'To store raw data in a value, encode it '
+                                 'first (e.g. hexadecimal or base64), which '
+                                 'is always valid UTF-8')
         parser.add_argument('--overwrite', action='store_true',
                             help='Allow object update')
         parser.add_argument('--file',
-                            help='File containing lines like: '\
-                                 '<src_file>  <object_id>  <metadata|->')
+                            help='File containing lines like: '
+                                 '<src_file>  <object_id>  <metadata|-> '
+                                 '(metadata format: see --metadata)')
         parser.add_argument('--no-split', action='store_true',
                             help='Prevent splitting object over multiple '
                             'media.')
