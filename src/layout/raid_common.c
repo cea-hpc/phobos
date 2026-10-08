@@ -266,6 +266,7 @@ static int common_rebuilder_writer_init(struct raid_io_context *io_context,
     rc = pho_attrs_to_json(attrs, output->user_md, PHO_ATTR_BACKUP_JSON_FLAGS);
     if (rc) {
         g_string_free(output->user_md, TRUE);
+        output->user_md = NULL;
         LOG_RETURN(rc, "Failed to convert attributes to JSON");
     }
 
@@ -472,13 +473,18 @@ void raid_writer_rebuilder_processor_destroy(struct pho_data_processor *proc)
 
         output->written_extents = NULL;
         output->to_release_media = NULL;
-        for (j = 0; j < n_total_extents(io_context); ++j) {
-            free(output->extents[j].uuid);
-            free(output->extents[j].address.buff);
+        if (output->extents) {
+            for (j = 0; j < n_total_extents(io_context); ++j) {
+                free(output->extents[j].uuid);
+                free(output->extents[j].address.buff);
+            }
+            free(output->extents);
         }
-        free(output->extents);
+
         free(io_context->iods);
-        g_string_free(output->user_md, TRUE);
+
+        if (output->user_md)
+            g_string_free(output->user_md, TRUE);
 
         for (j = 0; j < io_context->nb_hashes; j++)
             extent_hash_fini(&io_context->hashes[j]);
