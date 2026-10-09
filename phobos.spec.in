@@ -211,6 +211,32 @@ ldconfig
 
 %changelog
 
+* Fri Oct 09 2026 - Patrice Lucas <patrice.lucas@cea.fr> - 3.4.1-1
+ - Grouped read: queue preallocation has been improved to guarantee the
+   use of media already present and available.
+ - "phobos locate" is now compatible with incomplete copies missing
+   extents on some of their media.
+ - the fs_status of a medium is now set to FULL when a ENOSPC, EROFS or EDQUOT
+   errors occurs instead of FAILED.
+ - the last_load for each media is now recorded in its stats as a timestamp.
+ - the `nb_errors` stat for each media is now updated each time an error occurs
+   on that media.
+ - Add the "phobos <media> stats" command to retrieve statistics usage for each
+   media.
+ - Add "--extent-idx" to "phobos copy rebuild" to rebuild a list of specifics
+   extents
+ - Parallel IO: the medium synchronization is now performed concurrently
+   with the ongoing IOs of a device when nb_max_parallel_io is not 1 for
+   its family. It no longer waits for their end, and the device stays
+   selectable while a synchronization is pending.
+ - HSM release: add specific fill thresholds on the source copy extents,
+   used only when dir_release_specific_higher_threshold is strictly lower
+   than dir_release_higher_threshold.
+ - All user-provided strings are now escaped in the SQL requests, so that
+   quotes in them (e.g. an apostrophe in a full path) no longer cause errors.
+ - Escape metadata UTF8 invalid bytes
+ - fix object_size EA truncation and buffer overflow
+
 * Mon Aug 31 2026 - Patrice Lucas <patrice.lucas@cea.fr> - 3.4.0-1
  - WARNING: the stat dev.umount_error is changed to dev.umount_errors .
  - WARNING: When calling the pho_xfer_desc_clean function after a `phobos_get`

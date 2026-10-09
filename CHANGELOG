@@ -1,6 +1,6 @@
 # CHANGELOG UPDATES
 
-## Next
+## 3.4.1
  * Grouped read: queue preallocation has been improved to guarantee the
    use of media already present and available.
  * "phobos locate" is now compatible with incomplete copies missing
