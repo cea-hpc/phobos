@@ -54,6 +54,7 @@ check_PROGRAMS=test_attrs \
                test_dss_lock \
                test_dss_logs \
                test_dss_medium_locate \
+               test_dss_media_gc_stats \
                test_dss_object_move \
                test_io \
                test_layout_module \
@@ -136,6 +137,11 @@ test_dss_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/core/dss $(TESTS_LIB_INCLUDES)
 test_dss_medium_locate_SOURCES=test_dss_medium_locate.c
 test_dss_medium_locate_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_dss_medium_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/core/dss \
+        $(TESTS_LIB_INCLUDES)
+
+test_dss_media_gc_stats_SOURCES=test_dss_media_gc_stats.c
+test_dss_media_gc_stats_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
+test_dss_media_gc_stats_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/core/dss \
         $(TESTS_LIB_INCLUDES)
 
 test_dss_object_move_SOURCES=test_dss_object_move.c

@@ -786,6 +786,9 @@ int dss_media_gc_stats_compute(struct dss_handle *handle,
     int rc = 0;
     int count;
 
+    if ((media_count > 0 && media == NULL) || media_count < 0)
+        return -EINVAL;
+
     request = g_string_new(NULL);
 
     /* the media targeted by the computation: the media of the family,
