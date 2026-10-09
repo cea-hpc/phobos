@@ -274,7 +274,7 @@ int dss_update_gc_for_tape(struct dss_handle *handle,
  * @param[in]  media        identifiers of the media to refresh
  * @param[in]  media_count  number of media in \p media
  *
- * @return 0 on success, negated errno on failure
+ * @return number of media updated on success, negated errno on failure
  */
 int dss_media_gc_stats_compute(struct dss_handle *handle,
                                enum rsc_family family,

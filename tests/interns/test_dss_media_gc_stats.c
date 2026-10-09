@@ -273,7 +273,7 @@ static void dmgcs_refresh_family(void **state)
 
     /* no media given: all the media of the dir family are refreshed */
     rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, 0);
-    assert_return_code(rc, -rc);
+    assert_int_equal(rc, 2);
 
     /* e5+e6 are orphan (550 bytes), e2+e3 are deprecated (500 bytes) */
     media = get_stored_medium(M1.name, &media_count);
@@ -309,7 +309,7 @@ static void dmgcs_refresh_given_media(void **state)
 
     /* all the given media are refreshed, whatever their family */
     rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, targets, 3);
-    assert_return_code(rc, -rc);
+    assert_int_equal(rc, 3);
 
     media = get_stored_medium(M1.name, &media_count);
     assert_int_equal(media_count, 1);
@@ -340,7 +340,7 @@ static void dmgcs_refresh_subset(void **state)
     targets[0] = M2;
 
     rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, targets, 1);
-    assert_return_code(rc, -rc);
+    assert_int_equal(rc, 1);
 
     media = get_stored_medium(M2.name, &media_count);
     assert_int_equal(media_count, 1);
@@ -369,8 +369,9 @@ static void dmgcs_refresh_unknown_medium(void **state)
     targets[0] = M2;
     targets[1] = unknown;
 
+    /* only the existing medium is refreshed, the returned count reflects it */
     rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, targets, 2);
-    assert_return_code(rc, -rc);
+    assert_int_equal(rc, 1);
 
     media = get_stored_medium(M2.name, &media_count);
     assert_int_equal(media_count, 1);
@@ -398,7 +399,7 @@ static void dmgcs_refresh_preserves_live_counters(void **state)
     assert_return_code(rc, -rc);
 
     rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, 0);
-    assert_return_code(rc, -rc);
+    assert_int_equal(rc, 2);
 
     /* the GC counters are published, the live counter survived both the
      * update and the refresh
@@ -419,11 +420,11 @@ static void dmgcs_refresh_idempotent(void **state)
     (void) state;
 
     rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, 0);
-    assert_return_code(rc, -rc);
+    assert_int_equal(rc, 2);
 
     /* a second refresh replaces the counters, it does not add to them */
     rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, 0);
-    assert_return_code(rc, -rc);
+    assert_int_equal(rc, 2);
 
     media = get_stored_medium(M1.name, &media_count);
     assert_int_equal(media_count, 1);

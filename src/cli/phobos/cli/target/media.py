@@ -105,7 +105,13 @@ class MediaListOptHandler(ListOptHandler):
     blank: medium is not formatted
     empty: medium is formatted, no data written to it
     used: medium contains data
-    full: medium is full, no more data can be written to it"""
+    full: medium is full, no more data can be written to it
+
+    About the garbage collection statistics:
+    stats.nb_extent_deprecated, stats.nb_extent_orphan,
+    stats.logc_spc_deprecated and stats.logc_spc_orphan are never computed and
+    can be outdated. Use refresh_gc_stats to recompute them from the extents of
+    the media, which may take a long time."""
 
 
 class MediaLocateOptHandler(ActionOptHandler):
@@ -133,6 +139,20 @@ class MediaRebuildOptHandler(RebuildOptHandler):
         parser.add_argument('-L', '--library',
                             help="Library containing rebuilt resources")
         parser.add_argument('res', nargs='+', help='Resource(s) to rebuild')
+
+
+class MediaRefreshGCStatsOptHandler(ActionOptHandler):
+    """Refresh the GC stats of media"""
+    label = "refresh_gc_stats"
+    descr = "refresh the garbage collection statistics of media"
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(MediaRefreshGCStatsOptHandler, cls).add_options(parser)
+        parser.add_argument('-L', '--library',
+                            help="attribute to filter the refresh by library")
+        parser.add_argument('res', nargs='*', help='resource to refresh')
 
 
 class MediaRenameOptHandler(ActionOptHandler):
@@ -203,6 +223,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         MediaListOptHandler,
         MediaLocateOptHandler,
         MediaRebuildOptHandler,
+        MediaRefreshGCStatsOptHandler,
         MediaRenameOptHandler, # pylint: disable=duplicate-code
         MediaSetAccessOptHandler,
         MediaUpdateOptHandler,
@@ -407,6 +428,25 @@ class MediaOptHandler(BaseResourceOptHandler):
         if len(objs) > 0:
             dump_object_list(objs, attr=self.params.get('output'),
                              fmt=self.params.get('format'))
+
+    def exec_refresh_gc_stats(self):
+        """Refresh the gc stats of media"""
+        set_library(self)
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                ids = NodeSet.fromlist(self.params.get('res'))
+                refreshed = adm.medium_refresh_gc_stats(self.family, ids,
+                                                        self.library)
+            if refreshed > 0:
+                self.logger.info("Garbage collection statistics of the "
+                                 "media have been refreshed")
+            if ids and refreshed != len(ids):
+                self.logger.warning(f"Only {refreshed} of the {len(ids)} "
+                                    "requested media were refreshed")
+
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
     def _set_adm_status(self, adm_status):
         """Update media.adm_status"""

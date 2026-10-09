@@ -18,6 +18,8 @@
    configuration parameter in a given section.
  * Add the "phobos config get" command to read the value of a configuration
    parameter in a given section.
+ * Add the "phobos <media> refresh_gc_stats" command to refresh the garbage
+   collection statistics of media.
 
 ## 3.4.1
  * Grouped read: queue preallocation has been improved to guarantee the

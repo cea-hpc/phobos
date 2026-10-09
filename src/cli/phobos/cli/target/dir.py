@@ -39,6 +39,7 @@ from phobos.cli.target.media import (MediaAddOptHandler, MediaListOptHandler,
                                      MediaLocateOptHandler, MediaOptHandler,
                                      MediaRebuildOptHandler,
                                      MediaRenameOptHandler,
+                                     MediaRefreshGCStatsOptHandler,
                                      MediaImportOptHandler,
                                      MediaSetAccessOptHandler,
                                      MediaUpdateOptHandler)
@@ -104,6 +105,7 @@ class DirOptHandler(MediaOptHandler):
         MediaListOptHandler,
         MediaLocateOptHandler,
         MediaRebuildOptHandler,
+        MediaRefreshGCStatsOptHandler,
         MediaRenameOptHandler,
         MediaUpdateOptHandler, # pylint: enable=duplicate-code
         DirResourceDeleteOptHandler,

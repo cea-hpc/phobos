@@ -33,6 +33,7 @@ from phobos.cli.target.media import (MediaAddOptHandler,
                                      MediaOptHandler,
                                      MediaRebuildOptHandler,
                                      MediaRenameOptHandler,
+                                     MediaRefreshGCStatsOptHandler,
                                      MediaSetAccessOptHandler,
                                      MediaUpdateOptHandler)
 from phobos.cli.common.utils import (setaccess_epilog, uncase_fstype)
@@ -122,6 +123,7 @@ class TapeOptHandler(MediaOptHandler):
         MediaLocateOptHandler,
         MediaRebuildOptHandler,
         MediaRenameOptHandler,
+        MediaRefreshGCStatsOptHandler,
         MediaUpdateOptHandler, # pylint: enable=duplicate-code
         ResourceDeleteOptHandler,
         TapeAddOptHandler,

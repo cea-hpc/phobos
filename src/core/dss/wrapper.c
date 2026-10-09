@@ -892,9 +892,11 @@ int dss_media_gc_stats_compute(struct dss_handle *handle,
              LAST_GC_REFRESH;
 
     rc = dss_media_update(handle, media_list, media_list, count, fields);
-
     free(media_list);
-    return rc;
+    if (rc)
+        return rc;
+
+    return count;
 
 free_request:
     g_string_free(request, true);

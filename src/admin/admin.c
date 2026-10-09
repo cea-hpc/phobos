@@ -3034,3 +3034,24 @@ int phobos_admin_media_rebuild(struct admin_handle *adm, struct media_info *med,
 
     return skipped ? -ENODATA : rc;
 }
+
+int phobos_admin_media_refresh_gc_stats(struct admin_handle *adm,
+                                        enum rsc_family family,
+                                        const struct pho_id *media,
+                                        int media_count)
+{
+    int rc;
+
+    if ((media_count > 0 && media == NULL) || media_count < 0)
+        return -EINVAL;
+
+    for (int i = 0; i < media_count; i++) {
+        if (media[i].family == PHO_RSC_DIR) {
+            rc = _normalize_path((char *) media[i].name);
+            if (rc)
+                return rc;
+        }
+    }
+
+    return dss_media_gc_stats_compute(&adm->dss, family, media, media_count);
+}

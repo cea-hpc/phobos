@@ -718,4 +718,25 @@ int phobos_admin_stats(struct admin_handle *adm, const char *full_name,
 int phobos_admin_media_rebuild(struct admin_handle *adm, struct media_info *med,
                                int med_cnt);
 
+/**
+ * Refresh the garbage collection statistics of a list of media from the
+ * extents, it may take a long time.
+ *
+ * The refreshed media are the ones given in \p media or all the media of \p
+ * family when media_count is 0. The returned count may be lower than
+ * media_count when some of the given media do not match any medium of the
+ * DSS.
+ *
+ * @param[in] adm           Valid admin handle
+ * @param[in] family        targeted family
+ * @param[in] media         The list of media to refresh gc stats
+ * @param[in] media_count   The number of media in \p media
+ *
+ * @return             The number of refreshed media on success,
+ *                     negative POSIX error code on error
+ */
+int phobos_admin_media_refresh_gc_stats(struct admin_handle *adm,
+                                        enum rsc_family family,
+                                        const struct pho_id *media,
+                                        int media_count);
 #endif
