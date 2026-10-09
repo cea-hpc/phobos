@@ -261,10 +261,10 @@ int main(int argc, char **argv)
                           fs_type2str(media->fs.type),
                           fs_status2str(media->fs.status),
                           media->rsc.id.library);
-                pho_debug("Got Media Stats: nb_obj:%lld logc_spc_used:%zd"
+                pho_debug("Got Media Stats: nb_extent:%lld logc_spc_used:%zd"
                           " phys_spc_used:%zd phys_spc_free:%zd:nb_errors:%ld:"
                           "last_load:%ld",
-                          media->stats.nb_obj,
+                          media->stats.nb_extent,
                           media->stats.logc_spc_used,
                           media->stats.phys_spc_used,
                           media->stats.phys_spc_free,
@@ -387,8 +387,8 @@ int main(int argc, char **argv)
                     pho_id_name_set(&media->rsc.id, s, "legacy");
                     free(s);
                 } else if (action == DSS_SET_UPDATE) {
-                    media->stats.nb_obj = 1000;
-                    fields |= NB_OBJ_ADD;
+                    media->stats.nb_extent = 1000;
+                    fields |= NB_EXTENT_ADD;
                 }
             }
             break;

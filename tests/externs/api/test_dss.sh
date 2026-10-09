@@ -198,8 +198,8 @@ psql phobos_test phobos -c "SELECT * FROM MEDIA;"
 test_check_get "media" '{"$LIKE": {"DSS::MDA::id": "%COPY%"}}'
 psql phobos_test phobos -c "SELECT * FROM MEDIA;"
 test_check_set "media" "update"
-test_check_get "media" '{"$GT": {"DSS::MDA::nb_obj": "1002"}}'
-test_check_get "media" '{"$NOT": {"$GT": {"DSS::MDA::nb_obj": "1002"}}}'
+test_check_get "media" '{"$GT": {"DSS::MDA::nb_extent": "1002"}}'
+test_check_get "media" '{"$NOT": {"$GT": {"DSS::MDA::nb_extent": "1002"}}}'
 test_check_set "media" "delete"
 test_check_get "media" '{"$LIKE": {"DSS::MDA::id": "%COPY%"}}'
 echo "**** TEST: DSS_SET OBJECT AND LAYOUT ****"

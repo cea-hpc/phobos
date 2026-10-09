@@ -497,19 +497,19 @@ int dss_media_update(struct dss_handle *handle, struct media_info *src_list,
                          " to update stats",
                          PHO_ID(src_list[i].rsc.id));
 
-            if (NB_OBJ & fields)
-                medium_info->stats.nb_obj = dst_list[i].stats.nb_obj;
+            if (NB_EXTENT & fields)
+                medium_info->stats.nb_extent = dst_list[i].stats.nb_extent;
 
-            if (NB_OBJ_ADD & fields)
-                medium_info->stats.nb_obj += dst_list[i].stats.nb_obj;
+            if (NB_EXTENT_ADD & fields)
+                medium_info->stats.nb_extent += dst_list[i].stats.nb_extent;
 
 
             /*
              * DSS stats values must be positive values even if previous
              * approximations compute negative values.
              */
-            if (medium_info->stats.nb_obj < 0)
-                medium_info->stats.nb_obj = 0;
+            if (medium_info->stats.nb_extent < 0)
+                medium_info->stats.nb_extent = 0;
 
             if (LOGC_SPC_USED & fields)
                 medium_info->stats.logc_spc_used =

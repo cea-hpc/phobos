@@ -51,7 +51,7 @@ static void fill_medium_info(struct media_info *medium_info, struct pho_id id)
     medium_info->fs.type = PHO_FS_POSIX;
     medium_info->fs.status = PHO_FS_STATUS_USED;
     medium_info->fs.label[0] = '\0';
-    medium_info->stats.nb_obj = 1;
+    medium_info->stats.nb_extent = 1;
     medium_info->stats.logc_spc_used = 7;
     medium_info->stats.phys_spc_used = 7;
     medium_info->stats.phys_spc_free = 7;
@@ -84,7 +84,8 @@ static void check_medium_info_correctly_filled(struct media_info *medium_info,
     assert_int_equal(medium_info->fs.type, filled_medium.fs.type);
     assert_int_equal(medium_info->fs.status, filled_medium.fs.status);
     assert_string_equal(medium_info->fs.label, "NULL");
-    assert_int_equal(medium_info->stats.nb_obj, filled_medium.stats.nb_obj);
+    assert_int_equal(medium_info->stats.nb_extent,
+                     filled_medium.stats.nb_extent);
     assert_int_equal(medium_info->stats.logc_spc_used,
                      filled_medium.stats.logc_spc_used);
     assert_int_equal(medium_info->stats.phys_spc_used,

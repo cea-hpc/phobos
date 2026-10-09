@@ -307,7 +307,7 @@ function test_media
     "$IN_FILE" "$OUT_FILE"
 
     local req1="$($phobos tape list -o addr_type,adm_status,family,model,\
-name,fs.type,fs.status,fs.label,stats.nb_obj,stats.logc_spc_used,\
+name,fs.type,fs.status,fs.label,stats.nb_extent,stats.logc_spc_used,\
 stats.phys_spc_used)"
 
     db_cleanup
@@ -320,7 +320,7 @@ stats.phys_spc_used)"
     done
 
     local req2="$($phobos tape list -o addr_type,adm_status,family,model,\
-name,fs.type,fs.status,fs.label,stats.nb_obj,stats.logc_spc_used,\
+name,fs.type,fs.status,fs.label,stats.nb_extent,stats.logc_spc_used,\
 stats.phys_spc_used)"
 
     [[ "$req1" == "$req2" ]] || error "Media data mismatch"

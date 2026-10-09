@@ -385,7 +385,7 @@ class MediaFS(Structure): # pylint: disable=too-few-public-methods
 class MediaStats(Structure): # pylint: disable=too-few-public-methods
     """Media usage descriptor."""
     _fields_ = [
-        ('nb_obj', c_longlong),
+        ('nb_extent', c_longlong),
         ('logc_spc_used', c_longlong),
         ('phys_spc_used', c_longlong),
         ('phys_spc_free', c_longlong),
@@ -450,7 +450,7 @@ class MediaEnrichedStats(Structure, CLIManagedResourceMixin): # pylint: disable=
     def expanded_stats(self):
         """Wrapper to get media stats as dict"""
         return {
-            'stats.nb_obj': self.stats.nb_obj,
+            'stats.nb_extent': self.stats.nb_extent,
             'stats.logc_spc_used': self.stats.logc_spc_used,
             'stats.phys_spc_used': self.stats.phys_spc_used,
             'stats.phys_spc_free': self.stats.phys_spc_free,
@@ -602,7 +602,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
     def expanded_stats(self):
         """Wrapper to get media stats as dict"""
         return {
-            'stats.nb_obj': self.stats.nb_obj,
+            'stats.nb_extent': self.stats.nb_extent,
             'stats.logc_spc_used': self.stats.logc_spc_used,
             'stats.phys_spc_used': self.stats.phys_spc_used,
             'stats.phys_spc_free': self.stats.phys_spc_free,

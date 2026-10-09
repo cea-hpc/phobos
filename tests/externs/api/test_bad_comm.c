@@ -229,9 +229,9 @@ static int send_write_and_release_with_rc(struct pho_comm_info *ci,
         goto out;
 
     if (client_rc == 0) {
-        if (current_info->stats.nb_obj + 1 != new_info->stats.nb_obj)
+        if (current_info->stats.nb_extent + 1 != new_info->stats.nb_extent)
             LOG_GOTO(out, rc = PHO_TEST_FAILURE,
-                     "Total number of objects was not increased by 1");
+                     "Total number of extents was not increased by 1");
 
     } else {
         struct dss_handle dss;
@@ -266,10 +266,10 @@ static int send_write_and_release_with_rc(struct pho_comm_info *ci,
         }
 
 
-        if (current_info->stats.nb_obj != new_info->stats.nb_obj) {
+        if (current_info->stats.nb_extent != new_info->stats.nb_extent) {
             dss_fini(&dss);
             LOG_GOTO(out, rc = PHO_TEST_FAILURE,
-                     "Number of objects was increased but no object was "
+                     "Number of extents was increased but no object was "
                      "written");
         }
 

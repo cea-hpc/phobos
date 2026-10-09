@@ -92,21 +92,21 @@ function media_setup
     $phobos dir unlock "/tmp/pho_testdir3" "/tmp/pho_testdir4" \
                        "/tmp/pho_testdir5"
     $PSQL << EOF
-UPDATE media SET stats = '{"nb_obj":5, "logc_spc_used":0, "phys_spc_used":0,\
+UPDATE media SET stats = '{"nb_extent":5, "logc_spc_used":0, "phys_spc_used":0,\
                            "phys_spc_free":0, "nb_load":0, "nb_errors":0,\
                            "last_load":0}'
     WHERE id = '/tmp/pho_testdir1';
 EOF
 
     $PSQL << EOF
-UPDATE media SET stats = '{"nb_obj":1, "logc_spc_used":0, "phys_spc_used":0,\
+UPDATE media SET stats = '{"nb_extent":1, "logc_spc_used":0, "phys_spc_used":0,\
                            "phys_spc_free":0, "nb_load":0, "nb_errors":0,\
                            "last_load":0}'
     WHERE id = '/tmp/pho_testdir2';
 EOF
 
     $PSQL << EOF
-UPDATE media SET stats = '{"nb_obj":9, "logc_spc_used":0, "phys_spc_used":0,\
+UPDATE media SET stats = '{"nb_extent":9, "logc_spc_used":0, "phys_spc_used":0,\
                            "phys_spc_free":0, "nb_load":0, "nb_errors":0,\
                            "last_load":0}'
     WHERE id = '/tmp/pho_testdir5';
@@ -225,18 +225,18 @@ function test_media_list_sort
 {
     test_sort "dir" "--sort" "name"
     test_sort "dir" "--sort" "lock_ts"
-    test_sort "dir" "--sort" "stats.nb_obj"
-    test_multiple_output "dir" "--sort" "name" "name,lock_ts,stats.nb_obj" \
-                         "stats.nb_obj,name,lock_ts"
+    test_sort "dir" "--sort" "stats.nb_extent"
+    test_multiple_output "dir" "--sort" "name" "name,lock_ts,stats.nb_extent" \
+                         "stats.nb_extent,name,lock_ts"
 }
 
 function test_media_list_rsort
 {
     test_sort "dir" "--rsort" "name"
     test_sort "dir" "--rsort" "lock_ts"
-    test_sort "dir" "--rsort" "stats.nb_obj"
-    test_multiple_output "dir" "--rsort" "name" "name,lock_ts,stats.nb_obj" \
-                         "stats.nb_obj,name,lock_ts"
+    test_sort "dir" "--rsort" "stats.nb_extent"
+    test_multiple_output "dir" "--rsort" "name" "name,lock_ts,stats.nb_extent" \
+                         "stats.nb_extent,name,lock_ts"
 }
 
 function test_object_list_sort

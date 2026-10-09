@@ -116,7 +116,7 @@ function test_mput_error
         error "'$expected_count' extent(s) should have been inserted, found '$extent_count'"
     fi
 
-    local object_on_medium_count="$($phobos $family list -o stats.nb_obj)"
+    local object_on_medium_count="$($phobos $family list -o stats.nb_extent)"
     if ((object_on_medium_count != expected_count)); then
         error "The $family should only have '$expected_count' object registered, found '$object_on_tape_count'"
     fi

@@ -70,7 +70,7 @@ ATTRS2DSS = {
     'stats.logc_spc_used' : 'stats -> \'logc_spc_used\'',
     'stats.nb_errors'     : 'stats -> \'nb_errors\'',
     'stats.nb_load'       : 'stats -> \'nb_load\'',
-    'stats.nb_obj'        : 'stats -> \'nb_obj\'',
+    'stats.nb_extent'     : 'stats -> \'nb_extent\'',
     'stats.phys_spc_free' : 'stats -> \'phys_spc_free\'',
     'stats.phys_spc_used' : 'stats -> \'phys_spc_used\'',
 

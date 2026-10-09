@@ -167,7 +167,7 @@ function test_simple_repack
         error "repack should have copied 3 extents to the empty medium"
     fi
 
-    nb=$($phobos tape list -o stats.nb_obj $medium_origin_bis)
+    nb=$($phobos tape list -o stats.nb_extent $medium_origin_bis)
     if [ $nb -ne 3 ]; then
         error "tape stats should have said 3 extents were copied"
     fi
@@ -414,7 +414,7 @@ function test_simple_repack_library_bis
         error "repack should have copied 1 extent to the empty medium"
     fi
 
-    nb=$($phobos tape list -o stats.nb_obj $medium_other)
+    nb=$($phobos tape list -o stats.nb_extent $medium_other)
     if [ $nb -ne 1 ]; then
         error "tape stats should have said 1 extent were copied"
     fi

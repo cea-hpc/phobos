@@ -217,7 +217,7 @@ function test_dir_hard_delete
 
     for medium in $medium_list; do
         medium=$(echo $medium | cut -d"'" -f2)
-        [ $($phobos dir list -o stats.nb_obj $medium) -eq 0 ] ||
+        [ $($phobos dir list -o stats.nb_extent $medium) -eq 0 ] ||
             error "Hard delete should have set correct number of objects on dir"
         [ $($phobos dir list -o stats.logc_spc_used $medium) -eq 0 ] ||
             error "Hard delete should have set correct logical space on dir"

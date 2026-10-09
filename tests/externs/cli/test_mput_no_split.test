@@ -487,11 +487,11 @@ function test_threshold_raid1()
         error "There should be 2 sync (got $count)"
     fi
 
-    local nb_obj=$($phobos dir list -o stats.nb_obj)
+    local nb_extent=$($phobos dir list -o stats.nb_extent)
     local nb_written=$($phobos dir list -o stats.logc_spc_used)
 
-    if [[ $nb_obj -ne 2 ]]; then
-        error "There should be 2 objects (got $nb_obj)"
+    if [[ $nb_extent -ne 2 ]]; then
+        error "There should be 2 extents (got $nb_extent)"
     fi
 
     if [[ $nb_written -ne $((400 * 1000)) ]]; then

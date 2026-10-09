@@ -50,7 +50,7 @@ static void fill_medium_info(struct media_info *medium_info, struct pho_id id)
     medium_info->fs.type = PHO_FS_POSIX;
     medium_info->fs.status = PHO_FS_STATUS_USED;
     medium_info->fs.label[0] = '\0';
-    medium_info->stats.nb_obj = 1;
+    medium_info->stats.nb_extent = 1;
     medium_info->stats.logc_spc_used = 7;
     medium_info->stats.phys_spc_used = 7;
     medium_info->stats.phys_spc_free = 7;

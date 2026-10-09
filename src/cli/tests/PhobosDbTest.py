@@ -200,7 +200,7 @@ class MigratorTest(unittest.TestCase):
                                    lock_ts, stats, tags, put, get, delete)
                     VALUES ('dir', NULL, '{tmpdir}', 'unlocked',
                             'POSIX', '{tmpdir}', 'HASH1', 'used', '',
-                            0, '{{"nb_obj": 1, "last_load": 0, "nb_errors": 0,
+                            0, '{{"nb_extent": 1, "last_load": 0, "nb_errors": 0,
                                  "logc_spc_used": {size},
                                  "phys_spc_free": 17784107008,
                                  "phys_spc_used": 3679174656}}',

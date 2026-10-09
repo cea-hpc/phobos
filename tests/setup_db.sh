@@ -50,23 +50,23 @@ insert into device (family, model, id, host, adm_status, path, library)
 insert into media (family, model, id, adm_status, fs_type, address_type,
 		   fs_status, stats, tags, library)
     values ('dir', NULL, '/tmp/pho_testdir1', 'unlocked', 'POSIX',
-	    'HASH1', 'empty', '{"nb_obj":5, "logc_spc_used":3668841456,\
+	    'HASH1', 'empty', '{"nb_extent":5, "logc_spc_used":3668841456,\
 	      "phys_spc_used":3668841456,"phys_spc_free":12857675776,\
           "nb_errors":0,"last_load":0}', '[]', 'legacy'),
            ('dir', NULL, '/tmp/pho_testdir2', 'unlocked', 'POSIX',
-	    'HASH1', 'empty', '{"nb_obj":6,"logc_spc_used":4868841472,\
+	    'HASH1', 'empty', '{"nb_extent":6,"logc_spc_used":4868841472,\
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
           "nb_errors":0,"last_load":0}', '["mytag"]', 'legacy'),
            ('dir', NULL, '/tmp/pho_testdir3', 'unlocked', 'POSIX',
-	    'HASH1', 'empty', '{"nb_obj":0,"logc_spc_used":4868841472,\
+	    'HASH1', 'empty', '{"nb_extent":0,"logc_spc_used":4868841472,\
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
           "nb_errors":0,"last_load":0}', '[]', 'legacy'),
            ('dir', NULL, '/tmp/pho_testdir4', 'unlocked', 'POSIX',
-	    'HASH1', 'empty', '{"nb_obj":7,"logc_spc_used":4868841472,\
+	    'HASH1', 'empty', '{"nb_extent":7,"logc_spc_used":4868841472,\
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
           "nb_errors":0,"last_load":0}', '["mytag"]', 'legacy'),
            ('dir', NULL, '/tmp/pho_testdir5', 'unlocked', 'POSIX',
-	    'HASH1', 'empty', '{"nb_obj":7,"logc_spc_used":4868841472,\
+	    'HASH1', 'empty', '{"nb_extent":7,"logc_spc_used":4868841472,\
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
           "nb_errors":0,"last_load":0}', '["mytag"]', 'legacy');
 
@@ -117,7 +117,7 @@ function resize_medium
 
     $PSQL << EOF
 UPDATE media SET
-    stats = '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0,\
+    stats = '{"nb_extent":0, "logc_spc_used":0, "phys_spc_used":0,\
               "phys_spc_free":$size, "nb_load":0, "nb_errors":0,\
               "last_load":0}'
     WHERE id = '$id';

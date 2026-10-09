@@ -486,7 +486,7 @@ struct dev_info {
  * json_int_t.
  */
 struct media_stats {
-    long long   nb_obj;         /**< number of objects stored on media */
+    long long   nb_extent;      /**< number of extents stored on media */
     ssize_t     logc_spc_used;  /**< space used (logical)  */
     ssize_t     phys_spc_used;  /**< space used (physical) */
     ssize_t     phys_spc_free;  /**< free space (physical) */

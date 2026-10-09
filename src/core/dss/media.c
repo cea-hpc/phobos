@@ -55,7 +55,7 @@ static char *dss_media_stats_encode(struct media_stats stats)
         return NULL;
     }
 
-    JSON_INTEGER_SET_NEW(root, stats, nb_obj);
+    JSON_INTEGER_SET_NEW(root, stats, nb_extent);
     JSON_INTEGER_SET_NEW(root, stats, logc_spc_used);
     JSON_INTEGER_SET_NEW(root, stats, phys_spc_used);
     JSON_INTEGER_SET_NEW(root, stats, phys_spc_free);
@@ -91,7 +91,7 @@ int dss_media_stats_decode(struct media_stats *stats, const char *json)
 
     pho_debug("STATS: '%s'", json);
 
-    LOAD_CHECK64(rc, root, stats, nb_obj, false);
+    LOAD_CHECK64(rc, root, stats, nb_extent, false);
     LOAD_CHECK64(rc, root, stats, logc_spc_used, false);
     LOAD_CHECK64(rc, root, stats, phys_spc_used, false);
     LOAD_CHECK64(rc, root, stats, phys_spc_free, false);

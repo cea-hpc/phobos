@@ -1110,8 +1110,8 @@ void media_update_status_and_stats(struct media_info *media_info, int media_rc,
         }
 
         if (nb_new_obj) {
-            media_info->stats.nb_obj = nb_new_obj;
-            *fields |= NB_OBJ_ADD;
+            media_info->stats.nb_extent = nb_new_obj;
+            *fields |= NB_EXTENT_ADD;
         }
 
         if (size_written) {

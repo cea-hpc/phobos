@@ -266,12 +266,12 @@ function test_remove_invalid_media_locks
         "insert into media (family, model, id, adm_status, fs_type,
                             address_type, fs_status, stats, tags, library)
             values ('dir', NULL, '${dir0}', 'unlocked', 'POSIX', 'HASH1',
-                    'blank', '{\"nb_obj\":0, \"logc_spc_used\":0, \
+                    'blank', '{\"nb_extent\":0, \"logc_spc_used\":0, \
                                \"phys_spc_used\":0, \"phys_spc_free\":1024, \
                                \"nb_load\":0, \"nb_errors\":0, \
                                \"last_load\":0}', '[]', 'legacy'),
                    ('dir', NULL, '${dir1}', 'unlocked', 'POSIX', 'HASH1',
-                    'blank', '{\"nb_obj\":0, \"logc_spc_used\":0, \
+                    'blank', '{\"nb_extent\":0, \"logc_spc_used\":0, \
                                \"phys_spc_used\":0, \"phys_spc_free\":1024, \
                                \"nb_load\":0, \"nb_errors\":0, \
                                \"last_load\":0}', '[]', 'legacy');"

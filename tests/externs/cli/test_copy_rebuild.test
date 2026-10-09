@@ -373,7 +373,7 @@ function test_copy_rebuild_impl
         local rebuilt_medium="${rebuilt_media[$idx]}"
         local extent_size="${deleted_sizes[$i]}"
 
-        stat_should_be "$rebuilt_medium" stats.nb_obj 1
+        stat_should_be "$rebuilt_medium" stats.nb_extent 1
         stat_should_be "$rebuilt_medium" stats.logc_spc_used "$extent_size"
     done
 }

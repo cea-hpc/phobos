@@ -71,7 +71,7 @@ The list command can be used on a single `name` to display that specific medium.
       stored) or `full` (formatted and completely full of data)
     * `fs.label`: name of the filesystem
   * `stats.*`: various stats on the medium:
-    * `stats.nb_obj`: number of objects stored on the medium
+    * `stats.nb_extent`: number of extents stored on the medium
     * `stats.logc_spc_used`: sum of the size of all the objects on the medium
     * `stats.phys_spc_used`: correspond to `total_space - free_space` (may be
       different from `logc_spc_used` because of compression or metadata written
