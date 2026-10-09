@@ -1,0 +1,323 @@
+#!/usr/bin/env bash
+
+#
+#  All rights reserved (c) 2014-2026 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Test the media refresh_gc_stats command
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/tape_drive.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
+
+# logical size of the put files, so that each GC counter has its own value
+FILE_LIVE_SIZE=2048
+FILE_DEPRECATED_SIZE=1024
+FILE_OVERWRITTEN_SIZE=512
+FILE_ORPHANED_SIZE=4096
+FILE_REMOVED_SIZE=8192
+
+GC_ATTRS="stats.nb_extent_deprecated,stats.logc_spc_deprecated,"\
+"stats.nb_extent_orphan,stats.logc_spc_orphan"
+FULL_ATTRS="stats.nb_extent,stats.logc_spc_used,$GC_ATTRS"
+
+function setup_files
+{
+    FILE_LIVE="$DIR_TEST_IN/file_live"
+    FILE_DEPRECATED="$DIR_TEST_IN/file_deprecated"
+    FILE_OVERWRITTEN="$DIR_TEST_IN/file_overwritten"
+    FILE_ORPHANED="$DIR_TEST_IN/file_orphaned"
+    FILE_REMOVED="$DIR_TEST_IN/file_removed"
+
+    dd if=/dev/urandom of="$FILE_LIVE" bs=$FILE_LIVE_SIZE count=1 &>/dev/null
+    dd if=/dev/urandom of="$FILE_DEPRECATED" bs=$FILE_DEPRECATED_SIZE \
+        count=1 &>/dev/null
+    dd if=/dev/urandom of="$FILE_OVERWRITTEN" bs=$FILE_OVERWRITTEN_SIZE \
+        count=1 &>/dev/null
+    dd if=/dev/urandom of="$FILE_ORPHANED" bs=$FILE_ORPHANED_SIZE \
+        count=1 &>/dev/null
+    dd if=/dev/urandom of="$FILE_REMOVED" bs=$FILE_REMOVED_SIZE \
+        count=1 &>/dev/null
+
+    export FILE_LIVE FILE_DEPRECATED FILE_OVERWRITTEN FILE_ORPHANED \
+           FILE_REMOVED
+}
+
+function check_stats
+{
+    local family=$1
+    local medium=$2
+    local attrs=$3
+    local expected_row=$4
+    local out
+    local expected
+
+    out=$($valg_phobos "$family" list "$medium" -f csv -o "$attrs")
+
+    # the csv dialect terminates each line with \r\n
+    out=${out//$'\r'/}
+
+    expected="$attrs"$'\n'"$expected_row"
+    [[ "$out" == "$expected" ]] ||
+        error "unexpected stats of $family medium '$medium': got '$out', "\
+"expected '$expected'"
+}
+
+function setup_dir
+{
+    setup_tables
+    invoke_lrs
+
+    setup_test_dirs
+    setup_files
+
+    # two dir media in different libraries, and an empty one to check
+    # that a refresh also publishes null counters
+    DIR_LEGACY="$DIR_TEST_IN/dir_legacy"
+    DIR_OTHERLIB="$DIR_TEST_IN/dir_otherlib"
+    DIR_EMPTY="$DIR_TEST_IN/dir_empty"
+    export DIR_LEGACY DIR_OTHERLIB DIR_EMPTY
+
+    mkdir "$DIR_LEGACY" "$DIR_OTHERLIB" "$DIR_EMPTY"
+    $phobos dir add --tags statA "$DIR_LEGACY"
+    $phobos dir add --library otherlib "$DIR_OTHERLIB"
+    $phobos dir add --tags statE "$DIR_EMPTY"
+    $phobos dir format --fs posix --unlock "$DIR_LEGACY" "$DIR_EMPTY"
+    $phobos dir format --fs posix --unlock --library otherlib "$DIR_OTHERLIB"
+
+    # DIR_LEGACY: a live extent, a deprecated extent (soft delete) and a
+    # second deprecated extent (first version of an overwritten object)
+    $phobos put -f dir --tags statA "$FILE_LIVE" oid_dir_live
+    $phobos put -f dir --tags statA "$FILE_DEPRECATED" oid_dir_deprecated
+    $phobos del oid_dir_deprecated
+    $phobos put -f dir --tags statA "$FILE_OVERWRITTEN" oid_dir_overwritten
+    $phobos put -f dir --tags statA --overwrite "$FILE_OVERWRITTEN" \
+        oid_dir_overwritten
+
+    # DIR_OTHERLIB: a deprecated extent (soft delete) and a hard deleted
+    # one, which is physically removed from a directory instead of being
+    # orphan
+    $phobos put -f dir --library otherlib "$FILE_DEPRECATED" \
+        oid_dir2_deprecated
+    $phobos del oid_dir2_deprecated
+    $phobos put -f dir --library otherlib "$FILE_REMOVED" oid_dir2_removed
+    $phobos del --hard oid_dir2_removed
+}
+
+function cleanup_dir
+{
+    waive_lrs
+
+    cleanup_test_dirs
+
+    drop_tables
+}
+
+function setup_tape
+{
+    setup_tables
+    invoke_daemons
+
+    setup_test_dirs
+    setup_files
+
+    local drive
+    local tapes
+
+    drive="$(get_lto_drives 6 1)"
+    tapes=( $(get_tapes L6 2 | nodeset -e) )
+    TAPE_STAT_A="${tapes[0]}"
+    TAPE_STAT_B="${tapes[1]}"
+    export TAPE_STAT_A TAPE_STAT_B
+
+    $phobos drive add --unlock "$drive"
+    $phobos tape add -t lto6 --tags statA "$TAPE_STAT_A"
+    $phobos tape add -t lto6 --tags statB "$TAPE_STAT_B"
+    $phobos tape format --unlock "$TAPE_STAT_A" "$TAPE_STAT_B"
+
+    # TAPE_STAT_A: a live extent, a deprecated extent (soft delete) and
+    # an orphan extent (hard delete on tape)
+    $phobos put -f tape --tags statA "$FILE_LIVE" oid_tape_live
+    $phobos put -f tape --tags statA "$FILE_DEPRECATED" oid_tape_deprecated
+    $phobos del oid_tape_deprecated
+    $phobos put -f tape --tags statA "$FILE_ORPHANED" oid_tape_orphaned
+    $phobos del --hard oid_tape_orphaned
+
+    # TAPE_STAT_B: a deprecated extent only
+    $phobos put -f tape --tags statB "$FILE_DEPRECATED" oid_tape2_deprecated
+    $phobos del oid_tape2_deprecated
+}
+
+function cleanup_tape
+{
+    waive_daemons
+
+    drain_all_drives
+    cleanup_test_dirs
+
+    drop_tables
+}
+
+function test_dir_stats_before_refresh
+{
+    # the GC counters are null before any refresh, while the live
+    # counters already account for the extents written on the media
+    check_stats dir "$DIR_LEGACY" "$FULL_ATTRS" \
+        "4,4096,0,0,0,0"
+    check_stats dir "$DIR_OTHERLIB" "$FULL_ATTRS" \
+        "1,1024,0,0,0,0"
+    check_stats dir "$DIR_EMPTY" "$FULL_ATTRS" \
+        "0,0,0,0,0,0"
+}
+
+function test_dir_stats_refresh_time
+{
+    local ts=$($valg_phobos dir list "$DIR_EMPTY" -o stats.last_gc_refresh)
+    [[ "$ts" == "None" ]] ||
+        error "unexpected last refresh time of '$DIR_EMPTY' before any "\
+              "refresh: '$ts'"
+
+    local before=$(date +%s)
+    $valg_phobos dir refresh_gc_stats "$DIR_EMPTY" ||
+        error "refresh of $DIR_EMPTY failed"
+    local after=$(date +%s)
+
+    # the last refresh time is the time of the refresh command
+    ts=$($valg_phobos dir list "$DIR_EMPTY" -o stats.last_gc_refresh)
+    local ts_epoch=$(date -d "$ts" +%s)
+    [[ $ts_epoch -ge $before && $ts_epoch -le $after ]] ||
+        error "last refresh time of '$DIR_EMPTY' is '$ts', expected in the "\
+              "refresh execution window [$before, $after]"
+
+    sleep 2
+
+    $valg_phobos dir refresh_gc_stats "$DIR_EMPTY" ||
+        error "second refresh of $DIR_EMPTY failed"
+
+    ts=$($valg_phobos dir list "$DIR_EMPTY" -o stats.last_gc_refresh)
+    local new_ts_epoch=$(date -d "$ts" +%s)
+    [[ $new_ts_epoch -gt $ts_epoch ]] ||
+        error "last refresh time of '$DIR_EMPTY' did not move forward on a "\
+               "new refresh: '$ts'"
+}
+
+function test_dir_stats_refresh_scope
+{
+    # refresh a single medium of the other library: only this medium is
+    # refreshed
+    $valg_phobos dir refresh_gc_stats --library otherlib "$DIR_OTHERLIB" ||
+        error "refresh of $DIR_OTHERLIB failed"
+
+    check_stats dir "$DIR_OTHERLIB" "$GC_ATTRS" "1,1024,0,0"
+    check_stats dir "$DIR_LEGACY" "$GC_ATTRS" "0,0,0,0"
+}
+
+function test_dir_stats_refresh
+{
+    # refresh all the dir media: the deprecated extents of DIR_LEGACY are
+    # published, the live counters are preserved and the already
+    # refreshed counters of DIR_OTHERLIB are replaced, not added
+    $valg_phobos dir refresh_gc_stats ||
+        error "refresh of the dir family failed"
+
+    check_stats dir "$DIR_LEGACY" "$FULL_ATTRS" \
+        "4,4096,2,1536,0,0"
+    check_stats dir "$DIR_OTHERLIB" "$GC_ATTRS" "1,1024,0,0"
+    check_stats dir "$DIR_EMPTY" "$GC_ATTRS" "0,0,0,0"
+}
+
+function test_dir_stats_stale_without_refresh
+{
+    # a new deprecated extent on DIR_EMPTY: the plain stats command is
+    # read-only and still displays the last refreshed counters
+    $phobos put -f dir --tags statE "$FILE_DEPRECATED" oid_dir_empty_deprecated
+    $phobos del oid_dir_empty_deprecated
+
+    check_stats dir "$DIR_EMPTY" "$GC_ATTRS" "0,0,0,0"
+
+    $valg_phobos dir refresh_gc_stats "$DIR_EMPTY" ||
+        error "refresh of $DIR_EMPTY failed"
+
+    check_stats dir "$DIR_EMPTY" "$GC_ATTRS" "1,1024,0,0"
+}
+
+function test_tape_stats_before_refresh
+{
+    check_stats tape "$TAPE_STAT_A" "$GC_ATTRS" "0,0,0,0"
+    check_stats tape "$TAPE_STAT_B" "$GC_ATTRS" "0,0,0,0"
+}
+
+function test_tape_stats_refresh_scope
+{
+    # refresh a single medium of the default library, without the library
+    # option
+    $valg_phobos tape refresh_gc_stats "$TAPE_STAT_A" ||
+        error "refresh of $TAPE_STAT_A failed"
+
+    check_stats tape "$TAPE_STAT_A" "$GC_ATTRS" "1,1024,1,4096"
+    check_stats tape "$TAPE_STAT_B" "$GC_ATTRS" "0,0,0,0"
+
+    # several media can be refreshed by a single command
+    $valg_phobos tape refresh_gc_stats "$TAPE_STAT_A" "$TAPE_STAT_B" ||
+        error "refresh of the two tapes failed"
+
+    check_stats tape "$TAPE_STAT_A" "$GC_ATTRS" "1,1024,1,4096"
+    check_stats tape "$TAPE_STAT_B" "$GC_ATTRS" "1,1024,0,0"
+}
+
+function test_tape_stats_refresh
+{
+    # refresh all the tape media: the hard deleted extent of TAPE_STAT_A
+    # is orphan on tape, where the data cannot be reclaimed
+    $valg_phobos tape refresh_gc_stats ||
+        error "refresh of the tape family failed"
+
+    check_stats tape "$TAPE_STAT_A" "$GC_ATTRS" "1,1024,1,4096"
+    check_stats tape "$TAPE_STAT_B" "$GC_ATTRS" "1,1024,0,0"
+}
+
+function test_tape_stats_refresh_idempotent
+{
+    # a second refresh replaces the counters, it does not add to them
+    $valg_phobos tape refresh_gc_stats ||
+        error "refresh of the tape family failed"
+
+    check_stats tape "$TAPE_STAT_A" "$GC_ATTRS" "1,1024,1,4096"
+    check_stats tape "$TAPE_STAT_B" "$GC_ATTRS" "1,1024,0,0"
+}
+
+TESTS=("setup_dir; \
+            test_dir_stats_before_refresh; \
+            test_dir_stats_refresh_time; \
+            test_dir_stats_refresh_scope; \
+            test_dir_stats_refresh; \
+            test_dir_stats_stale_without_refresh; \
+        cleanup_dir")
+
+if [[ -w /dev/changer ]]; then
+    TESTS+=("setup_tape; \
+                test_tape_stats_before_refresh; \
+                test_tape_stats_refresh_scope; test_tape_stats_refresh; \
+                test_tape_stats_refresh_idempotent; \
+            cleanup_tape")
+fi

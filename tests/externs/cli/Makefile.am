@@ -80,6 +80,7 @@ check_SCRIPTS=acceptance.test \
               test_media.test \
               test_media_delete.test \
               test_media_rebuild.test \
+              test_media_refresh_gc_stats.test \
               test_multilibrary.test \
               test_mput_no_split.test \
               test_object_list.test \
