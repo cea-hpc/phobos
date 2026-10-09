@@ -638,7 +638,7 @@ static int layout_raid1_get_availability(struct layout_info lyt,
     ssize_t replica_size = 0;
     struct extent *extents;
     unsigned int repl_cnt;
-    int object_size;
+    int64_t object_size;
     int ext_cnt;
     int rc;
     int i;

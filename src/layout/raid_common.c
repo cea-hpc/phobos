@@ -2705,10 +2705,10 @@ log_err:
                extent->media.name, extent->address.buff);
 }
 
-int get_object_size_from_layout(struct layout_info *layout)
+int64_t get_object_size_from_layout(struct layout_info *layout)
 {
     const char *buffer;
-    int object_size;
+    int64_t object_size;
 
     buffer = pho_attr_get(&layout->layout_desc.mod_attrs,
                           PHO_EA_OBJECT_SIZE_NAME);

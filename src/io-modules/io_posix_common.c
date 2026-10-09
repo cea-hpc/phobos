@@ -861,7 +861,7 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
     struct module_desc mod;
     const char *tmp_copy;
     struct pho_attrs md;
-    int object_size;
+    int64_t object_size;
     char *filename;
     char *tmp_uuid;
     char *tmp_oid;
@@ -916,8 +916,8 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
     object_size = str2int64(tmp_object_size);
     if (object_size < 0)
         LOG_GOTO(free_oid_uuid, rc = -EINVAL,
-                 "Invalid object size found on '%s': '%d'",
-                 filename, object_size);
+                 "Invalid object size found on '%s': '%ld'",
+                 filename, (long)object_size);
 
     tmp_version = pho_attr_get(&md, PHO_EA_VERSION_NAME);
     if (tmp_version == NULL)

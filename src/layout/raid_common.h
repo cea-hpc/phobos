@@ -254,7 +254,7 @@ struct pho_ext_loc make_ext_location(struct pho_data_processor *proc,
                                      size_t context_or_layout_ext_index,
                                      int target_idx, enum processor_type type);
 
-int get_object_size_from_layout(struct layout_info *layout);
+int64_t get_object_size_from_layout(struct layout_info *layout);
 
 size_t get_n_extents(struct raid_io_context *io_context,
                      enum processor_type type);

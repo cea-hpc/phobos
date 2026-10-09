@@ -24,6 +24,7 @@
  * All user-provided strings are now escaped in the SQL requests, so that
    quotes in them (e.g. an apostrophe in a full path) no longer cause errors.
  * Escape metadata UTF8 invalid bytes
+ * fix object_size EA truncation and buffer overflow
 
 ## 3.4.0
  * WARNING: the stat dev.umount_error is changed to dev.umount_errors .

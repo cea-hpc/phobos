@@ -326,7 +326,7 @@ static int layout_raid4_get_availability(struct layout_info layout,
     ssize_t extent_sizes = 0;
     struct extent *extents;
     int extent_count;
-    int object_size;
+    int64_t object_size;
     int odd;
 
     extent_count = layout.ext_count;
@@ -335,8 +335,8 @@ static int layout_raid4_get_availability(struct layout_info layout,
     object_size = get_object_size_from_layout(&layout);
     if (object_size < 0)
         LOG_RETURN(-EINVAL,
-                   "Invalid object size for reconstruction of object '%s': '%d'",
-                   layout.oid, object_size);
+                   "Invalid object size for reconstruction of object '%s': '%ld'",
+                   layout.oid, (long)object_size);
 
     for (int i = 0; i < extent_count; i++) {
         int index = (extents[i].layout_idx % 3);
