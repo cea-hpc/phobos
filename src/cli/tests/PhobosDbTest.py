@@ -368,5 +368,83 @@ class MigratorTest(unittest.TestCase):
         )
         self.migrator.drop_tables()
 
+    def test_3_3_to_3_5(self):
+        """Test migration between 3.3 and 3.5"""
+        self.migrator.create_schema("3.3")
+
+        self.migrator.execute("""
+            INSERT INTO media (family, model, id, adm_status, fs_type,
+                               fs_label, address_type, fs_status, stats,
+                               tags, put, get, delete, library)
+                VALUES ('dir', NULL, '/tmp/pho_testdir1', 'unlocked', 'POSIX',
+                        '/tmp/pho_testdir1', 'HASH1', 'used',
+                        '{"nb_obj": 5, "logc_spc_used": 42,
+                          "phys_spc_used": 43, "phys_spc_free": 44,
+                          "nb_load": 45, "nb_errors": 46, "last_load": 47}',
+                        '[]', 't', 't', 't', 'legacy'),
+                       ('dir', NULL, '/tmp/pho_testdir2', 'unlocked', 'POSIX',
+                        '/tmp/pho_testdir2', 'HASH1', 'used',
+                        '{"nb_extent": 7, "nb_obj": 5, "logc_spc_used": 42,
+                          "nb_extent_orphan": 3}', '[]', 't', 't', 't',
+                        'legacy'),
+                       ('dir', NULL, '/tmp/pho_testdir3', 'unlocked', 'POSIX',
+                        '/tmp/pho_testdir3', 'HASH1', 'used', NULL, '[]',
+                        't', 't', 't', 'legacy');
+        """)
+
+        self.migrator.migrate("3.5")
+        self.assertEqual(self.migrator.schema_version(), "3.5")
+
+        # nb_obj renamed to nb_extent, other keys and values preserved
+        self.assertEqual(
+            self.migrator.execute("""
+                SELECT stats FROM media WHERE id = '/tmp/pho_testdir1';
+            """, output=True),
+            [
+                ({'nb_extent': 5, 'logc_spc_used': 42, 'phys_spc_used': 43,
+                  'phys_spc_free': 44, 'nb_load': 45, 'nb_errors': 46,
+                  'last_load': 47, 'nb_extent_deprecated': 0,
+                  'nb_extent_orphan': 0, 'logc_spc_deprecated': 0,
+                  'logc_spc_orphan': 0},)
+            ]
+        )
+
+        # an already existing nb_extent key takes precedence over nb_obj
+        self.assertEqual(
+            self.migrator.execute("""
+                SELECT stats FROM media WHERE id = '/tmp/pho_testdir2';
+            """, output=True),
+            [
+                ({'nb_extent': 7, 'logc_spc_used': 42, 'nb_extent_orphan': 3,
+                  'nb_extent_deprecated': 0, 'logc_spc_deprecated': 0,
+                  'logc_spc_orphan': 0},)
+            ]
+        )
+
+        # NULL stats get the GC counters initialized
+        self.assertEqual(
+            self.migrator.execute("""
+                SELECT stats FROM media WHERE id = '/tmp/pho_testdir3';
+            """, output=True),
+            [
+                ({'nb_extent': 0, 'nb_extent_deprecated': 0,
+                  'nb_extent_orphan': 0, 'logc_spc_deprecated': 0,
+                  'logc_spc_orphan': 0},)
+            ]
+        )
+
+        # the new indexes have been created
+        self.assertEqual(
+            self.migrator.execute("""
+                SELECT indexname FROM pg_indexes WHERE schemaname = 'public'
+                    AND indexname IN ('extent_medium_family_library_id_idx',
+                                      'layout_extent_uuid_object_version_idx')
+                ORDER BY indexname;
+            """, output=True),
+            [('extent_medium_family_library_id_idx',),
+             ('layout_extent_uuid_object_version_idx',)]
+        )
+        self.migrator.drop_tables()
+
 if __name__ == '__main__':
     unittest.main(buffer=True)

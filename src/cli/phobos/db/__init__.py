@@ -33,7 +33,7 @@ from phobos.core.ffi import (LIBPHOBOS, ResourceFamily)
 
 ORDERED_SCHEMAS = [
     "1.1", "1.2", "1.91", "1.92", "1.93", "1.95",
-    "2.0", "2.1", "2.2", "3.0", "3.2", "3.3",
+    "2.0", "2.1", "2.2", "3.0", "3.2", "3.3", "3.5",
 ]
 
 FUTURE_SCHEMAS = []
@@ -114,6 +114,7 @@ class Migrator: # pylint: disable=too-many-public-methods
             "2.2": ("3.0", self.convert_2_2_to_3),
             "3.0": ("3.2", self.convert_3_0_to_3_2),
             "3.2": ("3.3", self.convert_3_2_to_3_3),
+            "3.3": ("3.5", self.convert_3_3_to_3_5),
         }
 
         self.reachable_versions = set(
@@ -819,6 +820,56 @@ class Migrator: # pylint: disable=too-many-public-methods
         """Convert DB from v3.2 to v3.3"""
         with self.connect():
             self.convert_schema_3_2_to_3_3()
+
+    def convert_schema_3_3_to_3_5(self):
+        """
+        DB schema changes:
+        - rename the media stats key nb_obj into nb_extent
+        - initialize the GC counters in the media stats
+        - add indexes for medium-scoped extent lookups and for the resolution
+          of the object versions referencing an extent
+        """
+        cur = self.conn.cursor()
+        cur.execute("""
+            -- rename nb_obj into nb_extent in the media stats, keeping the
+            -- current value, and initialize the GC counters (already
+            -- existing values are preserved)
+            UPDATE media SET stats =
+                (COALESCE(stats, '{}'::jsonb) - 'nb_obj') ||
+                jsonb_build_object(
+                    'nb_extent', COALESCE(
+                        (COALESCE(stats, '{}'::jsonb) ->> 'nb_extent')::bigint,
+                        (COALESCE(stats, '{}'::jsonb) ->> 'nb_obj')::bigint,
+                        0
+                    ),
+                    'nb_extent_deprecated', COALESCE(
+                        (stats ->> 'nb_extent_deprecated')::bigint, 0),
+                    'nb_extent_orphan', COALESCE(
+                        (stats ->> 'nb_extent_orphan')::bigint, 0),
+                    'logc_spc_deprecated', COALESCE(
+                        (stats ->> 'logc_spc_deprecated')::bigint, 0),
+                    'logc_spc_orphan', COALESCE(
+                        (stats ->> 'logc_spc_orphan')::bigint, 0)
+                );
+
+            -- index to scope extents by medium
+            CREATE INDEX IF NOT EXISTS extent_medium_family_library_id_idx
+                ON extent (medium_family, medium_library, medium_id);
+
+            -- index to resolve the object versions referencing an extent
+            CREATE INDEX IF NOT EXISTS layout_extent_uuid_object_version_idx
+                ON layout (extent_uuid, object_uuid, version, copy_name);
+
+            -- update current schema version
+            UPDATE schema_info SET version = '3.5';
+        """)
+        self.conn.commit()
+        cur.close()
+
+    def convert_3_3_to_3_5(self):
+        """Convert DB from v3.3 to v3.5"""
+        with self.connect():
+            self.convert_schema_3_3_to_3_5()
 
     def migrate(self, target_version=None):
         """Convert DB schema up to a given phobos version"""
