@@ -543,6 +543,28 @@ int dss_media_update(struct dss_handle *handle, struct media_info *src_list,
                 medium_info->stats.nb_errors +=
                     dst_list[i].stats.nb_errors;
 
+            if (NB_EXTENT_ORPHAN & fields)
+                medium_info->stats.nb_extent_orphan =
+                    dst_list[i].stats.nb_extent_orphan;
+
+            if (NB_EXTENT_DEPRECATED & fields)
+                medium_info->stats.nb_extent_deprecated =
+                    dst_list[i].stats.nb_extent_deprecated;
+
+            if (LOGC_SPC_ORPHAN & fields) {
+                medium_info->stats.logc_spc_orphan =
+                    dst_list[i].stats.logc_spc_orphan;
+                if (medium_info->stats.logc_spc_orphan < 0)
+                    medium_info->stats.logc_spc_orphan = 0;
+            }
+
+            if (LOGC_SPC_DEPRECATED & fields) {
+                medium_info->stats.logc_spc_deprecated =
+                    dst_list[i].stats.logc_spc_deprecated;
+                if (medium_info->stats.logc_spc_deprecated < 0)
+                    medium_info->stats.logc_spc_deprecated = 0;
+            }
+
             dst_list[i].stats = medium_info->stats;
             dss_res_free(medium_info, 1);
         }

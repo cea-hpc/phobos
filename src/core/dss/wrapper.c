@@ -767,6 +767,134 @@ free_str:
     return check_orphan(handle, tape);
 }
 
+/**
+ * Refresh the garbage-collection statistics of the media of a family.
+ *
+ * The refreshed media are the ones given by the caller, targeted by
+ * their (id, library, family) identifier, or all the media of \p family.
+ */
+int dss_media_gc_stats_compute(struct dss_handle *handle,
+                               enum rsc_family family,
+                               const struct pho_id *media,
+                               int media_count)
+{
+    struct media_info *media_list;
+    PGresult *pg_res;
+    GString *request;
+    uint64_t fields;
+    int rc = 0;
+    int count;
+
+    request = g_string_new(NULL);
+
+    /* the media targeted by the computation: the media of the family,
+     * or the media given by the caller
+     */
+    g_string_append_printf(request,
+                           "WITH target_medium AS ("
+                           "SELECT family, id, library FROM media");
+
+    if (media_count == 0) {
+        g_string_append_printf(request, " WHERE family = '%s')",
+                               rsc_family2str(family));
+    } else {
+        g_string_append(request, " WHERE (id, library, family) IN (");
+
+        for (int i = 0; i < media_count; i++) {
+            char *esc_library;
+            char *esc_name;
+
+            esc_library = dss_char4sql(handle->dh_conn, media[i].library);
+            if (esc_library == NULL)
+                LOG_GOTO(free_request, rc = -EINVAL,
+                         "Failed to escape the library of medium "FMT_PHO_ID,
+                         PHO_ID(media[i]));
+
+            esc_name = dss_char4sql(handle->dh_conn, media[i].name);
+            if (esc_name == NULL) {
+                free_dss_char4sql(esc_library);
+                LOG_GOTO(free_request, rc = -EINVAL,
+                         "Failed to escape the name of medium "FMT_PHO_ID,
+                         PHO_ID(media[i]));
+            }
+
+            if (i > 0)
+                g_string_append(request, ",");
+
+            g_string_append_printf(request, "(%s, %s, '%s')", esc_name,
+                                   esc_library,
+                                   rsc_family2str(media[i].family));
+
+            free_dss_char4sql(esc_name);
+            free_dss_char4sql(esc_library);
+        }
+
+        g_string_append(request, "))");
+    }
+
+    g_string_append(request,
+                " SELECT tm.family, tm.id, tm.library,"
+                "   count(*) FILTER (WHERE e.state = 'orphan'),"
+                "   COALESCE(sum(e.size) FILTER (WHERE e.state = 'orphan'), 0),"
+                "   count(*) FILTER (WHERE e.state = 'sync'"
+                "       AND d.object_uuid IS NOT NULL),"
+                "   COALESCE(sum(e.size) FILTER (WHERE e.state = 'sync'"
+                "       AND d.object_uuid IS NOT NULL), 0)"
+                " FROM target_medium AS tm"
+                " LEFT JOIN extent AS e"
+                "   ON e.medium_family = tm.family"
+                "   AND e.medium_library = tm.library"
+                "   AND e.medium_id = tm.id"
+                " LEFT JOIN layout AS l"
+                "   ON l.extent_uuid = e.extent_uuid"
+                " LEFT JOIN deprecated_object AS d"
+                "   ON d.object_uuid = l.object_uuid"
+                "    AND d.version = l.version"
+                " GROUP BY tm.family, tm.id, tm.library;");
+
+    rc = execute(handle->dh_conn, request->str, &pg_res, PGRES_TUPLES_OK);
+    g_string_free(request, true);
+    if (rc) {
+        PQclear(pg_res);
+        return rc;
+    }
+
+    /* one media_info per medium returned by the query */
+    count = PQntuples(pg_res);
+    if (count == 0) {
+        PQclear(pg_res);
+        return 0;
+    }
+
+    media_list = xcalloc(count, sizeof(*media_list));
+
+    for (int row = 0; row < count; row++) {
+        struct media_info *medium = &media_list[row];
+
+        medium->rsc.id.family = str2rsc_family(PQgetvalue(pg_res, row, 0));
+        pho_id_name_set(&medium->rsc.id, PQgetvalue(pg_res, row, 1),
+                        PQgetvalue(pg_res, row, 2));
+        medium->stats.nb_extent_orphan = atoll(PQgetvalue(pg_res, row, 3));
+        medium->stats.logc_spc_orphan = atoll(PQgetvalue(pg_res, row, 4));
+        medium->stats.nb_extent_deprecated = atoll(PQgetvalue(pg_res, row, 5));
+        medium->stats.logc_spc_deprecated = atoll(PQgetvalue(pg_res, row, 6));
+    }
+
+    PQclear(pg_res);
+
+    fields = NB_EXTENT_ORPHAN | LOGC_SPC_ORPHAN |
+             NB_EXTENT_DEPRECATED | LOGC_SPC_DEPRECATED;
+
+    rc = dss_media_update(handle, media_list, media_list, count, fields);
+
+    free(media_list);
+    return rc;
+
+free_request:
+    g_string_free(request, true);
+    return rc;
+}
+
 static int get_copy_from_dss(struct dss_handle *handle, const char *uuid,
                              int version, const char *copy_name,
                              struct copy_info **copy)

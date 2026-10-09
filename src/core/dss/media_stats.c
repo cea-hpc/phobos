@@ -27,6 +27,8 @@
 
 #include "pho_type_utils.h"
 
+#include "pho_common.h"
+
 #include "dss_utils.h"
 #include "media_stats.h"
 #include "media.h"

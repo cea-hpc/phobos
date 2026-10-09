@@ -264,6 +264,23 @@ int dss_update_gc_for_tape(struct dss_handle *handle,
                            const struct pho_id *tape);
 
 /**
+ * Refresh the garbage-collection statistics of media
+ *
+ * The refreshed media are the ones given in \p media or all the media of \p
+ * family when media_count is 0.
+ *
+ * @param[in]  handle       DSS handle
+ * @param[in]  family       family of the media to refresh
+ * @param[in]  media        identifiers of the media to refresh
+ * @param[in]  media_count  number of media in \p media
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_media_gc_stats_compute(struct dss_handle *handle,
+                               enum rsc_family family,
+                               const struct pho_id *media, int media_count);
+
+/**
  * Find a copy's object
  *
  * The copy will be determined in this order:
