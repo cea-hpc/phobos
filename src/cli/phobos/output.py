@@ -32,7 +32,7 @@ import xml.etree.ElementTree
 from tabulate import tabulate
 import yaml
 
-from phobos.core.utils import bytes2human
+from phobos.core.utils import bytes2human, ratio2percent
 
 def csv_dump(data):
     """Convert a list of dictionaries to a csv string"""
@@ -80,10 +80,22 @@ def human_pretty_dump(data):
         "stats.logc_spc_orphan",
     ]
 
+    # Convert ratios to human readable percentages
+    ratio_attr = [
+        "stats.deprecated_ratio",
+        "stats.deprecated_nb_ratio",
+        "stats.orphan_ratio",
+        "stats.orphan_nb_ratio",
+        "stats.occupancy",
+    ]
+
     for obj in data:
         for key, attr in obj.items():
             if key in space_size_attr:
                 obj[key] = bytes2human(attr)
+
+            if key in ratio_attr:
+                obj[key] = ratio2percent(attr)
 
     # Generate formatted printing
     out = tabulate(data, headers="keys", tablefmt="github")

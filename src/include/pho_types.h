@@ -509,12 +509,15 @@ struct media_stats {
     time_t      last_gc_refresh;      /**< last refresh time of the GC stats
                                         *  (computed on demand)
                                         */
-};
-
-struct media_enriched_stats {
-    struct pho_resource rsc;     /**< Identifier and administrative status */
-    struct media_stats  stats;   /**< Usage statistics */
-    enum fs_status      status;  /**< Filesystem status */
+    double      deprecated_ratio;     /**< logc_spc_deprecated /
+                                        *  logc_spc_used
+                                        */
+    double      deprecated_nb_ratio;  /**< nb_extents_deprecated / nb_extents */
+    double      orphan_ratio;         /**< logc_spc_orphan / logc_spc_used */
+    double      orphan_nb_ratio;      /**< nb_extents_orphan / nb_extents */
+    double      occupancy;            /**< logc_spc_used /
+                                        *  (phys_spc_used + phys_spc_free)
+                                        */
 };
 
 /**

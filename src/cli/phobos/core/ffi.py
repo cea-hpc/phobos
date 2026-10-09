@@ -28,8 +28,8 @@ object-oriented API to the rest of the CLI.
 """
 
 from ctypes import (byref, CDLL, CFUNCTYPE, c_bool, c_char, c_char_p,
-                    c_int, c_long, c_longlong, c_size_t, c_ssize_t, c_ubyte,
-                    c_uint64, c_void_p, POINTER, Structure)
+                    c_double, c_int, c_long, c_longlong, c_size_t, c_ssize_t,
+                    c_ubyte, c_uint64, c_void_p, POINTER, Structure)
 from enum import IntEnum
 
 from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX, # pylint: disable=no-name-in-module
@@ -397,6 +397,11 @@ class MediaStats(Structure): # pylint: disable=too-few-public-methods
         ('logc_spc_deprecated', c_longlong),
         ('logc_spc_orphan', c_longlong),
         ('last_gc_refresh', c_longlong),
+        ('deprecated_ratio', c_double),
+        ('deprecated_nb_ratio', c_double),
+        ('orphan_ratio', c_double),
+        ('orphan_nb_ratio', c_double),
+        ('occupancy', c_double),
     ]
 
 class OperationFlags(Structure): # pylint: disable=too-few-public-methods
@@ -554,6 +559,11 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'stats.logc_spc_deprecated': self.stats.logc_spc_deprecated,
             'stats.logc_spc_orphan': self.stats.logc_spc_orphan,
             'stats.last_gc_refresh': time_t2str(self.stats.last_gc_refresh),
+            'stats.deprecated_ratio': self.stats.deprecated_ratio,
+            'stats.orphan_ratio': self.stats.orphan_ratio,
+            'stats.deprecated_nb_ratio': self.stats.deprecated_nb_ratio,
+            'stats.orphan_nb_ratio': self.stats.orphan_nb_ratio,
+            'stats.occupancy': self.stats.occupancy,
         }
 
     @property

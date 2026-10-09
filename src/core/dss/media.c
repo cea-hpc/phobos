@@ -663,9 +663,26 @@ static int media_select_query(GString **conditions, int n_conditions,
                               GString *request, struct dss_sort *sort)
 {
     g_string_append(request,
-                    "SELECT family, model, media.id, media.library, adm_status,"
-                    " address_type, fs_type, fs_status, fs_label, stats, tags, "
-                    " put, get, delete, groupings FROM media");
+              "SELECT family, model, media.id, media.library, adm_status,"
+              " address_type, fs_type, fs_status, fs_label, stats, tags, "
+              " put, get, delete, groupings,"
+              " COALESCE((stats->>'logc_spc_deprecated')::double precision / "
+              "   NULLIF((stats->>'logc_spc_used')::double precision,0.0), "
+              "   0.0::double precision) AS deprecated_ratio,"
+              " COALESCE((stats->>'nb_extent_deprecated')::double precision / "
+              "   NULLIF((stats->>'nb_extent')::double precision,0.0), "
+              "   0.0::double precision) AS deprecated_nb_ratio,"
+              " COALESCE((stats->>'logc_spc_orphan')::double precision / "
+              "   NULLIF((stats->>'logc_spc_used')::double precision,0.0), "
+              "   0.0::double precision) AS orphan_ratio,"
+              " COALESCE((stats->>'nb_extent_orphan')::double precision / "
+              "   NULLIF((stats->>'nb_extent')::double precision,0.0), "
+              "   0.0::double precision) AS orphan_nb_ratio,"
+              " COALESCE((stats->>'logc_spc_used')::double precision / "
+              "   NULLIF((stats->>'phys_spc_used')::double precision + "
+              "   (stats->>'phys_spc_free')::double precision, 0.0), "
+              "   0.0::double precision) AS occupancy "
+              " FROM media");
 
     if (sort && sort->is_lock)
         g_string_append(request,
@@ -768,6 +785,12 @@ static int media_from_pg_row(struct dss_handle *handle, void *void_media,
     }
     pho_debug("Decoded %lu groupings (%s)",
               medium->groupings.count, PQgetvalue(res, row_num, 14));
+
+    medium->stats.deprecated_ratio    = atof(PQgetvalue(res, row_num, 15));
+    medium->stats.deprecated_nb_ratio = atof(PQgetvalue(res, row_num, 16));
+    medium->stats.orphan_ratio        = atof(PQgetvalue(res, row_num, 17));
+    medium->stats.orphan_nb_ratio     = atof(PQgetvalue(res, row_num, 18));
+    medium->stats.occupancy           = atof(PQgetvalue(res, row_num, 19));
 
     rc = dss_lock_status(handle, DSS_MEDIA, medium, 1, &medium->lock);
     if (rc == -ENOLCK) {

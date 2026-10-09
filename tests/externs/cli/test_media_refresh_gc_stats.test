@@ -40,6 +40,8 @@ FILE_REMOVED_SIZE=8192
 GC_ATTRS="stats.nb_extent_deprecated,stats.logc_spc_deprecated,"\
 "stats.nb_extent_orphan,stats.logc_spc_orphan"
 FULL_ATTRS="stats.nb_extent,stats.logc_spc_used,$GC_ATTRS"
+RATIO_ATTRS="stats.deprecated_ratio,stats.deprecated_nb_ratio,"\
+"stats.orphan_ratio,stats.orphan_nb_ratio"
 
 function setup_files
 {
@@ -81,6 +83,97 @@ function check_stats
     [[ "$out" == "$expected" ]] ||
         error "unexpected stats of $family medium '$medium': got '$out', "\
 "expected '$expected'"
+}
+
+# Extract the data row of the human table displayed by the stats
+# command, as a comma-separated list of its cells: the ratio values are
+# rendered as percentages, which only appear in the data rows of the
+# table
+function human_stats_row
+{
+    local family=$1
+    local medium=$2
+    local attrs=$3
+
+    $phobos "$family" list "$medium" -o "$attrs" | awk -F'|' '
+        /%/ {
+            n = 0
+            for (i = 1; i <= NF; i++) {
+                cell = $i
+                gsub(/^ +| +$/, "", cell)
+                if (cell != "")
+                    val[++n] = cell
+            }
+
+            row = val[1]
+            for (i = 2; i <= n; i++)
+                row = row "," val[i]
+            print row
+        }'
+}
+
+# Check the ratios of a medium in the default human format, which
+# renders them as percentages
+function check_ratios
+{
+    local family=$1
+    local medium=$2
+    local expected_row=$3
+    local row
+
+    row=$(human_stats_row "$family" "$medium" "$RATIO_ATTRS")
+
+    [[ "$row" == "$expected_row" ]] ||
+        error "unexpected ratios of $family medium '$medium': got '$row', "\
+"expected '$expected_row'"
+}
+
+# Check the occupancy of a medium in the human format: the human output
+# of a single attribute displays the raw ratio, the percentage is
+# rendered only when it is displayed along with other attributes
+function check_occupancy
+{
+    local family=$1
+    local medium=$2
+    local expected=$3
+    local row
+    local occupancy
+
+    row=$(human_stats_row "$family" "$medium" "stats.occupancy,$RATIO_ATTRS")
+    occupancy=${row%%,*}
+
+    [[ "$occupancy" == "$expected" ]] ||
+        error "unexpected occupancy of $family medium '$medium': got "\
+"'$occupancy', expected '$expected'"
+}
+
+# The occupancy of a medium with data depends on the physical space of
+# its underlying filesystem, which is not controlled by this test: only
+# check that some data occupies the medium. The human format would
+# display 0.00%, as the test data is negligible compared to the capacity
+# of any real medium: check the raw value in csv instead.
+function check_occupancy_range
+{
+    local family=$1
+    local medium=$2
+    local out
+
+    out=$($phobos "$family" list "$medium" -f csv -o stats.occupancy)
+
+    # the csv dialect terminates each line with \r\n
+    out=${out//$'\r'/}
+
+    echo "$out" | awk -F, '
+        NR == 2 {
+            found = 1
+            if ($1 + 0 <= 0 || $1 + 0 >= 1) {
+                failed = 1
+                exit
+            }
+        }
+        END { if (!found || failed) exit 1 }' ||
+        error "occupancy of $family medium '$medium' should be in ]0,1[, "\
+"got '$out'"
 }
 
 function setup_dir
@@ -246,6 +339,21 @@ function test_dir_stats_refresh
     check_stats dir "$DIR_EMPTY" "$GC_ATTRS" "0,0,0,0"
 }
 
+function test_dir_stats_ratios
+{
+    # the ratios of the dir media are computed from their logical
+    # counters, which are all checked with fixed values
+    check_ratios dir "$DIR_LEGACY" "37.50%,50.00%,0.00%,0.00%"
+    check_ratios dir "$DIR_OTHERLIB" "100.00%,100.00%,0.00%,0.00%"
+
+    # the counters of an empty medium are all null: its ratios are null
+    # too, whatever its physical capacity
+    check_ratios dir "$DIR_EMPTY" "0.00%,0.00%,0.00%,0.00%"
+    check_occupancy dir "$DIR_EMPTY" "0.00%"
+
+    check_occupancy_range dir "$DIR_LEGACY"
+}
+
 function test_dir_stats_stale_without_refresh
 {
     # a new deprecated extent on DIR_EMPTY: the plain stats command is
@@ -259,6 +367,7 @@ function test_dir_stats_stale_without_refresh
         error "refresh of $DIR_EMPTY failed"
 
     check_stats dir "$DIR_EMPTY" "$GC_ATTRS" "1,1024,0,0"
+    check_ratios dir "$DIR_EMPTY" "100.00%,100.00%,0.00%,0.00%"
 }
 
 function test_tape_stats_before_refresh
@@ -296,6 +405,22 @@ function test_tape_stats_refresh
     check_stats tape "$TAPE_STAT_B" "$GC_ATTRS" "1,1024,0,0"
 }
 
+function test_tape_stats_ratios
+{
+    # TAPE_STAT_B holds a single deprecated extent: its deprecated
+    # ratios are total
+    check_stats tape "$TAPE_STAT_B" "$FULL_ATTRS" "1,1024,1,1024,0,0"
+    check_ratios tape "$TAPE_STAT_B" "100.00%,100.00%,0.00%,0.00%"
+
+    # the space of a tape cannot be reclaimed: deleting an object does
+    # not change the live counters of its tape, which keep accounting
+    # every extent ever written, deprecated or orphan
+    check_stats tape "$TAPE_STAT_A" "$FULL_ATTRS" "3,7168,1,1024,1,4096"
+    check_ratios tape "$TAPE_STAT_A" "14.29%,33.33%,57.14%,33.33%"
+
+    check_occupancy_range tape "$TAPE_STAT_A"
+}
+
 function test_tape_stats_refresh_idempotent
 {
     # a second refresh replaces the counters, it does not add to them
@@ -311,6 +436,7 @@ TESTS=("setup_dir; \
             test_dir_stats_refresh_time; \
             test_dir_stats_refresh_scope; \
             test_dir_stats_refresh; \
+            test_dir_stats_ratios; \
             test_dir_stats_stale_without_refresh; \
         cleanup_dir")
 
@@ -318,6 +444,7 @@ if [[ -w /dev/changer ]]; then
     TESTS+=("setup_tape; \
                 test_tape_stats_before_refresh; \
                 test_tape_stats_refresh_scope; test_tape_stats_refresh; \
+                test_tape_stats_ratios; \
                 test_tape_stats_refresh_idempotent; \
             cleanup_tape")
 fi

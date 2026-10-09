@@ -38,3 +38,7 @@ def num2human(number, unit='', base=1000, decimals=1):
 def bytes2human(number, *args, **kwargs):
     """Convert a size in bytes to a human readable string"""
     return num2human(number, 'B', 1024, *args, **kwargs)
+
+def ratio2percent(ratio):
+    """Convert a ratio to a percentage string"""
+    return '{:.2f}%'.format(ratio * 100)
