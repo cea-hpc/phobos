@@ -66,13 +66,17 @@ ATTRS2DSS = {
     'put_access'          : 'put',
 
     # "stats" col in media table
-    'stats.last_load'     : 'stats -> \'last_load\'',
-    'stats.logc_spc_used' : 'stats -> \'logc_spc_used\'',
-    'stats.nb_errors'     : 'stats -> \'nb_errors\'',
-    'stats.nb_load'       : 'stats -> \'nb_load\'',
-    'stats.nb_extent'     : 'stats -> \'nb_extent\'',
-    'stats.phys_spc_free' : 'stats -> \'phys_spc_free\'',
-    'stats.phys_spc_used' : 'stats -> \'phys_spc_used\'',
+    'stats.last_load'            : 'stats -> \'last_load\'',
+    'stats.logc_spc_deprecated'  : 'stats -> \'logc_spc_deprecated\'',
+    'stats.logc_spc_orphan'      : 'stats -> \'logc_spc_orphan\'',
+    'stats.logc_spc_used'        : 'stats -> \'logc_spc_used\'',
+    'stats.nb_errors'            : 'stats -> \'nb_errors\'',
+    'stats.nb_extent'            : 'stats -> \'nb_extent\'',
+    'stats.nb_extent_deprecated' : 'stats -> \'nb_extent_deprecated\'',
+    'stats.nb_extent_orphan'     : 'stats -> \'nb_extent_orphan\'',
+    'stats.nb_load'              : 'stats -> \'nb_load\'',
+    'stats.phys_spc_free'        : 'stats -> \'phys_spc_free\'',
+    'stats.phys_spc_used'        : 'stats -> \'phys_spc_used\'',
 
     # "Lock" table
     'lock_hostname'       : 'hostname',

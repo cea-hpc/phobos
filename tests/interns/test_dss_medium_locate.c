@@ -58,6 +58,10 @@ static void fill_medium_info(struct media_info *medium_info, struct pho_id id)
     medium_info->stats.nb_load = 7;
     medium_info->stats.nb_errors = 0;
     medium_info->stats.last_load = 7;
+    medium_info->stats.nb_extent_deprecated = 7;
+    medium_info->stats.nb_extent_orphan = 7;
+    medium_info->stats.logc_spc_deprecated = 7;
+    medium_info->stats.logc_spc_orphan = 7;
     medium_info->tags.strings = NULL;
     medium_info->tags.count = 0;
     medium_info->flags.put = true;
@@ -97,6 +101,14 @@ static void check_medium_info_correctly_filled(struct media_info *medium_info,
                      filled_medium.stats.nb_errors);
     assert_int_equal(medium_info->stats.last_load,
                      filled_medium.stats.last_load);
+    assert_int_equal(medium_info->stats.nb_extent_deprecated,
+                     filled_medium.stats.nb_extent_deprecated);
+    assert_int_equal(medium_info->stats.nb_extent_orphan,
+                     filled_medium.stats.nb_extent_orphan);
+    assert_int_equal(medium_info->stats.logc_spc_deprecated,
+                     filled_medium.stats.logc_spc_deprecated);
+    assert_int_equal(medium_info->stats.logc_spc_orphan,
+                     filled_medium.stats.logc_spc_orphan);
     assert_ptr_equal(medium_info->tags.strings, filled_medium.tags.strings);
     assert_null(medium_info->tags.strings);
     assert_int_equal(medium_info->tags.count, filled_medium.tags.count);

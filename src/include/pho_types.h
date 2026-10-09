@@ -490,9 +490,22 @@ struct media_stats {
     ssize_t     logc_spc_used;  /**< space used (logical)  */
     ssize_t     phys_spc_used;  /**< space used (physical) */
     ssize_t     phys_spc_free;  /**< free space (physical) */
-    long        nb_load;        /**< # the tape was loaded into a drive */
-    long        nb_errors;      /**< # errors encountered while accessing it */
+    long        nb_load;        /**< the tape was loaded into a drive */
+    long        nb_errors;      /**< errors encountered while accessing it */
     time_t      last_load;      /**< last time it was loaded into a drive */
+    long long   nb_extent_deprecated; /**< extents only referenced by
+                                        *  deprecated objects (computed on
+                                        *  demand)
+                                        */
+    long long   nb_extent_orphan;     /**< extents in orphan state
+                                        *  (computed on demand)
+                                        */
+    ssize_t     logc_spc_deprecated;  /**< logical size of deprecated extents
+                                        *  (computed on demand)
+                                        */
+    ssize_t     logc_spc_orphan;      /**< logical size of orphan extents
+                                        *  (computed on demand)
+                                        */
 };
 
 struct media_enriched_stats {

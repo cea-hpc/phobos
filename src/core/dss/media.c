@@ -62,6 +62,10 @@ static char *dss_media_stats_encode(struct media_stats stats)
     JSON_INTEGER_SET_NEW(root, stats, nb_load);
     JSON_INTEGER_SET_NEW(root, stats, nb_errors);
     JSON_INTEGER_SET_NEW(root, stats, last_load);
+    JSON_INTEGER_SET_NEW(root, stats, nb_extent_deprecated);
+    JSON_INTEGER_SET_NEW(root, stats, nb_extent_orphan);
+    JSON_INTEGER_SET_NEW(root, stats, logc_spc_deprecated);
+    JSON_INTEGER_SET_NEW(root, stats, logc_spc_orphan);
 
     res = json_dumps(root, 0);
     if (!res)
@@ -98,6 +102,10 @@ int dss_media_stats_decode(struct media_stats *stats, const char *json)
     LOAD_CHECK32(rc, root, stats, nb_load, true);
     LOAD_CHECK32(rc, root, stats, nb_errors, true);
     LOAD_CHECK32(rc, root, stats, last_load, true);
+    LOAD_CHECK64(rc, root, stats, nb_extent_deprecated, true);
+    LOAD_CHECK64(rc, root, stats, nb_extent_orphan, true);
+    LOAD_CHECK64(rc, root, stats, logc_spc_deprecated, true);
+    LOAD_CHECK64(rc, root, stats, logc_spc_orphan, true);
 
 out_decref:
     /* Most of the values above are not used to make decisions, so don't
@@ -717,7 +725,7 @@ static int media_from_pg_row(struct dss_handle *handle, void *void_media,
     medium->addr_type      = str2address_type(PQgetvalue(res, row_num, 5));
     medium->fs.type        = str2fs_type(PQgetvalue(res, row_num, 6));
     medium->fs.status      = str2fs_status(PQgetvalue(res, row_num, 7));
-    memcpy(medium->fs.label, PQgetvalue(res, row_num, 8),
+    strncpy(medium->fs.label, PQgetvalue(res, row_num, 8),
             sizeof(medium->fs.label));
     /* make sure the label is zero-terminated */
     medium->fs.label[sizeof(medium->fs.label) - 1] = '\0';

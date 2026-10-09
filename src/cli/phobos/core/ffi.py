@@ -391,7 +391,11 @@ class MediaStats(Structure): # pylint: disable=too-few-public-methods
         ('phys_spc_free', c_longlong),
         ('nb_load', c_long),
         ('nb_errors', c_long),
-        ('last_load', c_longlong)
+        ('last_load', c_longlong),
+        ('nb_extent_deprecated', c_longlong),
+        ('nb_extent_orphan', c_longlong),
+        ('logc_spc_deprecated', c_longlong),
+        ('logc_spc_orphan', c_longlong),
     ]
 
 class MediaEnrichedStats(Structure, CLIManagedResourceMixin): # pylint: disable=too-few-public-methods
@@ -457,6 +461,10 @@ class MediaEnrichedStats(Structure, CLIManagedResourceMixin): # pylint: disable=
             'stats.nb_load': self.stats.nb_load,
             'stats.nb_errors': self.stats.nb_errors,
             'stats.last_load': time_t2str(self.stats.last_load),
+            'stats.nb_extent_deprecated': self.stats.nb_extent_deprecated,
+            'stats.nb_extent_orphan': self.stats.nb_extent_orphan,
+            'stats.logc_spc_deprecated': self.stats.logc_spc_deprecated,
+            'stats.logc_spc_orphan': self.stats.logc_spc_orphan,
         }
 
 class OperationFlags(Structure): # pylint: disable=too-few-public-methods
@@ -609,6 +617,10 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'stats.nb_load': self.stats.nb_load,
             'stats.nb_errors': self.stats.nb_errors,
             'stats.last_load': time_t2str(self.stats.last_load),
+            'stats.nb_extent_deprecated': self.stats.nb_extent_deprecated,
+            'stats.nb_extent_orphan': self.stats.nb_extent_orphan,
+            'stats.logc_spc_deprecated': self.stats.logc_spc_deprecated,
+            'stats.logc_spc_orphan': self.stats.logc_spc_orphan,
         }
 
     @property

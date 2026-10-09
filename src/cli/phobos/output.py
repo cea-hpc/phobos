@@ -75,7 +75,9 @@ def human_pretty_dump(data):
     space_size_attr = [
         "stats.phys_spc_free",
         "stats.logc_spc_used",
-        "stats.phys_spc_used"
+        "stats.phys_spc_used",
+        "stats.logc_spc_deprecated",
+        "stats.logc_spc_orphan",
     ]
 
     for obj in data:
