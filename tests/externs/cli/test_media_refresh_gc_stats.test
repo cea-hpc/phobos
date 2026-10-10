@@ -370,6 +370,68 @@ function test_dir_stats_stale_without_refresh
     check_ratios dir "$DIR_EMPTY" "100.00%,100.00%,0.00%,0.00%"
 }
 
+function test_media_stats_sort_attr
+{
+    local family=$1
+    local operator=$2
+    local attr=$3
+    local exp=$4
+
+    if [ -z "$exp" ]; then
+        if [[ $operator == "--sort" ]]; then
+            exp="$($valg_phobos $family list -o $attr | sort)"
+        else
+            exp="$($valg_phobos $family list -o $attr | sort -r)"
+        fi
+    fi
+
+    local res="$($valg_phobos $family list -o $attr $operator $attr)"
+    if [[ "$res" != "$exp" ]]; then
+        error "phobos $family list -o $attr $operator $attr output is" \
+              "different than expected: $exp"
+    fi
+}
+
+function test_dir_stats_sort
+{
+    test_media_stats_sort_attr dir --sort name
+    test_media_stats_sort_attr dir --sort 'stats.nb_extent'
+    test_media_stats_sort_attr dir --sort 'stats.logc_spc_used'
+    # the deprecated counters come from the last refresh of each dir: two
+    # deprecated extents on the legacy dir, a single one on each other dir
+    test_media_stats_sort_attr dir --sort 'stats.nb_extent_deprecated' \
+        $'1\n1\n2'
+    test_media_stats_sort_attr dir --sort 'stats.logc_spc_deprecated' \
+        $'1024\n1024\n1536'
+
+    test_media_stats_sort_attr dir --rsort name
+    test_media_stats_sort_attr dir --rsort 'stats.nb_extent'
+    test_media_stats_sort_attr dir --rsort 'stats.logc_spc_used'
+    test_media_stats_sort_attr dir --rsort 'stats.nb_extent_deprecated' \
+        $'2\n1\n1'
+    test_media_stats_sort_attr dir \
+        --rsort 'stats.logc_spc_deprecated' $'1536\n1024\n1024'
+
+    # all the dirs have been written to, so they share the same fs status:
+    # only the reverse sort on their name decides the output order
+    local exp="$($valg_phobos dir list -o name | sort -r)"
+    local res="$($valg_phobos dir list -o name --sort fs.status --rsort name)"
+    if [[ "$res" != "$exp" ]]; then
+        error "phobos dir list -o name --sort fs.status --rsort name" \
+              "output is different than expected: $exp"
+    fi
+
+    # the sort attributes can also be given as a comma-separated list
+    res="$($valg_phobos dir list -o stats.nb_extent_deprecated \
+        --sort stats.nb_extent_deprecated,stats.logc_spc_deprecated)"
+    exp="$($valg_phobos dir list -o stats.nb_extent_deprecated | sort)"
+    if [[ "$res" != "$exp" ]]; then
+        error "phobos dir list -o stats.nb_extent_deprecated --sort" \
+              "stats.nb_extent_deprecated,stats.logc_spc_deprecated output is" \
+              "different than expected: $exp"
+    fi
+}
+
 function test_tape_stats_before_refresh
 {
     check_stats tape "$TAPE_STAT_A" "$GC_ATTRS" "0,0,0,0"
@@ -438,6 +500,7 @@ TESTS=("setup_dir; \
             test_dir_stats_refresh; \
             test_dir_stats_ratios; \
             test_dir_stats_stale_without_refresh; \
+            test_dir_stats_sort; \
         cleanup_dir")
 
 if [[ -w /dev/changer ]]; then

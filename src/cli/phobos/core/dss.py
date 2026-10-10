@@ -78,6 +78,11 @@ ATTRS2DSS = {
     'stats.nb_load'              : 'stats -> \'nb_load\'',
     'stats.phys_spc_free'        : 'stats -> \'phys_spc_free\'',
     'stats.phys_spc_used'        : 'stats -> \'phys_spc_used\'',
+    'stats.deprecated_ratio'     : 'deprecated_ratio',
+    'stats.orphan_ratio'         : 'orphan_ratio',
+    'stats.deprecated_nb_ratio'  : 'deprecated_nb_ratio',
+    'stats.orphan_nb_ratio'      : 'orphan_nb_ratio',
+    'stats.occupancy'            : 'occupancy',
 
     # "Lock" table
     'lock_hostname'       : 'hostname',
