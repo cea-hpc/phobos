@@ -203,7 +203,7 @@ static int device_select_query(GString **conditions, int n_conditions,
      * retrieve the "lock" table because the information is not in the "device"
      * table
      */
-    if (sort && sort->is_lock)
+    if (dss_sort_contains_lock(sort))
         g_string_append(request,
                         " LEFT JOIN lock ON lock.id = device.id || '_' || "
                         "                             device.library");

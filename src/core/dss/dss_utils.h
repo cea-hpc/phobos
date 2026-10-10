@@ -74,6 +74,19 @@ void free_dss_char4sql(char *s);
  */
 void dss_sort2sql(GString *request, struct dss_sort *sort);
 
+static inline bool dss_sort_contains_lock(struct dss_sort *sort)
+{
+    if (!sort)
+        return false;
+
+    for (size_t i = 0; i < sort->n_items; i++) {
+        if (sort->items[i].is_lock)
+            return true;
+    }
+
+    return false;
+}
+
 /**
  * Execute a PSQL \p request, verify the result is as expected with \p tested
  * and put the result in \p res.

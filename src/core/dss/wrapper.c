@@ -362,7 +362,10 @@ static int dss_find_deprec_object(struct dss_handle *hdl,
                                   const char *oid, const char *uuid,
                                   int version, struct object_info **obj)
 {
-    struct dss_sort sort = { "version", true, false, true };
+    static const struct dss_sort_item sort_items[] = {
+        { .attr = "version", .reverse = true, .psql_sort = true },
+    };
+    struct dss_sort sort = { sort_items, 1 };
     struct object_info *obj_list = NULL;
     int obj_cnt;
     int rc;

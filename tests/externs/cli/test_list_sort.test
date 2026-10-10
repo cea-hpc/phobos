@@ -239,6 +239,21 @@ function test_media_list_rsort
                          "stats.nb_extent,name,lock_ts"
 }
 
+function test_media_list_multisort
+{
+    local res
+    local exp=$($phobos dir list -f csv -o name,stats.nb_extent \
+                | tr -d '\r' | tail -n +2 | sort -t, -k2,2n -k1,1r)
+
+    res=$($phobos dir list -f csv -o name,stats.nb_extent \
+           --sort stats.nb_extent --rsort name | tr -d '\r' | tail -n +2)
+    if [ "$res" != "$exp" ]; then
+        error "phobos dir list -f csv -o name,stats.nb_extent --sort" \
+              "stats.nb_extent --rsort name output is different than" \
+              "expected: $exp"
+    fi
+}
+
 function test_object_list_sort
 {
     test_sort "object" "--sort" "uuid"
@@ -255,6 +270,18 @@ function test_object_list_rsort
     test_sort "object" "--rsort" "creation_time"
     test_multiple_output "object" "--rsort" "oid" "oid,uuid,creation_time" \
                          "creation_time,oid,uuid"
+}
+
+function test_object_list_multisort
+{
+    local res
+    local exp=$($phobos object list -o oid | sort)
+
+    res=$($phobos object list -o oid --sort oid --sort uuid)
+    if [ "$res" != "$exp" ]; then
+        error "phobos object list -o oid --sort oid --sort uuid output is" \
+              "different than expected: $exp"
+    fi
 }
 
 function test_extent_list_sort
@@ -275,14 +302,46 @@ function test_extent_list_rsort
                          "size,oid,ext_count"
 }
 
+function test_extent_list_multisort
+{
+    local res
+    local exp=$'[1024]\n[1048576]\n[3072]\n[2048, 2048]'
+
+    res=$($phobos extent list -o size --sort ext_count --sort oid)
+    if [ "$res" != "$exp" ]; then
+        error "phobos extent list -o size --sort ext_count --sort oid" \
+              "output is different than expected: $exp"
+    fi
+
+    res=$($phobos extent list -o size --sort ext_count,oid)
+    if [ "$res" != "$exp" ]; then
+        error "phobos extent list -o size --sort ext_count,oid output is" \
+              "different than expected: $exp"
+    fi
+
+    exp=$'[2048, 2048]\n[1024]\n[1048576]\n[3072]'
+    res=$($phobos extent list -o size --rsort ext_count --sort oid)
+    if [ "$res" != "$exp" ]; then
+        error "phobos extent list -o size --rsort ext_count --sort oid" \
+              "output is different than expected: $exp"
+    fi
+
+    if $phobos extent list --sort size --sort oid > /dev/null 2>&1; then
+        error "mixing 'size' with other sort attributes should be rejected"
+    fi
+}
+
 TESTS=("media_setup; \
             test_media_list_sort; test_media_list_rsort; \
+            test_media_list_multisort; \
         media_cleanup"
        "object_setup; \
             test_object_list_sort; test_object_list_rsort; \
+            test_object_list_multisort; \
         object_cleanup"
        "extent_setup; \
             test_extent_list_sort; test_extent_list_rsort; \
+            test_extent_list_multisort; \
         extent_cleanup")
 
 if [[ -w /dev/changer ]]; then

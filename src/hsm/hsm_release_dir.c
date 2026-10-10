@@ -510,6 +510,7 @@ int main(int argc, char **argv)
     for (i = 0; i < dev_count; i++) {
         bool specific_threshold_crossed = false;
         struct dev_adapter_module *dev_adapter;
+        struct dss_sort_item sort_items[1];
         double specific_higher_bytes = 0;
         struct media_info *medium_info;
         double specific_lower_bytes = 0;
@@ -517,11 +518,14 @@ int main(int argc, char **argv)
         struct fs_adapter_module *fsa;
         struct lib_drv_info drv_info;
         ssize_t size_to_release = 0;
-        struct dss_sort sort = {0};
         struct extent *extent_list;
         struct ldm_fs_space fs_spc;
         struct lib_handle lib_hdl;
         ssize_t specific_used = 0;
+        struct dss_sort sort = {
+            .items = sort_items,
+            .n_items = 1
+        };
         char fsroot[PATH_MAX];
         json_t *error_message;
         double fill_threshold;
@@ -672,13 +676,13 @@ int main(int argc, char **argv)
         if (rc)
             goto close_lib_hdl;
 
-        if (params.emergency_big_first) {
-            sort.attr = dss_fields_pub2implem("DSS::EXT::size");
-            sort.reverse = true;
-        } else {
-            sort.attr = dss_fields_pub2implem("DSS::EXT::creation_time");
-        }
-        sort.psql_sort = true;
+        sort_items[0] = (struct dss_sort_item) {
+            .attr = dss_fields_pub2implem(params.emergency_big_first ?
+                                          "DSS::EXT::size" :
+                                          "DSS::EXT::creation_time"),
+            .psql_sort = true,
+            .reverse = params.emergency_big_first,
+        };
 
         rc = dss_extent_get(&dss, &filter, &extent_list, &extent_count, &sort);
         dss_filter_free(&filter);

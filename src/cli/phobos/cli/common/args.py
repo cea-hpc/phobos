@@ -21,6 +21,8 @@
 Phobos CLI arguments utilities
 """
 
+import argparse
+
 from phobos.cli.common.utils import str_to_timestamp
 from phobos.core.const import rsc_family2str # pylint: disable=no-name-in-module
 from phobos.core.ffi import ResourceFamily
@@ -47,6 +49,19 @@ def add_put_arguments(parser):
                         help='comma-separated list of key=value for layout '
                              'specific parameters')
 
+class MultiOrderSortingAction(argparse.Action):
+    """Custom action for the sorting options"""
+    def __call__(self, parser, namespace, values, option_string=None):
+        if not hasattr(namespace, 'sort_order') or namespace.sort_order is None:
+            namespace.sort_order = []
+
+        is_reverse = (option_string == '--rsort')
+        columns = [col.strip() for col in values.split(',')]
+
+        for col in columns:
+            if col:
+                namespace.sort_order.append((col, is_reverse))
+
 def add_list_arguments(parser, attr, default_output, sort_option=False, # pylint: disable=too-many-arguments
                        lib_option=False, status_option=False):
     """Default arguments for list-like actions"""
@@ -56,13 +71,14 @@ def add_list_arguments(parser, attr, default_output, sort_option=False, # pylint
                               "choose from {" + " ".join(attr) + "} "
                               "(default: %(default)s)"))
     if sort_option:
-        parser.add_argument('--sort',
-                            help=("attribute to sort the output with, "
+        parser.add_argument('--sort', action=MultiOrderSortingAction,
+                            help=("attributes to sort the output with, "
+                                  "comma-separated or repeatable, "
                                   "choose from {" + " ".join(attr) + "} "))
-        parser.add_argument('--rsort',
-                            help=("attribute to sort the output in descending "
-                                  "order, choose from {" + " ".join(attr) + "} "
-                                  ))
+        parser.add_argument('--rsort', action=MultiOrderSortingAction,
+                            help=("attributes to sort the output in descending "
+                                  "order, comma-separated or repeatable, "
+                                  "choose from {" + " ".join(attr) + "} "))
     if lib_option:
         parser.add_argument('-L', '--library',
                             help=("attribute to filter the output by library "

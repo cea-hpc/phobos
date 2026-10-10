@@ -1,6 +1,8 @@
 # CHANGELOG UPDATES
 
 ## Next
+ * WARNING: the db schema moves from 3.3 to 3.5 and a migration is needed
+ * WARNING: the stats.nb_obj in media stats is changed to stats.nb_extent
  * HSM release: add the --emergency-big-first option to phobos_hsm_release_dir
    to release the biggest copies first, by decreasing extent size instead of
    increasing creation time.
@@ -18,6 +20,8 @@
    configuration parameter in a given section.
  * Add the "phobos config get" command to read the value of a configuration
    parameter in a given section.
+ * --sort and --rsort now accept several sort attributes, either
+   comma-separated or with repeated flags.
  * Add the "phobos <media> refresh_gc_stats" command to refresh the garbage
    collection statistics of media.
 

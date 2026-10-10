@@ -294,26 +294,16 @@ struct dss_filter {
     json_t  *df_json;
 };
 
+struct dss_sort_item {
+    const char *attr; /**< Attribute to sort on */
+    bool reverse;     /**< Indicate if the sort is reversed or not */
+    bool is_lock;     /**< Indicate if the column is in the "lock" table */
+    bool psql_sort;   /**< Indicate if the sort is done in psql */
+};
+
 struct dss_sort {
-    /**
-     * The attribute to sort the list on
-     */
-    const char *attr;
-
-    /**
-     * Boolean to indicate if it's a reverse sort or not
-     */
-    bool reverse;
-
-    /**
-     * Boolean to indicate if the column is in the "lock" table
-     */
-    bool is_lock;
-
-    /**
-     * Boolean to indicate if the sort is in psql
-     */
-    bool psql_sort;
+    const struct dss_sort_item *items; /**< Array of sort criteria */
+    size_t n_items;                    /**< Number of sort criteria */
 };
 
 /**

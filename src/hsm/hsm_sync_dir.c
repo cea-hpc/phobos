@@ -653,12 +653,16 @@ int main(int argc, char **argv)
 
     /* target extent for each device dir */
     for (i = 0; i < dev_count; i++) {
+        struct dss_sort_item sort_items[1];
         int64_t synced_object_bytes = 0;
         struct lib_drv_info drv_info;
         int synced_extent_count = 0;
-        struct dss_sort sort = {0};
         struct extent *extent_list;
         struct lib_handle lib_hdl;
+        struct dss_sort sort = {
+            .items = sort_items,
+            .n_items = 1
+        };
         int extent_count;
         int j;
 
@@ -708,13 +712,13 @@ int main(int argc, char **argv)
             goto close_lib_hdl;
         }
 
-        if (params.emergency_big_first) {
-            sort.attr = dss_fields_pub2implem("DSS::EXT::size");
-            sort.reverse = true;
-        } else {
-            sort.attr = dss_fields_pub2implem("DSS::EXT::creation_time");
-        }
-        sort.psql_sort = true;
+        sort_items[0] = (struct dss_sort_item) {
+            .attr = dss_fields_pub2implem(params.emergency_big_first ?
+                                          "DSS::EXT::size" :
+                                          "DSS::EXT::creation_time"),
+            .psql_sort = true,
+            .reverse = params.emergency_big_first,
+        };
 
         rc2 = dss_extent_get(&dss, &filter, &extent_list, &extent_count, &sort);
         dss_filter_free(&filter);

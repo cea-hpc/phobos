@@ -294,11 +294,27 @@ void free_dss_char4sql(char *s)
 
 void dss_sort2sql(GString *request, struct dss_sort *sort)
 {
-    if (sort != NULL && sort->psql_sort == true) {
-        g_string_append(request, " ORDER BY ");
-        g_string_append(request, sort->attr);
-        if (sort->reverse)
-            g_string_append(request, " DESC ");
+    bool need_comma = false;
+
+    if (sort == NULL)
+        return;
+
+    for (size_t i = 0; i < sort->n_items; i++) {
+        if (!sort->items[i].psql_sort)
+            continue;
+
+        if (need_comma)
+            g_string_append(request, ", ");
+        else
+            g_string_append(request, " ORDER BY ");
+
+        g_string_append(request, sort->items[i].attr);
+        if (sort->items[i].reverse)
+            g_string_append(request, " DESC");
+        else
+            g_string_append(request, " ASC");
+
+        need_comma = true;
     }
 }
 

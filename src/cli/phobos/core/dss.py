@@ -28,7 +28,8 @@ clean API to access it.
 import json
 import logging
 import os
-from ctypes import byref, c_int, c_void_p, c_char_p, c_bool, POINTER, Structure
+from ctypes import (byref, c_int, c_void_p, c_char_p, c_bool, POINTER,
+                    Structure, c_size_t)
 from abc import ABCMeta, abstractmethod
 
 from phobos.core.const import DSS_MEDIA # pylint: disable=no-name-in-module
@@ -169,8 +170,8 @@ class DSSResult: # pylint: disable=too-few-public-methods
         item._dss_result_parent_link = self # pylint: disable=protected-access
         return item
 
-class SortFilter(Structure): # pylint: disable=too-few-public-methods
-    """DSS sort filter"""
+class SortItem(Structure): # pylint: disable=too-few-public-methods
+    """DSS sort item"""
     _fields_ = [
         ('attr', c_char_p),
         ('reverse', c_bool),
@@ -178,37 +179,50 @@ class SortFilter(Structure): # pylint: disable=too-few-public-methods
         ('psql_sort', c_bool)
     ]
 
+class SortFilter(Structure): # pylint: disable=too-few-public-methods
+    """DSS sort filter"""
+    _fields_ = [
+        ('items', POINTER(SortItem)),
+        ('n_items', c_size_t)
+    ]
+
 def dss_sort(obj_type, **kwargs):
     """Convert a sort filter into a DSS-compatible sort filter"""
     sort = None
-    for key in ['sort', 'rsort']:
-        if kwargs.get(key):
-            is_lock = False
-            reverse = False
-            psql_sort = True
-            if key == 'rsort':
-                reverse = True
 
-            # Check if the sort is on the "lock" table to know whether we
-            # need to get the "lock" table in the select query
-            if 'lock_' in kwargs[key]:
-                is_lock = True
+    attrs = kwargs.pop('sort_order', None)
+    if not attrs:
+        return sort, kwargs
 
-            # Check if the attribute is in "ATTRS_SORTING" because some
-            # attributes displayed by "list" are not the same to those in
-            # postgresql
-            if ATTRS2DSS.get(kwargs[key]):
-                kwargs[key] = ATTRS2DSS[kwargs[key]]
+    sort_items = []
 
-            # special case where the sorting of extents by size is done in the
-            # C API
-            if kwargs[key] == 'size' and obj_type == 'layout':
-                psql_sort = False
+    for _attr in attrs:
+        attr = _attr[0]
+        reverse = _attr[1]
+        psql_sort = True
+        is_lock = False
 
-            sort = SortFilter(kwargs[key].encode('utf-8'), reverse, is_lock,
-                              psql_sort)
-            kwargs.pop(key)
-            break
+        # Check if the sort is on the "lock" table to know whether we
+        # need to get the "lock" table in the select query
+        if 'lock_' in attr:
+            is_lock = True
+
+        # Check if the attribute is in "ATTRS_SORTING" because some
+        # attributes displayed by "list" are not the same to those in
+        # postgresql
+        attr = ATTRS2DSS.get(attr, attr)
+
+        # special case where the sorting of extents by size is done in the
+        # C API
+        if attr == 'size' and obj_type == 'layout':
+            psql_sort = False
+
+        sort_items.append(SortItem(attr.encode('utf-8'), reverse, is_lock,
+                                   psql_sort))
+
+    sort = SortFilter((SortItem * len(sort_items))(*sort_items),
+                      len(sort_items))
+
     return sort, kwargs
 
 class BaseEntityManager:

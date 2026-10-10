@@ -1532,7 +1532,14 @@ static int _retrieve_source_info(struct admin_handle *adm,
 int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
                         struct string_array *tags)
 {
+    /* Order the extents to copy by creation time: they are generally
+     * sequential on the tape, so this reduces the tape workload.
+     */
+    const struct dss_sort_item sort_items[] = {
+            { .attr = "creation_time", .psql_sort = true },
+    };
     enum fs_type source_fs_type = PHO_FS_INVAL;
+    struct dss_sort sort = { sort_items, 1 };
     struct pho_io_descr iod_source = {0};
     struct pho_io_descr iod_target = {0};
     struct string_array empty_tags = {0};
@@ -1543,7 +1550,6 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     struct extent *ext_res = NULL;
     struct string_array src_tags;
     GArray *new_ext_uuids = NULL;
-    struct dss_sort sort = {0};
     int ext_cnt_done = 0;
     struct pho_id target;
     ssize_t total_size;
@@ -1558,12 +1564,6 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     rc = dss_update_gc_for_tape(&adm->dss, source);
     if (rc)
         return rc;
-
-    /* Order the extents to copy by creation time: they are generally
-     * sequential on the tape, so this reduces the tape workload.
-     */
-    sort.attr = dss_fields_pub2implem("DSS::EXT::creation_time");
-    sort.psql_sort = true;
 
     /* Determine total size of live objects */
     rc = get_extents_from_medium(adm, source, &ext_res, &ext_cnt, true,

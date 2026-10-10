@@ -245,6 +245,17 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
         LOG_RETURN(-EINVAL, "dss - conn: %p, item_list: %p, item_cnt: %p",
                    conn, item_list, item_cnt);
 
+    /* The only in-memory sort is 'size' on full layouts, and it cannot be
+     * composed with SQL-side sort keys.
+     */
+    if (sort != NULL && sort->n_items > 1) {
+        for (i = 0; i < sort->n_items; i++) {
+            if (!sort->items[i].psql_sort)
+                LOG_RETURN(-EINVAL,
+                           "Cannot mix in-memory and SQL-side sorting");
+        }
+    }
+
     *item_list = NULL;
     *item_cnt  = 0;
 
@@ -274,15 +285,18 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
 
     rc = dss_execute_generic_get(handle, type, clause, item_list, item_cnt);
 
-    item_size = get_resource_size(type);
-    if (sort && !sort->psql_sort) {
-        if (type == DSS_FULL_LAYOUT && !strcmp(sort->attr, "size")) {
-            quicksort(item_list, 0, *item_cnt - 1, item_size, sort->reverse,
-                      cmp_size);
-        }
-    }
-
     g_string_free(clause, true);
+
+    item_size = get_resource_size(type);
+    if (!sort)
+        return rc;
+
+    for (i = 0; i < sort->n_items; i++) {
+        if (!sort->items[i].psql_sort && type == DSS_FULL_LAYOUT &&
+            !strcmp(sort->items[i].attr, "size"))
+            quicksort(item_list, 0, *item_cnt - 1, item_size,
+                      sort->items[i].reverse, cmp_size);
+    }
 
     return rc;
 }

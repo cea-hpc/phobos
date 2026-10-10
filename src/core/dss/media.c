@@ -684,7 +684,7 @@ static int media_select_query(GString **conditions, int n_conditions,
               "   0.0::double precision) AS occupancy "
               " FROM media");
 
-    if (sort && sort->is_lock)
+    if (dss_sort_contains_lock(sort))
         g_string_append(request,
                         " LEFT JOIN lock ON lock.id = media.id || '_' || "
                         "                             media.library");

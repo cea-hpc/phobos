@@ -150,29 +150,26 @@ def get_scope(deprec, deprec_only):
 def handle_sort_option(params, resource, logger, **kwargs):
     """Handle the sort/rsort option"""
 
-    if params.get('sort') and params.get('rsort'):
-        logger.error("The option --sort and --rsort cannot be used together")
-        sys.exit(os.EX_USAGE)
+    if not params.get('sort_order'):
+        return kwargs
 
-    for key in ['sort', 'rsort']:
-        if params.get(key):
+    if isinstance(resource, LayoutInfo):
+        attrs_sort = list(resource.get_sort_fields().keys())
+    else:
+        attrs_sort = list(resource.get_display_dict().keys())
 
+    for sort_attr, _ in params['sort_order']:
+        if sort_attr not in attrs_sort:
             if isinstance(resource, LayoutInfo):
-                attrs_sort = list(resource.get_sort_fields().keys())
-            else:
-                attrs_sort = list(resource.get_display_dict().keys())
+                attrs = list(resource.get_display_dict().keys())
+                if sort_attr in attrs:
+                    logger.error("Sorting attributes not supported: %s",
+                                 sort_attr)
+                    sys.exit(os.EX_USAGE)
+            logger.error("Bad sorting attributes: %s", sort_attr)
+            sys.exit(os.EX_USAGE)
 
-            sort_attr = params.get(key)
-            if sort_attr not in attrs_sort:
-                if isinstance(resource, LayoutInfo):
-                    attrs = list(resource.get_display_dict().keys())
-                    if sort_attr in attrs:
-                        logger.error("Sorting attributes not supported: %s",
-                                     sort_attr)
-                        sys.exit(os.EX_USAGE)
-                logger.error("Bad sorting attributes: %s", sort_attr)
-                sys.exit(os.EX_USAGE)
-            kwargs[key] = sort_attr
+    kwargs['sort_order'] = params['sort_order']
     return kwargs
 
 def mput_file_line_parser(line):
