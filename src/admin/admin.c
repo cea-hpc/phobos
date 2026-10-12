@@ -1543,6 +1543,7 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     struct extent *ext_res = NULL;
     struct string_array src_tags;
     GArray *new_ext_uuids = NULL;
+    struct dss_sort sort = {0};
     int ext_cnt_done = 0;
     struct pho_id target;
     ssize_t total_size;
@@ -1558,8 +1559,15 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     if (rc)
         return rc;
 
+    /* Order the extents to copy by creation time: they are generally
+     * sequential on the tape, so this reduces the tape workload.
+     */
+    sort.attr = dss_fields_pub2implem("DSS::EXT::creation_time");
+    sort.psql_sort = true;
+
     /* Determine total size of live objects */
-    rc = get_extents_from_medium(adm, source, &ext_res, &ext_cnt, true);
+    rc = get_extents_from_medium(adm, source, &ext_res, &ext_cnt, true,
+                                 &sort);
     if (rc)
         return rc;
 
@@ -2101,7 +2109,7 @@ int phobos_admin_media_delete(struct admin_handle *adm, struct pho_id *med_ids,
         }
 
         rc = get_extents_from_medium(adm, med_ids + i, &ext_res, &ext_cnt,
-                                     false);
+                                     false, NULL);
         if (rc)
             goto out_free;
 
@@ -2289,7 +2297,7 @@ int phobos_admin_media_library_rename(struct admin_handle *adm,
         }
 
         rc2 = get_extents_from_medium(adm, med_ids + i, &ext_res, &ext_cnt,
-                                      false);
+                                      false, NULL);
         if (rc2) {
             dss_unlock(&adm->dss, DSS_MEDIA, med_res, 1, false);
             dss_res_free(med_res, 1);

@@ -69,7 +69,7 @@ int delete_media_and_extents(struct admin_handle *handle,
         int extent_count = 0;
 
         rc2 = get_extents_from_medium(handle, &medium->rsc.id, &extents,
-                                      &extent_count, false);
+                                      &extent_count, false, NULL);
         if (rc2) {
             pho_error(rc2, "Failed to get extents of medium "FMT_PHO_ID,
                       PHO_ID(medium->rsc.id));

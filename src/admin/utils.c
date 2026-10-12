@@ -27,7 +27,8 @@
 
 int get_extents_from_medium(struct admin_handle *adm,
                             const struct pho_id *source,
-                            struct extent **extents, int *count, bool no_orphan)
+                            struct extent **extents, int *count,
+                            bool no_orphan, struct dss_sort *sort)
 {
     struct dss_filter filter;
     int rc;
@@ -53,7 +54,7 @@ int get_extents_from_medium(struct admin_handle *adm,
     if (rc)
         LOG_RETURN(rc, "Failed to build filter for extent retrieval");
 
-    rc = dss_extent_get(&adm->dss, &filter, extents, count, NULL);
+    rc = dss_extent_get(&adm->dss, &filter, extents, count, sort);
     dss_filter_free(&filter);
     if (rc)
         LOG_RETURN(rc, "Failed to retrieve "FMT_PHO_ID" extents",

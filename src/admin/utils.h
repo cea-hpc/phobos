@@ -38,12 +38,14 @@
  * @param[out] count        The size of the \p extents array
  * @param[in]  no_orphan    Whether we should only retrieve non-orphan extents
  *                          or not
+ * @param[in]  sort         Sort to apply to the retrieved extents, or NULL
+ *                          for no sorting
  *
  * @return 0 on success, negated errno on failure
  */
 int get_extents_from_medium(struct admin_handle *adm,
                             const struct pho_id *source,
                             struct extent **extents, int *count,
-                            bool no_orphan);
+                            bool no_orphan, struct dss_sort *sort);
 
 #endif
