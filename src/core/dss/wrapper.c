@@ -29,6 +29,7 @@
 #include <glib.h>
 #include <libpq-fe.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "pho_common.h"
 #include "pho_dss.h"
@@ -878,12 +879,14 @@ int dss_media_gc_stats_compute(struct dss_handle *handle,
         medium->stats.logc_spc_orphan = atoll(PQgetvalue(pg_res, row, 4));
         medium->stats.nb_extent_deprecated = atoll(PQgetvalue(pg_res, row, 5));
         medium->stats.logc_spc_deprecated = atoll(PQgetvalue(pg_res, row, 6));
+        medium->stats.last_gc_refresh = time(NULL);
     }
 
     PQclear(pg_res);
 
     fields = NB_EXTENT_ORPHAN | LOGC_SPC_ORPHAN |
-             NB_EXTENT_DEPRECATED | LOGC_SPC_DEPRECATED;
+             NB_EXTENT_DEPRECATED | LOGC_SPC_DEPRECATED |
+             LAST_GC_REFRESH;
 
     rc = dss_media_update(handle, media_list, media_list, count, fields);
 

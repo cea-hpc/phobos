@@ -565,6 +565,10 @@ int dss_media_update(struct dss_handle *handle, struct media_info *src_list,
                     medium_info->stats.logc_spc_deprecated = 0;
             }
 
+            if (LAST_GC_REFRESH & fields)
+                medium_info->stats.last_gc_refresh =
+                    dst_list[i].stats.last_gc_refresh;
+
             dst_list[i].stats = medium_info->stats;
             dss_res_free(medium_info, 1);
         }

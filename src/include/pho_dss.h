@@ -284,12 +284,13 @@ static inline const char *dss_fields_pub2implem(const char *public_name)
 #define LOGC_SPC_ORPHAN     (1<<18)
 #define NB_EXTENT_DEPRECATED (1<<19)
 #define LOGC_SPC_DEPRECATED (1<<20)
+#define LAST_GC_REFRESH     (1<<21)
 
 #define IS_STAT(_f) ((NB_EXTENT | NB_EXTENT_ADD | LOGC_SPC_USED |\
                       LOGC_SPC_USED_ADD | PHYS_SPC_USED | PHYS_SPC_FREE |\
                       LAST_LOAD | NB_ERRORS_ADD | NB_EXTENT_ORPHAN |\
                       LOGC_SPC_ORPHAN | NB_EXTENT_DEPRECATED |\
-                      LOGC_SPC_DEPRECATED) & (_f))
+                      LOGC_SPC_DEPRECATED | LAST_GC_REFRESH) & (_f))
 
 struct dss_filter {
     json_t  *df_json;

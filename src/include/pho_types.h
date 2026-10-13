@@ -506,6 +506,9 @@ struct media_stats {
     ssize_t     logc_spc_orphan;      /**< logical size of orphan extents
                                         *  (computed on demand)
                                         */
+    time_t      last_gc_refresh;      /**< last refresh time of the GC stats
+                                        *  (computed on demand)
+                                        */
 };
 
 struct media_enriched_stats {

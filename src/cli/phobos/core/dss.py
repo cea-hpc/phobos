@@ -66,6 +66,7 @@ ATTRS2DSS = {
     'put_access'          : 'put',
 
     # "stats" col in media table
+    'stats.last_gc_refresh'      : 'stats -> \'last_gc_refresh\'',
     'stats.last_load'            : 'stats -> \'last_load\'',
     'stats.logc_spc_deprecated'  : 'stats -> \'logc_spc_deprecated\'',
     'stats.logc_spc_orphan'      : 'stats -> \'logc_spc_orphan\'',

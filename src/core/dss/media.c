@@ -66,6 +66,7 @@ static char *dss_media_stats_encode(struct media_stats stats)
     JSON_INTEGER_SET_NEW(root, stats, nb_extent_orphan);
     JSON_INTEGER_SET_NEW(root, stats, logc_spc_deprecated);
     JSON_INTEGER_SET_NEW(root, stats, logc_spc_orphan);
+    JSON_INTEGER_SET_NEW(root, stats, last_gc_refresh);
 
     res = json_dumps(root, 0);
     if (!res)
@@ -106,6 +107,7 @@ int dss_media_stats_decode(struct media_stats *stats, const char *json)
     LOAD_CHECK64(rc, root, stats, nb_extent_orphan, true);
     LOAD_CHECK64(rc, root, stats, logc_spc_deprecated, true);
     LOAD_CHECK64(rc, root, stats, logc_spc_orphan, true);
+    LOAD_CHECK64(rc, root, stats, last_gc_refresh, true);
 
 out_decref:
     /* Most of the values above are not used to make decisions, so don't
