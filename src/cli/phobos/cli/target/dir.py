@@ -41,7 +41,6 @@ from phobos.cli.target.media import (MediaAddOptHandler, MediaListOptHandler,
                                      MediaRenameOptHandler,
                                      MediaImportOptHandler,
                                      MediaSetAccessOptHandler,
-                                     MediaStatsOptHandler,
                                      MediaUpdateOptHandler)
 from phobos.core.admin import Client as AdminClient
 from phobos.core.const import fs_type2str, PHO_RSC_DIR # pylint: disable=no-name-in-module
@@ -106,7 +105,6 @@ class DirOptHandler(MediaOptHandler):
         MediaLocateOptHandler,
         MediaRebuildOptHandler,
         MediaRenameOptHandler,
-        MediaStatsOptHandler,
         MediaUpdateOptHandler, # pylint: enable=duplicate-code
         DirResourceDeleteOptHandler,
         StatusOptHandler,

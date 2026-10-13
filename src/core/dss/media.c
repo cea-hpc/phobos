@@ -79,7 +79,16 @@ static char *dss_media_stats_encode(struct media_stats stats)
     return res;
 }
 
-int dss_media_stats_decode(struct media_stats *stats, const char *json)
+/**
+ * Decode the stats of a medium from a given \p json.
+ *
+ * \param[out] stats  The stats in which to store the decoded JSON values
+ * \param[in]  json   The JSON string to decode
+ *
+ * \return 0 on success, -EINVAL if \p json is not a valid JSON object
+ *                       negative error code otherwise
+ */
+static int dss_media_stats_decode(struct media_stats *stats, const char *json)
 {
     json_t          *root;
     json_error_t     json_error;

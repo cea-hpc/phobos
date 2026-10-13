@@ -34,7 +34,6 @@ from phobos.cli.target.media import (MediaAddOptHandler,
                                      MediaRebuildOptHandler,
                                      MediaRenameOptHandler,
                                      MediaSetAccessOptHandler,
-                                     MediaStatsOptHandler,
                                      MediaUpdateOptHandler)
 from phobos.cli.common.utils import (setaccess_epilog, uncase_fstype)
 from phobos.core.const import fs_type2str # pylint: disable=no-name-in-module
@@ -123,7 +122,6 @@ class TapeOptHandler(MediaOptHandler):
         MediaLocateOptHandler,
         MediaRebuildOptHandler,
         MediaRenameOptHandler,
-        MediaStatsOptHandler,
         MediaUpdateOptHandler, # pylint: enable=duplicate-code
         ResourceDeleteOptHandler,
         TapeAddOptHandler,

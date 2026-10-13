@@ -35,15 +35,4 @@
  */
 extern const struct dss_resource_ops media_ops;
 
-/**
- * Decode the stats of a medium from a given \p json.
- *
- * \param[out] stats  The stats in which to store the decoded JSON values
- * \param[in]  json   The JSON string to decode
- *
- * \return 0 on success, -EINVAL if \p json is not a valid JSON object
- *                       negative error code otherwise
- */
-int dss_media_stats_decode(struct media_stats *stats, const char *json);
-
 #endif
