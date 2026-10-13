@@ -514,6 +514,90 @@ function log_on_error()
     fi
 }
 
+function big_first_release()
+{
+    # 3 objects on dir_to_release_1G, by increasing size and creation time:
+    # the oldest object is the smallest one, to check that the emergency
+    # big first order does not follow the creation times. The 3 extents of
+    # the source copy occupy about 7% of the dir.
+    local small_file medium_file big_file
+    small_file=$(mktemp ${DIR_TEST_IN}/bf_rel_small_XXXXXX)
+    medium_file=$(mktemp ${DIR_TEST_IN}/bf_rel_medium_XXXXXX)
+    big_file=$(mktemp ${DIR_TEST_IN}/bf_rel_big_XXXXXX)
+    dd if=/dev/urandom of=${small_file} bs=1M count=10 &>/dev/null
+    dd if=/dev/urandom of=${medium_file} bs=1M count=20 &>/dev/null
+    dd if=/dev/urandom of=${big_file} bs=1M count=40 &>/dev/null
+
+    $phobos put --tags to_release --copy-name copy_to_release \
+        ${small_file} obj_bfr_a
+    sleep 0.1
+    $phobos put --tags to_release --copy-name copy_to_release \
+        ${medium_file} obj_bfr_b
+    sleep 0.1
+    $phobos put --tags to_release --copy-name copy_to_release \
+        ${big_file} obj_bfr_c
+    $phobos copy create --tags for_sync obj_bfr_a copy_synced
+    $phobos copy create --tags for_sync obj_bfr_b copy_synced
+    $phobos copy create --tags for_sync obj_bfr_c copy_synced
+
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_release_delay_second="0"
+
+    local dry_run_log delete_order
+
+    # specific threshold dry-run: the specific fill rate of the extents of
+    # the source copy, about 7%, crosses the specific higher threshold of
+    # 5%, and the space to release to get back under the specific lower
+    # threshold of 4% is covered by the biggest extent alone: only the
+    # biggest object must be listed for release
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="99"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_specific_higher_threshold="5"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_specific_lower_threshold="4"
+    dry_run_log=$($valg_phobos_hsm_release_dir --emergency-big-first \
+                      copy_to_release copy_synced)
+    delete_order=$(echo "${dry_run_log}" | grep "DELETE" | \
+                   grep -o "obj_bfr_[abc]" | tr '\n' ' ')
+    if [[ "${delete_order}" != "obj_bfr_c " ]]; then
+        error "specific emergency big first release must list the biggest " \
+              "object only, got '${delete_order}'"
+    fi
+
+    # general threshold dry-run: with a lower threshold of 0%, all the
+    # objects must be listed for release, by decreasing size
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="1"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_lower_threshold="0"
+    unset PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_specific_higher_threshold
+    unset PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_specific_lower_threshold
+    dry_run_log=$($valg_phobos_hsm_release_dir --emergency-big-first \
+                      copy_to_release copy_synced)
+    delete_order=$(echo "${dry_run_log}" | grep "DELETE" | \
+                   grep -o "obj_bfr_[abc]" | tr '\n' ' ')
+    if [[ "${delete_order}" != "obj_bfr_c obj_bfr_b obj_bfr_a " ]]; then
+        error "emergency big first release must list the objects by " \
+              "decreasing size, got '${delete_order}'"
+    fi
+
+    # general threshold run: the about 8% fill rate of the dir crosses the
+    # higher threshold of 6%, and with a lower threshold of 5% the space to
+    # release is covered by the biggest extent alone: only the biggest
+    # object must be released
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold="6"
+    export PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_lower_threshold="5"
+    run_log=$($valg_phobos_hsm_release_dir -d --emergency-big-first \
+                  copy_to_release copy_synced 2>&1)
+
+    # released
+    check_copy obj_bfr_c copy_synced
+    # not released
+    check_copy obj_bfr_a copy_to_release copy_synced
+    check_copy obj_bfr_b copy_to_release copy_synced
+
+    unset PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_release_delay_second
+    unset PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_higher_threshold
+    unset PHOBOS_HSM_COPY_TO_RELEASE_COPY_SYNCED_dir_release_lower_threshold
+
+    return 0
+}
+
 TESTS=(
     "check_hsm_release_dir_opt;"
     "setup; check_hsm_release_dir; cleanup"
@@ -522,6 +606,7 @@ TESTS=(
     "setup; check_hsm_release_dir_specific_threshold_unselectable; cleanup"
     "setup; check_hsm_release_dir_specific_threshold_lower_zero; cleanup"
     "setup; check_hsm_release_dir_general_threshold_precedence; cleanup"
+    "setup; big_first_release; cleanup"
     "setup; check_hsm_release_dir_specific_threshold_invalid; cleanup"
     "setup; log_on_error; cleanup"
 )

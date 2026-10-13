@@ -1,6 +1,9 @@
 # CHANGELOG UPDATES
 
 ## Next
+ * HSM release: add the --emergency-big-first option to phobos_hsm_release_dir
+   to release the biggest copies first, by decreasing extent size instead of
+   increasing creation time.
  * HSM sync: add the --emergency-big-first option to phobos_hsm_sync_dir, to
    check the extents of the time window by decreasing size instead of
    increasing creation time, so that the biggest objects are synced first.

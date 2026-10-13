@@ -17,8 +17,10 @@ If the fill rate of one local dir is above the **release_higher_threshold**,
 the phobos_hsm_release_dir command deletes copies of object with extents on this
 dir to decrease the fill rate under the **release_lower_threshold**. To be
 deleted, a "to release" copy must have an existing backend copy. The older
-copies are deleted first. "To release" copies with a creation time younger than
-"current_time - **release_delay_second**" are not deleted.
+copies are deleted first, or the biggest ones first with the
+--emergency-big-first option of phobos_hsm_release_dir. "To release" copies
+with a creation time younger than "current_time - **release_delay_second**"
+are not deleted.
 
 If the fill rate of the dir is not above the **dir_release_higher_threshold**
 and **dir_release_specific_higher_threshold** is strictly lower than

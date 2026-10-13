@@ -38,7 +38,8 @@
  *
  * To be deleted, a "to release" copy must have an existing backend copy.
  *
- * The older copies are deleted first.
+ * The older copies are deleted first, or the biggest ones first with the
+ * --emergency-big-first option.
  *
  * "To release" copies with a creation time younger than
  * "current_time - release_delay_second" are not deleted.
@@ -96,6 +97,7 @@ static void print_usage(void)
 {
     printf("usage: %s [-h/--help] [-v/--verbose] [-q/--quiet] [-d/--delete] "
            "[-m/--metadata key1[,key2,[...]]] [-b/--base64] "
+           "[-e/--emergency-big-first] "
            "source_copy_name destination_copy_name\n"
            "\n"
            "This command detects which source_copy_name copies of objects on "
@@ -137,7 +139,13 @@ static void print_usage(void)
            "'keyX' metadata.\n"
            "\n"
            "If the -b/--base64 option is set, all metadata values will be "
-           "printed on stdout in base 64.\n",
+           "printed on stdout in base 64.\n"
+           "\n"
+           "If the -e/--emergency-big-first option is set, the extents are "
+           "checked by decreasing size instead of increasing creation "
+           "time, so that the biggest copies are released first and the "
+           "lower threshold is reached with a minimum number of "
+           "releases.\n",
            program_invocation_short_name);
 }
 
@@ -150,12 +158,14 @@ static struct hsm_params parse_args(int argc, char **argv)
         {"delete", no_argument, 0, 'd'},
         {"metadata", required_argument, 0, 'm'},
         {"base64", no_argument, 0, 'b'},
+        {"emergency-big-first", no_argument, 0, 'e'},
         {0, 0, 0, 0}
     };
     struct hsm_params params = DEFAULT_HSM_PARAMS;
     int c;
 
-    while ((c = getopt_long(argc, argv, "hvqdm:b", long_options, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "hvqdm:be", long_options, NULL)) !=
+           -1) {
         switch (c) {
         case 'h':
             print_usage();
@@ -174,6 +184,9 @@ static struct hsm_params parse_args(int argc, char **argv)
             break;
         case 'b':
             params.base64 = true;
+            break;
+        case 'e':
+            params.emergency_big_first = true;
             break;
         default:
             print_usage();
@@ -387,6 +400,9 @@ int main(int argc, char **argv)
 
     pho_info("Checking new object copies to release older than %s",
              torelease_ctime_string);
+    if (params.emergency_big_first)
+        pho_info("Emergency big first: the extents are checked by "
+                 "decreasing size");
 
     rc = get_hsm_threshold(hsm_cfg_section_name,
                            PHO_CFG_HSM_dir_release_higher_threshold, 1, 100,
@@ -656,7 +672,12 @@ int main(int argc, char **argv)
         if (rc)
             goto close_lib_hdl;
 
-        sort.attr = dss_fields_pub2implem("DSS::EXT::creation_time");
+        if (params.emergency_big_first) {
+            sort.attr = dss_fields_pub2implem("DSS::EXT::size");
+            sort.reverse = true;
+        } else {
+            sort.attr = dss_fields_pub2implem("DSS::EXT::creation_time");
+        }
         sort.psql_sort = true;
 
         rc = dss_extent_get(&dss, &filter, &extent_list, &extent_count, &sort);
