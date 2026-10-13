@@ -436,6 +436,83 @@ function capped_sync_kb()
     return 0
 }
 
+function big_first_sync()
+{
+    # 3 objects on dir1, by increasing size and creation time: the oldest
+    # object is the smallest one, to check that the emergency big first
+    # order does not follow the creation times
+    local medium_file big_file
+    medium_file=$(mktemp ${DIR_TEST_IN}/bf_medium_XXXXXX)
+    big_file=$(mktemp ${DIR_TEST_IN}/bf_big_XXXXXX)
+    dd if=/dev/urandom of=${medium_file} bs=1k count=2 &>/dev/null
+    dd if=/dev/urandom of=${big_file} bs=1k count=4 &>/dev/null
+
+    $phobos put --tags dir1 ${FILES[0]} obj_bf_a
+    sleep 0.1
+    $phobos put --tags dir1 ${medium_file} obj_bf_b
+    sleep 0.1
+    $phobos put --tags dir1 ${big_file} obj_bf_c
+
+    # the candidates are listed and synced by decreasing size, not by
+    # increasing creation time
+    rm -f ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
+    local sync_log order
+    sync_log=$($valg_phobos_hsm_sync_dir -c --emergency-big-first source sync)
+    check_nb_sync_copy 3
+    order=$(echo "${sync_log}" | grep "CREATE" | grep -o "obj_bf_[abc]" |
+            tr '\n' ' ')
+    if [[ "${order}" != "obj_bf_c obj_bf_b obj_bf_a " ]]; then
+        error "emergency big first sync must list the objects by decreasing " \
+              "size, got '${order}'"
+    fi
+
+    return 0
+}
+
+function big_first_capped_sync()
+{
+    # 2 objects on dir1, by increasing size and creation time: the oldest
+    # object is the smallest one
+    local big_file
+    big_file=$(mktemp ${DIR_TEST_IN}/bfc_big_XXXXXX)
+    dd if=/dev/urandom of=${big_file} bs=1k count=4 &>/dev/null
+
+    $phobos put --tags dir1 ${FILES[0]} obj_bfc_a
+    sleep 0.1
+    $phobos put --tags dir1 ${big_file} obj_bfc_b
+
+    # cap the number of synced extents to 1 per dir device and per run
+    export PHOBOS_HSM_SOURCE_SYNC_max_synced_extent_count_per_device=1
+
+    # seed the synced ctime file with a date older than the extents of both
+    # objects, to check that a capped run does not advance it
+    echo "2000-01-01 00:00:00.000000" > \
+        ${PHOBOS_HSM_SOURCE_SYNC_synced_ctime_path}
+
+    # first run: the biggest object is synced, not the oldest one, and the
+    # synced ctime is not advanced: it keeps the seeded value
+    $valg_phobos_hsm_sync_dir -c --emergency-big-first source sync
+    check_nb_sync_copy 1
+    check_nb_sync_copy 1 obj_bfc_b
+    check_nb_sync_copy 0 obj_bfc_a
+    check_synced_ctime_value "2000-01-01 00:00:00.000000"
+
+    # second run: the biggest object is checked again without consuming
+    # the cap and the smallest one is synced; the whole window has been
+    # checked, so the synced ctime now advances to the end of the window
+    $valg_phobos_hsm_sync_dir -c --emergency-big-first source sync
+    check_nb_sync_copy 2
+    check_nb_sync_copy 1 obj_bfc_a
+
+    # last run: nothing left to sync
+    $valg_phobos_hsm_sync_dir -c --emergency-big-first source sync
+    check_nb_sync_copy 2
+
+    unset PHOBOS_HSM_SOURCE_SYNC_max_synced_extent_count_per_device
+
+    return 0
+}
+
 TESTS=(
     "check_hsm_sync_dir_opt;"
     "setup; check_hsm_sync_dir; cleanup"
@@ -444,4 +521,6 @@ TESTS=(
     "setup; capped_sync; cleanup"
     "setup; capped_sync_several_dirs; cleanup"
     "setup; capped_sync_kb; cleanup"
+    "setup; big_first_sync; cleanup"
+    "setup; big_first_capped_sync; cleanup"
 )

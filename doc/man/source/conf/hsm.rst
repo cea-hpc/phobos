@@ -99,6 +99,13 @@ then only advanced up to the creation time of the last extent checked on
 the dir devices that reached their limit, at the oldest of these creation
 times, so that the postponed extents are checked again.
 
+This is only true in the default order, by increasing creation time. With
+the --emergency-big-first option of phobos_hsm_sync_dir, the extents are
+checked by decreasing size, and the remaining extents of a dir device are
+not guaranteed to be more recent than the checked ones: the last synced
+time is then not advanced at all when a limit is reached, so that the
+whole time window is scanned again by the next executions of the command.
+
 This parameter must be an integer value. A value of 0, which is the default,
 or any lower value, means that the number of extents synced per device is
 not limited.
@@ -125,7 +132,9 @@ This parameter behaves like max_synced_extent_count_per_device: when it is
 reached on a dir device, the remaining extents of this device in the time
 window are not checked during this execution and are postponed to the next
 executions of the command, the last synced time being only advanced up to
-the creation time of the last extent checked. Both limits can be set at the
+the creation time of the last extent checked, or not advanced at all with
+the --emergency-big-first option, as detailed for
+max_synced_extent_count_per_device. Both limits can be set at the
 same time, the first one reached stops the scan.
 
 This parameter must be an integer value. A value of 0, which is the

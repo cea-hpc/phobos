@@ -334,6 +334,7 @@ static void print_usage(void)
 {
     printf("usage: %s [-h/--help] [-v/--verbose] [-q/--quiet] [-g/--grouping] "
            "[-c/--create] [-m/--metadata key1[,key2,[...]]] [-b/--base64] "
+           "[-e/--emergency-big-first] "
            "source_copy_name destination_copy_name\n"
            "\n"
            "This command detects which new copy `destination_copy_name` "
@@ -369,7 +370,17 @@ static void print_usage(void)
            "'keyX' metadata.\n"
            "\n"
            "If the -b/--base64 option is set, all metadata values will be "
-           "printed on stdout in base 64.\n",
+           "printed on stdout in base 64.\n"
+           "\n"
+           "If the -e/--emergency-big-first option is set, the extents of "
+           "the time window are checked by decreasing size instead of "
+           "increasing creation time, so that the biggest objects are "
+           "synced first. In that order, the remaining extents of a dir "
+           "device are not guaranteed to be more recent than the checked "
+           "ones, so when a max_synced cap stops the scan of a dir device "
+           "the last synced time is not advanced at all: the next "
+           "executions scan the whole time window again, skipping the "
+           "extents of the already synced objects.\n",
            program_invocation_short_name);
 }
 
@@ -383,12 +394,13 @@ static struct hsm_params parse_args(int argc, char **argv)
         {"create", no_argument, 0, 'c'},
         {"metadata", required_argument, 0, 'm'},
         {"base64", no_argument, 0, 'b'},
+        {"emergency-big-first", no_argument, 0, 'e'},
         {0, 0, 0, 0}
     };
     struct hsm_params params = DEFAULT_HSM_PARAMS;
     int c;
 
-    while ((c = getopt_long(argc, argv, "hvqgcm:b", long_options, NULL)) !=
+    while ((c = getopt_long(argc, argv, "hvqgcm:be", long_options, NULL)) !=
            -1) {
         switch (c) {
         case 'h':
@@ -411,6 +423,9 @@ static struct hsm_params parse_args(int argc, char **argv)
             break;
         case 'b':
             params.base64 = true;
+            break;
+        case 'e':
+            params.emergency_big_first = true;
             break;
         default:
             print_usage();
@@ -605,6 +620,9 @@ int main(int argc, char **argv)
 
     pho_info("Checking new object copies from %s to %s",
              synced_ctime_string, tosync_ctime_string);
+    if (params.emergency_big_first)
+        pho_info("Emergency big first: the extents of the time window are "
+                 "checked by decreasing size");
 
     /* only target local unlocked dir */
     hostname = get_hostname();
@@ -690,7 +708,12 @@ int main(int argc, char **argv)
             goto close_lib_hdl;
         }
 
-        sort.attr = dss_fields_pub2implem("DSS::EXT::creation_time");
+        if (params.emergency_big_first) {
+            sort.attr = dss_fields_pub2implem("DSS::EXT::size");
+            sort.reverse = true;
+        } else {
+            sort.attr = dss_fields_pub2implem("DSS::EXT::creation_time");
+        }
         sort.psql_sort = true;
 
         rc2 = dss_extent_get(&dss, &filter, &extent_list, &extent_count, &sort);
@@ -850,17 +873,26 @@ int main(int argc, char **argv)
          * only exits with j < extent_count in that case): only advance the
          * synced ctime up to the creation time of the last checked extent,
          * so that the remaining, more recent, extents are checked by the
-         * next executions.
+         * next executions. In emergency big first order, the remaining
+         * extents are not guaranteed to be more recent than the checked
+         * ones: do not advance the synced ctime at all, the next
+         * executions will scan the whole window again, skipping the
+         * extents of the already synced objects, which do not consume
+         * the caps.
          */
         if (j < extent_count) {
-            const struct timeval *last_checked_ctime =
-                &extent_list[j - 1].creation_time;
+            if (!params.emergency_big_first) {
+                const struct timeval *last_checked_ctime =
+                    &extent_list[j - 1].creation_time;
 
-            /* keep the oldest creation time of the capped devices */
-            if (new_synced_ctime.tv_sec > last_checked_ctime->tv_sec ||
-                (new_synced_ctime.tv_sec == last_checked_ctime->tv_sec &&
-                 new_synced_ctime.tv_usec > last_checked_ctime->tv_usec))
-                new_synced_ctime = *last_checked_ctime;
+                /* keep the oldest creation time of the capped devices */
+                if (new_synced_ctime.tv_sec > last_checked_ctime->tv_sec ||
+                    (new_synced_ctime.tv_sec == last_checked_ctime->tv_sec &&
+                     new_synced_ctime.tv_usec > last_checked_ctime->tv_usec))
+                    new_synced_ctime = *last_checked_ctime;
+            } else {
+                new_synced_ctime = synced_ctime;
+            }
         }
 
         dss_res_free(extent_list, extent_count);

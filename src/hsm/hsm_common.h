@@ -82,10 +82,11 @@ struct hsm_params {
     bool achieve;
     struct string_array wanted_keys;
     bool base64;
+    bool emergency_big_first;
 };
 
 #define DEFAULT_HSM_PARAMS {NULL, NULL, PHO_LOG_INFO, false, NULL, false, {0}, \
-                            false}
+                            false, false}
 
 static inline void clean_hsm_params(struct hsm_params *params)
 {
