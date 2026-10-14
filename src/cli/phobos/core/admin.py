@@ -557,20 +557,24 @@ class Client: # pylint: disable=too-many-public-methods
             raise EnvironmentError(rc, f"Failed to rebuild media(s) '{media}'")
 
     def medium_refresh_gc_stats(self, family, media, library):
-        """Refresh gc stats of media, return the number of refreshed media"""
+        """Refresh gc stats of media, return the number of refreshed media.
+
+        Library restricts the refresh to a library when no medium is given.
+        """
         if media:
             c_id = Id * len(media)
             med_ids = [Id(family=family, name=med, library=library)
                        for med in media]
             res_array = c_id(*med_ids)
             res_cnt = len(media)
+            lib = None
         else:
             res_array = None
             res_cnt = 0
+            lib = library.encode('utf-8') if library else None
 
-        rc = LIBPHOBOS_ADMIN.phobos_admin_media_refresh_gc_stats(\
-                                                byref(self.handle), int(family),
-                                                res_array, res_cnt)
+        rc = LIBPHOBOS_ADMIN.phobos_admin_media_refresh_gc_stats(
+            byref(self.handle), int(family), lib, res_array, res_cnt)
         if rc < 0:
             raise EnvironmentError(rc, "Failed to refresh gc stats")
 

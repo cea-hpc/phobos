@@ -314,6 +314,20 @@ function test_dir_stats_refresh_time
                "new refresh: '$ts'"
 }
 
+function test_dir_stats_refresh_library_scope
+{
+    # refresh all the media of the other library, without naming them:
+    # the media of the other libraries are not refreshed
+    $valg_phobos dir refresh_gc_stats --library otherlib ||
+        error "refresh of the otherlib library failed"
+
+    # DIR_LEGACY holds deprecated extents but is not refreshed, which
+    # proves that the refresh is restricted to the targeted library
+    check_stats dir "$DIR_OTHERLIB" "$GC_ATTRS" "1,1024,0,0"
+    check_stats dir "$DIR_LEGACY" "$GC_ATTRS" "0,0,0,0"
+    check_stats dir "$DIR_EMPTY" "$GC_ATTRS" "0,0,0,0"
+}
+
 function test_dir_stats_refresh_scope
 {
     # refresh a single medium of the other library: only this medium is
@@ -496,6 +510,7 @@ function test_tape_stats_refresh_idempotent
 TESTS=("setup_dir; \
             test_dir_stats_before_refresh; \
             test_dir_stats_refresh_time; \
+            test_dir_stats_refresh_library_scope; \
             test_dir_stats_refresh_scope; \
             test_dir_stats_refresh; \
             test_dir_stats_ratios; \

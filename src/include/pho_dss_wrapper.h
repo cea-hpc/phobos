@@ -266,11 +266,14 @@ int dss_update_gc_for_tape(struct dss_handle *handle,
 /**
  * Refresh the garbage-collection statistics of media
  *
- * The refreshed media are the ones given in \p media or all the media of \p
- * family when media_count is 0.
+ * The refreshed media are the ones given in \p media or, when media_count
+ * is 0, all the media of \p family, restricted to \p library when it is
+ * not NULL.
  *
  * @param[in]  handle       DSS handle
  * @param[in]  family       family of the media to refresh
+ * @param[in]  library      library to refresh when no media is given, all
+ *                          the libraries when NULL
  * @param[in]  media        identifiers of the media to refresh
  * @param[in]  media_count  number of media in \p media
  *
@@ -278,6 +281,7 @@ int dss_update_gc_for_tape(struct dss_handle *handle,
  */
 int dss_media_gc_stats_compute(struct dss_handle *handle,
                                enum rsc_family family,
+                               const char *library,
                                const struct pho_id *media, int media_count);
 
 /**

@@ -775,10 +775,12 @@ free_str:
  * Refresh the garbage-collection statistics of the media of a family.
  *
  * The refreshed media are the ones given by the caller, targeted by
- * their (id, library, family) identifier, or all the media of \p family.
+ * their (id, library, family) identifier, or all the media of \p family,
+ * restricted to \p library when it is not NULL.
  */
 int dss_media_gc_stats_compute(struct dss_handle *handle,
                                enum rsc_family family,
+                               const char *library,
                                const struct pho_id *media,
                                int media_count)
 {
@@ -802,8 +804,22 @@ int dss_media_gc_stats_compute(struct dss_handle *handle,
                            "SELECT family, id, library FROM media");
 
     if (media_count == 0) {
-        g_string_append_printf(request, " WHERE family = '%s')",
+        g_string_append_printf(request, " WHERE family = '%s'",
                                rsc_family2str(family));
+
+        if (library != NULL) {
+            char *esc_library = dss_char4sql(handle->dh_conn, library);
+
+            if (esc_library == NULL)
+                LOG_GOTO(free_request, rc = -EINVAL,
+                         "Failed to escape the library '%s'", library);
+
+            g_string_append_printf(request, " AND library = %s",
+                                   esc_library);
+            free_dss_char4sql(esc_library);
+        }
+
+        g_string_append(request, ")");
     } else {
         g_string_append(request, " WHERE (id, library, family) IN (");
 
