@@ -150,6 +150,9 @@ class MediaRefreshGCStatsOptHandler(ActionOptHandler):
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(MediaRefreshGCStatsOptHandler, cls).add_options(parser)
+        parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
+                            help="target the media carrying all these tags "
+                                 "(comma-separated: foo,bar)")
         parser.add_argument('-L', '--library',
                             help="attribute to filter the refresh by library")
         parser.add_argument('res', nargs='*', help='resource to refresh')
@@ -435,8 +438,9 @@ class MediaOptHandler(BaseResourceOptHandler):
         try:
             with AdminClient(lrs_required=False) as adm:
                 ids = NodeSet.fromlist(self.params.get('res'))
-                refreshed = adm.medium_refresh_gc_stats(self.family, ids,
-                                                        self.library)
+                refreshed = adm.medium_refresh_gc_stats(
+                    self.family, ids, self.library, self.params.get('tags'))
+
             if refreshed > 0:
                 self.logger.info("Garbage collection statistics of the "
                                  "media have been refreshed")

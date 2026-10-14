@@ -771,16 +771,41 @@ free_str:
     return check_orphan(handle, tape);
 }
 
+/* Append to the request the restriction of the targeted media to the ones
+ * carrying all the tags of \p tags, which does nothing when it is NULL.
+ */
+static int append_tag_filters(struct dss_handle *handle, GString *request,
+                              const struct string_array *tags)
+{
+    if (tags == NULL)
+        return 0;
+
+    for (size_t i = 0; i < tags->count; i++) {
+        char *esc_tag = dss_char4sql(handle->dh_conn, tags->strings[i]);
+
+        if (esc_tag == NULL)
+            LOG_RETURN(-EINVAL, "Failed to escape the tag '%s'",
+                       tags->strings[i]);
+
+        g_string_append_printf(request, " AND tags ? %s", esc_tag);
+        free_dss_char4sql(esc_tag);
+    }
+
+    return 0;
+}
+
 /**
  * Refresh the garbage-collection statistics of the media of a family.
  *
  * The refreshed media are the ones given by the caller, targeted by
  * their (id, library, family) identifier, or all the media of \p family,
- * restricted to \p library when it is not NULL.
+ * restricted to \p library and to the media carrying all the tags of \p
+ * tags when they are given.
  */
 int dss_media_gc_stats_compute(struct dss_handle *handle,
                                enum rsc_family family,
                                const char *library,
+                               const struct string_array *tags,
                                const struct pho_id *media,
                                int media_count)
 {
@@ -819,6 +844,10 @@ int dss_media_gc_stats_compute(struct dss_handle *handle,
             free_dss_char4sql(esc_library);
         }
 
+        rc = append_tag_filters(handle, request, tags);
+        if (rc)
+            goto free_request;
+
         g_string_append(request, ")");
     } else {
         g_string_append(request, " WHERE (id, library, family) IN (");
@@ -852,7 +881,13 @@ int dss_media_gc_stats_compute(struct dss_handle *handle,
             free_dss_char4sql(esc_library);
         }
 
-        g_string_append(request, "))");
+        g_string_append(request, ")");
+
+        rc = append_tag_filters(handle, request, tags);
+        if (rc)
+            goto free_request;
+
+        g_string_append(request, ")");
     }
 
     g_string_append(request,

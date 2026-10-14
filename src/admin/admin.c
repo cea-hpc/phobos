@@ -3038,6 +3038,7 @@ int phobos_admin_media_rebuild(struct admin_handle *adm, struct media_info *med,
 int phobos_admin_media_refresh_gc_stats(struct admin_handle *adm,
                                         enum rsc_family family,
                                         const char *library,
+                                        const struct string_array *tags,
                                         const struct pho_id *media,
                                         int media_count)
 {
@@ -3054,6 +3055,6 @@ int phobos_admin_media_refresh_gc_stats(struct admin_handle *adm,
         }
     }
 
-    return dss_media_gc_stats_compute(&adm->dss, family, library, media,
-                                      media_count);
+    return dss_media_gc_stats_compute(&adm->dss, family, library, tags,
+                                      media, media_count);
 }

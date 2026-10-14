@@ -49,6 +49,9 @@ static struct pho_id M3 = {
     .family = PHO_RSC_TAPE, .name = "TAPE0001", .library = "legacy",
 };
 
+/* the only tag of the media under test, carried by M1 */
+static char *TAG_A[] = { "tagA" };
+
 static void fill_medium_info(struct media_info *medium_info,
                              const struct pho_id *id)
 {
@@ -66,13 +69,20 @@ static void fill_medium_info(struct media_info *medium_info,
     medium_info->flags.delete = true;
 }
 
-static int insert_medium(const struct pho_id *id)
+static int insert_medium(const struct pho_id *id, char **tags,
+                         size_t tag_count)
 {
     struct media_info medium_info;
+    int rc;
 
     fill_medium_info(&medium_info, id);
+    string_array_init(&medium_info.tags, tags, tag_count);
 
-    return dss_media_insert(DSS, &medium_info, 1);
+    rc = dss_media_insert(DSS, &medium_info, 1);
+
+    string_array_free(&medium_info.tags);
+
+    return rc;
 }
 
 static int insert_object(const char *oid, const char *uuid, int version)
@@ -142,13 +152,13 @@ static int dmgcs_setup(void **state)
     mkdir(M2.name, 0755);
 
     /* the media under test: two dir media in different libraries, an empty
-     * tape
+     * tape. M1 carries a tag, to filter the refresh on it.
      */
-    rc = insert_medium(&M1);
+    rc = insert_medium(&M1, TAG_A, 1);
     assert_return_code(rc, -rc);
-    rc = insert_medium(&M2);
+    rc = insert_medium(&M2, NULL, 0);
     assert_return_code(rc, -rc);
-    rc = insert_medium(&M3);
+    rc = insert_medium(&M3, NULL, 0);
     assert_return_code(rc, -rc);
 
     /* version 2 of the shared object is deprecated, version 1 stays live */
@@ -272,7 +282,7 @@ static void dmgcs_refresh_family(void **state)
     (void) state;
 
     /* no media given: all the media of the dir family are refreshed */
-    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, NULL, 0);
+    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, NULL, NULL, 0);
     assert_int_equal(rc, 2);
 
     /* e5+e6 are orphan (550 bytes), e2+e3 are deprecated (500 bytes) */
@@ -303,7 +313,8 @@ static void dmgcs_refresh_library_scope(void **state)
     (void) state;
 
     /* no media given: only the media of the given library are refreshed */
-    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, "otherlib", NULL, 0);
+    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, "otherlib",
+                                    NULL, NULL, 0);
     assert_int_equal(rc, 1);
 
     /* e9 is deprecated only (10 bytes) */
@@ -319,8 +330,50 @@ static void dmgcs_refresh_library_scope(void **state)
     dss_res_free(media, media_count);
 
     /* an unknown library matches no medium */
-    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, "nosuchlib", NULL, 0);
+    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, "nosuchlib",
+                                    NULL, NULL, 0);
     assert_int_equal(rc, 0);
+}
+
+static void dmgcs_refresh_tags_scope(void **state)
+{
+    struct string_array tags = {0};
+    struct pho_id targets[2];
+    struct media_info *media;
+    int media_count;
+    int rc;
+
+    (void) state;
+
+    string_array_init(&tags, TAG_A, 1);
+
+    /* no media given: only the media of the family carrying the tag are
+     * refreshed
+     */
+    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, &tags, NULL, 0);
+    assert_int_equal(rc, 1);
+
+    /* M1 carries the tag: e5+e6 are orphan, e2+e3 are deprecated */
+    media = get_stored_medium(M1.name, &media_count);
+    assert_int_equal(media_count, 1);
+    assert_gc(&media[0], 2, 550, 2, 500);
+    dss_res_free(media, media_count);
+
+    /* M2, without the tag, is not refreshed */
+    media = get_stored_medium(M2.name, &media_count);
+    assert_int_equal(media_count, 1);
+    assert_gc(&media[0], 0, 0, 0, 0);
+    dss_res_free(media, media_count);
+
+    /* with named media, only those carrying the tag are refreshed */
+    targets[0] = M1;
+    targets[1] = M2;
+
+    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, &tags,
+                                    targets, 2);
+    assert_int_equal(rc, 1);
+
+    string_array_free(&tags);
 }
 
 static void dmgcs_refresh_given_media(void **state)
@@ -337,7 +390,7 @@ static void dmgcs_refresh_given_media(void **state)
     targets[2] = M3;
 
     /* all the given media are refreshed, whatever their family */
-    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, targets, 3);
+    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, NULL, targets, 3);
     assert_int_equal(rc, 3);
 
     media = get_stored_medium(M1.name, &media_count);
@@ -368,7 +421,7 @@ static void dmgcs_refresh_subset(void **state)
 
     targets[0] = M2;
 
-    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, targets, 1);
+    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, NULL, targets, 1);
     assert_int_equal(rc, 1);
 
     media = get_stored_medium(M2.name, &media_count);
@@ -399,7 +452,7 @@ static void dmgcs_refresh_unknown_medium(void **state)
     targets[1] = unknown;
 
     /* only the existing medium is refreshed, the returned count reflects it */
-    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, targets, 2);
+    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, NULL, targets, 2);
     assert_int_equal(rc, 1);
 
     media = get_stored_medium(M2.name, &media_count);
@@ -427,7 +480,7 @@ static void dmgcs_refresh_preserves_live_counters(void **state)
     rc = dss_media_update(DSS, &upd, &upd, 1, LOGC_SPC_USED);
     assert_return_code(rc, -rc);
 
-    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, NULL, 0);
+    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, NULL, NULL, 0);
     assert_int_equal(rc, 2);
 
     /* the GC counters are published, the live counter survived both the
@@ -448,11 +501,11 @@ static void dmgcs_refresh_idempotent(void **state)
 
     (void) state;
 
-    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, NULL, 0);
+    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, NULL, NULL, 0);
     assert_int_equal(rc, 2);
 
     /* a second refresh replaces the counters, it does not add to them */
-    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, NULL, 0);
+    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, NULL, NULL, 0);
     assert_int_equal(rc, 2);
 
     media = get_stored_medium(M1.name, &media_count);
@@ -469,11 +522,11 @@ static void dmgcs_refresh_invalid_args(void **state)
     (void) state;
 
     /* a media count without the corresponding list */
-    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, NULL, 1);
+    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, NULL, NULL, 1);
     assert_int_equal(rc, -EINVAL);
 
     /* a negative media count */
-    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, targets, -1);
+    rc = dss_media_gc_stats_compute(DSS, PHO_RSC_DIR, NULL, NULL, targets, -1);
     assert_int_equal(rc, -EINVAL);
 }
 
@@ -484,6 +537,8 @@ int main(void)
                                         dmgcs_teardown),
         cmocka_unit_test_setup_teardown(dmgcs_refresh_library_scope,
                                         dmgcs_setup, dmgcs_teardown),
+        cmocka_unit_test_setup_teardown(dmgcs_refresh_tags_scope, dmgcs_setup,
+                                        dmgcs_teardown),
         cmocka_unit_test_setup_teardown(dmgcs_refresh_given_media, dmgcs_setup,
                                         dmgcs_teardown),
         cmocka_unit_test_setup_teardown(dmgcs_refresh_subset, dmgcs_setup,

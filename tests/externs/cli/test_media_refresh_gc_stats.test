@@ -314,6 +314,36 @@ function test_dir_stats_refresh_time
                "new refresh: '$ts'"
 }
 
+function test_dir_stats_refresh_tags_scope
+{
+    # the tag option combines with the library option: no medium of the
+    # otherlib library carries the statA tag, nothing is refreshed
+    $valg_phobos dir refresh_gc_stats --tags statA --library otherlib ||
+        error "refresh of the statA media of the otherlib library failed"
+
+    # DIR_LEGACY, which carries the tag, belongs to another library and
+    # DIR_OTHERLIB, which belongs to the library, does not carry the
+    # tag: none of them is refreshed
+    check_stats dir "$DIR_LEGACY" "$GC_ATTRS" "0,0,0,0"
+    check_stats dir "$DIR_OTHERLIB" "$GC_ATTRS" "0,0,0,0"
+
+    # with named media, only those carrying the requested tag are
+    # refreshed
+    $valg_phobos dir refresh_gc_stats --tags statE "$DIR_LEGACY" \
+        "$DIR_EMPTY" ||
+        error "refresh of the statE media failed"
+
+    check_stats dir "$DIR_LEGACY" "$GC_ATTRS" "0,0,0,0"
+
+    # refresh all the media carrying the tag, without naming them
+    $valg_phobos dir refresh_gc_stats --tags statA ||
+        error "refresh of the statA media failed"
+
+    check_stats dir "$DIR_LEGACY" "$GC_ATTRS" "2,1536,0,0"
+    check_stats dir "$DIR_OTHERLIB" "$GC_ATTRS" "0,0,0,0"
+    check_stats dir "$DIR_EMPTY" "$GC_ATTRS" "0,0,0,0"
+}
+
 function test_dir_stats_refresh_library_scope
 {
     # refresh all the media of the other library, without naming them:
@@ -321,22 +351,23 @@ function test_dir_stats_refresh_library_scope
     $valg_phobos dir refresh_gc_stats --library otherlib ||
         error "refresh of the otherlib library failed"
 
-    # DIR_LEGACY holds deprecated extents but is not refreshed, which
-    # proves that the refresh is restricted to the targeted library
+    # the media of the other libraries are not refreshed: they keep the
+    # counters of their last refresh, by tags for DIR_LEGACY
     check_stats dir "$DIR_OTHERLIB" "$GC_ATTRS" "1,1024,0,0"
-    check_stats dir "$DIR_LEGACY" "$GC_ATTRS" "0,0,0,0"
+    check_stats dir "$DIR_LEGACY" "$GC_ATTRS" "2,1536,0,0"
     check_stats dir "$DIR_EMPTY" "$GC_ATTRS" "0,0,0,0"
 }
 
 function test_dir_stats_refresh_scope
 {
     # refresh a single medium of the other library: only this medium is
-    # refreshed
+    # refreshed, the media of the other libraries keep the counters of
+    # their last refresh
     $valg_phobos dir refresh_gc_stats --library otherlib "$DIR_OTHERLIB" ||
         error "refresh of $DIR_OTHERLIB failed"
 
     check_stats dir "$DIR_OTHERLIB" "$GC_ATTRS" "1,1024,0,0"
-    check_stats dir "$DIR_LEGACY" "$GC_ATTRS" "0,0,0,0"
+    check_stats dir "$DIR_LEGACY" "$GC_ATTRS" "2,1536,0,0"
 }
 
 function test_dir_stats_refresh
@@ -510,6 +541,7 @@ function test_tape_stats_refresh_idempotent
 TESTS=("setup_dir; \
             test_dir_stats_before_refresh; \
             test_dir_stats_refresh_time; \
+            test_dir_stats_refresh_tags_scope; \
             test_dir_stats_refresh_library_scope; \
             test_dir_stats_refresh_scope; \
             test_dir_stats_refresh; \
