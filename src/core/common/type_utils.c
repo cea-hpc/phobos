@@ -31,10 +31,12 @@
 #include <jansson.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "pho_common.h"
 #include "pho_type_utils.h"
@@ -489,8 +491,16 @@ int tsqueue_init(struct tsqueue *tsqueue)
         LOG_RETURN(-rc, "Unable to init threadsafe queue mutex");
 
     tsqueue->queue = g_queue_new();
+    tsqueue->notify_fd = -1;
 
     return 0;
+}
+
+void tsqueue_set_notify_fd(struct tsqueue *tsqueue, int fd)
+{
+    MUTEX_LOCK(&tsqueue->mutex);
+    tsqueue->notify_fd = fd;
+    MUTEX_UNLOCK(&tsqueue->mutex);
 }
 
 void tsqueue_destroy(struct tsqueue *tsq, GDestroyNotify free_func)
@@ -520,9 +530,23 @@ void *tsqueue_pop(struct tsqueue *tsq)
 
 void tsqueue_push(struct tsqueue *tsq, void *data)
 {
+    int notify_fd;
+
     MUTEX_LOCK(&tsq->mutex);
     g_queue_push_head(tsq->queue, data);
+    notify_fd = tsq->notify_fd;
     MUTEX_UNLOCK(&tsq->mutex);
+
+    /* Notify after enqueueing: with a level-triggered eventfd, a consumer
+     * woken up here is guaranteed to see the new item (no lost wakeup).
+     */
+    if (notify_fd >= 0) {
+        uint64_t one = 1;
+
+        if (write(notify_fd, &one, sizeof(one)) < 0)
+            pho_warn("Failed to notify a queue push on fd %d: %s",
+                     notify_fd, strerror(errno));
+    }
 }
 
 unsigned int tsqueue_get_length(struct tsqueue *tsq)

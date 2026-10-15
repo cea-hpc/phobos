@@ -120,6 +120,7 @@ class CommInfo(Structure): # pylint: disable=too-few-public-methods
         ('_path', c_char_p),
         ('socket_fd', c_int),
         ('epoll_fd', c_int),
+        ('wakeup_fd', c_int),
         ('ev_tab', c_void_p),
     ]
 

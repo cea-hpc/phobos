@@ -661,6 +661,10 @@ static inline bool pho_configure_op_is_valid(enum configure_op op)
 struct tsqueue {
     GQueue             *queue;          /**< Object queue */
     pthread_mutex_t     mutex;          /**< Mutex to protect the queue */
+    int                 notify_fd;      /**< Optional eventfd written on each
+                                          *   push to wake a poller up (-1:
+                                          *   disabled). Not owned by the queue.
+                                          */
 };
 
 #endif

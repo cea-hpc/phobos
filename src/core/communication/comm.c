@@ -38,6 +38,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/epoll.h>
+#include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -484,6 +485,22 @@ int pho_comm_open(struct pho_comm_info *ci, const union pho_comm_addr *addr,
         LOG_GOTO(out_err, rc = -errno,
                  "Socket poll control failed in adding(%s)", ci->path);
 
+    /* Wakeup channel for the server owner: an eventfd in the poll set, so
+     * internal producers (e.g. threads queueing responses) can make
+     * pho_comm_recv() return immediately instead of waiting for the poll
+     * timeout. Identified in the poll events by data.ptr == NULL.
+     */
+    ci->wakeup_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    if (ci->wakeup_fd == -1)
+        LOG_GOTO(out_err, rc = -errno, "Wakeup eventfd creation failed");
+
+    ev.events = EPOLLIN;
+    ev.data.ptr = NULL;
+
+    if (epoll_ctl(ci->epoll_fd, EPOLL_CTL_ADD, ci->wakeup_fd, &ev))
+        LOG_GOTO(out_err, rc = -errno,
+                 "Socket poll control failed in adding the wakeup eventfd");
+
     ci->ev_tab = g_hash_table_new(NULL, NULL);
     g_hash_table_insert(ci->ev_tab, &cri->fd, cri);
 
@@ -495,6 +512,10 @@ out_err:
     if (ci->epoll_fd != -1) {
         close(ci->epoll_fd);
         ci->epoll_fd = -1;
+    }
+    if (ci->wakeup_fd != -1) {
+        close(ci->wakeup_fd);
+        ci->wakeup_fd = -1;
     }
 
     if (ci->socket_fd != -1) {
@@ -548,6 +569,9 @@ int pho_comm_close(struct pho_comm_info *ci)
 
     if (close(ci->epoll_fd))
         rc = -errno;
+
+    if (close(ci->wakeup_fd))
+        rc = rc ? : -errno;
 
     if (ci->type == PHO_COMM_UNIX_SERVER) {
         if (unlink(ci->path))
@@ -849,12 +873,14 @@ static int _process_recv_contents(struct pho_comm_info *ci,
 static int _recv_server(struct pho_comm_info *ci, struct pho_comm_data **data,
                         int *nb_data)
 {
-    struct epoll_event ev[g_hash_table_size(ci->ev_tab)];
+    /* +1: the wakeup eventfd is polled but not tracked in ev_tab */
+    struct epoll_event ev[g_hash_table_size(ci->ev_tab) + 1];
     int idx_event, idx_data = 0;
     int rca = 0;
 
     /* probing the socket poll */
-    *nb_data = epoll_wait(ci->epoll_fd, ev, g_hash_table_size(ci->ev_tab), 100);
+    *nb_data = epoll_wait(ci->epoll_fd, ev,
+                          g_hash_table_size(ci->ev_tab) + 1, 100);
     rca = -errno;
     if (*nb_data == 0)
         return 0;
@@ -875,6 +901,15 @@ static int _recv_server(struct pho_comm_info *ci, struct pho_comm_data **data,
         int rc;
         struct _pho_comm_recv_info *cri
             = (struct _pho_comm_recv_info *) ev[idx_event].data.ptr;
+
+        if (cri == NULL) { /* wakeup eventfd */
+            uint64_t counter;
+
+            if (read(ci->wakeup_fd, &counter, sizeof(counter)) < 0)
+                pho_warn("Failed to drain the wakeup eventfd: %s",
+                         strerror(errno));
+            continue;
+        }
 
         if (cri->fd == ci->socket_fd) { /* accept socket */
             rc = _process_accept(ci, cri);

@@ -90,6 +90,10 @@ struct pho_comm_info {
                          *   (the one open with socket() call).
                          */
     int epoll_fd;       /*!< Socket poll descriptor (used by the server). */
+    int wakeup_fd;      /*!< Server-only: eventfd watched by the socket poll,
+                         *   so that internal producers can wake the poller
+                         *   up (poll event with data.ptr == NULL).
+                         */
     GHashTable *ev_tab; /*!< Hash table of events of the socket poll
                          *   (used by the server for cleaning).
                          */
@@ -112,6 +116,7 @@ static inline struct pho_comm_info pho_comm_info_init(void)
         .path = NULL,
         .socket_fd = -1,
         .epoll_fd = -1,
+        .wakeup_fd = -1,
         .ev_tab = NULL
     };
 

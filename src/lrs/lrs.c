@@ -1243,6 +1243,11 @@ static int lrs_init(struct lrs *lrs)
     if (rc)
         LOG_GOTO(err, rc, "Failed to open the phobosd socket");
 
+    /* Wake the comm thread up as soon as a response is queued by a scheduler
+     * or device thread, instead of waiting for the poll timeout.
+     */
+    tsqueue_set_notify_fd(&lrs->response_queue, lrs->comm.wakeup_fd);
+
     rc = dss_init(&lrs->dss);
     if (rc)
         LOG_GOTO(err, rc, "Failed to init comm dss handle");

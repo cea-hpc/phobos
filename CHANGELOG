@@ -3,6 +3,9 @@
 ## Next
  * WARNING: the db schema moves from 3.3 to 3.5 and a migration is needed
  * WARNING: the stats.nb_obj in media stats is changed to stats.nb_extent
+ * The LRS responses are now sent as soon as they are produced by the
+   scheduler and device threads, instead of waiting up to 100 ms for the
+   communication thread to poll again.
  * HSM release: add the --emergency-big-first option to phobos_hsm_release_dir
    to release the biggest copies first, by decreasing extent size instead of
    increasing creation time.

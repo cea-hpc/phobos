@@ -319,6 +319,14 @@ int saj_parser_run(struct saj_parser *parser, json_t *root);
 int tsqueue_init(struct tsqueue *tsqueue);
 
 /**
+ * Set the queue notification fd: it is written on each push, so that an
+ * epoll-based consumer can be woken up immediately.
+ * @param[in,out]   tsqueue     Threadsafe queue.
+ * @param[in]       fd          eventfd to write on push (-1 to disable).
+ */
+void tsqueue_set_notify_fd(struct tsqueue *tsqueue, int fd);
+
+/**
  * Threadsafe queue destructor.
  * @param[in,out]   tsq         Threadsafe queue.
  * @param[in]       free_func   Function used to free queue elements contents.
