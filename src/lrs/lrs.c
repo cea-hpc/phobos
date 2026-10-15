@@ -103,9 +103,6 @@ struct lrs {
                                                 * completed after the LRS
                                                 * stopped.
                                                 */
-    struct dss_handle     dss;                 /*!< DSS handle of the
-                                                * communication thread
-                                                */
     const char *lock_file;                     /*!< Daemon lock file path */
 
     struct lrs_stats stats;
@@ -575,9 +572,14 @@ static void init_request_container_param(struct lrs_stats *stats,
         reqc->params.notify.notified_device = NULL;
 }
 
-static int update_phys_spc_free(struct dss_handle *dss,
-                                struct media_info *dss_media_info,
-                                size_t written_size)
+/** Update the in-memory free space of a medium with the size written
+ * by a client, as seen by the scheduler.
+ *
+ * The DSS is not updated here: the medium sync recomputes this value
+ * from the filesystem, so the releases do not pay a DSS request each.
+ */
+static void update_phys_spc_free(struct media_info *dss_media_info,
+                                 size_t written_size)
 {
     if (written_size > 0) {
         dss_media_info->stats.phys_spc_free -= written_size;
@@ -597,23 +599,16 @@ static int update_phys_spc_free(struct dss_handle *dss,
                       dss_media_info->rsc.id.library);
             dss_media_info->stats.phys_spc_free = 0;
         }
-
-        return dss_media_update(dss, dss_media_info, dss_media_info, 1,
-                                PHYS_SPC_FREE);
     }
-
-    return 0;
 }
 
-static int release_medium(struct lrs_sched *sched,
-                          struct dss_handle *comm_dss,
-                          struct req_container *reqc,
-                          pho_req_release_elt_t *release,
-                          size_t medium_index,
-                          int *req_rc)
+static void release_medium(struct lrs_sched *sched,
+                           struct req_container *reqc,
+                           pho_req_release_elt_t *release,
+                           size_t medium_index,
+                           int *req_rc)
 {
     struct lrs_dev *dev = NULL;
-    int rc = 0;
 
     *req_rc = 0;
 
@@ -627,7 +622,7 @@ static int release_medium(struct lrs_sched *sched,
                   "Unable to find loaded device of the medium (name '%s', "
                   "library '%s') to release",
                   release->med_id->name, release->med_id->library);
-        return 0;
+        return;
     } else if (!dev_is_release_ready(dev)) {
         pho_error(0, /* Do not display a POSIX error in the logs, as it would
                       * be confusing to see.
@@ -637,14 +632,14 @@ static int release_medium(struct lrs_sched *sched,
                   dev->ld_dss_dev_info->rsc.id.name,
                   release->med_id->name, release->med_id->library);
         *req_rc = -ESHUTDOWN;
-        return 0;
+        return;
     }
 
     /* update media phys_spc_free stats in advance, before next sync */
     MUTEX_LOCK(&dev->ld_mutex);
     if (release->rc == 0)
-        rc = update_phys_spc_free(comm_dss, dev->ld_dss_media_info,
-                                  release->size_written);
+        update_phys_spc_free(dev->ld_dss_media_info,
+                             release->size_written);
     if (release->to_sync)
         /* ownership of reqc is passed to the device thread */
         push_new_sync_to_device(dev, reqc, medium_index);
@@ -658,8 +653,6 @@ static int release_medium(struct lrs_sched *sched,
                         reqc->socket_id);
 
     MUTEX_UNLOCK(&dev->ld_mutex);
-
-    return rc;
 }
 
 /**
@@ -669,18 +662,12 @@ static int release_medium(struct lrs_sched *sched,
  * The request container is queued or freed by this call.
  * If an error occurs, this function creates and queues the corresponding
  * error message.
- *
- * The error code returned by this function stands for an error of the LRS
- * daemon itself, not an error about the release request which is managed by
- * an error message.
  */
-static int process_release_request(struct lrs_sched *sched,
-                                   struct dss_handle *comm_dss,
-                                   struct req_container *reqc)
+static void process_release_request(struct lrs_sched *sched,
+                                    struct req_container *reqc)
 {
     int release_index = -1;
     int client_err = 0;
-    int rc = 0;
     size_t i;
     size_t j;
 
@@ -688,11 +675,7 @@ static int process_release_request(struct lrs_sched *sched,
         pho_req_release_elt_t *release_elt = reqc->req->release->media[i];
         int req_rc = 0;
 
-        rc = release_medium(sched, comm_dss, reqc, release_elt,
-                            release_index + 1, &req_rc);
-        if (rc)
-            /* system error, stop */
-            break;
+        release_medium(sched, reqc, release_elt, release_index + 1, &req_rc);
 
         if (release_elt->to_sync && !client_err) {
             client_err = req_rc;
@@ -700,22 +683,22 @@ static int process_release_request(struct lrs_sched *sched,
         }
     }
 
-    if (!rc && !client_err) {
+    if (!client_err) {
         if (reqc->params.release.n_tosync_media == 0)
             sched_req_free(reqc);
 
-        return 0;
+        return;
     }
 
     if (reqc->params.release.n_tosync_media == 0) {
         /* the client will not wait for the reponse, do not send one */
         sched_req_free(reqc);
-        return rc;
+        return;
     }
 
     /* send error to client */
     MUTEX_LOCK(&reqc->mutex);
-    reqc->params.release.rc = rc ? : client_err;
+    reqc->params.release.rc = client_err;
     reqc->params.release.tosync_media[release_index].status =
         SUB_REQUEST_ERROR;
     queue_error_response(sched->response_queue, reqc->params.release.rc, reqc);
@@ -732,8 +715,6 @@ static int process_release_request(struct lrs_sched *sched,
     if (release_index == 0)
         /* never queued: we can free it */
         sched_req_free(reqc);
-
-    return rc;
 }
 
 static const char *config_get_value(json_t *config, const char *key,
@@ -1008,10 +989,8 @@ static int _prepare_requests(struct lrs *lrs, bool *schedulers_to_signal,
         init_request_container_param(&lrs->stats, req_cont);
         if (pho_request_is_release(req_cont->req)) {
             pho_stat_incr(lrs->stats.req_stats[PHO_REQ_RELEASE], 1);
-            rc2 = process_release_request(lrs->sched[fam], &lrs->dss, req_cont);
-            rc = rc ? : rc2;
-            if (!rc2)
-                schedulers_to_signal[fam] = true;
+            process_release_request(lrs->sched[fam], req_cont);
+            schedulers_to_signal[fam] = true;
         } else {
             /* update stats about other requests */
             if (pho_request_is_format(req_cont->req))
@@ -1157,8 +1136,7 @@ static void lrs_stats_destroy(struct lrs_stats *lrs_stats)
 /* ****************************************************************************/
 
 /**
- * Free all resources associated with this LRS except for the dss, which must be
- * deinitialized by the caller if necessary.
+ * Free all resources associated with this LRS.
  *
  * The LRS data structure is allocated in lrs_init()
  * and deallocated in lrs_fini().
@@ -1196,7 +1174,6 @@ static void lrs_fini(struct lrs *lrs)
     lrs_stats_destroy(&lrs->stats);
 
     tsqueue_destroy(&lrs->response_queue, sched_resp_free_with_cont);
-    dss_fini(&lrs->dss);
 
     _delete_lock_file(lrs->lock_file);
 }
@@ -1247,10 +1224,6 @@ static int lrs_init(struct lrs *lrs)
      * or device thread, instead of waiting for the poll timeout.
      */
     tsqueue_set_notify_fd(&lrs->response_queue, lrs->comm.wakeup_fd);
-
-    rc = dss_init(&lrs->dss);
-    if (rc)
-        LOG_GOTO(err, rc, "Failed to init comm dss handle");
 
     rc = lrs_stats_init(&lrs->stats);
     if (rc)

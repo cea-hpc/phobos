@@ -3,6 +3,10 @@
 ## Next
  * WARNING: the db schema moves from 3.3 to 3.5 and a migration is needed
  * WARNING: the stats.nb_obj in media stats is changed to stats.nb_extent
+ * The media phys_spc_free is no longer updated in the DSS at each
+   release. The scheduler reads the in-memory value of loaded media,
+   and the final value is saved in the DSS at medium unload and at LRS
+   stop.
  * The LRS responses are now sent as soon as they are produced by the
    scheduler and device threads, instead of waiting up to 100 ms for the
    communication thread to poll again.

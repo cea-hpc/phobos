@@ -1305,6 +1305,29 @@ int dev_unload(struct lrs_dev *dev)
     MUTEX_LOCK(&dev->ld_mutex);
     dev->ld_op_status = PHO_DEV_OP_ST_EMPTY;
     unloaded_medium = dev->ld_dss_media_info;
+
+    /* The releases only decrement phys_spc_free in memory, and no sync will
+     * ever run for this load of the medium: save the final value in the DSS,
+     * so that the space written since the last sync is not lost with the
+     * device state. Best effort: the next sync of the medium will
+     * recompute the value from the filesystem anyway.
+     *
+     * The update is done under the device lock, before the medium is
+     * detached: otherwise, a release processed in between would decrement
+     * the value after it was saved, and the scheduler would see the medium
+     * as not loaded with a stale DSS row, and allocate its already-used
+     * space.
+     */
+    rc = dss_media_update(&dev->ld_device_thread.dss, unloaded_medium,
+                          unloaded_medium, 1, PHYS_SPC_FREE);
+    if (rc)
+        pho_error(rc,
+                  "Failed to save the free space of medium (family '%s', name "
+                  "'%s', library '%s') in the DSS at unload",
+                  rsc_family2str(unloaded_medium->rsc.id.family),
+                  unloaded_medium->rsc.id.name,
+                  unloaded_medium->rsc.id.library);
+
     dev->ld_dss_media_info = NULL;
     MUTEX_UNLOCK(&dev->ld_mutex);
 
@@ -2210,6 +2233,7 @@ static void cancel_pending_sub_request(struct lrs_dev *device)
  */
 static int dev_cleanup_medium_at_stop(struct lrs_dev *device)
 {
+    struct media_info *stopped_medium;
     int rc;
 
     if (dev_is_mounted(device)) {
@@ -2229,12 +2253,39 @@ static int dev_cleanup_medium_at_stop(struct lrs_dev *device)
     }
 
     if (dev_is_loaded(device)) {
-        rc = dss_medium_release(&device->ld_device_thread.dss,
-                                device->ld_dss_media_info);
-        if (rc) {
-            const struct pho_id *med_id = lrs_dev_med_id(device);
-            const struct pho_id *dev_id = lrs_dev_id(device);
+        const struct pho_id *med_id = lrs_dev_med_id(device);
+        const struct pho_id *dev_id = lrs_dev_id(device);
 
+        /* The releases only decrement phys_spc_free in memory, and no sync
+         * will ever run for this load of the medium: the medium stays in
+         * the drive when the LRS stops, so save the final value in the DSS,
+         * as done at unload, or the space written since the last sync is
+         * lost and reallocated after a restart. Best effort: the next sync
+         * of the medium will recompute the value from the filesystem
+         * anyway.
+         *
+         * Like at unload, the update is done under the device lock and
+         * before the medium is detached, so that no release can decrement
+         * the value once saved, and the scheduler cannot see the medium as
+         * not loaded with a stale DSS row.
+         */
+        MUTEX_LOCK(&device->ld_mutex);
+        stopped_medium = device->ld_dss_media_info;
+        rc = dss_media_update(&device->ld_device_thread.dss, stopped_medium,
+                              stopped_medium, 1, PHYS_SPC_FREE);
+        if (rc)
+            pho_error(rc,
+                      "Failed to save the free space of medium (family '%s', "
+                      "name '%s', library '%s') in the DSS during regular "
+                      "exit",
+                      rsc_family2str(med_id->family), med_id->name,
+                      med_id->library);
+        device->ld_dss_media_info = NULL;
+        MUTEX_UNLOCK(&device->ld_mutex);
+
+        rc = dss_medium_release(&device->ld_device_thread.dss,
+                                stopped_medium);
+        if (rc)
             LOG_RETURN(rc,
                        "unable to release DSS lock of medium (family '%s', "
                        "name '%s', library '%s') in device (family '%s', name "
@@ -2243,12 +2294,8 @@ static int dev_cleanup_medium_at_stop(struct lrs_dev *device)
                        med_id->library,
                        rsc_family2str(dev_id->family), dev_id->name,
                        dev_id->library);
-        }
 
-        MUTEX_LOCK(&device->ld_mutex);
-        lrs_medium_release(device->ld_dss_media_info);
-        device->ld_dss_media_info = NULL;
-        MUTEX_UNLOCK(&device->ld_mutex);
+        lrs_medium_release(stopped_medium);
     }
 
     rc = dss_device_release(&device->ld_device_thread.dss,
@@ -2311,14 +2358,36 @@ static void fail_release_device(struct lrs_dev *dev)
  */
 static void dev_cleanup_on_error(struct lrs_dev *device)
 {
+    struct media_info *errored_medium;
     int rc;
 
     if (device->ld_dss_media_info) {
-        if (device->ld_dss_media_info->lock.hostname) {
+        /* Save the final in-memory free space of the medium, as done at
+         * unload: no sync will ever run for this load of the medium. The
+         * update is done under the device lock, before the medium is
+         * detached, for the same reasons as at unload. Best effort: the
+         * next sync of the medium will recompute the value from the
+         * filesystem anyway.
+         */
+        MUTEX_LOCK(&device->ld_mutex);
+        errored_medium = device->ld_dss_media_info;
+        rc = dss_media_update(&device->ld_device_thread.dss, errored_medium,
+                              errored_medium, 1, PHYS_SPC_FREE);
+        if (rc)
+            pho_error(rc,
+                      "Failed to save the free space of medium (family '%s', "
+                      "name '%s', library '%s') in the DSS at cleanup",
+                      rsc_family2str(errored_medium->rsc.id.family),
+                      errored_medium->rsc.id.name,
+                      errored_medium->rsc.id.library);
+        device->ld_dss_media_info = NULL;
+        MUTEX_UNLOCK(&device->ld_mutex);
+
+        if (errored_medium->lock.hostname) {
             rc = dss_medium_release(&device->ld_device_thread.dss,
-                                    device->ld_dss_media_info);
+                                    errored_medium);
             if (rc) {
-                const struct pho_id *med_id = lrs_dev_med_id(device);
+                const struct pho_id *med_id = &errored_medium->rsc.id;
 
                 pho_error(rc,
                           "Error when releasing medium (family '%s', name "
@@ -2328,10 +2397,7 @@ static void dev_cleanup_on_error(struct lrs_dev *device)
             }
         }
 
-        MUTEX_LOCK(&device->ld_mutex);
-        lrs_medium_release(device->ld_dss_media_info);
-        device->ld_dss_media_info = NULL;
-        MUTEX_UNLOCK(&device->ld_mutex);
+        lrs_medium_release(errored_medium);
 
         /* the medium is set to failed when the health reaches 0, no need to set
          * it to failed here.
@@ -2862,19 +2928,4 @@ struct media_info *atomic_dev_medium_get(struct lrs_dev *device)
     MUTEX_UNLOCK(&device->ld_mutex);
 
     return medium;
-}
-
-ssize_t atomic_dev_medium_phys_space_free(struct lrs_dev *dev)
-{
-    struct media_info *medium;
-    ssize_t space_free;
-
-    medium = atomic_dev_medium_get(dev);
-    if (!medium)
-        return -1;
-
-    space_free = medium->stats.phys_spc_free;
-    lrs_medium_release(medium);
-
-    return space_free;
 }

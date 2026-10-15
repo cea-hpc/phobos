@@ -701,8 +701,6 @@ void atomic_dev_update_loaded_medium(struct lrs_dev *device);
 
 struct media_info *atomic_dev_medium_get(struct lrs_dev *device);
 
-ssize_t atomic_dev_medium_phys_space_free(struct lrs_dev *dev);
-
 void fail_release_medium(struct lrs_dev *dev, struct media_info *medium);
 
 int dev_stats_init(struct lrs_dev *dev);

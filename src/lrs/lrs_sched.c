@@ -1216,6 +1216,34 @@ int sched_select_medium(struct io_scheduler *io_sched,
         if (already_alloc)
             continue;
 
+        /* already loaded ? */
+        dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,
+                                   curr->rsc.id.name, curr->rsc.id.library,
+                                   &sched_ready);
+
+        /* The space written on a loaded medium is accounted in memory at
+         * each release, while its DSS row is only refreshed at the medium
+         * sync: use the in-memory free space, so that a next allocation
+         * does not rely on a stale DSS value.
+         *
+         * The value is read under the device lock, which the releases
+         * also take to decrement it. The medium identity is checked under
+         * this lock too, as the device may have been found through its
+         * load sub request, or may have changed medium since the search
+         * above.
+         */
+        if (dev != NULL) {
+            struct media_info *loaded_medium;
+
+            MUTEX_LOCK(&dev->ld_mutex);
+            loaded_medium = dev->ld_dss_media_info;
+            if (loaded_medium != NULL &&
+                pho_id_equal(&loaded_medium->rsc.id, &curr->rsc.id))
+                curr->stats.phys_spc_free =
+                    loaded_medium->stats.phys_spc_free;
+            MUTEX_UNLOCK(&dev->ld_mutex);
+        }
+
         /* exclude medium too small to do a no-split */
         if (reqc->req->walloc->no_split &&
             curr->stats.phys_spc_free <= required_size)
@@ -1230,10 +1258,6 @@ int sched_select_medium(struct io_scheduler *io_sched,
                 /* not locked by myself */
                 continue;
 
-        /* already loaded and in use ? */
-        dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,
-                                   curr->rsc.id.name, curr->rsc.id.library,
-                                   &sched_ready);
         if (dev && (!sched_ready ||
                     /* we cannot use a medium that doesn't belong to the write
                      * I/O scheduler.
@@ -1870,7 +1894,10 @@ static int sched_device_unlock(struct lrs_sched *sched, const char *name,
     return sched_device_add(sched, sched->family, name, library);
 }
 
-/** remove written_size from phys_spc_free in media_info and DSS */
+/** Create one sub request per device selected for the allocation, assign
+ * each of them to its device and wake the device threads up, so that they
+ * handle the scheduled IOs or medium loads.
+ */
 static void push_sub_request_to_device(struct req_container *reqc)
 {
     struct lrs_dev **devices = reqc->params.rwalloc.respc->devices;
