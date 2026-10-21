@@ -362,16 +362,27 @@ char *uchar2hex(const unsigned char *buf, int buf_size)
 
 unsigned char *hex2uchar(const char *hex, int uchar_size)
 {
-    unsigned char *buff = xcalloc(uchar_size + 1, sizeof(char));
+    unsigned char *buff;
     int i;
     int j;
+
+    /* exact length required: decoding must not read past the string end */
+    if (strlen(hex) != 2 * (size_t)uchar_size) {
+        errno = -EINVAL;
+        return NULL;
+    }
+
+    buff = xcalloc(uchar_size + 1, sizeof(char));
 
     for (i = 0, j = 0; i < uchar_size; i++, j += 2) {
         unsigned int temp = 0;
         int rc = 0;
 
         rc = sscanf(hex + j, "%02x", &temp);
-        if (rc < 0) {
+        /* %02x also matches a single hex digit before a non-hex
+         * character (e.g. "0g"), so validate both characters
+         */
+        if (rc != 1 || !isxdigit(hex[j]) || !isxdigit(hex[j + 1])) {
             free(buff);
             errno = -EINVAL;
             return NULL;

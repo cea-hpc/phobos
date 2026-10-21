@@ -859,7 +859,9 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
     const char *tmp_user_md;
     const char *tmp_version;
     struct module_desc mod;
+    const char *tmp_xxh128;
     const char *tmp_copy;
+    const char *tmp_md5;
     struct pho_attrs md;
     int64_t object_size;
     char *filename;
@@ -967,6 +969,35 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
                      filename);
     }
 
+    tmp_md5 = pho_attr_get(&md, PHO_EA_MD5_NAME);
+    if (tmp_md5 != NULL) {
+        unsigned char *md5_digest = hex2uchar(tmp_md5, MD5_BYTE_LENGTH);
+
+        if (md5_digest == NULL)
+            LOG_GOTO(free_oid_uuid, rc = -EINVAL,
+                     "Invalid md5 digest on file '%s': '%s'", filename,
+                     tmp_md5);
+
+        extent_to_insert->with_md5 = true;
+        memcpy(extent_to_insert->md5, md5_digest, MD5_BYTE_LENGTH);
+        free(md5_digest);
+    }
+
+    tmp_xxh128 = pho_attr_get(&md, PHO_EA_XXH128_NAME);
+    if (tmp_xxh128 != NULL) {
+        unsigned char *xxh128_digest = hex2uchar(tmp_xxh128,
+                                                 XXH128_BYTE_LENGTH);
+
+        if (xxh128_digest == NULL)
+            LOG_GOTO(free_oid_uuid, rc = -EINVAL,
+                     "Invalid xxh128 digest on file '%s': '%s'", filename,
+                     tmp_xxh128);
+
+        extent_to_insert->with_xxh128 = true;
+        memcpy(extent_to_insert->xxh128, xxh128_digest, XXH128_BYTE_LENGTH);
+        free(xxh128_digest);
+    }
+
     obj_info->size = object_size;
 
     lyt_info->version = version;
@@ -997,6 +1028,7 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
 free_oid_uuid:
     free(oid);
     free(uuid);
+    pho_attrs_free(&md);
 
 free_filename:
     free(filename);
