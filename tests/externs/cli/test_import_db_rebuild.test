@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+
+#
+#  All rights reserved (c) 2014-2026 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Non-regression test for the database recovery feature: after a database
+# loss, 'phobos dir import' and 'phobos tape import' must rebuild the
+# object, deprecated_object, copy, layout and extent tables, and the
+# groupings of the media, from the xattrs stored on the media.
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
+
+export PHOBOS_LRS_families="dir,tape"
+# a grouped put on a dir medium only syncs its grouping to the medium when
+# this is enabled, which is needed to compare the media groupings in the dumps
+export PHOBOS_LRS_grouping_on_dir=true
+
+### SETUP/CLEANUP FUNCTIONS
+function setup
+{
+    drain_all_drives
+    setup_tables
+    setup_test_dirs
+
+    FILE_DIR_MD="$DIR_TEST_IN/file_dir_md"
+    FILE_DIR_NOMD="$DIR_TEST_IN/file_dir_nomd"
+    FILE_DIR_RAID1="$DIR_TEST_IN/file_dir_raid1"
+    FILE_DIR_RAID4="$DIR_TEST_IN/file_dir_raid4"
+    FILE_DIR_COPY="$DIR_TEST_IN/file_dir_copy"
+    FILE_OVER_V1="$DIR_TEST_IN/file_over_v1"
+    FILE_OVER_V2="$DIR_TEST_IN/file_over_v2"
+    FILE_TAPE_RAID1="$DIR_TEST_IN/file_tape_raid1"
+    FILE_TAPE_RAID1R2="$DIR_TEST_IN/file_tape_raid1r2"
+    FILE_TAPE_RAID4="$DIR_TEST_IN/file_tape_raid4"
+    FILE_TAPE_GROUP="$DIR_TEST_IN/file_tape_group"
+    FILE_TAPE_GROUP_V2="$DIR_TEST_IN/file_tape_group_v2"
+    FILE_TAPE_GROUP2="$DIR_TEST_IN/file_tape_group2"
+    FILE_DIR_GROUP="$DIR_TEST_IN/file_dir_group"
+
+    set +x
+    # distinct sizes, so that extent mismatches are easy to spot in dumps
+    dd if=/dev/urandom of="$FILE_DIR_MD" bs=1K count=33
+    dd if=/dev/urandom of="$FILE_DIR_NOMD" bs=1K count=17
+    dd if=/dev/urandom of="$FILE_DIR_RAID1" bs=1K count=41
+    dd if=/dev/urandom of="$FILE_DIR_RAID4" bs=1K count=51
+    dd if=/dev/urandom of="$FILE_DIR_COPY" bs=1K count=19
+    dd if=/dev/urandom of="$FILE_OVER_V1" bs=1K count=23
+    dd if=/dev/urandom of="$FILE_OVER_V2" bs=1K count=45
+    dd if=/dev/urandom of="$FILE_TAPE_RAID1" bs=1K count=29
+    dd if=/dev/urandom of="$FILE_TAPE_RAID1R2" bs=1K count=37
+    dd if=/dev/urandom of="$FILE_TAPE_RAID4" bs=1K count=43
+    dd if=/dev/urandom of="$FILE_TAPE_GROUP" bs=1K count=31
+    dd if=/dev/urandom of="$FILE_TAPE_GROUP_V2" bs=1K count=27
+    dd if=/dev/urandom of="$FILE_TAPE_GROUP2" bs=1K count=35
+    dd if=/dev/urandom of="$FILE_DIR_GROUP" bs=1K count=39
+    set -x
+
+    DIRS=(
+          $(mktemp -d "$DIR_TEST_IN/test_pho.XXXX")
+          $(mktemp -d "$DIR_TEST_IN/test_pho.XXXX")
+          $(mktemp -d "$DIR_TEST_IN/test_pho.XXXX")
+          $(mktemp -d "$DIR_TEST_IN/test_pho.XXXX")
+         )
+    DRIVES="$(get_lto_drives 5 4)"
+    TAPES="$(get_tapes L5 6)"
+
+    invoke_daemons
+
+    $phobos dir add --tags my_tag ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+
+    for drive in ${DRIVES}; do
+        $phobos drive add --unlock "$drive" ||
+            error "Drive ${drive} should have been added"
+    done
+
+    for tape in $(nodeset -e "${TAPES}"); do
+        $phobos tape add -t lto5 --tags my_tag "${tape}" ||
+            error "Tape ${tape} should have been added"
+        $phobos tape format --unlock "${tape}" ||
+            error "Tape ${tape} should have been formated"
+    done
+}
+
+function cleanup
+{
+    waive_daemons
+    drain_all_drives
+
+    cleanup_test_dirs
+    drop_tables
+}
+
+### DUMP HELPERS
+# Dump every table rebuilt by the import, skipping what cannot be recovered
+# from the media: timestamps (creation_time, deprec_time, access_time),
+# physical space stats and fullness (they depend on the host filesystem),
+# and the media tags, which are only stored in the database.
+function dump_db
+{
+    echo "== media =="
+    # the groupings are compared as a sorted set: the import walks the
+    # extents in directory order, which may differ from their write order
+    $PSQL -A -t -F '|' -c "SELECT family, model, id, adm_status, fs_type, \
+fs_label, address_type, fs_status, stats->>'nb_extent', \
+stats->>'logc_spc_used', put, \"get\", \"delete\", library, \
+(SELECT string_agg(g, ',' ORDER BY g) FROM jsonb_array_elements_text(groupings) g) \
+FROM media ORDER BY id"
+    echo "== object =="
+    $PSQL -A -t -F '|' -c "SELECT oid, user_md, object_uuid, version, \
+_grouping, size FROM object ORDER BY oid"
+    echo "== deprecated_object =="
+    $PSQL -A -t -F '|' -c "SELECT oid, object_uuid, version, user_md, \
+_grouping, size FROM deprecated_object ORDER BY oid, version"
+    # layout name and repl_count are compared instead of the whole lyt_info:
+    # the import rebuilds it from the xattrs and its extra attributes differ
+    # from the ones set at put time
+    echo "== copy =="
+    $PSQL -A -t -F '|' -c "SELECT object_uuid, version, copy_name, \
+copy_status, lyt_info->>'name', lyt_info->'attrs'->>'raid1.repl_count' \
+FROM copy ORDER BY object_uuid, version, copy_name"
+    echo "== layout =="
+    $PSQL -A -t -F '|' -c "SELECT object_uuid, version, extent_uuid, \
+layout_index, copy_name FROM layout \
+ORDER BY object_uuid, version, copy_name, layout_index"
+    echo "== extent =="
+    $PSQL -A -t -F '|' -c "SELECT extent_uuid, state, size, offsetof, \
+medium_family, medium_id, medium_library, address, hash, info FROM extent \
+ORDER BY extent_uuid"
+}
+
+function get_and_check
+{
+    local oid="$1"
+    local src="$2"
+
+    $phobos get "$oid" "$DIR_TEST_OUT/${oid}.out" ||
+        error "get of ${oid} failed after import"
+    cmp "$src" "$DIR_TEST_OUT/${oid}.out" ||
+        error "content of ${oid} differs after import"
+}
+
+function test_import_db_rebuild
+{
+    ### dir media: raid1 with one and two replicas, raid4, with and
+    ### without user metadata, and a grouping
+    $phobos put -f dir -m "blob=toto" "$FILE_DIR_MD" oid_dir_md ||
+        error "put of oid_dir_md failed"
+    $phobos put -f dir "$FILE_DIR_NOMD" oid_dir_nomd ||
+        error "put of oid_dir_nomd failed"
+    $phobos put -f dir -l raid1 --lyt-params repl_count=2 \
+        "$FILE_DIR_RAID1" oid_dir_raid1 || error "put of oid_dir_raid1 failed"
+    $phobos put -f dir -l raid4 "$FILE_DIR_RAID4" oid_dir_raid4 ||
+        error "put of oid_dir_raid4 failed"
+
+    ### grouped put on dir media: the grouping is synced to the medium
+    ### (grouping_on_dir is enabled above) and must be rebuilt by the import
+    $phobos put -f dir --grouping my_group "$FILE_DIR_GROUP" oid_dir_group ||
+        error "put of oid_dir_group failed"
+
+    ### second copy of an object
+    $phobos put -f dir "$FILE_DIR_COPY" oid_dir_copy ||
+        error "put of oid_dir_copy failed"
+    $phobos copy create -f dir oid_dir_copy second ||
+        error "copy create of oid_dir_copy failed"
+
+    ### deprecated object: the extents of the first version are still on
+    ### the media, so they must be imported in deprecated_object
+    $phobos put -f dir "$FILE_OVER_V1" oid_overwrite ||
+        error "first put of oid_overwrite failed"
+    $phobos put -f dir --overwrite "$FILE_OVER_V2" oid_overwrite ||
+        error "overwrite of oid_overwrite failed"
+
+    ### tape media: raid1 with one and two replicas, raid4, user metadata
+    ### and two groupings
+    $phobos put -f tape "$FILE_TAPE_RAID1" oid_tape_raid1 ||
+        error "put of oid_tape_raid1 failed"
+    $phobos put -f tape -l raid1 --lyt-params repl_count=2 \
+        "$FILE_TAPE_RAID1R2" oid_tape_raid1r2 ||
+        error "put of oid_tape_raid1r2 failed"
+    $phobos put -f tape -l raid4 "$FILE_TAPE_RAID4" oid_tape_raid4 ||
+        error "put of oid_tape_raid4 failed"
+    $phobos put -f tape -m "blob=tata" --grouping my_group \
+        "$FILE_TAPE_GROUP" oid_tape_group ||
+        error "put of oid_tape_group failed"
+
+    ### a second grouping, and the overwrite of the grouped object: the
+    ### first version must be imported in deprecated_object with its
+    ### grouping, and both versions share the tape that carries my_group,
+    ### so the import also deduplicates the groupings of that medium
+    $phobos put -f tape --grouping my_group2 "$FILE_TAPE_GROUP2" \
+        oid_tape_group2 || error "put of oid_tape_group2 failed"
+    $phobos put -f tape --overwrite --grouping my_group \
+        "$FILE_TAPE_GROUP_V2" oid_tape_group ||
+        error "overwrite of oid_tape_group failed"
+
+    ### simulate the loss of the database and rebuild it from the media
+    dump_db > "$DIR_TEST_OUT/dump_before"
+
+    waive_daemons
+    drop_tables
+    setup_tables
+    drain_all_drives
+    invoke_daemons
+
+    $phobos dir import --unlock ${DIRS[@]} ||
+        error "'phobos dir import' failed to rebuild the database"
+
+    for drive in ${DRIVES}; do
+        $phobos drive add --unlock "$drive" ||
+            error "Drive ${drive} should have been re-added"
+    done
+
+    $phobos tape import --unlock -t lto5 $(nodeset -e "${TAPES}") ||
+        error "'phobos tape import' failed to rebuild the database"
+
+    dump_db > "$DIR_TEST_OUT/dump_after"
+
+    diff "$DIR_TEST_OUT/dump_before" "$DIR_TEST_OUT/dump_after" ||
+        error "database rebuilt by import differs from the original one"
+
+    ### the rebuilt database must give access to the data itself
+    get_and_check oid_dir_md "$FILE_DIR_MD"
+    get_and_check oid_dir_nomd "$FILE_DIR_NOMD"
+    get_and_check oid_dir_raid1 "$FILE_DIR_RAID1"
+    get_and_check oid_dir_raid4 "$FILE_DIR_RAID4"
+    get_and_check oid_dir_group "$FILE_DIR_GROUP"
+    get_and_check oid_dir_copy "$FILE_DIR_COPY"
+    get_and_check oid_overwrite "$FILE_OVER_V2"
+    get_and_check oid_tape_raid1 "$FILE_TAPE_RAID1"
+    get_and_check oid_tape_raid1r2 "$FILE_TAPE_RAID1R2"
+    get_and_check oid_tape_raid4 "$FILE_TAPE_RAID4"
+    get_and_check oid_tape_group "$FILE_TAPE_GROUP_V2"
+    get_and_check oid_tape_group2 "$FILE_TAPE_GROUP2"
+
+    return 0
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Tapes are required for this test"
+fi
+
+TESTS=("setup; test_import_db_rebuild; cleanup")

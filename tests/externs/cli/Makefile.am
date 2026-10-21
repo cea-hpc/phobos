@@ -68,6 +68,7 @@ check_SCRIPTS=acceptance.test \
               test_hsm_sync_dir.test \
               test_hsm_release_dir.test \
               test_import.test \
+              test_import_db_rebuild.test \
               test_ldm.sh \
               test_list_sort.test \
               test_locate.test \
