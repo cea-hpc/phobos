@@ -407,11 +407,13 @@ static int layout_raid4_get_specific_attrs(struct pho_io_descr *iod,
                                            struct pho_attrs *layout_md)
 {
     const char *tmp_extent_index;
+    const char *tmp_chunk_size;
     struct pho_attrs md;
     int rc;
 
     md.attr_set = NULL;
     pho_attr_set(&md, PHO_EA_RAID4_EXTENT_INDEX_NAME, NULL);
+    pho_attr_set(&md, PHO_EA_RAID4_CHUNK_SIZE_NAME, NULL);
 
     iod->iod_attrs = md;
     iod->iod_flags = PHO_IO_MD_ONLY;
@@ -431,6 +433,22 @@ static int layout_raid4_get_specific_attrs(struct pho_io_descr *iod,
         LOG_GOTO(end, rc = -EINVAL,
                  "Invalid extent index found on '%s': '%d'",
                  iod->iod_loc->extent->address.buff, extent->layout_idx);
+
+    tmp_chunk_size = pho_attr_get(&md, PHO_EA_RAID4_CHUNK_SIZE_NAME);
+    if (tmp_chunk_size != NULL) {
+        if (str2int64(tmp_chunk_size) <= 0)
+            LOG_GOTO(end, rc = -EINVAL,
+                     "Invalid chunk size found on '%s': '%s'",
+                     iod->iod_loc->extent->address.buff, tmp_chunk_size);
+
+        pho_attr_set(&extent->info, PHO_EA_RAID4_CHUNK_SIZE_NAME,
+                     tmp_chunk_size);
+    } else {
+        pho_warn("No '%s' xattr on '%s': probably written by an old phobos "
+                 "version, the object will not be readable",
+                 PHO_EA_RAID4_CHUNK_SIZE_NAME,
+                 iod->iod_loc->extent->address.buff);
+    }
 
 end:
     pho_attrs_free(&md);

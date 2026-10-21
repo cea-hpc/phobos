@@ -547,13 +547,14 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
 
     rc = dss_lock(&adm->dss, DSS_OBJECT, &obj_to_insert, 1);
     if (rc)
-        LOG_RETURN(rc, "Unable to lock object objid: '%s'", obj_to_insert.oid);
+        LOG_GOTO(free_extent_info, rc,
+                 "Unable to lock object objid: '%s'", obj_to_insert.oid);
 
     save_oid = obj_to_insert.oid;
 
     rc = _add_object_to_dss(&adm->dss, &obj_to_insert, &copy_to_insert);
     if (rc)
-        LOG_RETURN(rc, "Could not add object to DSS");
+        LOG_GOTO(free_extent_info, rc, "Could not add object to DSS");
 
     lyt_to_insert.oid = obj_to_insert.oid;
     lyt_to_insert.uuid = obj_to_insert.uuid;
@@ -561,7 +562,9 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
 
     rc = _add_extent_to_dss(&adm->dss, &lyt_to_insert, &ext_to_insert);
     if (rc)
-        LOG_RETURN(rc, "Could not add extent to DSS");
+        LOG_GOTO(free_extent_info, rc, "Could not add extent to DSS");
+
+    pho_attrs_free(&ext_to_insert.info);
 
     if (obj_to_insert.oid != save_oid) {
         free((void *)obj_to_insert.oid);
@@ -575,6 +578,11 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
                    obj_to_insert.oid);
 
     return 0;
+
+free_extent_info:
+    pho_attrs_free(&ext_to_insert.info);
+
+    return rc;
 }
 
 /**
