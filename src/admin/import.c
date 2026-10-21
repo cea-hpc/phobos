@@ -356,6 +356,36 @@ insert_object_with_different_uuid(struct dss_handle *dss,
     return rc;
 }
 
+static int _add_copy_to_dss_if_missing(struct dss_handle *dss,
+                                       struct copy_info *copy_to_insert)
+{
+    struct copy_info *copy_res;
+    struct dss_filter filter;
+    int copy_count = 0;
+    int rc;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                              "{\"DSS::COPY::object_uuid\": \"%s\"}, "
+                              "{\"DSS::COPY::version\": \"%d\"},"
+                              "{\"DSS::COPY::copy_name\": \"%s\"}"
+                          "]}", copy_to_insert->object_uuid,
+                          copy_to_insert->version, copy_to_insert->copy_name);
+    if (rc)
+        return rc;
+
+    rc = dss_copy_get(dss, &filter, &copy_res, &copy_count, NULL);
+    dss_filter_free(&filter);
+    if (rc)
+        return rc;
+
+    if (copy_count == 0)
+        rc = dss_copy_insert(dss, copy_to_insert, 1);
+
+    dss_res_free(copy_res, copy_count);
+    return rc;
+}
+
 /**
  * Adds an object inside the DSS, depending on the version of the object,
  * and the presence of other objects or deprecated objects already in the DSS.
@@ -390,6 +420,16 @@ static int _add_object_to_dss(struct dss_handle *dss,
         pho_verb("Object '%s' with uuid '%s' and version '%d' already in DSS",
                  object_to_insert->oid, object_to_insert->uuid,
                  object_to_insert->version);
+
+        /*
+         * The object row is already there, but this extent may belong to a
+         * copy that has not been imported yet.
+         */
+        rc = _add_copy_to_dss_if_missing(dss, copy_to_insert);
+        if (rc)
+            LOG_RETURN(rc, "Could not add copy '%s' of object '%s' to DSS",
+                       copy_to_insert->copy_name, object_to_insert->oid);
+
         return 0;
     }
 
