@@ -21,11 +21,16 @@
 #define RM_OPEN_FDS 16
 #define WAIT_UNLOCK_SLEEP 2
 
-/** Assert an rc is 0 or print a pretty error and exit */
+/** Assert an rc is 0 or print a pretty error and exit.
+ * The local variable must not shadow the asserted expression: the test
+ * compiler would then read the uninitialized local instead of the caller's
+ * variable when it is called with a same-named one (e.g. ASSERT_RC(rc)).
+ */
 #define ASSERT_RC(rc_expr) do {                                         \
-        int rc = (rc_expr);                                             \
-        if (rc) {                                                       \
-            pho_error(rc, "%s:%d:%s", __FILE__, __LINE__, #rc_expr);    \
+        int _assert_rc = (rc_expr);                                     \
+        if (_assert_rc) {                                               \
+            pho_error(_assert_rc, "%s:%d:%s", __FILE__, __LINE__,       \
+                      #rc_expr);                                        \
             exit(EXIT_FAILURE);                                         \
         }                                                               \
     } while (0)

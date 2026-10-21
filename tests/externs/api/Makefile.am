@@ -35,6 +35,7 @@ TEST_LOG_DRIVER=$(TO_TEST)/test-driver.sh
 
 check_PROGRAMS=phobos_put_copy \
                test_bad_comm \
+               test_bad_fd \
                test_concurrency \
                test_copy_rebuild_extent_list \
                test_delete \
@@ -54,6 +55,7 @@ check_PROGRAMS=phobos_put_copy \
                test_utf8_user_md
 
 check_SCRIPTS=test_bad_comm.sh \
+              test_bad_fd.test \
               test_concurrency.test \
               test_copy_rebuild_extent_list.test \
               test_delete.test \
@@ -90,6 +92,10 @@ phobos_put_copy_CFLAGS=$(TESTS_INCLUDE)
 test_bad_comm_SOURCES=test_bad_comm.c
 test_bad_comm_LDADD=$(CORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_bad_comm_CFLAGS=$(TESTS_INCLUDE)
+
+test_bad_fd_SOURCES=test_bad_fd.c
+test_bad_fd_LDADD=$(STORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
+test_bad_fd_CFLAGS=$(TESTS_INCLUDE)
 
 test_concurrency_SOURCES=test_concurrency.c
 test_concurrency_LDADD=$(STORE_LIB)

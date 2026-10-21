@@ -115,6 +115,8 @@ static int set_private_posix_io_descr(struct pho_io_descr **private_io_descr,
         fd = dup(input_fd);
         if (fd == -1) {
             rc = -errno;
+            pho_error(rc, "failed to duplicate fd %d for target index %d",
+                      input_fd, target_idx);
             goto end;
         }
 

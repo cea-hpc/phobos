@@ -330,6 +330,9 @@ static int decoder_build(struct dss_handle *dss, struct pho_xfer_desc *xfer,
 
 err:
     if (rc) {
+        /* the layout is freed here on error: drop the processor's reference
+         * to it, as store_fini frees proc->src_layout too
+         */
         dss_res_free(layout, cnt);
         decoder->src_layout = NULL;
     }

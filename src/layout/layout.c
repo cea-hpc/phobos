@@ -204,8 +204,10 @@ int layout_encoder(struct pho_data_processor *encoder,
     }
 
     rc = set_posix_reader(encoder);
-    if (rc)
+    if (rc) {
         layout_destroy(encoder);
+        return rc;
+    }
 
     /* get io_block_size from conf */
     rc = get_cfg_io_block_size(&encoder->io_block_size,
@@ -255,8 +257,10 @@ int layout_decoder(struct pho_data_processor *decoder,
     }
 
     rc = set_posix_writer(decoder);
-    if (rc)
+    if (rc) {
         layout_destroy(decoder);
+        return rc;
+    }
 
     /* get io_block_size from conf */
     rc = get_cfg_io_block_size(&decoder->io_block_size,
