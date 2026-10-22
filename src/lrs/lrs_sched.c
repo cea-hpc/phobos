@@ -1556,7 +1556,7 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
                                             wreq, empty_medium))
                 goto unlock_continue;
 
-            rc = tape_drive_compat(pmedia, itr, &compatible);
+            rc = medium_device_compat_locked(pmedia, itr, &compatible);
             if (rc) {
                 selected = NULL;
                 MUTEX_UNLOCK(&itr->ld_mutex);
@@ -1716,13 +1716,13 @@ device_select_func_t get_dev_policy(void)
  * @param[in] allocation_seeker Allocation requester.
  * @return                    True if one compatible drive is found, else false.
  */
-static bool compatible_drive_exists(struct lrs_sched *sched,
-                                    struct media_info *pmedia,
-                                    struct lrs_dev **selected_devs,
-                                    size_t n_selected_devs,
-                                    size_t not_selected,
-                                    bool prevent_duplicate,
-                                    int allocation_requester)
+bool compatible_drive_exists(struct lrs_sched *sched,
+                             struct media_info *pmedia,
+                             struct lrs_dev **selected_devs,
+                             size_t n_selected_devs,
+                             size_t not_selected,
+                             bool prevent_duplicate,
+                             int allocation_requester)
 {
     int i, j;
 
@@ -1757,21 +1757,10 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
         if (is_already_selected)
             continue;
 
-        if (sched->family == PHO_RSC_TAPE && pmedia) {
+        if (pmedia) {
             bool is_compat = false;
 
-            /* DIR or RADOS resource */
-            if (pmedia->rsc.id.family == PHO_RSC_DIR ||
-                pmedia->rsc.id.family == PHO_RSC_RADOS_POOL) {
-                if (pho_id_equal(&dev->ld_dss_dev_info->rsc.id,
-                                 &pmedia->rsc.id))
-                    continue;
-
-                return true;
-            }
-
-            /* last existing resource type : tape */
-            if (tape_drive_compat(pmedia, dev, &is_compat))
+            if (medium_device_compat(pmedia, dev, &is_compat))
                 continue;
 
             if (is_compat)
@@ -2540,7 +2529,7 @@ static int count_suitable_devices(struct lrs_sched *sched,
         if (!thread_is_running(&iter->ld_device_thread))
             continue;
 
-        if (tape_drive_compat(medium, iter, &is_compatible))
+        if (medium_device_compat(medium, iter, &is_compatible))
             continue;
 
         if (is_compatible)

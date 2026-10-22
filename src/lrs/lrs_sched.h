@@ -41,15 +41,71 @@
 #include "lrs_thread.h"
 #include "lrs_utils.h"
 
-static inline int tape_drive_compat(const struct media_info *tape,
-                                    const struct lrs_dev *drive, bool *res)
+/**
+ * Check if a medium is compatible with a device.
+ *
+ * The caller must hold lrs_dev::ld_mutex.
+ *
+ * @param[in]   medium      Medium to check
+ * @param[in]   device      Device to check
+ * @param[out]  res         Set to true if the device can access the medium
+ *
+ * @return 0 on success, -1 * posix error code on failure
+ */
+static inline int medium_device_compat_locked(const struct media_info *medium,
+                                              struct lrs_dev *device,
+                                              bool *res)
 {
-    if (strncmp(tape->rsc.id.library, drive->ld_dss_dev_info->rsc.id.library,
-                sizeof(tape->rsc.id.library)))
-        return false;
+    /* DIR and RADOS media have no model and are bound to the device that
+     * holds them. A device ID is prefixed with the hostname (e.g.
+     * "host:/path") while the medium ID is not, so compare with the medium
+     * loaded in the device instead of the device ID.
+     */
+    if (medium->rsc.id.family != PHO_RSC_TAPE) {
+        /* ld_dss_media_info and the medium it points to are only changed
+         * under ld_mutex, so the loaded medium can be read without taking
+         * a cache reference.
+         */
+        *res = device->ld_dss_media_info != NULL &&
+               pho_id_equal(&medium->rsc.id,
+                            &device->ld_dss_media_info->rsc.id);
 
-    return tape_drive_compat_models(tape->rsc.model,
-                                    drive->ld_dss_dev_info->rsc.model, res);
+        return 0;
+    }
+
+    if (strncmp(medium->rsc.id.library, device->ld_dss_dev_info->rsc.id.library,
+                sizeof(medium->rsc.id.library))) {
+        *res = false;
+        return 0;
+    }
+
+    return tape_drive_compat_models(medium->rsc.model,
+                                    device->ld_dss_dev_info->rsc.model, res);
+}
+
+/**
+ * Check if a medium is compatible with a device.
+ *
+ * @param[in]   medium      Medium to check
+ * @param[in]   device      Device to check
+ * @param[out]  res         Set to true if the device can access the medium
+ *
+ * @return 0 on success, -1 * posix error code on failure
+ */
+static inline int medium_device_compat(const struct media_info *medium,
+                                       struct lrs_dev *device, bool *res)
+{
+    int rc;
+
+    /* only the loaded medium of a non-tape device is protected by ld_mutex */
+    if (medium->rsc.id.family == PHO_RSC_TAPE)
+        return medium_device_compat_locked(medium, device, res);
+
+    MUTEX_LOCK(&device->ld_mutex);
+    rc = medium_device_compat_locked(medium, device, res);
+    MUTEX_UNLOCK(&device->ld_mutex);
+
+    return rc;
 }
 
 /**
@@ -419,6 +475,14 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
                            struct media_info *pmedia,
                            bool is_write, const pho_req_write_t *wreq,
                            bool empty_medium, bool *one_drive_available);
+
+bool compatible_drive_exists(struct lrs_sched *sched,
+                             struct media_info *pmedia,
+                             struct lrs_dev **selected_devs,
+                             size_t n_selected_devs,
+                             size_t not_selected,
+                             bool prevent_duplicate,
+                             int allocation_requester);
 
 bool medium_is_write_compatible(struct media_info *medium,
                                 const char *grouping,

@@ -439,6 +439,132 @@ static void dev_picker_avoids_write_medium(void **data)
     cleanup_device(&device[1]);
 }
 
+static void dev_picker_dir_medium(void **data)
+{
+    GPtrArray *devices = g_ptr_array_new();
+    bool one_device_available;
+    struct media_info medium;
+    struct media_info loaded;
+    struct lrs_dev device[2];
+    struct lrs_dev *dev;
+
+    /* a dir device ID is prefixed with the hostname, while the ID of the
+     * medium it holds is the path only
+     */
+    create_device(&device[0], "vm0:/d1", LTO5_MODEL, NULL);
+    device[0].ld_dss_dev_info->rsc.id.family = PHO_RSC_DIR;
+    device[0].ld_dss_dev_info->rsc.model = NULL;
+    create_device(&device[1], "vm0:/d2", LTO5_MODEL, NULL);
+    device[1].ld_dss_dev_info->rsc.id.family = PHO_RSC_DIR;
+    device[1].ld_dss_dev_info->rsc.model = NULL;
+
+    create_medium(&loaded, "/d1");
+    loaded.rsc.id.family = PHO_RSC_DIR;
+    loaded.rsc.model = NULL;
+    load_medium(&device[0], &loaded);
+
+    create_medium(&medium, "/d1");
+    medium.rsc.id.family = PHO_RSC_DIR;
+    medium.rsc.model = NULL;
+
+    gptr_array_from_list(devices, &device, 2, sizeof(device[0]));
+
+    /* a dir medium is only accessed by the device that holds it */
+    dev = dev_picker(devices, NULL, PHO_DEV_OP_ST_UNSPEC, NULL, NULL,
+                     select_empty_loaded_mount, 0, &NO_STRING, &medium, false,
+                     NULL, false, &one_device_available);
+    assert_true(one_device_available);
+    assert_non_null(dev);
+    assert_string_equal(dev->ld_dev_path, "vm0:/d1");
+
+    /* a dir medium not held by any device cannot be scheduled, even if a
+     * tape model would be compatible (mocked tape_drive_compat_models)
+     */
+    pho_id_name_set(&medium.rsc.id, "/d9", "legacy");
+    dev = dev_picker(devices, NULL, PHO_DEV_OP_ST_UNSPEC, NULL, NULL,
+                     select_empty_loaded_mount, 0, &NO_STRING, &medium, false,
+                     NULL, false, &one_device_available);
+    assert_true(one_device_available);
+    assert_null(dev);
+
+    g_ptr_array_free(devices, true);
+    cleanup_device(&device[0]);
+    cleanup_device(&device[1]);
+}
+
+/* A non-tape medium is only compatible with the device that holds it. */
+static void compatible_drive_exists_rados_medium(void **data)
+{
+    struct lrs_sched sched;
+    GPtrArray *devices = g_ptr_array_new();
+    struct media_info medium;
+    struct media_info loaded;
+    struct lrs_dev device[2];
+
+    create_device(&device[0], "vm0:/d1", LTO5_MODEL, NULL);
+    device[0].ld_dss_dev_info->rsc.id.family = PHO_RSC_RADOS_POOL;
+    device[0].ld_dss_dev_info->rsc.model = NULL;
+    create_device(&device[1], "vm0:/d2", LTO5_MODEL, NULL);
+    device[1].ld_dss_dev_info->rsc.id.family = PHO_RSC_RADOS_POOL;
+    device[1].ld_dss_dev_info->rsc.model = NULL;
+
+    create_medium(&loaded, "/d1");
+    loaded.rsc.id.family = PHO_RSC_RADOS_POOL;
+    loaded.rsc.model = NULL;
+    load_medium(&device[0], &loaded);
+
+    create_medium(&medium, "/d1");
+    medium.rsc.id.family = PHO_RSC_RADOS_POOL;
+    medium.rsc.model = NULL;
+
+    gptr_array_from_list(devices, &device, 2, sizeof(device[0]));
+
+    memset(&sched, 0, sizeof(sched));
+    /* the scheduler family is not checked anymore, but keep it coherent
+     * with the medium, so a reintroduced family check fails the test.
+     */
+    sched.family = PHO_RSC_RADOS_POOL;
+    sched.devices.ldh_devices = devices;
+
+    /* the device that holds the medium is compatible with it */
+    assert_true(compatible_drive_exists(&sched, &medium, NULL, 0, 0,
+                                        false, 0));
+
+    /* a medium not held by any device is compatible with no device */
+    pho_id_name_set(&medium.rsc.id, "/d9", "legacy");
+    assert_false(compatible_drive_exists(&sched, &medium, NULL, 0, 0,
+                                         false, 0));
+
+    g_ptr_array_free(devices, true);
+    cleanup_device(&device[0]);
+    cleanup_device(&device[1]);
+}
+
+/* A medium can only be accessed by a device of the same library. */
+static void dev_picker_medium_library_mismatch(void **data)
+{
+    GPtrArray *devices = g_ptr_array_new();
+    bool one_device_available;
+    struct media_info medium;
+    struct lrs_dev device;
+    struct lrs_dev *dev;
+
+    create_device(&device, "D1", LTO5_MODEL, NULL);
+    create_medium(&medium, "T1");
+    pho_id_name_set(&medium.rsc.id, "T1", "other_lib");
+
+    gptr_array_from_list(devices, &device, 1, sizeof(device));
+
+    dev = dev_picker(devices, NULL, PHO_DEV_OP_ST_UNSPEC, NULL, NULL,
+                     select_empty_loaded_mount, 0, &NO_STRING, &medium, false,
+                     NULL, false, &one_device_available);
+    assert_true(one_device_available);
+    assert_null(dev);
+
+    g_ptr_array_free(devices, true);
+    cleanup_device(&device);
+}
+
 int tape_drive_compat_models(const char *tape_model, const char *drive_model,
                              bool *res)
 {
@@ -2807,6 +2933,9 @@ int main(void)
         cmocka_unit_test(dev_picker_available_space),
         cmocka_unit_test(dev_picker_flags),
         cmocka_unit_test(dev_picker_avoids_write_medium),
+        cmocka_unit_test(dev_picker_dir_medium),
+        cmocka_unit_test(dev_picker_medium_library_mismatch),
+        cmocka_unit_test(compatible_drive_exists_rados_medium),
     };
     const struct CMUnitTest test_walloc_request[] = {
         cmocka_unit_test(check_walloc_divergent_empty_medium),

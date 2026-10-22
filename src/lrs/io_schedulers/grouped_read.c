@@ -190,7 +190,7 @@ find_compatible_device(GPtrArray *devices, struct media_info *medium,
 
         dev = g_ptr_array_index(devices, i);
 
-        if (tape_drive_compat(medium, dev->device, &is_compatible))
+        if (medium_device_compat(medium, dev->device, &is_compatible))
             continue;
 
         if (!is_compatible)
@@ -1101,7 +1101,8 @@ static struct device *find_unallocated_device(GPtrArray *devices,
         if (dev->queue)
             continue;
 
-        if (tape_drive_compat(queue->medium_info, dev->device, &is_compatible))
+        if (medium_device_compat(queue->medium_info, dev->device,
+                                 &is_compatible))
             continue;
 
         if (is_compatible)

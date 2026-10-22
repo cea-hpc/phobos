@@ -46,7 +46,7 @@ configuration file.
 
 ## Device selection
 The new `library` criteria needs to be taken into account by the
-`tape_drive_compat` function for put, get and format actions.
+`medium_device_compat` function for put, get and format actions.
 
 For locate, in addition to the `tape_drive_compat_models` function, the library
 compatibility must also be taken into account.
