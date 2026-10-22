@@ -241,6 +241,41 @@ function test_raid1_repack
     return 0
 }
 
+function test_repack_deprecated_version
+{
+    local drives="$(get_lto_drives 5 3)"
+    local media=($(get_tapes L5 3 | nodeset -e))
+
+    $phobos drive add --unlock $drives
+    $phobos tape add -t lto5 --unlock ${media[@]}
+    $phobos tape format --unlock ${media[@]}
+
+    $phobos tape lock ${media[1]} ${media[2]}
+
+    $phobos put /etc/hosts oid
+    $phobos tape lock ${media[0]}
+    $phobos tape unlock ${media[1]}
+    $phobos put --overwrite /etc/hosts oid
+    $phobos del oid
+
+    $phobos tape unlock ${media[0]} ${media[2]}
+    $phobos tape repack ${media[0]}
+
+    nb=$($phobos object list --deprecated-only | wc -l)
+    if [ $nb -ne 1 ]; then
+        error "repack should only purge the deprecated version on the medium"
+    fi
+
+    $phobos undel oid ||
+        error "undel oid1 should have succeeded"
+
+    $phobos get oid /tmp/oid-repack-deprecated-version ||
+        error "get oid1 should have succeeded"
+
+    diff /etc/hosts /tmp/oid-repack-deprecated-version ||
+        error "file oid-repack-deprecated-version is not correctly retrieved"
+}
+
 function test_orphan_repack
 {
     local family=$1
@@ -467,6 +502,7 @@ TEST_CLEANUP=cleanup
 TESTS=("tape_setup;test_simple_repack tape;tape_cleanup"
        "tape_setup;test_deprec_repack tape;tape_cleanup"
        "test_raid1_repack_setup;test_raid1_repack tape;tape_cleanup"
+       "setup; test_repack_deprecated_version; tape_cleanup"
        "tape_setup;test_orphan_repack tape;tape_cleanup"
        "test_dedup_repack_setup;test_dedup_repack tape;tape_cleanup"
        "tape_setup;test_tags_repack;tape_cleanup"
