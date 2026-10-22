@@ -228,11 +228,18 @@ function test_raid1_repack
 {
     local family=$1
 
+    uuid=$($phobos object list --deprecated -o uuid oid-mirror)
+
     $phobos $family repack $medium_origin1
 
     nb=$($phobos object list --deprecated-only | wc -l)
     if [ $nb -ne 0 ]; then
         error "repack should have deleted deprecated objects"
+    fi
+
+    nb=$($phobos copy list --uuid ${uuid} | wc -l)
+    if [ $nb -ne 0 ]; then
+        error "repack should have deleted the copies of the purged object"
     fi
 
     $phobos get oid-mirror /tmp/oid-repack-bad &&

@@ -250,9 +250,10 @@ int dss_update_extent_state(struct dss_handle *handle, const char **uuids,
                             int num_uuids, enum extent_state state);
 
 /**
- * Update the deprecated_object, layout and extent tables following a garbage
- * collection invocation on a given \p tape:
- * - deprecated objects are removed from deprecated_object and layout tables;
+ * Update the deprecated_object, copy, layout and extent tables following a
+ * garbage collection invocation on a given \p tape:
+ * - the deprecated objects with a copy on \p tape are removed from the
+ *   deprecated_object, copy and layout tables;
  * - deprecated extents state is changed to orphan in the extent table.
  *
  * @param[in]   handle          DSS handle
