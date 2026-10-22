@@ -67,7 +67,8 @@ class ExtentListOptHandler(ListOptHandler):
                             help=("filter on extent state. If the state is " +
                                   extent_state2str(PHO_EXT_ST_ORPHAN) + " only "
                                   "these attributes are available: {" +
-                                  " ".join(attr) + "}"),
+                                  " ".join(attr) + "} and the default output "
+                                  "is 'ext_uuid' instead of 'oid'"),
                             choices=[extent_state2str(PHO_EXT_ST_PENDING),
                                      extent_state2str(PHO_EXT_ST_SYNC),
                                      extent_state2str(PHO_EXT_ST_ORPHAN)])
@@ -83,9 +84,6 @@ class ExtentOptHandler(BaseResourceOptHandler):
 
     def exec_list(self):
         """List extents."""
-        attrs = list(LayoutInfo().get_display_dict().keys())
-        check_output_attributes(attrs, self.params.get('output'), self.logger)
-
         kwargs = {}
         if self.params.get('library'):
             kwargs['library'] = self.params.get('library')
@@ -95,6 +93,16 @@ class ExtentOptHandler(BaseResourceOptHandler):
 
         kwargs['state'] = str2extent_state(self.params.get('state') \
                                            if self.params.get('state') else '')
+
+        # orphan extents belong to no object: the default output attribute
+        # 'oid' does not exist for them
+        if kwargs['state'] == PHO_EXT_ST_ORPHAN:
+            if self.params.get('output') == ['oid']:
+                self.params['output'] = ['ext_uuid']
+            attrs = list(ExtentInfo().get_display_dict().keys())
+        else:
+            attrs = list(LayoutInfo().get_display_dict().keys())
+        check_output_attributes(attrs, self.params.get('output'), self.logger)
 
         kwargs = handle_sort_option(
                         self.params,

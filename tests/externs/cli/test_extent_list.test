@@ -240,8 +240,8 @@ function test_extent_list_state() {
     $phobos put -f tape ${FILES[0]} oid1
     $phobos put -f tape ${FILES[0]} oid2
 
-    local output=$($valg_phobos extent list -f csv -o oid,state --state orphan |
-                   tail -n +2 | wc -l)
+    local output=$($valg_phobos extent list -f csv -o ext_uuid,state \
+                   --state orphan | tail -n +2 | wc -l)
     if [[ $output -ne 0 ]]; then
         error "There should be no orphan extent, got $output"
     fi
@@ -260,6 +260,12 @@ function test_extent_list_state() {
         error "There should be one extent, got $count"
     fi
 
+    if [[ "$output" != "$extent_uuid1" ]]; then
+        error "It should be $extent_uuid1, got $output"
+    fi
+
+    # default output of orphan extents is ext_uuid
+    output=$($valg_phobos extent list --state orphan)
     if [[ "$output" != "$extent_uuid1" ]]; then
         error "It should be $extent_uuid1, got $output"
     fi
