@@ -705,7 +705,7 @@ static int check_orphan(struct dss_handle *handle, const struct pho_id *tape)
         "    LEFT JOIN layout ON extent.extent_uuid = layout.extent_uuid "
         "  WHERE layout.extent_uuid IS NULL AND "
         "    extent.medium_id = %s AND extent.medium_family = '%s' AND "
-        "    extent.medium_library = %s);",
+        "    extent.medium_library = %s AND extent.state <> 'orphan');",
         medium_id, rsc_family2str(tape->family), src_library);
 
     rc = execute_and_commit_or_rollback(handle->dh_conn, request, NULL,

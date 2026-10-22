@@ -50,7 +50,7 @@ class ExtentListOptHandler(ListOptHandler):
         attr = list(LayoutInfo().get_display_dict().keys())
         attr.sort()
 
-        add_list_arguments(parser, attr, "oid", sort_option=True,
+        add_list_arguments(parser, attr, None, sort_option=True,
                            lib_option=True, status_option=False)
         parser.add_argument('-c', '--copy-name',
                             help="Copy's name of the extents to list")
@@ -96,12 +96,15 @@ class ExtentOptHandler(BaseResourceOptHandler):
 
         # orphan extents belong to no object: the default output attribute
         # 'oid' does not exist for them
+        if self.params.get('output') is None:
+            self.params['output'] = ['ext_uuid'] \
+                    if kwargs['state'] == PHO_EXT_ST_ORPHAN else ['oid']
+
         if kwargs['state'] == PHO_EXT_ST_ORPHAN:
-            if self.params.get('output') == ['oid']:
-                self.params['output'] = ['ext_uuid']
             attrs = list(ExtentInfo().get_display_dict().keys())
         else:
             attrs = list(LayoutInfo().get_display_dict().keys())
+
         check_output_attributes(attrs, self.params.get('output'), self.logger)
 
         kwargs = handle_sort_option(

@@ -155,7 +155,7 @@ function test_simple_repack
     # Make 'alt' medium not empty to prevent its selection for repack
     $phobos put -T alt /etc/hosts oid5
 
-    $phobos $family repack $medium_origin
+    $valg_phobos $family repack $medium_origin
 
     nb=$($phobos extent list --name $medium_alt | wc -l)
     if [ $nb -ne 1 ]; then
@@ -194,7 +194,7 @@ function test_deprec_repack
     $phobos put -T alt /etc/hosts oid5
     $phobos del oid5
 
-    $phobos $family repack $medium_origin
+    $valg_phobos $family repack $medium_origin
 
     nb=$($phobos object list --deprecated-only | wc -l)
     if [ $nb -ne 1 ]; then
@@ -230,14 +230,14 @@ function test_raid1_repack
 
     uuid=$($phobos object list --deprecated -o uuid oid-mirror)
 
-    $phobos $family repack $medium_origin1
+    $valg_phobos $family repack $medium_origin1
 
     nb=$($phobos object list --deprecated-only | wc -l)
     if [ $nb -ne 0 ]; then
         error "repack should have deleted deprecated objects"
     fi
 
-    nb=$($phobos copy list --uuid ${uuid} | wc -l)
+    nb=$($PSQL -qtc "SELECT COUNT(*) FROM copy WHERE object_uuid = '${uuid}';")
     if [ $nb -ne 0 ]; then
         error "repack should have deleted the copies of the purged object"
     fi
@@ -271,18 +271,17 @@ function test_repack_deprecated_version
     $phobos del oid
 
     $phobos tape unlock ${media[0]} ${media[2]}
-    $phobos tape repack ${media[0]}
+    $valg_phobos tape repack ${media[0]}
 
     nb=$($phobos object list --deprecated-only | wc -l)
     if [ $nb -ne 1 ]; then
         error "repack should only purge the deprecated version on the medium"
     fi
 
-    $phobos undel oid ||
-        error "undel oid1 should have succeeded"
+    $phobos undel oid || error "undel oid should have succeeded"
 
     $phobos get oid /tmp/oid-repack-deprecated-version ||
-        error "get oid1 should have succeeded"
+        error "get oid should have succeeded"
 
     diff /etc/hosts /tmp/oid-repack-deprecated-version ||
         error "file oid-repack-deprecated-version is not correctly retrieved"
@@ -297,7 +296,7 @@ function test_orphan_repack
     ext_uuid=$($PSQL -qtc \
         "DELETE FROM layout WHERE object_uuid='${uuid}' RETURNING extent_uuid;")
 
-    $phobos $family repack $medium_origin
+    $valg_phobos $family repack $medium_origin
 
     nb=$($PSQL -qtc "SELECT COUNT(*) FROM extent")
     if [ $nb -ne 2 ]; then
@@ -362,7 +361,7 @@ function test_dedup_repack
 {
     local family=$1
 
-    $phobos $family repack $medium_origin
+    $valg_phobos $family repack $medium_origin
     nb=$($phobos extent list --name $medium_other | wc -l)
     if [ $nb -ne 1 ]; then
         error "repack should have copied 1 extent to the tagged medium"

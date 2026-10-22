@@ -240,6 +240,13 @@ function test_extent_list_state() {
     $phobos put -f tape ${FILES[0]} oid1
     $phobos put -f tape ${FILES[0]} oid2
 
+    $valg_phobos extent list -o oid --state orphan &&
+        error "Phobos extent list --state orphan with oid should have failed"
+
+    $valg_phobos extent list -o oid,ext_uuid --state orphan &&
+        error "Phobos extent list --state orphan with oid,ext_uuid " \
+              "should have failed"
+
     local output=$($valg_phobos extent list -f csv -o ext_uuid,state \
                    --state orphan | tail -n +2 | wc -l)
     if [[ $output -ne 0 ]]; then
