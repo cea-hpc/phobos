@@ -242,6 +242,11 @@ function test_raid1_repack
         error "repack should have deleted the copies of the purged object"
     fi
 
+    nb=$($phobos extent list --state orphan --name $medium_origin2 | wc -l)
+    if [ $nb -ne 1 ]; then
+        error "repack should have orphaned the extent on the other medium"
+    fi
+
     $phobos get oid-mirror /tmp/oid-repack-bad &&
         error "oid-mirror should not be available"
 
