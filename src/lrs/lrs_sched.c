@@ -1338,11 +1338,11 @@ err_nores:
  * locked, full, do not have the put operation flag, do not have the
  * requested tags and do not have the requested grouping.
  */
-static bool medium_is_write_compatible(struct media_info *medium,
-                                       const char *grouping,
-                                       const struct string_array *required_tags,
-                                       const pho_req_write_t *wreq,
-                                       bool empty_medium)
+bool medium_is_write_compatible(struct media_info *medium,
+                                const char *grouping,
+                                const struct string_array *required_tags,
+                                const pho_req_write_t *wreq,
+                                bool empty_medium)
 {
     if (write_avoids_medium(wreq, medium)) {
         pho_debug("Media "FMT_PHO_ID" is in the write allocation avoid list",
@@ -2244,6 +2244,27 @@ static int check_medium_permission_and_status(struct req_container *reqc,
                        rsc_family2str(medium->rsc.id.family),
                        medium->rsc.id.name, medium->rsc.id.library,
                        fs_status2str(medium->fs.status));
+    }
+
+    return 0;
+}
+
+/**
+ * Check the coherence of a received write allocation request: an empty
+ * medium is required for the whole allocation (repack) or for none of its
+ * targets. The medium selection filters on the first medium of the request
+ * while each target is then checked against its own requirement: divergent
+ * values would make them disagree on every selected medium.
+ */
+int check_walloc_request(const pho_req_write_t *wreq)
+{
+    size_t i;
+
+    for (i = 1; i < wreq->n_media; i++) {
+        if (wreq->media[i]->empty_medium != wreq->media[0]->empty_medium)
+            LOG_RETURN(-EINVAL,
+                       "Divergent empty_medium requirements between the "
+                       "media of a write allocation request");
     }
 
     return 0;

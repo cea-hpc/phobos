@@ -407,6 +407,7 @@ static int find_write_device(struct io_scheduler *io_sched,
     bool one_drive_available;
     struct string_array tags;
     bool need_new_grouping;
+    bool medium_preset;
     bool sched_ready;
     size_t size;
     int rc;
@@ -415,18 +416,20 @@ static int find_write_device(struct io_scheduler *io_sched,
         !PHO_CFG_GET_BOOL(cfg_lrs, PHO_CFG_LRS, grouping_on_dir, false))
         targeted_grouping = NULL;
 
-    /* Are we retrying to find a new device to an already chosen medium? */
-    if (*medium)
-        goto find_device;
+    tags.count = wreq->media[index]->n_tags;
+    tags.strings = wreq->media[index]->tags;
+    size = wreq->media[index]->size;
 
+    /* Are we retrying to find a new device to an already chosen medium? */
+    medium_preset = *medium != NULL;
+    if (*medium)
+        goto check_in_use;
+
+select_medium:
     dev_select_policy = get_dev_policy();
     if (!dev_select_policy)
         LOG_RETURN(-EINVAL,
                    "Unable to get device select policy during write alloc");
-
-    tags.count = wreq->media[index]->n_tags;
-    tags.strings = wreq->media[index]->tags;
-    size = wreq->media[index]->size;
 
 search_again:
     need_new_grouping = false;
@@ -469,6 +472,23 @@ search_again:
     if (rc)
         return rc;
 
+check_in_use:
+    /* The medium may have become unusable since it was selected, e.g. it was
+     * set to 'failed' after the IO errors that caused this retry: release it
+     * and select a new one instead of reusing the device holding it.
+     * The grouping is not rechecked for a medium chosen by a previous pass,
+     * which may have selected it with a relaxed grouping.
+     */
+    if (!medium_is_write_compatible(*medium,
+                                    medium_preset ? NULL : targeted_grouping,
+                                    &tags, wreq,
+                                    wreq->media[index]->empty_medium)) {
+        lrs_medium_release(*medium);
+        *medium = NULL;
+        medium_preset = false;
+        goto select_medium;
+    }
+
     *dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,
                                (*medium)->rsc.id.name,
                                (*medium)->rsc.id.library, &sched_ready);
@@ -486,7 +506,19 @@ search_again:
             return 0;
     }
 
-find_device:
+    /* The medium is already in a device: only this device can access it, as
+     * it cannot be loaded in another drive while it stays in this one (e.g.
+     * a tape in another drive). It was not selected above, so its holder is
+     * busy or not available to this scheduler: retry later instead of trying
+     * to load it somewhere else.
+     */
+    if (*dev) {
+        pho_debug("Medium '%s' is in device '%s' which is not available to "
+                  "this scheduler yet", (*medium)->rsc.id.name,
+                  (*dev)->ld_dss_dev_info->rsc.id.name);
+        return -EAGAIN;
+    }
+
     *dev = dev_picker(io_sched->devices,
                       io_sched->io_sched_hdl->lock_handle->dss,
                       PHO_DEV_OP_ST_UNSPEC, wreq->library,

@@ -420,6 +420,12 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
                            bool is_write, const pho_req_write_t *wreq,
                            bool empty_medium, bool *one_drive_available);
 
+bool medium_is_write_compatible(struct media_info *medium,
+                                const char *grouping,
+                                const struct string_array *required_tags,
+                                const pho_req_write_t *wreq,
+                                bool empty_medium);
+
 device_select_func_t get_dev_policy(void);
 
 int sched_select_medium(struct io_scheduler *io_sched,
@@ -433,6 +439,8 @@ int sched_select_medium(struct io_scheduler *io_sched,
                         size_t n_med,
                         size_t not_alloc,
                         bool *need_new_grouping);
+
+int check_walloc_request(const pho_req_write_t *wreq);
 
 int fetch_and_check_medium_info(struct lock_handle *lock_handle,
                                 struct req_container *reqc,

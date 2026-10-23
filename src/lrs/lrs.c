@@ -986,6 +986,12 @@ static int _prepare_requests(struct lrs *lrs, bool *schedulers_to_signal,
             LOG_GOTO(send_err, rc2 = -EINVAL,
                      "Requested family is not handled by the daemon");
 
+        if (pho_request_is_write(req_cont->req)) {
+            rc2 = check_walloc_request(req_cont->req->walloc);
+            if (rc2)
+                LOG_GOTO(send_err, rc2, "Invalid write allocation request");
+        }
+
         init_request_container_param(&lrs->stats, req_cont);
         if (pho_request_is_release(req_cont->req)) {
             pho_stat_incr(lrs->stats.req_stats[PHO_REQ_RELEASE], 1);

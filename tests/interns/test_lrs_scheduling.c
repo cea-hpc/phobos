@@ -1550,6 +1550,189 @@ static void io_sched_eagain(void **data)
     g_hash_table_destroy(seen_media);
 }
 
+/* A medium already in a device can only be accessed through this device: a
+ * write allocation must not fall back to another (empty) device, which would
+ * try to load a medium that is in another drive.
+ */
+static void io_sched_medium_in_busy_device(void **data)
+{
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
+    GPtrArray *device_array = g_ptr_array_new();
+    static const char * const media_names[] = {
+        "M1",
+    };
+    struct req_container *new_reqc;
+    struct req_container reqc;
+    struct media_info M1;
+    struct lrs_dev devices[2];
+    struct lrs_dev *dev;
+    size_t index = 0;
+    int rc;
+    int i;
+
+    if (IO_REQ_TYPE != IO_REQ_WRITE)
+        skip();
+
+    io_sched->global_device_list = device_array;
+    create_device(&devices[0], "D1", LTO5_MODEL, NULL);
+    create_device(&devices[1], "D2", LTO5_MODEL, NULL);
+
+    wrap_create_medium(&M1, media_names[0]);
+    add_media(&M1, 1);
+    create_request(&reqc, media_names, 1, 1, io_sched->lock_handle);
+
+    /* M1 is in D1, which is busy with another operation, and D2 is empty */
+    mount_medium(&devices[0], &M1);
+    devices[0].ld_ongoing_scheduled = true;
+    gptr_array_from_list(device_array, &devices, 2, sizeof(*devices));
+
+    rc = io_sched_push_request(io_sched, &reqc);
+    assert_return_code(rc, -rc);
+
+    rc = io_sched_dispatch_devices(io_sched, device_array);
+    assert_return_code(rc, -rc);
+
+    rc = io_sched_peek_request(io_sched, &new_reqc);
+    assert_return_code(rc, -rc);
+    assert_ptr_equal(&reqc, new_reqc);
+
+    /* M1 is selected but it is held by a busy device: it cannot be loaded in
+     * the empty D2.
+     */
+    will_return(sched_select_medium, &M1);
+    will_return(sched_select_medium, 0);
+
+    index = 0;
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
+    assert_int_equal(rc, -EAGAIN);
+
+    /* Retry with M1 already selected for this target: it is still held by
+     * the busy D1 and must not be loaded in the empty D2.
+     */
+    index = 0;
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
+    assert_int_equal(rc, -EAGAIN);
+
+    rc = io_sched_remove_request(io_sched, &reqc);
+    assert_return_code(rc, -rc);
+
+    for (i = 0; i < 2; i++) {
+        rc = io_sched_remove_device(io_sched, &devices[i]);
+        cleanup_device(&devices[i]);
+        assert_return_code(rc, -rc);
+    }
+
+    remove_media(&M1, 1);
+    destroy_request(&reqc);
+    g_ptr_array_free(device_array, true);
+}
+
+/* A medium selected for a target may have become unusable when the
+ * allocation is retried (e.g. set to full after IO errors): it must be
+ * released and a new medium selected.
+ */
+static void io_sched_reselect_unusable_medium(void **data)
+{
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
+    GPtrArray *device_array = g_ptr_array_new();
+    static const char * const media_names[] = { "M1", "M2" };
+    struct req_container *new_reqc;
+    struct req_container reqc;
+    struct media_info M1;
+    struct media_info M2;
+    struct lrs_dev devices[1];
+    struct lrs_dev *dev;
+    struct pho_ref *ref;
+    size_t index = 0;
+    int rc;
+
+    if (IO_REQ_TYPE != IO_REQ_WRITE)
+        skip();
+
+    io_sched->global_device_list = device_array;
+    create_device(&devices[0], "D1", LTO5_MODEL, NULL);
+
+    wrap_create_medium(&M1, media_names[0]);
+    wrap_create_medium(&M2, media_names[1]);
+    add_media(&M1, 1);
+    create_request(&reqc, media_names, 1, 1, io_sched->lock_handle);
+
+    gptr_array_from_list(device_array, &devices, 1, sizeof(*devices));
+
+    rc = io_sched_push_request(io_sched, &reqc);
+    assert_return_code(rc, -rc);
+
+    rc = io_sched_dispatch_devices(io_sched, device_array);
+    assert_return_code(rc, -rc);
+
+    rc = io_sched_peek_request(io_sched, &new_reqc);
+    assert_return_code(rc, -rc);
+    assert_ptr_equal(&reqc, new_reqc);
+
+    /* M1 was selected for this target but became full: the allocation must
+     * release it and select M2, to be loaded in the empty D1.
+     */
+    reqc.params.rwalloc.media[0].alloc_medium = lrs_medium_acquire(&M1.rsc.id);
+    assert_non_null(reqc.params.rwalloc.media[0].alloc_medium);
+    reqc.params.rwalloc.media[0].alloc_medium->fs.status = PHO_FS_STATUS_FULL;
+
+    will_return(sched_select_medium, &M2);
+    will_return(sched_select_medium, 0);
+
+    index = 0;
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
+    assert_return_code(rc, -rc);
+    assert_ptr_equal(reqc.params.rwalloc.media[0].alloc_medium, &M2);
+    assert_ptr_equal(dev, &devices[0]);
+
+    /* The preset medium has been released by the retry: its cache entry must
+     * be back to the single reference of the fake DSS.
+     */
+    ref = g_hash_table_lookup(
+        phobos_context()->lrs_media_cache[PHO_RSC_TAPE]->cache, &M1.rsc.id);
+    assert_non_null(ref);
+    assert_int_equal(ref->count, 1);
+
+    rc = io_sched_remove_request(io_sched, &reqc);
+    assert_return_code(rc, -rc);
+
+    rc = io_sched_remove_device(io_sched, &devices[0]);
+    cleanup_device(&devices[0]);
+    assert_return_code(rc, -rc);
+
+    remove_media(&M1, 1);
+    destroy_request(&reqc);
+    g_ptr_array_free(device_array, true);
+}
+
+/* A write allocation requires an empty medium for all of its targets or for
+ * none: the medium selection filters on the first medium while each target
+ * is checked against its own requirement.
+ */
+static void check_walloc_divergent_empty_medium(void **data)
+{
+    size_t n_tags[] = { 0, 0 };
+    pho_req_t req;
+    int rc;
+
+    (void) data;
+
+    pho_srl_request_write_alloc(&req, 2, n_tags, 0);
+
+    rc = check_walloc_request(req.walloc);
+    assert_return_code(rc, -rc);
+
+    req.walloc->media[1]->empty_medium = true;
+    rc = check_walloc_request(req.walloc);
+    assert_int_equal(rc, -EINVAL);
+
+    req.walloc->media[0]->empty_medium = true;
+    rc = check_walloc_request(req.walloc);
+    assert_return_code(rc, -rc);
+
+    pho_srl_request_free(&req, false);
+}
+
 /* When a device that joins the grouped_read scheduler already contains the
  * medium targeted by a pending queue, the queue must be allocated to this
  * device right away, so that the medium is not unloaded pointlessly.
@@ -2405,6 +2588,9 @@ int main(void)
         cmocka_unit_test(dev_picker_flags),
         cmocka_unit_test(dev_picker_avoids_write_medium),
     };
+    const struct CMUnitTest test_walloc_request[] = {
+        cmocka_unit_test(check_walloc_divergent_empty_medium),
+    };
     const struct CMUnitTest test_io_sched_api[] = {
         cmocka_unit_test(io_sched_add_device_twice),
         cmocka_unit_test(io_sched_remove_non_existing_device),
@@ -2419,6 +2605,8 @@ int main(void)
         cmocka_unit_test(io_sched_one_error),
         cmocka_unit_test(io_sched_one_error_no_device_available),
         cmocka_unit_test(io_sched_eagain),
+        cmocka_unit_test(io_sched_medium_in_busy_device),
+        cmocka_unit_test(io_sched_reselect_unusable_medium),
         /* TODO test out of order medium?
          * Add med_ids_switch when necessary.
          */
@@ -2455,6 +2643,8 @@ int main(void)
      */
 
     error_count = cmocka_run_group_tests(test_dev_picker, NULL, NULL);
+
+    error_count += cmocka_run_group_tests(test_walloc_request, NULL, NULL);
 
     check_rc(set_schedulers("fifo", "fifo", "fifo", "none"));
 
