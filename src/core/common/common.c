@@ -109,6 +109,7 @@ static void watch_child_cb(GPid pid, gint status, gpointer data)
         ctx->rc = error->code;
 
         pho_debug("External command failed: %s", error_string);
+        g_error_free(error);
     }
 
     g_spawn_close_pid(pid);
@@ -129,40 +130,35 @@ static gboolean readline_cb(GIOChannel *channel, GIOCondition cond, gpointer ud)
     gsize                size;
     GIOStatus            res;
 
-    /* The channel is closed, no more data to read */
-    if (cond == G_IO_HUP) {
-        g_io_channel_unref(channel);
-        ctx_decref(args->exec_ctx);
-        return false;
-    }
-
+    /*
+     * G_IO_HUP may be raised together with G_IO_IN: always read, and only
+     * let the EOF of a drained channel end this watcher.
+     */
     res = g_io_channel_read_line(channel, &line, &size, NULL, &error);
     switch (res) {
-    case G_IO_STATUS_EOF:
-        g_io_channel_shutdown(channel, true, &error);
-        g_error_free(error);
-        g_io_channel_unref(channel);
-        ctx_decref(args->exec_ctx);
-
-        return false;
-    case G_IO_STATUS_ERROR:
-        if (error) {
-            pho_error(EIO, "Cannot read from child: %s", error->message);
-            g_error_free(error);
-        } else {
-            pho_error(0, "Cannot read from child, but no error was given");
-        }
-
-        return false;
     case G_IO_STATUS_NORMAL:
         args->cb(args->udata, line, size, args->ident);
         g_free(line);
+        return true;
     case G_IO_STATUS_AGAIN:
         return true;
+    case G_IO_STATUS_EOF:
+        break;
+    case G_IO_STATUS_ERROR:
+        if (error) {
+            pho_error(EIO, "Cannot read from child: %s", error->message);
+        } else {
+            pho_error(0, "Cannot read from child, but no error was given");
+        }
+        break;
     }
 
-     __builtin_unreachable();
-    return true;
+    /* channel done: release it and stop watching it */
+    g_clear_error(&error);
+    g_io_channel_unref(channel);
+    ctx_decref(args->exec_ctx);
+
+    return false;
 }
 
 /**
@@ -173,6 +169,8 @@ int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg)
 {
     GSpawnFlags flags = G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD;
     struct exec_ctx ctx = { 0 };
+    struct io_chan_arg out_args;
+    struct io_chan_arg err_args;
     GError *err_desc = NULL;
     GIOChannel *out_chan;
     GIOChannel *err_chan;
@@ -215,13 +213,13 @@ int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg)
     g_child_watch_add(pid, watch_child_cb, &ctx);
 
     if (cb_func != NULL) {
-        struct io_chan_arg  out_args = {
+        out_args = (struct io_chan_arg) {
             .ident    = STDOUT_FILENO,
             .cb       = cb_func,
             .udata    = cb_arg,
             .exec_ctx = &ctx
         };
-        struct io_chan_arg  err_args = {
+        err_args = (struct io_chan_arg) {
             .ident    = STDERR_FILENO,
             .cb       = cb_func,
             .udata    = cb_arg,
@@ -239,8 +237,12 @@ int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg)
         ctx_incref(&ctx);
         ctx_incref(&ctx);
 
-        g_io_add_watch(out_chan, G_IO_IN | G_IO_HUP, readline_cb, &out_args);
-        g_io_add_watch(err_chan, G_IO_IN | G_IO_HUP, readline_cb, &err_args);
+        g_io_add_watch(out_chan,
+                       G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+                       readline_cb, &out_args);
+        g_io_add_watch(err_chan,
+                       G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+                       readline_cb, &err_args);
     }
 
     g_main_loop_run(ctx.loop);
