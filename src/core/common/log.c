@@ -40,7 +40,7 @@ char *rstrip(char *msg)
 {
     int i;
 
-    for (i = strlen(msg) - 1; i >= 0 && isspace(msg[i]); i--)
+    for (i = strlen(msg) - 1; i >= 0 && isspace((unsigned char) msg[i]); i--)
         msg[i] = '\0';
 
     return msg;

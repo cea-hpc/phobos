@@ -155,10 +155,20 @@ static char *ltfs_release_cmd(const char *device)
 
 static int ltfs_collect_output(void *arg, char *line, size_t size, int stream)
 {
-    if (stream == STDERR_FILENO)
-        pho_verb("%s", rstrip(line));
+    gchar *valid_line;
 
-    /* drop other streams for now */
+    if (stream != STDERR_FILENO || line == NULL)
+        return 0;
+
+    /* Replace invalid UTF-8 sequences before logging */
+    valid_line = g_utf8_make_valid(line, size);
+
+    if (valid_line == NULL)
+        return -ENOMEM;
+
+    pho_verb("%s", g_strchomp(valid_line));
+
+    g_free(valid_line);
     return 0;
 }
 
