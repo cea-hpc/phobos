@@ -57,6 +57,34 @@ static int parse_line(void *arg, char *line, size_t size, int stream)
     return 0;
 }
 
+/** recorded output line, with its raw bytes and size */
+struct cmd_line {
+    int     stream;
+    size_t  size;
+    char    bytes[];
+};
+
+/** record each line given by command_call(), with its stream and size */
+static int record_line(void *arg, char *line, size_t size, int stream)
+{
+    GList **lines = arg;
+    struct cmd_line *rec = xmalloc(sizeof(*rec) + size + 1);
+
+    rec->stream = stream;
+    rec->size = size;
+    memcpy(rec->bytes, line, size);
+    rec->bytes[size] = '\0';
+
+    *lines = g_list_append(*lines, rec);
+    return 0;
+}
+
+static void free_recorded_lines(GList **lines)
+{
+    g_list_free_full(*lines, free);
+    *lines = NULL;
+}
+
 static void command_call_success(void **state)
 {
     GList *lines = NULL;
@@ -105,6 +133,139 @@ static void command_call_failure(void **state)
     assert_int_equal(rc, 42);
 
     free(full_command);
+}
+
+/*
+ * VTL cartridges emit non-UTF-8 bytes in their tape attributes: this used
+ * to block command_call() forever and must return the raw bytes unchanged
+ * on both output channels.
+ */
+static void command_call_invalid_utf8(void **state)
+{
+    static const char garbage[] = "P000s\x8d\x1f\xea\x7f.\n";
+    GList *lines = NULL;
+    struct cmd_line *first_line;
+    struct cmd_line *second_line;
+    int rc;
+
+    rc = command_call("sh -c \"printf 'P000s\\215\\037\\352\\177.\\n'; "
+                      "printf 'P000s\\215\\037\\352\\177.\\n' >&2\"",
+                      record_line, &lines);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(g_list_length(lines), 2);
+    first_line = lines->data;
+    second_line = lines->next->data;
+
+    /* the dispatch order between the two channels is not deterministic */
+    assert_true((first_line->stream == STDOUT_FILENO &&
+                 second_line->stream == STDERR_FILENO) ||
+                (first_line->stream == STDERR_FILENO &&
+                 second_line->stream == STDOUT_FILENO));
+
+    assert_int_equal(first_line->size, sizeof(garbage) - 1);
+    assert_memory_equal(first_line->bytes, garbage, sizeof(garbage) - 1);
+    assert_int_equal(second_line->size, sizeof(garbage) - 1);
+    assert_memory_equal(second_line->bytes, garbage, sizeof(garbage) - 1);
+
+    free_recorded_lines(&lines);
+}
+
+/* valid UTF-8 output must reach the callback unchanged */
+static void command_call_valid_utf8(void **state)
+{
+    static const char utf8_line[] = "h\xc3\xa9llo w\xc3\xb6rld\n";
+    GList *lines = NULL;
+    struct cmd_line *rec;
+    int rc;
+
+    rc = command_call("sh -c \"printf 'h\\303\\251llo w\\303\\266rld\\n'\"",
+                      record_line, &lines);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(g_list_length(lines), 1);
+    rec = lines->data;
+    assert_int_equal(rec->stream, STDOUT_FILENO);
+    assert_int_equal(rec->size, sizeof(utf8_line) - 1);
+    assert_memory_equal(rec->bytes, utf8_line, sizeof(utf8_line) - 1);
+
+    free_recorded_lines(&lines);
+}
+
+/* the last line must be delivered even without a trailing newline */
+static void command_call_last_line_unterminated(void **state)
+{
+    GList *lines = NULL;
+    int rc;
+
+    rc = command_call("sh -c \"printf abc\"", record_line, &lines);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(g_list_length(lines), 1);
+    assert_int_equal(((struct cmd_line *) lines->data)->size, 3);
+    assert_memory_equal(((struct cmd_line *) lines->data)->bytes, "abc", 3);
+
+    free_recorded_lines(&lines);
+}
+
+/*
+ * no line must be lost when the child exits right after writing:
+ * G_IO_IN and G_IO_HUP can be raised at the same time
+ */
+static void command_call_lines_before_hup(void **state)
+{
+    GList *lines = NULL;
+    int rc;
+
+    rc = command_call("sh -c \"printf 'l1\\nl2\\nl3\\n' >&2\"",
+                      record_line, &lines);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(g_list_length(lines), 3);
+    assert_string_equal(((struct cmd_line *) lines->data)->bytes, "l1\n");
+    assert_string_equal(((struct cmd_line *) lines->next->data)->bytes,
+                        "l2\n");
+    assert_string_equal(((struct cmd_line *) lines->next->next->data)->bytes,
+                        "l3\n");
+
+    free_recorded_lines(&lines);
+}
+
+/*
+ * a channel closed while the other is still in use must not block the
+ * command: close stdout first, keep writing to stderr
+ */
+static void command_call_stdout_closed_first(void **state)
+{
+    GList *lines = NULL;
+    int rc;
+
+    rc = command_call("sh -c \"exec 1>&-; sleep 0.1; "
+                      "printf 'late error\\n' >&2\"",
+                      record_line, &lines);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(g_list_length(lines), 1);
+    assert_string_equal(((struct cmd_line *) lines->data)->bytes,
+                        "late error\n");
+
+    free_recorded_lines(&lines);
+}
+
+/* same as above, closing stderr first */
+static void command_call_stderr_closed_first(void **state)
+{
+    GList *lines = NULL;
+    int rc;
+
+    rc = command_call("sh -c \"printf 'out1\\n'; exec 2>&-; sleep 0.1\"",
+                      record_line, &lines);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(g_list_length(lines), 1);
+    assert_string_equal(((struct cmd_line *) lines->data)->bytes, "out1\n");
+
+    free_recorded_lines(&lines);
 }
 
 static void check_str2int64(void **state)
@@ -208,6 +369,13 @@ int main(int argc, char **argv)
         cmocka_unit_test(command_call_success),
         cmocka_unit_test(command_call_failure),
 
+        cmocka_unit_test(command_call_valid_utf8),
+        cmocka_unit_test(command_call_invalid_utf8),
+        cmocka_unit_test(command_call_last_line_unterminated),
+        cmocka_unit_test(command_call_lines_before_hup),
+        cmocka_unit_test(command_call_stdout_closed_first),
+        cmocka_unit_test(command_call_stderr_closed_first),
+
         cmocka_unit_test(check_str2int64),
 
         cmocka_unit_test(hashtable_foreach_success),
@@ -217,6 +385,9 @@ int main(int argc, char **argv)
     };
 
     test_env_initialize();
+
+    /* turn a stuck command_call() into a test failure instead of a hang */
+    alarm(30);
 
     return cmocka_run_group_tests(test_common, NULL, NULL);
 }

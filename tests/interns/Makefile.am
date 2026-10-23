@@ -64,6 +64,7 @@ check_PROGRAMS=test_attrs \
                test_lrs_device \
                test_lrs_scheduling \
                test_ltfs_logs \
+               test_ltfs_output \
                test_mapper \
                test_phobos_admin_medium_locate \
                test_phobos_admin_rebuild_schedule \
@@ -187,6 +188,10 @@ test_ltfs_logs_LDADD=$(MOD_LOAD_LIB) $(SCSI_LIB) $(LDM_SCSI_LIB) \
                      $(TESTS_LIB_DEPS) $(TLC_LIB)
 test_ltfs_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I$(TO_SRC)/ldm-modules \
                       -I..  $(TESTS_LIB_INCLUDES)
+
+test_ltfs_output_SOURCES=test_ltfs_output.c
+test_ltfs_output_LDADD=$(FS_LTFS_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
+test_ltfs_output_CFLAGS=$(AM_CFLAGS) -I..
 
 test_mapper_SOURCES=test_mapper.c
 test_mapper_LDADD=$(STORE_LIB) $(MAPPER_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
