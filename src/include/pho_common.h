@@ -383,14 +383,33 @@ static inline bool gstring_empty(const GString *s)
  * The function can freely modify line contents
  * without impacting program working.
  *
+ * The line is delivered as raw bytes read from the command output: it is
+ * not guaranteed to be valid UTF-8, NUL bytes may be embedded, and the
+ * line terminator ('\n'), when present, is included. line is
+ * NUL-terminated at line[size]: process the line with size, not
+ * strlen().
+ *
  * \param[in,out] cb_arg    argument passed to command_call
  * \param[in]     line      the line to be parsed
- * \param[in]     size      size of the line buffer
+ * \param[in]     size      size of the line buffer, terminator included
  * \param[in]     stream    fileno of the stream the line comes from
  */
 typedef int (*parse_cb_t)(void *cb_arg, char *line, size_t size, int stream);
 
-/** call a command and call cb_func for each output line. */
+/**
+ * Call a command and call cb_func for each output line.
+ *
+ * \param[in] cmd_line  the command line to run
+ * \param[in] cb_func   callback invoked on each output line, or NULL to
+ *                      run the command without capturing its output
+ * \param[in] cb_arg    argument passed to cb_func
+ *
+ * \return 0 on success; -errno if the command line cannot be parsed, the
+ *         command cannot be spawned, or its output cannot be read; or
+ *         the positive exit code of the command (not an errno) if it
+ *         exited with a non-zero status, which takes precedence over a
+ *         read error.
+ */
 int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg);
 
 #define container_of(addr, type, member) ({         \

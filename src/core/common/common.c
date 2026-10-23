@@ -56,9 +56,10 @@ struct io_chan_arg {
  * reference counting for this purpose.
  */
 struct exec_ctx {
-    GMainLoop   *loop;  /* GMainLoop for the current context */
-    int          ref;   /* Pending operations in the loop */
-    int          rc;    /* Subprocess termination code (as an errno) */
+    GMainLoop   *loop;      /* GMainLoop for the current context */
+    int          ref;       /* Pending operations in the loop */
+    int          child_rc;  /* Subprocess termination code */
+    int          io_rc;     /* Negated errno of a failed output read */
 };
 
 
@@ -106,7 +107,7 @@ static void watch_child_cb(GPid pid, gint status, gpointer data)
 
         g_spawn_check_wait_status(status, &error);
         error_string = error->message;
-        ctx->rc = error->code;
+        ctx->child_rc = error->code;
 
         pho_debug("External command failed: %s", error_string);
         g_error_free(error);
@@ -150,6 +151,7 @@ static gboolean readline_cb(GIOChannel *channel, GIOCondition cond, gpointer ud)
         } else {
             pho_error(0, "Cannot read from child, but no error was given");
         }
+        args->exec_ctx->io_rc = -EIO;
         break;
     }
 
@@ -189,7 +191,7 @@ int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg)
 
     ctx.loop = g_main_loop_new(NULL, false);
     ctx.ref = 0;
-    ctx.rc = 0;
+    ctx.child_rc = 0;
 
     pho_debug("Spawning external command '%s'", cmd_line);
 
@@ -233,16 +235,35 @@ int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg)
         g_io_channel_set_close_on_unref(out_chan, true);
         g_io_channel_set_close_on_unref(err_chan, true);
 
-        /* update refcount for the two watchers */
-        ctx_incref(&ctx);
-        ctx_incref(&ctx);
+        /*
+         * Read raw bytes: the output of an external command is not
+         * guaranteed to be valid UTF-8 (e.g. LTFS tape attributes), and
+         * GIOChannel would reject it as a read error.
+         */
+        if (g_io_channel_set_encoding(out_chan, NULL, NULL)
+                == G_IO_STATUS_NORMAL &&
+            g_io_channel_set_encoding(err_chan, NULL, NULL)
+                == G_IO_STATUS_NORMAL) {
+            /* update refcount for the two watchers */
+            ctx_incref(&ctx);
+            ctx_incref(&ctx);
 
-        g_io_add_watch(out_chan,
-                       G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
-                       readline_cb, &out_args);
-        g_io_add_watch(err_chan,
-                       G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
-                       readline_cb, &err_args);
+            g_io_add_watch(out_chan,
+                           G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+                           readline_cb, &out_args);
+            g_io_add_watch(err_chan,
+                           G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+                           readline_cb, &err_args);
+        } else {
+            /*
+             * Not expected on fresh channels: drop them, report a read
+             * error, and keep supervising the child until it terminates.
+             */
+            pho_error(EIO, "Cannot set raw encoding on child output");
+            ctx.io_rc = -EIO;
+            g_io_channel_unref(out_chan);
+            g_io_channel_unref(err_chan);
+        }
     }
 
     g_main_loop_run(ctx.loop);
@@ -255,7 +276,8 @@ out_err_free:
     if (err_desc)
         g_error_free(err_desc);
 
-    return rc ? rc : ctx.rc;
+    /* the child status takes precedence over a read error */
+    return rc ? rc : (ctx.child_rc ? ctx.child_rc : ctx.io_rc);
 }
 
 void upperstr(char *str)
