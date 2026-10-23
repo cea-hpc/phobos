@@ -975,16 +975,18 @@ out:
  *
  * @param[in] medium            Medium to check
  * @param[in] reqc              Request to check
- * @param[in] n_med             Number of medium already allocated in this
- *                              request
+ * @param[in] n_med             Number of request media to scan: a target
+ *                              with neither an allocated medium nor an
+ *                              allocation device (e.g. reset after a
+ *                              previous EAGAIN) is skipped
  * @param[in] not_alloc         Index of one medium which is not to take into
  *                              account into already allocated media
  *                              (ie: index with an error which is currently
  *                              in "retry")
  * @param[out] already_alloc    Set to true if medium is already allocated
  *
- * @return  0 if no error, -EINVAL if a previous medium is not set (neither in
- *          request, nor in alloc device)
+ * @return  0 if no error, -EINVAL if a target has an allocation device
+ *          holding no medium
  */
 static int medium_in_devices(const struct media_info *medium,
                              struct req_container *reqc, size_t n_med,
@@ -998,6 +1000,12 @@ static int medium_in_devices(const struct media_info *medium,
         struct media_info *prev_medium = media[i].alloc_medium;
 
         if (i == not_alloc)
+            continue;
+
+        /* target not allocated yet in this pass (a previous EAGAIN may have
+         * reset it)
+         */
+        if (!prev_medium && !devices[i])
             continue;
 
         if (!prev_medium)
@@ -1066,7 +1074,10 @@ static bool write_avoids_medium(const pho_req_write_t *wreq,
  * @param[in]  tags          Tags used to filter candidate media, the
  *                           selected medium must have all the specified tags.
  * @param[in]  reqc          Current write alloc request container
- * @param[in]  n_med         Nb already allocated media
+ * @param[in]  n_med         Number of request media to scan for an existing
+ *                           allocation: a target with neither an allocated
+ *                           medium nor an allocation device (e.g. reset
+ *                           after a previous EAGAIN) is skipped
  * @param[in]  not_alloc     Index to ignore in \p reqc allocated media (can
  *                           be set to n_med or more if every already allocated
  *                           media should be taken into account)
@@ -1732,6 +1743,10 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
             if (j == not_selected)
                 continue;
 
+            /* target reset by an error or a cancellation */
+            if (!selected_devs[j])
+                continue;
+
             if (pho_id_equal(&dev->ld_dss_dev_info->rsc.id,
                              &selected_devs[j]->ld_dss_dev_info->rsc.id)) {
                 is_already_selected = true;
@@ -2070,6 +2085,11 @@ lock_race_retry:
 notify_error:
     lrs_medium_release(*alloc_medium);
     *alloc_medium = NULL;
+    /* Symmetry with select_device, which records the device next to the
+     * medium: a device left here with no medium loaded anymore would make
+     * medium_in_devices() fail for the other targets.
+     */
+    reqc->params.rwalloc.respc->devices[index_to_alloc] = NULL;
 
     return rc;
 

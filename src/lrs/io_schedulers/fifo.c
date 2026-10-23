@@ -393,11 +393,52 @@ static int find_read_device(struct io_scheduler *io_sched,
     return 0;
 }
 
+/* The medium of a device picked for one target of a write request must not
+ * already be claimed by another target of the same request, otherwise the
+ * same resource is written twice (e.g. both replicas of a RAID1 write).
+ */
+static bool medium_claimed_by_request(struct req_container *reqc,
+                                      struct lrs_dev *dev, size_t index)
+{
+    struct rwalloc_medium *media = reqc->params.rwalloc.media;
+    struct media_info *loaded_medium;
+    bool claimed = false;
+    size_t i;
+
+    loaded_medium = atomic_dev_medium_get(dev);
+    if (!loaded_medium)
+        return false;
+
+    for (i = 0; i < reqc->req->walloc->n_media; i++) {
+        if (i != index && media[i].alloc_medium &&
+            pho_id_equal(&media[i].alloc_medium->rsc.id,
+                         &loaded_medium->rsc.id)) {
+            claimed = true;
+            break;
+        }
+    }
+
+    lrs_medium_release(loaded_medium);
+    return claimed;
+}
+
+/* Drop a picked device that holds a medium claimed by another target of
+ * the request, so the caller falls back to its next selection strategy.
+ */
+static void drop_device_of_claimed_medium(struct req_container *reqc,
+                                          struct lrs_dev **dev, size_t index)
+{
+    if (*dev && medium_claimed_by_request(reqc, *dev, index)) {
+        pho_debug("Device '%s' holds a medium claimed by another target of "
+                  "this request", (*dev)->ld_dev_path);
+        *dev = NULL;
+    }
+}
+
 static int find_write_device(struct io_scheduler *io_sched,
                              struct req_container *reqc,
                              struct lrs_dev **dev,
-                             size_t index,
-                             bool handle_error)
+                             size_t index)
 {
     pho_req_write_t *wreq = reqc->req->walloc;
     struct media_info **medium =
@@ -440,6 +481,7 @@ search_again:
                       targeted_grouping, dev_select_policy, size, &tags, NULL,
                       true, wreq, wreq->media[index]->empty_medium,
                       &one_drive_available);
+    drop_device_of_claimed_medium(reqc, dev, index);
     /* If we find a dev, we exit. */
     /* If there is no chance to find a device, we also exit right now. */
     if (*dev || !one_drive_available)
@@ -452,6 +494,7 @@ search_again:
                       targeted_grouping, dev_select_policy, size, &tags, NULL,
                       true, wreq, wreq->media[index]->empty_medium,
                       &one_drive_available);
+    drop_device_of_claimed_medium(reqc, dev, index);
     if (*dev || !one_drive_available)
         return 0;
 
@@ -462,8 +505,7 @@ search_again:
     pho_verb("No loaded media with enough space found: selecting another one");
     rc = sched_select_medium(io_sched, medium, size, wreq->family,
                              wreq->library, targeted_grouping, &tags, reqc,
-                             handle_error ? wreq->n_media : index, index,
-                             &need_new_grouping);
+                             wreq->n_media, index, &need_new_grouping);
     if (need_new_grouping) {
         targeted_grouping = NULL;
         goto search_again;
@@ -524,6 +566,7 @@ check_in_use:
                       PHO_DEV_OP_ST_UNSPEC, wreq->library,
                       targeted_grouping, select_empty_loaded_mount, 0,
                       &NO_STRING, *medium, true, wreq, false, NULL);
+    drop_device_of_claimed_medium(reqc, dev, index);
     if (*dev)
         return 0;
 
@@ -636,8 +679,7 @@ static int generic_get_device_medium_pair(struct io_scheduler *io_sched,
             sreq->medium_index = index;
 
     } else if (pho_request_is_write(reqc->req)) {
-        rc = find_write_device(io_sched, reqc, device, sreq->medium_index,
-                               is_error);
+        rc = find_write_device(io_sched, reqc, device, sreq->medium_index);
     } else if (pho_request_is_format(reqc->req)) {
         rc = find_format_device(io_sched, reqc, device);
     } else {

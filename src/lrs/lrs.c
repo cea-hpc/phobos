@@ -286,6 +286,10 @@ static void notify_device_request_is_canceled(struct resp_container *respc)
     int i;
 
     for (i = 0; i < respc->devices_len; i++) {
+        /* target reset by an error or a cancellation */
+        if (!respc->devices[i])
+            continue;
+
         MUTEX_LOCK(&respc->devices[i]->ld_mutex);
         dev_clean_io(respc->devices[i], respc->socket_id);
         MUTEX_UNLOCK(&respc->devices[i]->ld_mutex);

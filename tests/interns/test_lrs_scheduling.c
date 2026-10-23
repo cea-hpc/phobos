@@ -459,6 +459,11 @@ int sched_select_medium(struct io_scheduler *io_sched,
                         size_t not_alloc,
                         bool *need_new_grouping)
 {
+    /* find_write_device always scans all the media of the request, so that
+     * a medium claimed by another target is never missed.
+     */
+    assert_int_equal(n_med, reqc->req->walloc->n_media);
+
     *p_media = mock_ptr_type(struct media_info *);
 
     return mock();
@@ -1627,6 +1632,221 @@ static void io_sched_medium_in_busy_device(void **data)
     g_ptr_array_free(device_array, true);
 }
 
+static void io_sched_skip_device_of_claimed_medium(void **data)
+{
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
+    GPtrArray *device_array = g_ptr_array_new();
+    static const char * const media_names[] = { "M1", "M2", };
+    struct req_container *new_reqc;
+    struct req_container reqc;
+    struct media_info M1;
+    struct media_info M2;
+    struct lrs_dev devices[2];
+    struct lrs_dev *dev;
+    size_t index = 0;
+    int rc;
+    int i;
+
+    if (IO_REQ_TYPE != IO_REQ_WRITE)
+        skip();
+
+    io_sched->global_device_list = device_array;
+    create_device(&devices[0], "D1", LTO5_MODEL, NULL);
+    create_device(&devices[1], "D2", LTO5_MODEL, NULL);
+
+    wrap_create_medium(&M1, media_names[0]);
+    wrap_create_medium(&M2, media_names[1]);
+    add_media(&M1, 1);
+    create_request(&reqc, media_names, 2, 2, io_sched->lock_handle);
+
+    /* D1 is mounted with M1, D2 is empty */
+    mount_medium(&devices[0], &M1);
+    gptr_array_from_list(device_array, &devices, 2, sizeof(*devices));
+
+    rc = io_sched_push_request(io_sched, &reqc);
+    assert_return_code(rc, -rc);
+
+    rc = io_sched_dispatch_devices(io_sched, device_array);
+    assert_return_code(rc, -rc);
+
+    rc = io_sched_peek_request(io_sched, &new_reqc);
+    assert_return_code(rc, -rc);
+    assert_ptr_equal(&reqc, new_reqc);
+
+    /* target 0 is allocated D1, which holds M1 */
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
+    assert_return_code(rc, -rc);
+    assert_ptr_equal(dev, &devices[0]);
+
+    /* target 0 still claims M1 from a previous pass, and the -EAGAIN
+     * requeue freed D1 for scheduling: the allocation of target 1 must
+     * skip D1 and load M2 in the empty D2
+     */
+    reqc.params.rwalloc.media[0].alloc_medium = &M1;
+    will_return(sched_select_medium, &M2);
+    will_return(sched_select_medium, 0);
+
+    index = 1;
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
+    assert_return_code(rc, -rc);
+    assert_ptr_equal(dev, &devices[1]);
+
+    rc = io_sched_remove_request(io_sched, &reqc);
+    assert_return_code(rc, -rc);
+
+    for (i = 0; i < 2; i++) {
+        rc = io_sched_remove_device(io_sched, &devices[i]);
+        cleanup_device(&devices[i]);
+        assert_return_code(rc, -rc);
+    }
+
+    remove_media(&M1, 1);
+    destroy_request(&reqc);
+    g_ptr_array_free(device_array, true);
+}
+
+/* The LOADED pick must not return a device whose medium is claimed by
+ * another target of the request either.
+ */
+static void io_sched_skip_loaded_device_of_claimed_medium(void **data)
+{
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
+    GPtrArray *device_array = g_ptr_array_new();
+    static const char * const media_names[] = { "M1", "M2", };
+    struct req_container *new_reqc;
+    struct req_container reqc;
+    struct media_info M1;
+    struct media_info M2;
+    struct lrs_dev devices[2];
+    struct lrs_dev *dev;
+    size_t index = 0;
+    int rc;
+    int i;
+
+    if (IO_REQ_TYPE != IO_REQ_WRITE)
+        skip();
+
+    io_sched->global_device_list = device_array;
+    create_device(&devices[0], "D1", LTO5_MODEL, NULL);
+    create_device(&devices[1], "D2", LTO5_MODEL, NULL);
+
+    wrap_create_medium(&M1, media_names[0]);
+    wrap_create_medium(&M2, media_names[1]);
+    add_media(&M1, 1);
+    create_request(&reqc, media_names, 2, 2, io_sched->lock_handle);
+
+    /* D1 is loaded with M1, D2 is empty */
+    load_medium(&devices[0], &M1);
+    gptr_array_from_list(device_array, &devices, 2, sizeof(*devices));
+
+    rc = io_sched_push_request(io_sched, &reqc);
+    assert_return_code(rc, -rc);
+
+    rc = io_sched_dispatch_devices(io_sched, device_array);
+    assert_return_code(rc, -rc);
+
+    rc = io_sched_peek_request(io_sched, &new_reqc);
+    assert_return_code(rc, -rc);
+    assert_ptr_equal(&reqc, new_reqc);
+
+    /* target 0 is allocated D1, which holds M1 */
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
+    assert_return_code(rc, -rc);
+    assert_ptr_equal(dev, &devices[0]);
+
+    /* target 0 still claims M1 from a previous pass, and the -EAGAIN
+     * requeue freed D1 for scheduling: the allocation of target 1 must
+     * skip D1 and load M2 in the empty D2
+     */
+    reqc.params.rwalloc.media[0].alloc_medium = &M1;
+    will_return(sched_select_medium, &M2);
+    will_return(sched_select_medium, 0);
+
+    index = 1;
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
+    assert_return_code(rc, -rc);
+    assert_ptr_equal(dev, &devices[1]);
+
+    rc = io_sched_remove_request(io_sched, &reqc);
+    assert_return_code(rc, -rc);
+
+    for (i = 0; i < 2; i++) {
+        rc = io_sched_remove_device(io_sched, &devices[i]);
+        cleanup_device(&devices[i]);
+        assert_return_code(rc, -rc);
+    }
+
+    remove_media(&M1, 1);
+    destroy_request(&reqc);
+    g_ptr_array_free(device_array, true);
+}
+
+/* The device chosen to load a freshly selected medium must not hold a
+ * medium claimed by another target of the request.
+ */
+static void io_sched_skip_third_pick_of_claimed_medium(void **data)
+{
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
+    GPtrArray *device_array = g_ptr_array_new();
+    static const char * const media_names[] = { "M1", "M3", };
+    struct req_container *new_reqc;
+    struct req_container reqc;
+    struct lrs_dev devices[1];
+    struct media_info M1;
+    struct media_info M3;
+    struct lrs_dev *dev;
+    size_t index = 1;
+    int rc;
+
+    if (IO_REQ_TYPE != IO_REQ_WRITE)
+        skip();
+
+    io_sched->global_device_list = device_array;
+    create_device(&devices[0], "D1", LTO5_MODEL, NULL);
+
+    wrap_create_medium(&M1, media_names[0]);
+    wrap_create_medium(&M3, media_names[1]);
+    add_media(&M1, 1);
+    create_request(&reqc, media_names, 2, 2, io_sched->lock_handle);
+
+    /* D1 is mounted with M1 and is the only drive: no empty drive exists */
+    mount_medium(&devices[0], &M1);
+    gptr_array_from_list(device_array, &devices, 1, sizeof(*devices));
+
+    rc = io_sched_push_request(io_sched, &reqc);
+    assert_return_code(rc, -rc);
+
+    rc = io_sched_dispatch_devices(io_sched, device_array);
+    assert_return_code(rc, -rc);
+
+    rc = io_sched_peek_request(io_sched, &new_reqc);
+    assert_return_code(rc, -rc);
+    assert_ptr_equal(&reqc, new_reqc);
+
+    /* target 0 still claims M1 from a previous pass, and the -EAGAIN
+     * requeue freed D1 for scheduling: the device chosen to load the
+     * medium of target 1 must not be the holder of M1.
+     */
+    reqc.params.rwalloc.media[0].alloc_medium = &M1;
+    will_return(sched_select_medium, &M3);
+    will_return(sched_select_medium, 0);
+
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
+    assert_return_code(rc, -rc);
+    assert_null(dev);
+
+    rc = io_sched_remove_request(io_sched, &reqc);
+    assert_return_code(rc, -rc);
+
+    rc = io_sched_remove_device(io_sched, &devices[0]);
+    cleanup_device(&devices[0]);
+    assert_return_code(rc, -rc);
+
+    remove_media(&M1, 1);
+    destroy_request(&reqc);
+    g_ptr_array_free(device_array, true);
+}
+
 /* A medium selected for a target may have become unusable when the
  * allocation is retried (e.g. set to full after IO errors): it must be
  * released and a new medium selected.
@@ -2607,6 +2827,9 @@ int main(void)
         cmocka_unit_test(io_sched_eagain),
         cmocka_unit_test(io_sched_medium_in_busy_device),
         cmocka_unit_test(io_sched_reselect_unusable_medium),
+        cmocka_unit_test(io_sched_skip_device_of_claimed_medium),
+        cmocka_unit_test(io_sched_skip_loaded_device_of_claimed_medium),
+        cmocka_unit_test(io_sched_skip_third_pick_of_claimed_medium),
         /* TODO test out of order medium?
          * Add med_ids_switch when necessary.
          */
