@@ -54,7 +54,7 @@ static int raid4_get_reader_chunk_size(struct pho_data_processor *proc,
     int64_t value;
 
     extent = &proc->src_layout->extents[0];
-    attr = pho_attr_get(&extent->info, "raid4.chunk_size");
+    attr = pho_attr_get(&extent->info, PHO_EA_RAID4_CHUNK_SIZE_NAME);
     if (!attr)
         LOG_RETURN(-EINVAL,
                    "'raid4.chunk_size' attribute not found on extent '%s'",
@@ -438,6 +438,14 @@ end:
     return rc;
 }
 
+static int layout_raid4_extent_attr_names(struct pho_attrs *attr_names)
+{
+    pho_attr_set(attr_names, PHO_EA_RAID4_EXTENT_INDEX_NAME, NULL);
+    pho_attr_set(attr_names, PHO_EA_RAID4_CHUNK_SIZE_NAME, NULL);
+
+    return 0;
+}
+
 static const struct pho_layout_module_ops LAYOUT_RAID4_OPS = {
     .encode = layout_raid4_encode,
     .decode = layout_raid4_decode,
@@ -445,6 +453,7 @@ static const struct pho_layout_module_ops LAYOUT_RAID4_OPS = {
     .rebuild = layout_raid4_rebuild,
     .locate = layout_raid4_locate,
     .get_specific_attrs = layout_raid4_get_specific_attrs,
+    .get_extent_attr_names = layout_raid4_extent_attr_names,
     .get_availability = layout_raid4_get_availability,
     .get_replica_info = layout_raid4_get_replica_info,
     .get_extents_to_rebuild_from = layout_raid4_get_extents_to_rebuild_from,

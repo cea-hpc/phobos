@@ -434,6 +434,25 @@ int layout_get_specific_attrs(struct pho_io_descr *iod,
                                         &layout->layout_desc.mod_attrs);
 }
 
+int layout_get_extent_attr_names(const char *layout_name,
+                                 struct pho_attrs *attr_names)
+{
+    char module_name[NAME_MAX];
+    struct layout_module *mod;
+    int rc = 0;
+
+    rc = build_layout_name(layout_name, module_name, sizeof(module_name));
+    if (rc)
+        return rc;
+
+    rc = load_module(module_name, sizeof(*mod), phobos_context(),
+                     (void **) &mod);
+    if (rc)
+        return rc;
+
+    return mod->ops->get_extent_attr_names(attr_names);
+}
+
 int layout_get_availability(struct layout_info lyt, struct copy_info *copy)
 {
     char layout_name[NAME_MAX];

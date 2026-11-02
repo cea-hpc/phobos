@@ -78,6 +78,11 @@ struct pho_layout_module_ops {
                               struct extent *extent,
                               struct pho_attrs *layout_md);
 
+    /** List the names of the layout-specific attributes set on the files
+     * of the extents (set with NULL values in \a attr_names).
+     */
+    int (*get_extent_attr_names)(struct pho_attrs *attr_names);
+
     /** Updates the status of an copy based on its extents */
     int (*get_availability)(struct layout_info lyt, struct copy_info *copy);
 
@@ -418,6 +423,18 @@ int layout_get_specific_attrs(struct pho_io_descr *iod,
                               struct io_adapter_module *ioa,
                               struct extent *extent,
                               struct layout_info *layout);
+
+/**
+ * Get the names of the layout-specific attributes that the layout sets on
+ * the files of its extents.
+ *
+ * @param[in]   layout_name Name of the layout to query
+ * @param[out]  attr_names  Attribute names, set with NULL values
+ *
+ * @return 0 on success, -errno on failure.
+ */
+int layout_get_extent_attr_names(const char *layout_name,
+                                 struct pho_attrs *attr_names);
 
 /**
  * Updates the status of the copy according to its detected extents

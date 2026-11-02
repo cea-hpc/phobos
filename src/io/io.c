@@ -171,11 +171,39 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter_module **ioa)
     return rc;
 }
 
+/* Attributes set on the file of every extent, whatever its layout: they
+ * describe the extent and its object, so that the data remains usable
+ * without the database.
+ */
+static void extent_common_attr_names(struct pho_attrs *attrs)
+{
+    pho_attr_set(attrs, PHO_EA_OBJECT_UUID_NAME, NULL);
+    pho_attr_set(attrs, PHO_EA_OBJECT_SIZE_NAME, NULL);
+    pho_attr_set(attrs, PHO_EA_VERSION_NAME, NULL);
+    pho_attr_set(attrs, PHO_EA_UMD_NAME, NULL);
+    pho_attr_set(attrs, PHO_EA_MD5_NAME, NULL);
+    pho_attr_set(attrs, PHO_EA_XXH128_NAME, NULL);
+    pho_attr_set(attrs, PHO_EA_LAYOUT_NAME, NULL);
+    pho_attr_set(attrs, PHO_EA_EXTENT_OFFSET_NAME, NULL);
+    pho_attr_set(attrs, PHO_EA_COPY_NAME, NULL);
+}
+
+/* Add the name of the iterated attribute to \a udata, to retrieve its
+ * value along with the common ones.
+ */
+static int attr_name_add_cb(const char *key, const char *value, void *udata)
+{
+    pho_attr_set(udata, key, NULL);
+
+    return 0;
+}
+
 int copy_extent(struct io_adapter_module *ioa_source,
                 struct pho_io_descr *iod_source,
                 struct io_adapter_module *ioa_target,
                 struct pho_io_descr *iod_target,
-                enum rsc_family family)
+                enum rsc_family family,
+                const struct pho_attrs *layout_attr_names)
 {
     size_t left_to_read;
     size_t buf_size;
@@ -188,9 +216,18 @@ int copy_extent(struct io_adapter_module *ioa_source,
 
     buffer = xcalloc(buf_size, sizeof(*buffer));
 
-    /* prepare the retrieval of source xattrs */
-    pho_json_to_attrs(&iod_source->iod_attrs,
-                      "{\"id\":\"\", \"user_md\":\"\", \"md5\":\"\"}");
+    /* Prepare the retrieval of the source xattrs, which are also set on
+     * the target: the copied extent must keep all the attributes which
+     * describe it, so that it remains self-describing without the
+     * database, e.g. to import the medium into another Phobos instance.
+     * The common attribute names are handled here, while the layout
+     * module of the extent provides the names of its specific ones.
+     */
+    pho_attrs_free(&iod_source->iod_attrs);
+    extent_common_attr_names(&iod_source->iod_attrs);
+    if (layout_attr_names != NULL)
+        pho_attrs_foreach(layout_attr_names, attr_name_add_cb,
+                          &iod_source->iod_attrs);
 
     /* open source IO descriptor then copy address to the target */
     rc = ioa_open(ioa_source, NULL, iod_source, false);

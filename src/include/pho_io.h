@@ -458,6 +458,9 @@ void update_io_size(struct pho_io_descr *iod, size_t *io_size);
  * \param[in]       ioa_target  I/O adapter of the target medium.
  * \param[in, out]  iod_target  I/O descriptor of the target object.
  * \param[in]       family      Family of the source medium.
+ * \param[in]       layout_attr_names  Names of the layout-specific
+ *                              attributes to copy, provided by the layout
+ *                              module of the extent (ignored if NULL).
  *
  * \return 0 on success, negative error code on failure.
  */
@@ -465,7 +468,8 @@ int copy_extent(struct io_adapter_module *ioa_source,
                 struct pho_io_descr *iod_source,
                 struct io_adapter_module *ioa_target,
                 struct pho_io_descr *iod_target,
-                enum rsc_family family);
+                enum rsc_family family,
+                const struct pho_attrs *layout_attr_names);
 
 /**
  * Set the common information regarding an object and the extent being

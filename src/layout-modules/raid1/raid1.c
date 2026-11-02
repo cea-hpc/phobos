@@ -724,6 +724,14 @@ end:
     return rc;
 }
 
+static int layout_raid1_extent_attr_names(struct pho_attrs *attr_names)
+{
+    pho_attr_set(attr_names, PHO_EA_RAID1_EXTENT_INDEX_NAME, NULL);
+    pho_attr_set(attr_names, PHO_EA_RAID1_REPL_COUNT_NAME, NULL);
+
+    return 0;
+}
+
 static int layout_raid1_get_replica_info(struct layout_info *lyt,
                                          int *n_data_extents,
                                          int *n_parity_extents)
@@ -763,6 +771,7 @@ static const struct pho_layout_module_ops LAYOUT_RAID1_OPS = {
     .rebuild = layout_raid1_rebuild,
     .locate = layout_raid1_locate,
     .get_specific_attrs = layout_raid1_get_specific_attrs,
+    .get_extent_attr_names = layout_raid1_extent_attr_names,
     .get_availability = layout_raid1_get_availability,
     .get_replica_info = layout_raid1_get_replica_info,
     .get_extents_to_rebuild_from = layout_raid1_get_extents_to_rebuild_from,

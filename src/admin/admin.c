@@ -43,6 +43,7 @@
 #include "pho_dss_wrapper.h"
 #include "pho_io.h"
 #include "pho_ldm.h"
+#include "pho_layout.h"
 #include "pho_srl_lrs.h"
 #include "pho_types.h"
 #include "pho_type_utils.h"
@@ -1317,6 +1318,10 @@ static int _get_source_medium(struct admin_handle *adm,
     loc->root_path = xstrdup(resp->ralloc->media[0]->root_path);
     loc->addr_type = (enum address_type)resp->ralloc->media[0]->addr_type;
     iod->iod_loc = loc;
+    /* The medium is only accessed by path: fd 0 would make the xattr
+     * reads silently target stdin.
+     */
+    iod->iod_fd = -1;
 
 free_resp:
     pho_srl_response_free(resp, true);
@@ -1387,6 +1392,7 @@ static int _get_target_medium(struct admin_handle *adm,
         (enum address_type)resp->walloc->media[0]->addr_type;
     iod->iod_flags = PHO_IO_REPLACE | PHO_IO_NO_REUSE;
     iod->iod_loc = loc;
+    iod->iod_fd = -1;
 
     target->family = resp->walloc->media[0]->med_id->family;
     pho_id_name_set(target, resp->walloc->media[0]->med_id->name,
@@ -1452,15 +1458,18 @@ static int _send_and_recv_release(struct admin_handle *adm,
     return rc;
 }
 
-static void _build_new_extent(const struct pho_id *target,
-                              struct extent *old_extent,
-                              struct extent *new_extent,
-                              struct pho_io_descr *iod_source,
-                              struct pho_io_descr *iod_target)
+static int _build_new_extent(const struct pho_id *target,
+                             struct extent *old_extent,
+                             struct extent *new_extent,
+                             struct pho_io_descr *iod_source,
+                             struct pho_io_descr *iod_target)
 {
+    int rc;
+
     new_extent->uuid = generate_uuid();
     new_extent->state = PHO_EXT_ST_PENDING;
     new_extent->size = old_extent->size;
+    new_extent->offset = old_extent->offset;
     new_extent->address.size = old_extent->address.size;
     new_extent->address.buff = xstrdup(old_extent->address.buff);
     pho_id_copy(&new_extent->media, target);
@@ -1471,9 +1480,15 @@ static void _build_new_extent(const struct pho_id *target,
     new_extent->with_md5 = old_extent->with_md5;
     if (new_extent->with_md5)
         memcpy(new_extent->md5, old_extent->md5, sizeof(old_extent->md5));
+    rc = pho_attrs_copy(&old_extent->info, &new_extent->info);
+    if (rc)
+        return rc;
+
     iod_source->iod_loc->extent = old_extent;
     iod_source->iod_size = old_extent->size;
     iod_target->iod_loc->extent = new_extent;
+
+    return 0;
 }
 
 static int _clean_database_following_format(struct admin_handle *adm,
@@ -1608,6 +1623,44 @@ static int _resolve_target_medium(struct admin_handle *adm,
 
 free_media:
     dss_res_free(media, count);
+
+    return rc;
+}
+
+/* Get the names of the layout-specific attributes of the extent to copy:
+ * the layout of an extent is only recorded in its file attributes, which
+ * are read to load the matching layout module.
+ */
+static int _extent_layout_attr_names(struct io_adapter_module *ioa,
+                                     const struct pho_ext_loc *loc,
+                                     struct pho_attrs *attr_names)
+{
+    struct pho_ext_loc md_loc = *loc;
+    struct pho_io_descr iod = {0};
+    const char *layout_name;
+    struct pho_attrs md;
+    int rc;
+
+    md.attr_set = NULL;
+    pho_attr_set(&md, PHO_EA_LAYOUT_NAME, NULL);
+    iod.iod_loc = &md_loc;
+    iod.iod_attrs = md;
+    iod.iod_fd = -1;
+    iod.iod_flags = PHO_IO_MD_ONLY;
+
+    rc = ioa_open(ioa, NULL, &iod, false);
+    if (rc)
+        LOG_RETURN(rc, "Failed to read the layout of the extent to copy");
+
+    layout_name = pho_attr_get(&md, PHO_EA_LAYOUT_NAME);
+    if (layout_name == NULL) {
+        pho_attrs_free(&md);
+        LOG_RETURN(-EINVAL, "The extent to copy has no layout attribute");
+    }
+
+    rc = layout_get_extent_attr_names(layout_name, attr_names);
+
+    pho_attrs_free(&md);
 
     return rc;
 }
@@ -1766,11 +1819,32 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     /* Copy loop */
     for (i = 0; i < ext_cnt; ++i, ++ext_cnt_done) {
         struct extent ext_new = {0};
+        struct pho_attrs layout_attr_names;
 
-        _build_new_extent(&allocated, &ext_res[i], &ext_new, &iod_source,
-                          &iod_target);
+        rc = _build_new_extent(&allocated, &ext_res[i], &ext_new, &iod_source,
+                               &iod_target);
+        if (rc) {
+            pho_error(rc, "Failed to build the extent replacing '%s'",
+                      ext_res[i].uuid);
+            break;
+        }
 
-        rc = copy_extent(ioa, &iod_source, ioa, &iod_target, PHO_RSC_TAPE);
+        /* Get the names of the layout-specific attributes of the extent
+         * to copy through its layout module: they are retrieved from the
+         * source and set on the target along with the common ones.
+         */
+        layout_attr_names.attr_set = NULL;
+        rc = _extent_layout_attr_names(ioa, iod_source.iod_loc,
+                                       &layout_attr_names);
+        if (rc) {
+            pho_error(rc, "Failed to get the layout-specific attributes of "
+                      "extent '%s'", ext_res[i].uuid);
+            break;
+        }
+
+        rc = copy_extent(ioa, &iod_source, ioa, &iod_target, PHO_RSC_TAPE,
+                         &layout_attr_names);
+        pho_attrs_free(&layout_attr_names);
         if (rc) {
             pho_error(rc, "Failed to copy extent '%s'", ext_res[i].uuid);
             break;
@@ -1786,6 +1860,7 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
         g_array_append_val(new_ext_uuids, ext_new.uuid);
 
         free(ext_new.address.buff);
+        pho_attrs_free(&ext_new.info);
     }
     free(loc_target.root_path);
     free(loc_source.root_path);

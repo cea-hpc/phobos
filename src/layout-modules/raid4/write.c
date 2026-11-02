@@ -41,8 +41,8 @@ static int set_extent_extra_attrs(struct extent *extent,
     if (rc < 0)
         LOG_RETURN(rc = -errno, "Unable to convert extent index to string");
 
-    pho_attr_set(&extent->info, "raid4.chunk_size", buff);
-    pho_attr_set(&iod->iod_attrs, "raid4.chunk_size", buff);
+    pho_attr_set(&extent->info, PHO_EA_RAID4_CHUNK_SIZE_NAME, buff);
+    pho_attr_set(&iod->iod_attrs, PHO_EA_RAID4_CHUNK_SIZE_NAME, buff);
 
     rc = sprintf(buff, "%d", extent->layout_idx);
     if (rc < 0)

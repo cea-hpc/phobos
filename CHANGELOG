@@ -46,6 +46,10 @@
    the data of the repacked tape, Phobos checks that the target tape holds
    no extent of the same copy, unless the new --ignore-check option is
    given, which is only usable with --target.
+ * Repack: the layout-specific attributes of the copied extents (the raid4
+   chunk size for instance) are now preserved: without them, the objects
+   using layouts relying on these attributes became unreadable after a
+   repack.
 
 ## 3.4.1
  * Grouped read: queue preallocation has been improved to guarantee the

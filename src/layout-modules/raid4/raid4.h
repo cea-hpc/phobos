@@ -5,6 +5,7 @@
 #include "raid_common.h"
 
 #define PHO_EA_RAID4_EXTENT_INDEX_NAME    "raid4.extent_index"
+#define PHO_EA_RAID4_CHUNK_SIZE_NAME      "raid4.chunk_size"
 
 int raid4_read_into_buff(struct pho_data_processor *proc);
 int raid4_write_from_buff(struct pho_data_processor *proc);
