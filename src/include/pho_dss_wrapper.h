@@ -265,6 +265,28 @@ int dss_update_gc_for_tape(struct dss_handle *handle,
                            const struct pho_id *tape);
 
 /**
+ * Get the media holding extents of a copy which also has an extent on the
+ * given \p medium: a copy is identified by its object UUID, version and
+ * copy name.
+ *
+ * The returned media must not be targeted by the repack of \p medium, as
+ * they already hold a copy of part of its data. This includes \p medium
+ * itself.
+ *
+ * @param[in]   handle          DSS handle
+ * @param[in]   medium          Medium whose copies are considered
+ * @param[out]  media           Media holding extents of the copies of the
+ *                              objects of \p medium, to be freed by the
+ *                              caller
+ * @param[out]  count           Number of media in \p media
+ *
+ * @return 0 on success, -errno on failure
+ */
+int dss_media_get_sharing_objects(struct dss_handle *handle,
+                                  const struct pho_id *medium,
+                                  struct pho_id **media, int *count);
+
+/**
  * Refresh the garbage-collection statistics of media
  *
  * The refreshed media are the ones given in \p media or, when media_count

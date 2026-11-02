@@ -445,8 +445,8 @@ class MediaOptHandler(BaseResourceOptHandler):
                 self.logger.info("Garbage collection statistics of the "
                                  "media have been refreshed")
             if ids and refreshed != len(ids):
-                self.logger.warning(f"Only {refreshed} of the {len(ids)} "
-                                    "requested media were refreshed")
+                self.logger.warning("Only %d of the %d requested media "
+                                    "were refreshed", refreshed, len(ids))
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
@@ -580,7 +580,7 @@ class MediaOptHandler(BaseResourceOptHandler):
             with AdminClient(lrs_required=True) as adm:
                 tags = self.params.get('tags', [])
                 adm.repack(self.family, self.params.get('res'), self.library,
-                           tags)
+                           tags, self.params.get('empty', False))
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))

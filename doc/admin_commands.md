@@ -101,10 +101,15 @@ To repack a medium, use the following command:
 phobos tape repack 073200L6
 ```
 
-The operation will copy any alive extent from the 073200L6 tape to another empty
-tape and format the old one.
+The operation will copy any alive extent from the 073200L6 tape to another
+available tape, preferring the used ones to fill them up rather than to consume
+empty tapes, and format the old one. To only allow an empty tape as target, use
+the --empty option:
+```
+phobos tape repack --empty 073200L6
+```
 
-You can provide tags to define the empty tape:
+You can provide tags to define the target tape:
 ```
 phobos tape repack --tags repack_target 073200L6
 ```

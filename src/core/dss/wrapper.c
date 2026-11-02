@@ -785,6 +785,82 @@ free_str:
     return check_orphan(handle, tape);
 }
 
+int dss_media_get_sharing_objects(struct dss_handle *handle,
+                                  const struct pho_id *medium,
+                                  struct pho_id **media, int *count)
+{
+    char *medium_library = NULL;
+    struct pho_id *res = NULL;
+    PGresult *pg_res = NULL;
+    char *medium_id = NULL;
+    GString *request;
+    int rc;
+    int i;
+
+    *media = NULL;
+    *count = 0;
+
+    medium_id = dss_char4sql(handle->dh_conn, medium->name);
+    if (medium_id == NULL)
+        LOG_RETURN(-EINVAL, "Failed to escape medium name "FMT_PHO_ID,
+                   PHO_ID(*medium));
+
+    medium_library = dss_char4sql(handle->dh_conn, medium->library);
+    if (medium_library == NULL)
+        LOG_GOTO(free_str, rc = -EINVAL,
+                 "Failed to escape medium library "FMT_PHO_ID,
+                 PHO_ID(*medium));
+
+    /* Build the list of media sharing a copy of an object with the given
+     * medium, from the innermost query to the outermost one: the extents
+     * located on the given medium, then the copies they belong to (a copy
+     * is identified by its object UUID, version and copy name), then all
+     * the extents of these copies, and finally the media holding these
+     * extents.
+     */
+    request = g_string_new(NULL);
+    g_string_append_printf(request,
+        "SELECT DISTINCT medium_family, medium_id, medium_library"
+        " FROM extent"
+        " WHERE extent_uuid IN ("
+        "  SELECT extent_uuid FROM layout"
+        "  WHERE (object_uuid, version, copy_name) IN ("
+        "    SELECT object_uuid, version, copy_name FROM layout"
+        "    WHERE extent_uuid IN ("
+        "      SELECT extent_uuid FROM extent"
+        "      WHERE medium_id = %s AND medium_family = '%s'"
+        "        AND medium_library = %s)));",
+        medium_id, rsc_family2str(medium->family), medium_library);
+
+    rc = execute(handle->dh_conn, request->str, &pg_res, PGRES_TUPLES_OK);
+    g_string_free(request, true);
+    if (rc) {
+        PQclear(pg_res);
+        goto free_str;
+    }
+
+    *count = PQntuples(pg_res);
+    if (*count > 0) {
+        res = xcalloc(*count, sizeof(*res));
+
+        for (i = 0; i < *count; i++) {
+            res[i].family = str2rsc_family(PQgetvalue(pg_res, i, 0));
+            pho_id_name_set(&res[i], PQgetvalue(pg_res, i, 1),
+                            PQgetvalue(pg_res, i, 2));
+        }
+    }
+
+    *media = res;
+
+    PQclear(pg_res);
+
+free_str:
+    free_dss_char4sql(medium_id);
+    free_dss_char4sql(medium_library);
+
+    return rc;
+}
+
 /* Append to the request the restriction of the targeted media to the ones
  * carrying all the tags of \p tags, which does nothing when it is NULL.
  */

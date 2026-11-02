@@ -38,6 +38,9 @@
    comma-separated or with repeated flags.
  * Add the "phobos <media> refresh_gc_stats" command to refresh the garbage
    collection statistics of media.
+ * Repack: "phobos tape repack" now targets any available tape by default,
+   preferring the used ones, to fill them up rather than to consume empty
+   tapes. The new --empty option restricts the target to an empty tape.
 
 ## 3.4.1
  * Grouped read: queue preallocation has been improved to guarantee the

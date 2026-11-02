@@ -146,6 +146,10 @@ function test_simple_repack
 {
     local family=$1
 
+    $phobos tape lock $medium_origin
+    $phobos put -T origin /etc/hosts oid6
+    $phobos tape unlock $medium_origin
+
     $phobos tape lock $medium_origin_bis
     $valg_phobos tape repack $medium_origin &&
         error "Repack should have failed"
@@ -159,17 +163,17 @@ function test_simple_repack
 
     nb=$($phobos extent list --name $medium_alt | wc -l)
     if [ $nb -ne 1 ]; then
-        error "repack should not have selected a used medium"
+        error "repack should not have selected the 'alt' medium"
     fi
 
     nb=$($phobos extent list --name $medium_origin_bis | wc -l)
-    if [ $nb -ne 3 ]; then
-        error "repack should have copied 3 extents to the empty medium"
+    if [ $nb -ne 4 ]; then
+        error "repack should have copied the extents to the used medium"
     fi
 
     nb=$($phobos tape list -o stats.nb_extent $medium_origin_bis)
-    if [ $nb -ne 3 ]; then
-        error "tape stats should have said 3 extents were copied"
+    if [ $nb -ne 4 ]; then
+        error "tape stats should have counted 4 extents on the target medium"
     fi
 
     nb=$($phobos object list --deprecated-only | wc -l)
@@ -448,7 +452,7 @@ function test_simple_repack_library_bis
     $phobos put -T origin /etc/hosts oid5
     $phobos put -T alt /etc/hosts oid6
 
-    $valg_phobos tape repack --library library_bis $tape_bis
+    $valg_phobos tape repack --empty --library library_bis $tape_bis
 
     nb=$($phobos extent list --name $medium_alt | wc -l)
     if [ $nb -ne 1 ]; then

@@ -1328,6 +1328,9 @@ static int _get_target_medium(struct admin_handle *adm,
                               const struct pho_id *source,
                               ssize_t total_size,
                               struct string_array *tags,
+                              bool empty,
+                              const struct pho_id *avoid_media,
+                              int avoid_media_count,
                               struct pho_ext_loc *loc,
                               struct pho_io_descr *iod,
                               struct pho_id *target)
@@ -1337,14 +1340,21 @@ static int _get_target_medium(struct admin_handle *adm,
     int rc;
     int i;
 
-    pho_srl_request_write_alloc(&req, 1, &tags->count, 0);
+    pho_srl_request_write_alloc(&req, 1, &tags->count, avoid_media_count);
     req.id = 2;
     req.walloc->family = source->family;
     req.walloc->prevent_duplicate = true;
+    req.walloc->no_split = true;
     req.walloc->media[0]->size = total_size;
-    req.walloc->media[0]->empty_medium = true;
+    req.walloc->media[0]->empty_medium = empty;
     for (i = 0; i < tags->count; ++i)
         req.walloc->media[0]->tags[i] = xstrdup(tags->strings[i]);
+
+    for (i = 0; i < avoid_media_count; ++i) {
+        req.walloc->avoid_med[i]->family = avoid_media[i].family;
+        req.walloc->avoid_med[i]->name = xstrdup(avoid_media[i].name);
+        req.walloc->avoid_med[i]->library = xstrdup(avoid_media[i].library);
+    }
 
     rc = comm_send_and_recv(&adm->phobosd_comm, &req, &resp);
     if (rc)
@@ -1530,7 +1540,7 @@ static int _retrieve_source_info(struct admin_handle *adm,
 }
 
 int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
-                        struct string_array *tags)
+                        struct string_array *tags, bool empty)
 {
     /* Order the extents to copy by creation time: they are generally
      * sequential on the tape, so this reduces the tape workload.
@@ -1546,6 +1556,7 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     struct pho_ext_loc loc_source = {0};
     struct pho_ext_loc loc_target = {0};
     struct io_adapter_module *ioa = {0};
+    struct pho_id *avoid_media = NULL;
     struct string_array *ptr_tags;
     struct extent *ext_res = NULL;
     struct string_array src_tags;
@@ -1553,6 +1564,7 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     int ext_cnt_done = 0;
     struct pho_id target;
     ssize_t total_size;
+    int avoid_cnt = 0;
     int ext_cnt;
     int rc;
     int i;
@@ -1582,6 +1594,18 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     if (total_size == 0)
         goto format;
 
+    /* If an empty medium is not specifically requested, compile a list of
+     * media that cannot be used as repack target.
+     */
+    if (!empty) {
+        rc = dss_media_get_sharing_objects(&adm->dss, source, &avoid_media,
+                                           &avoid_cnt);
+        if (rc)
+            LOG_GOTO(free_tags, rc,
+                     "Failed to get the media holding a copy of the data of "
+                     FMT_PHO_ID, PHO_ID(*source));
+    }
+
     /* Prepare read allocation */
     rc = _get_source_medium(adm, source, &loc_source, &iod_source, &ioa,
                             &source_fs_type);
@@ -1600,8 +1624,9 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     else
         ptr_tags = tags;
 
-    rc = _get_target_medium(adm, source, total_size, ptr_tags, &loc_target,
-                            &iod_target, &target);
+    rc = _get_target_medium(adm, source, total_size, ptr_tags, empty,
+                            avoid_media, avoid_cnt,
+                            &loc_target, &iod_target, &target);
     if (rc) {
         free(loc_source.root_path);
 
@@ -1684,6 +1709,7 @@ free_ext:
     }
 
 free_tags:
+    free(avoid_media);
     string_array_free(&src_tags);
     dss_res_free(ext_res, ext_cnt);
 

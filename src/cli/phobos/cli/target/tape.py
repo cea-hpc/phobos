@@ -44,7 +44,9 @@ from phobos.core.ffi import (FSType, ResourceFamily)
 class TapeRepackOptHandler(ActionOptHandler):
     """Repack a tape."""
     label = 'repack'
-    descr = 'Repack a tape, by copying its alive extents to another one'
+    descr = ('Repack a tape, by copying its alive extents to another one. '
+             'A used tape is preferred as target, and an empty one is only '
+             'used when no used tape has enough free space or is available.')
 
     @classmethod
     def add_options(cls, parser):
@@ -55,6 +57,9 @@ class TapeRepackOptHandler(ActionOptHandler):
                                  'If not specified, Phobos will use a tape '
                                  'with the same tags as the repack tape. To '
                                  'let Phobos choose any tape, use --tags "".')
+        parser.add_argument('--empty', action='store_true',
+                            help='Only use an empty tape as repack target, '
+                                 'and never a used one.')
         parser.add_argument('res', help='Tape to repack')
         parser.add_argument('-L', '--library',
                             help="Library containing the tape to repack")
