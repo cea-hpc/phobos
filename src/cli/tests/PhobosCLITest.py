@@ -109,6 +109,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['tape', 'repack', 'A'])
         self.check_cmdline_valid(['tape', 'repack', '-T', 't1,t2', 'A'])
         self.check_cmdline_valid(['tape', 'repack', '--target', 'B', 'A'])
+        self.check_cmdline_valid(['tape', 'repack', '--target', 'B',
+                                  '--ignore-check', 'A'])
         self.check_cmdline_valid(['tape', 'repack', '--empty',
                                   '--target', 'B', 'A'])
         self.check_cmdline_valid(['tape', 'repack', '--empty', 'A'])
