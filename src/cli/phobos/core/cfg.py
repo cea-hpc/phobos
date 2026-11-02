@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2026 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -23,9 +23,11 @@
 High level interface for managing configuration from CLI.
 """
 
+import configparser
 from ctypes import byref, c_char_p
 import errno
 import os
+import re
 
 from phobos.core.ffi import (LIBPHOBOS, ResourceFamily)
 
@@ -84,3 +86,36 @@ def get_default_copy_name():
     except KeyError as err:
         raise KeyError("Default copy name is not set, must be defined in Phobos"
                        "configuration") from err
+
+# Tape libraries are declared as 'tlc "<name>"' sections in the configuration
+# file, as built by TLC_SECTION_CFG in the C sources.
+TLC_SECTION_MATCHER = re.compile(r'^tlc\s+"(?P<name>[^"]+)"$')
+
+# Default location of the configuration file, as defined by PHO_DEFAULT_CFG in
+# the C sources (not exposed through the Python bindings).
+DEFAULT_CFG_FILE = '/etc/phobos.conf'
+
+def get_library_list(cfg_file=None):
+    """Return the names of the tape libraries declared in the configuration
+    file, in alphabetical order.
+
+    The configuration file is resolved like pho_cfg_init_local() does:
+    explicit cfg_file argument, then PHOBOS_CFG_FILE environment variable,
+    then the default location.
+
+    Raise an EnvironmentError if the configuration file cannot be read.
+    """
+    if not cfg_file:
+        cfg_file = os.environ.get("PHOBOS_CFG_FILE", DEFAULT_CFG_FILE)
+
+    parser = configparser.ConfigParser(interpolation=None, strict=False)
+    with open(cfg_file, encoding='utf-8') as cfg_fd:
+        parser.read_file(cfg_fd)
+
+    libraries = []
+    for section in parser.sections():
+        match = TLC_SECTION_MATCHER.match(section.strip())
+        if match:
+            libraries.append(match.group('name'))
+
+    return sorted(libraries)

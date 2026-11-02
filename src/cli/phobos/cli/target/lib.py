@@ -1,5 +1,5 @@
 #
-#  All rights reserved (c) 2014-2025 CEA/DAM.
+#  All rights reserved (c) 2014-2026 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -25,10 +25,15 @@ import sys
 
 from phobos.core import cfg
 from phobos.cli.action import ActionOptHandler
-from phobos.cli.common import BaseResourceOptHandler
+from phobos.cli.common import BaseOptHandler, env_error_format
 from phobos.core.admin import Client as AdminClient
 from phobos.core.const import PHO_LIB_SCSI # pylint: disable=no-name-in-module
 from phobos.core.ffi import ResourceFamily
+
+class LibListOptHandler(ActionOptHandler):
+    """List the tape libraries declared in the configuration."""
+    label = 'list'
+    descr = 'list the tape libraries declared in the configuration'
 
 class LibRefreshOptHandler(ActionOptHandler):
     """Refresh the library internal cache"""
@@ -63,7 +68,7 @@ class LibScanOptHandler(ActionOptHandler):
                                  "cache before sending the data")
 
 
-class LibOptHandler(BaseResourceOptHandler):
+class LibOptHandler(BaseOptHandler):
     """Tape library options and actions."""
     label = 'lib'
     descr = 'handle tape libraries'
@@ -71,9 +76,29 @@ class LibOptHandler(BaseResourceOptHandler):
     # it is used for other families, set family as None
     family = ResourceFamily(ResourceFamily.RSC_TAPE)
     verbs = [
-        LibScanOptHandler,
+        LibListOptHandler,
         LibRefreshOptHandler,
+        LibScanOptHandler,
     ]
+
+    # No DSS connection is needed here: 'list' only reads the configuration
+    # and the other actions access the DSS through their own AdminClient.
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+    def exec_list(self):
+        """List the tape libraries declared in the configuration."""
+        try:
+            libraries = cfg.get_library_list(self.params.get('config'))
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
+        for library in libraries:
+            print(library)
 
     def exec_scan(self):
         """Scan this lib and display the result"""

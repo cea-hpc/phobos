@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  All rights reserved (c) 2014-2025 CEA/DAM.
+#  All rights reserved (c) 2014-2026 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -195,6 +195,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['lib', 'scan'])
         self.check_cmdline_valid(['lib', 'scan', '--refresh'])
         self.check_cmdline_valid(['lib', 'refresh'])
+        self.check_cmdline_valid(['lib', 'list'])
         self.check_cmdline_valid(['tape', 'import', '-t', 'lto5', 'name'])
         self.check_cmdline_valid(['tape', 'import', '-t', 'lto5', 'A', 'B',
                                   'C'])
@@ -251,6 +252,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['phobosd', 'bad_action'], code=2)
         self.check_cmdline_exit(['tlc', 'bad_action'], code=2)
         self.check_cmdline_exit(['drive', 'lookup'], code=2)
+        self.check_cmdline_exit(['lib', 'list', 'legacy'], code=2)
         self.check_cmdline_exit(['drive', 'load'], code=2)
         self.check_cmdline_exit(['drive', 'load', 'only_drive_no_tape'], code=2)
         self.check_cmdline_exit(['drive', 'unload', 'drive_serial_or_path',
@@ -419,6 +421,45 @@ class ConfigGetTest(BasicExecutionTest):
         """Getting an undefined parameter exits with ENODATA."""
         self.pho_execute(['config', 'get', 'no_section', 'no_param'],
                          code=errno.ENODATA)
+
+
+class LibListTest(BasicExecutionTest):
+    """Test the lib list command."""
+
+    def test_lib_list(self):
+        """List the libraries declared in the test configuration."""
+        stdout, _ = self.pho_execute_capture(['lib', 'list'])
+        # Order-insensitive comparison: the alphabetical output order is
+        # already asserted in PhobosCfgTest.
+        self.assertEqual(sorted(stdout.splitlines()),
+                         ['bad_library', 'legacy', 'library_bis'])
+
+    def test_lib_list_no_config_file(self):
+        """A missing configuration file exits with ENOENT."""
+        old_path = os.environ.get('PHOBOS_CFG_FILE')
+        os.environ['PHOBOS_CFG_FILE'] = '/no/such/phobos.conf'
+        try:
+            self.pho_execute(['lib', 'list'], auto_cfg=False,
+                             code=errno.ENOENT)
+        finally:
+            if old_path is None:
+                del os.environ['PHOBOS_CFG_FILE']
+            else:
+                os.environ['PHOBOS_CFG_FILE'] = old_path
+
+    def test_lib_list_no_library(self):
+        """A configuration without any tlc section declares no library."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf',
+                                         delete=False) as cfg_file:
+            cfg_file.write('[store]\ndefault_tape_library = legacy\n')
+
+        try:
+            stdout, _ = self.pho_execute_capture(
+                ['-c', cfg_file.name, 'lib', 'list'], auto_cfg=False)
+        finally:
+            os.unlink(cfg_file.name)
+
+        self.assertEqual(stdout, '')
 
 
 class MediaAddTest(BasicExecutionTest):

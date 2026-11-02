@@ -10,6 +10,14 @@ To launch/stop the daemon:
 # systemctl start/stop phobosd
 ```
 
+## Listing libraries
+Robotic libraries are declared in the phobos configuration file, with one
+`[tlc "<name>"]` section per library. The `phobos lib list` command prints the
+name of each declared library, in alphabetical order:
+```
+phobos lib list
+```
+
 ## Scanning libraries
 Use the `phobos lib scan` command to scan a given library. For instance, the
 following will give the contents of the default tape library:
