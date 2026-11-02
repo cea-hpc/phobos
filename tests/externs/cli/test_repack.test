@@ -387,6 +387,68 @@ function test_used_medium_raid1_repack
     fi
 }
 
+function test_target_repack_setup
+{
+    setup
+
+    export drives="$(get_lto_drives 5 2)"
+    export media="$(get_tapes L5 3 | nodeset -e)"
+
+    export medium_origin="$(echo $media | cut -d' ' -f1)"
+    export medium_target="$(echo $media | cut -d' ' -f2)"
+    export medium_other="$(echo $media | cut -d' ' -f3)"
+
+    $phobos drive add --unlock $drives
+    $phobos tape add -t lto5 -T tag_origin $medium_origin
+    $phobos tape add -t lto5 -T tag_target $medium_target
+    $phobos tape add -t lto5 $medium_other
+
+    $phobos tape format --unlock $media
+}
+
+function test_target_repack
+{
+    $phobos tape lock $medium_other
+    $phobos put -P repl_count=2 /etc/hosts oid-raid1-1
+    $phobos tape unlock $medium_other
+    $phobos put -T tag_target /etc/hosts oid-raid1-2
+
+    $valg_phobos tape repack --target $medium_origin $medium_origin &&
+        error "repack to the tape being repacked should have failed"
+
+    # A target medium holding a copy of the repacked data is refused
+    $valg_phobos tape repack --target $medium_target $medium_origin &&
+        error "repack to a target medium holding a copy should have failed"
+
+    nb=$($phobos extent list --name $medium_origin | wc -l)
+    if (( nb != 1 )); then
+        error "repack should have left the extent of the source medium"
+    fi
+
+    state=$($phobos tape list -o fs.status $medium_origin)
+    if [ "$state" != "used" ]; then
+        error "repack should not have formatted the source medium"
+    fi
+
+    $valg_phobos tape repack --target $medium_other $medium_origin ||
+        error "repack to the requested target medium should have succeed"
+
+    nb=$($phobos extent list --name $medium_other | wc -l)
+    if (( nb != 1 )); then
+        error "repack should have copied the extent to the target medium"
+    fi
+
+    $phobos get oid-raid1-1 /tmp/oid-raid1-1 ||
+        error "get oid-raid1-1 should have succeed"
+    diff /etc/hosts /tmp/oid-raid1-1 ||
+        error "file oid-raid1-1 is not correctly retrieved"
+
+    state=$($phobos tape list -o fs.status $medium_origin)
+    if [ "$state" != "empty" ]; then
+        error "repack should format source medium"
+    fi
+}
+
 function test_orphan_repack
 {
     local family=$1
@@ -663,6 +725,7 @@ TESTS=("tape_setup;test_simple_repack tape;tape_cleanup"
        "setup; test_repack_deprecated_version; tape_cleanup"
        "used_medium_repack_setup;test_used_medium_repack;tape_cleanup"
        "used_medium_repack_setup;test_used_medium_raid1_repack;tape_cleanup"
+       "test_target_repack_setup;test_target_repack;tape_cleanup"
        "tape_setup;test_orphan_repack tape;tape_cleanup"
        "test_dedup_repack_setup;test_dedup_repack tape;tape_cleanup"
        "tape_setup;test_tags_repack;tape_cleanup"

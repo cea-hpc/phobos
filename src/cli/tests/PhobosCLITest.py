@@ -108,6 +108,9 @@ class CLIParametersTest(unittest.TestCase):
                                   'name,family'])
         self.check_cmdline_valid(['tape', 'repack', 'A'])
         self.check_cmdline_valid(['tape', 'repack', '-T', 't1,t2', 'A'])
+        self.check_cmdline_valid(['tape', 'repack', '--target', 'B', 'A'])
+        self.check_cmdline_valid(['tape', 'repack', '--empty',
+                                  '--target', 'B', 'A'])
         self.check_cmdline_valid(['tape', 'repack', '--empty', 'A'])
         self.check_cmdline_valid(['tape', 'repack', '-T', 't1',
                                   '--empty', 'A'])
@@ -238,6 +241,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['tape', 'locate'], code=2)
         self.check_cmdline_exit(['tape', 'locate', 'oid1', 'oid2'], code=2)
         self.check_cmdline_exit(['tape', 'repack', 'A', 'B'], code=2)
+        self.check_cmdline_exit(['tape', 'repack', '-T', 't1', '--target', 'B',
+                                 'A'], code=2)
         self.check_cmdline_exit(['drive', 'delete'], code=2)
         self.check_cmdline_exit(['phobosd'], code=2)
         self.check_cmdline_exit(['tlc'], code=2)
