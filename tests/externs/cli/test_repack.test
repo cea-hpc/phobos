@@ -43,6 +43,7 @@ function cleanup
     drop_tables
     rm -f /tmp/oid-repack*
     rm -f /tmp/oid_bis-repack*
+    rm -f /tmp/oid-used*
 }
 
 function obj_setup
@@ -189,6 +190,28 @@ function test_simple_repack
     fi
 }
 
+function test_empty_fallback_repack
+{
+    # When only empty media are available as candidates, the default
+    # repack targets an empty one
+    $valg_phobos tape repack -T "" $medium_origin ||
+        error "repack to an empty medium should have succeed"
+
+    nb=$(($phobos extent list --name $medium_alt;
+          $phobos extent list --name $medium_other;
+          $phobos extent list --name $medium_origin_bis) | wc -l)
+    if [ $nb -ne 3 ]; then
+        error "repack should have copied the 3 extents to an empty medium"
+    fi
+
+    obj_check
+
+    state=$($phobos tape list -o fs.status $medium_origin)
+    if [ "$state" != "empty" ]; then
+        error "repack should format source medium"
+    fi
+}
+
 function test_deprec_repack
 {
     local family=$1
@@ -289,6 +312,79 @@ function test_repack_deprecated_version
 
     diff /etc/hosts /tmp/oid-repack-deprecated-version ||
         error "file oid-repack-deprecated-version is not correctly retrieved"
+}
+
+function used_medium_repack_setup
+{
+    setup
+
+    export drives="$(get_lto_drives 5 2)"
+    export media="$(get_tapes L5 2 | nodeset -e)"
+
+    export medium_origin="$(echo $media | cut -d' ' -f1)"
+    export medium_target="$(echo $media | cut -d' ' -f2)"
+
+    $phobos drive add --unlock $drives
+    $phobos tape add -t lto5 -T tag_origin $medium_origin
+    $phobos tape add -t lto5 -T tag_target $medium_target
+
+    $phobos tape format --unlock $media
+}
+
+function test_used_medium_repack
+{
+    $phobos put -T tag_origin /etc/hosts oid-used-1
+    $phobos put -T tag_target /etc/hosts oid-used-2
+
+    $valg_phobos tape repack --empty -T "" $medium_origin &&
+        error "repack should have failed: no empty tape is available"
+
+    $valg_phobos tape repack -T "" $medium_origin ||
+        error "repack to a used medium holding no copy of the data should have succeed"
+
+    nb=$($phobos extent list --name $medium_target | wc -l)
+    if (( nb != 2 )); then
+        error "repack should have copied the extent to the used medium"
+    fi
+
+    $phobos get oid-used-1 /tmp/oid-used-1 ||
+        error "get oid-used-1 should have succeed"
+    $phobos get oid-used-2 /tmp/oid-used-2 ||
+        error "get oid-used-2 should have succeed"
+
+    diff /etc/hosts /tmp/oid-used-1 ||
+        error "file oid-used-1 is not correctly retrieved"
+    diff /etc/hosts /tmp/oid-used-2 ||
+        error "file oid-used-2 is not correctly retrieved"
+
+    state=$($phobos tape list -o fs.status $medium_origin)
+    if [ "$state" != "empty" ]; then
+        error "repack should format source medium"
+    fi
+}
+
+function test_used_medium_raid1_repack
+{
+    $phobos put -P repl_count=2 /etc/hosts oid-raid1-1
+    $phobos put -T tag_target /etc/hosts oid-raid1-2
+
+    $valg_phobos tape repack -T "" $medium_origin &&
+        error "repack should have failed: the only other medium holds a copy of the repacked data"
+
+    nb=$($phobos extent list --name $medium_origin | wc -l)
+    if (( nb != 1 )); then
+        error "repack should have left the extent of the source medium"
+    fi
+
+    nb=$($phobos extent list --name $medium_target | wc -l)
+    if (( nb != 2 )); then
+        error "repack should not have copied extents to the used medium"
+    fi
+
+    state=$($phobos tape list -o fs.status $medium_origin)
+    if [ "$state" != "used" ]; then
+        error "repack should not have formatted the source medium"
+    fi
 }
 
 function test_orphan_repack
@@ -482,6 +578,52 @@ function test_simple_repack_library_bis
     fi
 }
 
+function test_used_repack_library_bis
+{
+    $phobos tape lock $medium_origin_bis
+
+    # By default, the used media are preferred over the empty ones.
+    # Put more data on 'origin' than on 'alt' so that it is deterministically
+    # the selected medium.
+    $phobos put -T origin /etc/hosts oid5
+    $phobos put -T origin /etc/hosts oid7
+    $phobos put -T alt /etc/hosts oid6
+
+    $valg_phobos tape repack --library library_bis $tape_bis
+
+    nb=$($phobos extent list --name $medium_origin | wc -l)
+    if [ $nb -ne 3 ]; then
+        error "repack should have copied the extent to the fullest medium"
+    fi
+
+    nb=$($phobos extent list --name $medium_alt | wc -l)
+    if [ $nb -ne 1 ]; then
+        error "repack should not have selected the 'alt' medium"
+    fi
+
+    nb=$($phobos extent list --name $medium_other | wc -l)
+    if [ $nb -ne 0 ]; then
+        error "repack should not have selected an empty medium"
+    fi
+
+    nb=$($phobos tape list -o stats.nb_extent $medium_origin)
+    if [ $nb -ne 3 ]; then
+        error "tape stats should have counted 3 extents on the target medium"
+    fi
+
+    nb=$($phobos object list --deprecated-only | wc -l)
+    if [ $nb -ne 0 ]; then
+        error "repack should have deleted deprecated objects"
+    fi
+
+    obj_check_bis
+
+    state=$($phobos tape list --library library_bis -o fs.status $tape_bis)
+    if [ "$state" != "empty" ]; then
+        error "repack should format source medium in library bis"
+    fi
+}
+
 function test_repack_order_ctime
 {
     local family=$1
@@ -515,12 +657,16 @@ fi
 
 TEST_CLEANUP=cleanup
 TESTS=("tape_setup;test_simple_repack tape;tape_cleanup"
+       "tape_setup;test_empty_fallback_repack;tape_cleanup"
        "tape_setup;test_deprec_repack tape;tape_cleanup"
        "test_raid1_repack_setup;test_raid1_repack tape;tape_cleanup"
        "setup; test_repack_deprecated_version; tape_cleanup"
+       "used_medium_repack_setup;test_used_medium_repack;tape_cleanup"
+       "used_medium_repack_setup;test_used_medium_raid1_repack;tape_cleanup"
        "tape_setup;test_orphan_repack tape;tape_cleanup"
        "test_dedup_repack_setup;test_dedup_repack tape;tape_cleanup"
        "tape_setup;test_tags_repack;tape_cleanup"
        "tape_setup;test_tags_empty_repack;tape_cleanup"
        "tape_setup bis;test_simple_repack_library_bis;tape_cleanup"
+       "tape_setup bis;test_used_repack_library_bis;tape_cleanup"
        "tape_setup;test_repack_order_ctime tape;tape_cleanup")
