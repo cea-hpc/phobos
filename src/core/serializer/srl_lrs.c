@@ -182,6 +182,7 @@ void pho_srl_request_write_alloc(pho_req_t *req, size_t n_media,
                 xcalloc(n_tags[i], sizeof(*req->walloc->media[i]->tags));
 
         req->walloc->media[i]->empty_medium = false;
+        req->walloc->media[i]->target_med = NULL;
     }
 
     req->walloc->n_avoid_med = n_avoid_media;
@@ -316,6 +317,11 @@ void pho_srl_request_free(pho_req_t *req, bool unpack)
             for (j = 0; j < req->walloc->media[i]->n_tags; ++j)
                 free(req->walloc->media[i]->tags[j]);
             free(req->walloc->media[i]->tags);
+            if (req->walloc->media[i]->target_med) {
+                free(req->walloc->media[i]->target_med->name);
+                free(req->walloc->media[i]->target_med->library);
+                free(req->walloc->media[i]->target_med);
+            }
             free(req->walloc->media[i]);
         }
         for (i = 0; i < req->walloc->n_avoid_med; i++) {

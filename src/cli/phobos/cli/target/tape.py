@@ -51,15 +51,22 @@ class TapeRepackOptHandler(ActionOptHandler):
     @classmethod
     def add_options(cls, parser):
         super(TapeRepackOptHandler, cls).add_options(parser)
-        parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
+        target = parser.add_mutually_exclusive_group()
+        target.add_argument('-T', '--tags', type=lambda t: t.split(','),
                             help='Only use a tape that contain this set of '
                                  'tags (comma-separated: foo,bar).'
                                  'If not specified, Phobos will use a tape '
                                  'with the same tags as the repack tape. To '
                                  'let Phobos choose any tape, use --tags "".')
+        target.add_argument('--target',
+                            help='Tape to hold the data of the repacked tape. '
+                                 'Phobos checks that it does not already '
+                                 'hold a copy of the data of the repacked '
+                                 'tape.')
         parser.add_argument('--empty', action='store_true',
                             help='Only use an empty tape as repack target, '
-                                 'and never a used one.')
+                                 'and never a used one. Ignored when '
+                                 '--target is given.')
         parser.add_argument('res', help='Tape to repack')
         parser.add_argument('-L', '--library',
                             help="Library containing the tape to repack")

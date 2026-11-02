@@ -280,17 +280,24 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
  * Live extents of the source medium are copied to another medium.
  * Source extents state are set to ORPHAN.
  *
- * The destination medium is selected by the LRS among the available
- * media: it must have enough space to hold the data of the source medium
- * and must not already hold any copy of this data. The used media are
- * preferred, as they offer the least sufficient free space, and only the
- * empty media are considered when \p empty is set.
+ * When \p target is NULL, the destination medium is selected by the LRS
+ * among the available media: it must have enough space to hold the data
+ * of the source medium and must not already hold any copy of this data.
+ * The used media are preferred, as they offer the least sufficient free
+ * space, and only the empty media are considered when \p empty is set.
+ * When \p target is specified, it is used as destination medium, whether
+ * it is empty or not: Phobos checks that it is writable (unlocked, with
+ * put allowed and not full) and large enough, and that it does not
+ * already hold a copy of this data.
  *
  * \param[in]       adm             Admin module handle.
  * \param[in]       source          Source medium ID.
  * \param[in]       tags            Tags for the destination medium.
+ * \param[in]       target          Target medium for the data of the source
+ *                                  medium, NULL to let the LRS select it.
  * \param[in]       empty           Use an empty medium as destination
  *                                  medium when the LRS selects it.
+ *                                  Ignored when \p target is specified.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
@@ -298,7 +305,8 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
  * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
-                        struct string_array *tags, bool empty);
+                        struct string_array *tags,
+                        const struct pho_id *target, bool empty);
 
 /*
  * Ping the lrs phobosd daemon to check if it is online or not.

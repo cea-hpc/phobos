@@ -474,29 +474,37 @@ select_medium:
 
 search_again:
     need_new_grouping = false;
-    /* 1a) is there a mounted filesystem with enough room? */
-    *dev = dev_picker(io_sched->devices,
-                      io_sched->io_sched_hdl->lock_handle->dss,
-                      PHO_DEV_OP_ST_MOUNTED, wreq->library,
-                      targeted_grouping, dev_select_policy, size, &tags, NULL,
-                      true, wreq, wreq->media[index]->empty_medium,
-                      &one_drive_available);
-    drop_device_of_claimed_medium(reqc, dev, index);
-    /* If we find a dev, we exit. */
-    /* If there is no chance to find a device, we also exit right now. */
-    if (*dev || !one_drive_available)
-        return 0;
+    /* The loaded media are not checked when a specific medium is
+     * targeted: it is selected from the DSS, and reused below if it is
+     * already loaded in a device.
+     */
+    if (wreq->media[index]->target_med == NULL) {
+        /* 1a) is there a mounted filesystem with enough room? */
+        *dev = dev_picker(io_sched->devices,
+                          io_sched->io_sched_hdl->lock_handle->dss,
+                          PHO_DEV_OP_ST_MOUNTED, wreq->library,
+                          targeted_grouping, dev_select_policy, size, &tags,
+                          NULL, true, wreq,
+                          wreq->media[index]->empty_medium,
+                          &one_drive_available);
+        drop_device_of_claimed_medium(reqc, dev, index);
+        /* If we find a dev, we exit. */
+        /* If there is no chance to find a device, we also exit right now. */
+        if (*dev || !one_drive_available)
+            return 0;
 
-    /* 1b) is there a loaded media with enough room? */
-    *dev = dev_picker(io_sched->devices,
-                      io_sched->io_sched_hdl->lock_handle->dss,
-                      PHO_DEV_OP_ST_LOADED, wreq->library,
-                      targeted_grouping, dev_select_policy, size, &tags, NULL,
-                      true, wreq, wreq->media[index]->empty_medium,
-                      &one_drive_available);
-    drop_device_of_claimed_medium(reqc, dev, index);
-    if (*dev || !one_drive_available)
-        return 0;
+        /* 1b) is there a loaded media with enough room? */
+        *dev = dev_picker(io_sched->devices,
+                          io_sched->io_sched_hdl->lock_handle->dss,
+                          PHO_DEV_OP_ST_LOADED, wreq->library,
+                          targeted_grouping, dev_select_policy, size, &tags,
+                          NULL, true, wreq,
+                          wreq->media[index]->empty_medium,
+                          &one_drive_available);
+        drop_device_of_claimed_medium(reqc, dev, index);
+        if (*dev || !one_drive_available)
+            return 0;
+    }
 
     /* 2) For the next steps, we need a medium to write on.
      * It will be loaded into a free drive.

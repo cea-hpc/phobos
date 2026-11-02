@@ -41,6 +41,10 @@
  * Repack: "phobos tape repack" now targets any available tape by default,
    preferring the used ones, to fill them up rather than to consume empty
    tapes. The new --empty option restricts the target to an empty tape.
+ * Repack: add the --target option to "phobos tape repack", to copy the data
+   of the repacked tape to a specific tape, empty or not. For each copy of
+   the data of the repacked tape, Phobos checks that the target tape holds
+   no extent of the same copy.
 
 ## 3.4.1
  * Grouped read: queue preallocation has been improved to guarantee the

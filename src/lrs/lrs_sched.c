@@ -1099,6 +1099,8 @@ int sched_select_medium(struct io_scheduler *io_sched,
                         bool *need_new_grouping)
 {
     struct lock_handle *lock_handle = io_sched->io_sched_hdl->lock_handle;
+    const PhoResourceId *target_med =
+        reqc->req->walloc->media[not_alloc]->target_med;
     bool with_tags = tags != NULL && tags->count > 0;
     struct media_info *split_media_best = NULL;
     struct media_info *whole_media_best = NULL;
@@ -1121,7 +1123,29 @@ int sched_select_medium(struct io_scheduler *io_sched,
             LOG_GOTO(err_nores, rc = -ENOMEM, "while building tags dss filter");
     }
 
-    if (reqc->req->walloc->media[0]->empty_medium)
+    /* The allocation may target a specific medium: match it directly,
+     * instead of getting every candidate medium and skipping the ones
+     * that are not the target.
+     */
+    if (target_med != NULL)
+        rc = dss_filter_build(&filter,
+                              "{\"$AND\": ["
+                              "  {\"DSS::MDA::family\": \"%s\"},"
+                              "  {\"DSS::MDA::id\": \"%s\"},"
+                              "  {\"DSS::MDA::library\": \"%s\"},"
+                              "  {\"DSS::MDA::put\": \"t\"},"
+                              "  {\"DSS::MDA::adm_status\": \"%s\"},"
+                              "  {\"$OR\": ["
+                              "    {\"DSS::MDA::fs_status\": \"%s\"},"
+                              "    {\"DSS::MDA::fs_status\": \"%s\"}"
+                              "  ]}"
+                              "]}",
+                              rsc_family2str(family), target_med->name,
+                              target_med->library,
+                              rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
+                              fs_status2str(PHO_FS_STATUS_USED),
+                              fs_status2str(PHO_FS_STATUS_EMPTY));
+    else if (reqc->req->walloc->media[0]->empty_medium)
         rc = dss_filter_build(&filter,
                               "{\"$AND\": ["
                               "  {\"DSS::MDA::family\": \"%s\"},"

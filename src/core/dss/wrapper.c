@@ -861,6 +861,88 @@ free_str:
     return rc;
 }
 
+int dss_media_check_shared_copy(struct dss_handle *handle,
+                                const struct pho_id *medium1,
+                                const struct pho_id *medium2, bool *shared)
+{
+    char *medium1_id = NULL;
+    char *medium1_library = NULL;
+    char *medium2_id = NULL;
+    char *medium2_library = NULL;
+    PGresult *pg_res = NULL;
+    GString *request;
+    int rc;
+
+    *shared = false;
+
+    medium1_id = dss_char4sql(handle->dh_conn, medium1->name);
+    if (medium1_id == NULL)
+        LOG_RETURN(-EINVAL, "Failed to escape medium name "FMT_PHO_ID,
+                   PHO_ID(*medium1));
+
+    medium1_library = dss_char4sql(handle->dh_conn, medium1->library);
+    if (medium1_library == NULL)
+        LOG_GOTO(free_str, rc = -EINVAL,
+                 "Failed to escape medium library "FMT_PHO_ID,
+                 PHO_ID(*medium1));
+
+    medium2_id = dss_char4sql(handle->dh_conn, medium2->name);
+    if (medium2_id == NULL)
+        LOG_GOTO(free_str, rc = -EINVAL,
+                 "Failed to escape medium name "FMT_PHO_ID,
+                 PHO_ID(*medium2));
+
+    medium2_library = dss_char4sql(handle->dh_conn, medium2->library);
+    if (medium2_library == NULL)
+        LOG_GOTO(free_str, rc = -EINVAL,
+                 "Failed to escape medium library "FMT_PHO_ID,
+                 PHO_ID(*medium2));
+
+    /* Check whether the two media hold extents of a same copy of an
+     * object, from the innermost query to the outermost one: the extents
+     * located on the first medium, then the copies they belong to (a copy
+     * is identified by its object UUID, version and copy name), then the
+     * extents of these copies located on the second medium.
+     */
+    request = g_string_new(NULL);
+    g_string_append_printf(request,
+        "SELECT EXISTS ("
+        " SELECT 1"
+        "  FROM layout l1, layout l2"
+        "  WHERE l1.object_uuid = l2.object_uuid"
+        "    AND l1.version = l2.version"
+        "    AND l1.copy_name = l2.copy_name"
+        "    AND l1.extent_uuid IN ("
+        "      SELECT extent_uuid FROM extent"
+        "      WHERE medium_id = %s AND medium_family = '%s'"
+        "        AND medium_library = %s)"
+        "    AND l2.extent_uuid IN ("
+        "      SELECT extent_uuid FROM extent"
+        "      WHERE medium_id = %s AND medium_family = '%s'"
+        "        AND medium_library = %s))",
+        medium1_id, rsc_family2str(medium1->family), medium1_library,
+        medium2_id, rsc_family2str(medium2->family), medium2_library);
+
+    rc = execute(handle->dh_conn, request->str, &pg_res, PGRES_TUPLES_OK);
+    g_string_free(request, true);
+    if (rc) {
+        PQclear(pg_res);
+        goto free_str;
+    }
+
+    *shared = (PQntuples(pg_res) == 1 && PQgetvalue(pg_res, 0, 0)[0] == 't');
+
+    PQclear(pg_res);
+
+free_str:
+    free_dss_char4sql(medium1_id);
+    free_dss_char4sql(medium1_library);
+    free_dss_char4sql(medium2_id);
+    free_dss_char4sql(medium2_library);
+
+    return rc;
+}
+
 /* Append to the request the restriction of the targeted media to the ones
  * carrying all the tags of \p tags, which does nothing when it is NULL.
  */

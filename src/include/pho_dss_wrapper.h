@@ -287,6 +287,25 @@ int dss_media_get_sharing_objects(struct dss_handle *handle,
                                   struct pho_id **media, int *count);
 
 /**
+ * Check whether two media hold extents of a same copy of an object.
+ *
+ * A copy is identified by its object UUID, version and copy name. This is
+ * used to check that a medium does not already hold a copy of the data of
+ * another medium to repack.
+ *
+ * @param[in]   handle          DSS handle
+ * @param[in]   medium1         First medium of the check
+ * @param[in]   medium2         Second medium of the check
+ * @param[out]  shared          Set to true if both media hold extents of a
+ *                              same copy
+ *
+ * @return 0 on success, -errno on failure
+ */
+int dss_media_check_shared_copy(struct dss_handle *handle,
+                                const struct pho_id *medium1,
+                                const struct pho_id *medium2, bool *shared);
+
+/**
  * Refresh the garbage-collection statistics of media
  *
  * The refreshed media are the ones given in \p media or, when media_count

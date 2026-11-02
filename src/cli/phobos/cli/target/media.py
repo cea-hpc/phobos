@@ -576,11 +576,17 @@ class MediaOptHandler(BaseResourceOptHandler):
     def exec_repack(self):
         """Repack a medium"""
         set_library(self)
+        target = self.params.get('target')
+        empty = self.params.get('empty', False)
+        if empty and target:
+            self.logger.warning("--empty is ignored: a target tape is "
+                                "explicitly given to --target")
+            empty = False
         try:
             with AdminClient(lrs_required=True) as adm:
                 tags = self.params.get('tags', [])
                 adm.repack(self.family, self.params.get('res'), self.library,
-                           tags, self.params.get('empty', False))
+                           tags, target, empty)
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))

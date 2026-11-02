@@ -1329,6 +1329,7 @@ static int _get_target_medium(struct admin_handle *adm,
                               ssize_t total_size,
                               struct string_array *tags,
                               bool empty,
+                              const struct pho_id *target_medium,
                               const struct pho_id *avoid_media,
                               int avoid_media_count,
                               struct pho_ext_loc *loc,
@@ -1346,7 +1347,7 @@ static int _get_target_medium(struct admin_handle *adm,
     req.walloc->prevent_duplicate = true;
     req.walloc->no_split = true;
     req.walloc->media[0]->size = total_size;
-    req.walloc->media[0]->empty_medium = empty;
+    req.walloc->media[0]->empty_medium = target_medium == NULL && empty;
     for (i = 0; i < tags->count; ++i)
         req.walloc->media[0]->tags[i] = xstrdup(tags->strings[i]);
 
@@ -1354,6 +1355,20 @@ static int _get_target_medium(struct admin_handle *adm,
         req.walloc->avoid_med[i]->family = avoid_media[i].family;
         req.walloc->avoid_med[i]->name = xstrdup(avoid_media[i].name);
         req.walloc->avoid_med[i]->library = xstrdup(avoid_media[i].library);
+    }
+
+    /* Target the medium requested by the caller, if any: no other medium
+     * may be selected, whatever its content.
+     */
+    if (target_medium != NULL) {
+        req.walloc->media[0]->target_med =
+            xmalloc(sizeof(*req.walloc->media[0]->target_med));
+        pho_resource_id__init(req.walloc->media[0]->target_med);
+        req.walloc->media[0]->target_med->family = target_medium->family;
+        req.walloc->media[0]->target_med->name = xstrdup(target_medium->name);
+        req.walloc->media[0]->target_med->library =
+            xstrdup(target_medium->library);
+        req.walloc->library = xstrdup(target_medium->library);
     }
 
     rc = comm_send_and_recv(&adm->phobosd_comm, &req, &resp);
@@ -1539,8 +1554,67 @@ static int _retrieve_source_info(struct admin_handle *adm,
     return 0;
 }
 
+static int _resolve_target_medium(struct admin_handle *adm,
+                                  const struct pho_id *source,
+                                  const struct pho_id *target,
+                                  struct pho_id *resolved,
+                                  ssize_t *phys_spc_free)
+{
+    struct dss_filter filter;
+    struct media_info *media;
+    int count;
+    int rc;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::MDA::family\": \"%s\"},"
+                          "  {\"DSS::MDA::id\": \"%s\"}"
+                          "]}", rsc_family2str(source->family), target->name);
+    if (rc)
+        LOG_RETURN(rc, "Failed to build target medium filter");
+
+    rc = dss_media_get(&adm->dss, &filter, &media, &count, NULL);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc, "Failed to retrieve target tape '%s' info from DSS",
+                   target->name);
+
+    if (count != 1)
+        LOG_GOTO(free_media, rc = -EINVAL,
+                 "Target tape '%s' does not match a single medium of the DSS",
+                 target->name);
+
+    if (pho_id_equal(&media->rsc.id, source))
+        LOG_GOTO(free_media, rc = -EINVAL,
+                 "Target tape '%s' is the tape being repacked", target->name);
+
+    if (media->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
+        LOG_GOTO(free_media, rc = -EACCES,
+                 "Target tape '%s' is administratively locked", target->name);
+
+    if (!media->flags.put)
+        LOG_GOTO(free_media, rc = -EPERM,
+                 "Put operations are not allowed on target tape '%s'",
+                 target->name);
+
+    if (media->fs.status != PHO_FS_STATUS_EMPTY &&
+        media->fs.status != PHO_FS_STATUS_USED)
+        LOG_GOTO(free_media, rc = -ENOSPC,
+                 "Target tape '%s' cannot be written to: filesystem status "
+                 "'%s'", target->name, fs_status2str(media->fs.status));
+
+    *phys_spc_free = media->stats.phys_spc_free;
+    pho_id_copy(resolved, &media->rsc.id);
+
+free_media:
+    dss_res_free(media, count);
+
+    return rc;
+}
+
 int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
-                        struct string_array *tags, bool empty)
+                        struct string_array *tags,
+                        const struct pho_id *target, bool empty)
 {
     /* Order the extents to copy by creation time: they are generally
      * sequential on the tape, so this reduces the tape workload.
@@ -1556,13 +1630,15 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     struct pho_ext_loc loc_source = {0};
     struct pho_ext_loc loc_target = {0};
     struct io_adapter_module *ioa = {0};
+    struct pho_id target_medium = {0};
     struct pho_id *avoid_media = NULL;
     struct string_array *ptr_tags;
     struct extent *ext_res = NULL;
     struct string_array src_tags;
     GArray *new_ext_uuids = NULL;
+    ssize_t target_spc_free = 0;
+    struct pho_id allocated;
     int ext_cnt_done = 0;
-    struct pho_id target;
     ssize_t total_size;
     int avoid_cnt = 0;
     int ext_cnt;
@@ -1571,6 +1647,18 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
 
     if (source->family != PHO_RSC_TAPE)
         LOG_RETURN(-ENOTSUP, "Repack operation is only available for tapes");
+
+    /* Resolve the target tape requested by the caller, if any, and check
+     * that it is a usable write target: its library is needed to target it
+     * in the write allocation, and resolving it now allows failing before
+     * any operation is performed.
+     */
+    if (target != NULL) {
+        rc = _resolve_target_medium(adm, source, target, &target_medium,
+                                    &target_spc_free);
+        if (rc)
+            return rc;
+    }
 
     /* Invoke garbage collector for source tape */
     rc = dss_update_gc_for_tape(&adm->dss, source);
@@ -1594,16 +1682,40 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     if (total_size == 0)
         goto format;
 
-    /* If an empty medium is not specifically requested, compile a list of
-     * media that cannot be used as repack target.
+    if (target != NULL && target_spc_free <= total_size)
+        LOG_GOTO(free_tags, rc = -ENOSPC,
+                 "Target tape '%s' does not have enough free space (%zd) to "
+                 "hold the data of the repacked tape (%zd)", target->name,
+                 target_spc_free, total_size);
+
+    /* A medium must not receive a copy of the data it already holds: when
+     * the LRS selects the target itself, compile the list of media that
+     * cannot be used as repack target, and when the target is explicitly
+     * given, check that it holds no copy of the data of the source medium.
      */
-    if (!empty) {
+    if (target != NULL) {
+        bool shared_copy;
+
+        rc = dss_media_check_shared_copy(&adm->dss, source,
+                                         &target_medium, &shared_copy);
+        if (rc)
+            LOG_GOTO(free_tags, rc,
+                     "Failed to check that the target tape holds no "
+                     "copy of the data of "FMT_PHO_ID, PHO_ID(*source));
+
+        if (shared_copy) {
+            rc = -EINVAL;
+            LOG_GOTO(free_tags, rc,
+                     "Target tape '%s' already holds a copy of the "
+                     "data of the repacked tape", target->name);
+        }
+    } else if (!empty) {
         rc = dss_media_get_sharing_objects(&adm->dss, source, &avoid_media,
                                            &avoid_cnt);
         if (rc)
             LOG_GOTO(free_tags, rc,
-                     "Failed to get the media holding a copy of the data of "
-                     FMT_PHO_ID, PHO_ID(*source));
+                     "Failed to get the media holding a copy of the data "
+                     "of "FMT_PHO_ID, PHO_ID(*source));
     }
 
     /* Prepare read allocation */
@@ -1612,21 +1724,25 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     if (rc)
         goto free_tags;
 
-    /* Prepare write allocation
-     * Use the same tags as the source medium
-     */
-    if (tags->count == 0)
-        ptr_tags = &src_tags;
-    /* Use no tags */
-    else if (tags->count == 1 && strcmp(tags->strings[0], "") == 0)
+    /* Prepare write allocation */
+    if (target != NULL)
+        /* Use no tags: the target medium is explicitly requested */
         ptr_tags = &empty_tags;
-    /* Use the tags specified */
+    else if (tags->count == 0)
+        /* Use the same tags as the source medium */
+        ptr_tags = &src_tags;
+    else if (tags->count == 1 && strcmp(tags->strings[0], "") == 0)
+        /* Use no tags */
+        ptr_tags = &empty_tags;
     else
+        /* Use the tags specified */
         ptr_tags = tags;
 
     rc = _get_target_medium(adm, source, total_size, ptr_tags, empty,
-                            avoid_media, avoid_cnt,
-                            &loc_target, &iod_target, &target);
+                            target != NULL ? &target_medium : NULL,
+                            target != NULL ? NULL : avoid_media,
+                            target != NULL ? 0 : avoid_cnt,
+                            &loc_target, &iod_target, &allocated);
     if (rc) {
         free(loc_source.root_path);
 
@@ -1640,7 +1756,7 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     for (i = 0; i < ext_cnt; ++i, ++ext_cnt_done) {
         struct extent ext_new = {0};
 
-        _build_new_extent(&target, &ext_res[i], &ext_new, &iod_source,
+        _build_new_extent(&allocated, &ext_res[i], &ext_new, &iod_source,
                           &iod_target);
 
         rc = copy_extent(ioa, &iod_source, ioa, &iod_target, PHO_RSC_TAPE);
@@ -1669,7 +1785,7 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     }
 
     rc = _send_and_recv_release(adm, source, &iod_source, 3,
-                                &target, &iod_target,
+                                &allocated, &iod_target,
                                 ext_cnt_done == ext_cnt ?
                                     total_size :
                                     _sum_extent_size(ext_res, ext_cnt_done),

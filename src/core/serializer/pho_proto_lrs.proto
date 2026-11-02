@@ -38,7 +38,11 @@ message PhoRequest {
             repeated string tags = 2;          // Tags to be satisfied.
             required bool empty_medium = 3;    // Whether the client requires an
                                                // empty medium for the operation
-                                               // (REPACK for instead)
+                                               // (REPACK for instance)
+            optional PhoResourceId target_med = 4; // Medium to target for
+                                                   // the allocation: no other
+                                                   // medium will be allocated
+                                                   // (REPACK for instance)
         }
 
         repeated Elt media = 1;                // Write allocation requests.
