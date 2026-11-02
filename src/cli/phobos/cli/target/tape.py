@@ -62,11 +62,16 @@ class TapeRepackOptHandler(ActionOptHandler):
                             help='Tape to hold the data of the repacked tape. '
                                  'Phobos checks that it does not already '
                                  'hold a copy of the data of the repacked '
-                                 'tape.')
+                                 'tape, unless --ignore-check is given.')
         parser.add_argument('--empty', action='store_true',
                             help='Only use an empty tape as repack target, '
                                  'and never a used one. Ignored when '
                                  '--target is given.')
+        parser.add_argument('--ignore-check', action='store_true',
+                            help='Do not check that the tape given to '
+                                 '--target does not already hold a copy of '
+                                 'the data of the repacked tape. Only usable '
+                                 'with --target.')
         parser.add_argument('res', help='Tape to repack')
         parser.add_argument('-L', '--library',
                             help="Library containing the tape to repack")

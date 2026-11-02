@@ -517,7 +517,7 @@ class Client: # pylint: disable=too-many-public-methods
                                        f"{library}")
 
     def repack(self, family, medium, library, tags, target=None, # pylint: disable=too-many-arguments
-               empty=False):
+               empty=False, ignore_check=False):
         """Repack a tape"""
         tags = StringArray(tags)
         rc = LIBPHOBOS_ADMIN.phobos_admin_repack(
@@ -525,7 +525,7 @@ class Client: # pylint: disable=too-many-public-methods
                                          library=library)),
             byref(tags),
             byref(Id(family, name=target)) if target else None,
-            empty)
+            empty, ignore_check)
 
         if rc:
             raise EnvironmentError(rc, f"Failed to repack {medium} from "

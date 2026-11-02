@@ -44,7 +44,8 @@
  * Repack: add the --target option to "phobos tape repack", to copy the data
    of the repacked tape to a specific tape, empty or not. For each copy of
    the data of the repacked tape, Phobos checks that the target tape holds
-   no extent of the same copy.
+   no extent of the same copy, unless the new --ignore-check option is
+   given, which is only usable with --target.
 
 ## 3.4.1
  * Grouped read: queue preallocation has been improved to guarantee the

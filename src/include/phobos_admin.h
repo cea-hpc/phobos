@@ -288,7 +288,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
  * When \p target is specified, it is used as destination medium, whether
  * it is empty or not: Phobos checks that it is writable (unlocked, with
  * put allowed and not full) and large enough, and that it does not
- * already hold a copy of this data.
+ * already hold a copy of this data, unless \p ignore_layout_check is set.
  *
  * \param[in]       adm             Admin module handle.
  * \param[in]       source          Source medium ID.
@@ -298,6 +298,10 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
  * \param[in]       empty           Use an empty medium as destination
  *                                  medium when the LRS selects it.
  *                                  Ignored when \p target is specified.
+ * \param[in]       ignore_layout_check Do not check that the destination
+ *                                  medium does not already hold a copy of
+ *                                  the data of the source medium. Only
+ *                                  allowed with an explicit \p target.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
@@ -306,7 +310,8 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
  */
 int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
                         struct string_array *tags,
-                        const struct pho_id *target, bool empty);
+                        const struct pho_id *target, bool empty,
+                        bool ignore_layout_check);
 
 /*
  * Ping the lrs phobosd daemon to check if it is online or not.

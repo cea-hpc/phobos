@@ -1614,7 +1614,8 @@ free_media:
 
 int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
                         struct string_array *tags,
-                        const struct pho_id *target, bool empty)
+                        const struct pho_id *target, bool empty,
+                        bool ignore_layout_check)
 {
     /* Order the extents to copy by creation time: they are generally
      * sequential on the tape, so this reduces the tape workload.
@@ -1647,6 +1648,14 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
 
     if (source->family != PHO_RSC_TAPE)
         LOG_RETURN(-ENOTSUP, "Repack operation is only available for tapes");
+
+    /* Ignoring the layout check is only allowed with an explicit target:
+     * without one, the LRS could select a medium holding a copy of the
+     * data of the source medium.
+     */
+    if (ignore_layout_check && target == NULL)
+        LOG_RETURN(-EINVAL, "Ignoring the layout check is only possible "
+                            "with an explicit target medium");
 
     /* Resolve the target tape requested by the caller, if any, and check
      * that it is a usable write target: its library is needed to target it
@@ -1693,29 +1702,31 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
      * cannot be used as repack target, and when the target is explicitly
      * given, check that it holds no copy of the data of the source medium.
      */
-    if (target != NULL) {
-        bool shared_copy;
+    if (!ignore_layout_check) {
+        if (target != NULL) {
+            bool shared_copy;
 
-        rc = dss_media_check_shared_copy(&adm->dss, source,
-                                         &target_medium, &shared_copy);
-        if (rc)
-            LOG_GOTO(free_tags, rc,
-                     "Failed to check that the target tape holds no "
-                     "copy of the data of "FMT_PHO_ID, PHO_ID(*source));
+            rc = dss_media_check_shared_copy(&adm->dss, source,
+                                             &target_medium, &shared_copy);
+            if (rc)
+                LOG_GOTO(free_tags, rc,
+                         "Failed to check that the target tape holds no "
+                         "copy of the data of "FMT_PHO_ID, PHO_ID(*source));
 
-        if (shared_copy) {
-            rc = -EINVAL;
-            LOG_GOTO(free_tags, rc,
-                     "Target tape '%s' already holds a copy of the "
-                     "data of the repacked tape", target->name);
+            if (shared_copy) {
+                rc = -EINVAL;
+                LOG_GOTO(free_tags, rc,
+                         "Target tape '%s' already holds a copy of the "
+                         "data of the repacked tape", target->name);
+            }
+        } else if (!empty) {
+            rc = dss_media_get_sharing_objects(&adm->dss, source,
+                                               &avoid_media, &avoid_cnt);
+            if (rc)
+                LOG_GOTO(free_tags, rc,
+                         "Failed to get the media holding a copy of the "
+                         "data of "FMT_PHO_ID, PHO_ID(*source));
         }
-    } else if (!empty) {
-        rc = dss_media_get_sharing_objects(&adm->dss, source, &avoid_media,
-                                           &avoid_cnt);
-        if (rc)
-            LOG_GOTO(free_tags, rc,
-                     "Failed to get the media holding a copy of the data "
-                     "of "FMT_PHO_ID, PHO_ID(*source));
     }
 
     /* Prepare read allocation */

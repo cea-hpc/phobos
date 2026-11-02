@@ -23,6 +23,7 @@ Media target for Phobos CLI
 
 import argparse
 import sys
+from os import EX_USAGE
 
 from ClusterShell.NodeSet import NodeSet
 
@@ -578,6 +579,9 @@ class MediaOptHandler(BaseResourceOptHandler):
         set_library(self)
         target = self.params.get('target')
         empty = self.params.get('empty', False)
+        if self.params.get('ignore_check') and not target:
+            self.logger.error("--ignore-check can only be used with --target")
+            sys.exit(EX_USAGE)
         if empty and target:
             self.logger.warning("--empty is ignored: a target tape is "
                                 "explicitly given to --target")
@@ -586,7 +590,8 @@ class MediaOptHandler(BaseResourceOptHandler):
             with AdminClient(lrs_required=True) as adm:
                 tags = self.params.get('tags', [])
                 adm.repack(self.family, self.params.get('res'), self.library,
-                           tags, target, empty)
+                           tags, target, empty,
+                           self.params.get('ignore_check', False))
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
