@@ -7,6 +7,8 @@
    release. The scheduler reads the in-memory value of loaded media,
    and the final value is saved in the DSS at medium unload and at LRS
    stop.
+ * Fix a phobosd hang, line losses and rstrip() UB on non-UTF-8 LTFS command
+   output (e.g. VTL tape attributes), now read raw and logged as valid UTF-8.
  * The LRS responses are now sent as soon as they are produced by the
    scheduler and device threads, instead of waiting up to 100 ms for the
    communication thread to poll again.
