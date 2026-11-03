@@ -500,14 +500,25 @@ void layout_destroy(struct pho_data_processor *proc)
 {
     int i;
 
-    if (proc->reader_ops)
+    /* The layout_* builders destroy the processor when its initialization
+     * fails, and store_fini destroys it again: drop the ops references
+     * once their destroy has run, so that a second layout_destroy is a
+     * no-op instead of relying on every module destroy being idempotent.
+     */
+    if (proc->reader_ops) {
         proc->reader_ops->destroy(proc);
+        proc->reader_ops = NULL;
+    }
 
-    if (proc->writer_ops)
+    if (proc->writer_ops) {
         proc->writer_ops->destroy(proc);
+        proc->writer_ops = NULL;
+    }
 
-    if (proc->eraser_ops)
+    if (proc->eraser_ops) {
         proc->eraser_ops->destroy(proc);
+        proc->eraser_ops = NULL;
+    }
 
     /* Only encoders own their layout, no need to free src_layout */
     if (proc->dest_layout != NULL) {

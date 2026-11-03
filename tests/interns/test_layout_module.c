@@ -31,6 +31,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 #include "pho_layout.h"
 
@@ -142,6 +143,36 @@ static void le_valid_layout_io_size(void **data)
     layout_destroy(&processor);
 }
 
+static int destroy_calls;
+
+/* A destroy written the natural way: it frees its private without
+ * resetting the pointer, so a second call would double-free.
+ */
+static void destroy_frees_without_reset(struct pho_data_processor *proc)
+{
+    destroy_calls++;
+    free(proc->private_reader);
+}
+
+static const struct pho_proc_ops COUNTING_DESTROY_OPS = {
+    .destroy = destroy_frees_without_reset,
+};
+
+static void ld_destroy_twice_is_noop(void **data)
+{
+    struct pho_data_processor processor = {0};
+
+    processor.reader_ops = &COUNTING_DESTROY_OPS;
+    processor.private_reader = malloc(1);
+    assert_non_null(processor.private_reader);
+
+    destroy_calls = 0;
+    layout_destroy(&processor);
+    layout_destroy(&processor);
+
+    assert_int_equal(destroy_calls, 1);
+}
+
 int main(void)
 {
     const struct CMUnitTest layout_module_tests[] = {
@@ -149,6 +180,7 @@ int main(void)
         cmocka_unit_test(le_invalid_module),
         cmocka_unit_test(le_invalid_layout_io_size),
         cmocka_unit_test(le_valid_layout_io_size),
+        cmocka_unit_test(ld_destroy_twice_is_noop),
     };
 
     pho_context_init();
