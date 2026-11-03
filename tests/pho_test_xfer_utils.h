@@ -28,11 +28,13 @@
 #define _PHO_TEST_XFER_UTILS_H
 
 /* Standard includes */
+#include <assert.h>
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <ftw.h>
 
 /* Local Phobos includes */
 #include "pho_common.h"
@@ -103,6 +105,72 @@ static int xfer_close_fd(struct pho_xfer_target *target)
     }
 
     return 0;
+}
+
+/** Template of the temporary directory created by setup_tmp_dir() */
+#define PHO_TMP_DIR_TEMPLATE "/tmp/pho_XXXXXX"
+
+/** Max number of file descriptors kept open by nftw() in rm_tmp_dir() */
+#define RM_OPEN_FDS 16
+
+static char *TMP_DIR;
+
+/**
+ * Remove anything, as a callback of nftw(): rm_tmp_dir() walks the
+ * temporary directory tree bottom-up and removes every entry.
+ */
+static inline int rm_anything(const char *pathname, const struct stat *sbuf,
+                              int type, struct FTW *ftwb)
+{
+    if (remove(pathname) < 0) {
+        perror("ERROR: remove");
+        return -1;
+    }
+    return 0;
+}
+
+/** Recursively remove the temporary directory created by setup_tmp_dir() */
+static inline void rm_tmp_dir(void)
+{
+    if (!TMP_DIR)
+        return;
+    /* Recursive rm */
+    nftw(TMP_DIR, rm_anything, RM_OPEN_FDS, FTW_DEPTH | FTW_MOUNT | FTW_PHYS);
+    free(TMP_DIR);
+}
+
+/** Create a temporary directory, recursively removed at process exit */
+static inline char *setup_tmp_dir(void)
+{
+    TMP_DIR = xmalloc(sizeof(PHO_TMP_DIR_TEMPLATE));
+    strcpy(TMP_DIR, PHO_TMP_DIR_TEMPLATE);
+    assert(mkdtemp(TMP_DIR) != NULL);
+    atexit(rm_tmp_dir);
+    return TMP_DIR;
+}
+
+/**
+ * Free the object id, uuid and file descriptor of the current operation,
+ * then open the xfer for a new operation on the given path, with the given
+ * object id.
+ */
+static inline void reinit_xfer(struct pho_xfer_desc *xfer, const char *path,
+                               const char *objid, enum pho_xfer_op op)
+{
+    free((void *)xfer->xd_targets->xt_objid);
+    free(xfer->xd_targets->xt_objuuid);
+    close(xfer->xd_targets->xt_fd);
+
+    xfer_desc_open_path(xfer, path, op, 0);
+    xfer->xd_op = op;
+    /* xd_params is a union: reset it, so that the parameters of the previous
+     * operation are not read as the parameters of the new one (a put family
+     * resolved to PHO_RSC_DIR was read as the get copy_name pointer).
+     */
+    memset(&xfer->xd_params, 0, sizeof(xfer->xd_params));
+    xfer->xd_targets->xt_objid = xstrdup(objid);
+    if (op == PHO_XFER_OP_PUT)
+        xfer->xd_params.put.family = PHO_RSC_INVAL;
 }
 
 #endif

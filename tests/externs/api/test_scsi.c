@@ -32,15 +32,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define ASSERT_RC(_stmt)        \
-do {                            \
-    int rc = _stmt;             \
-    if (rc) {                   \
-        pho_error(rc, #_stmt);  \
-        exit(EXIT_FAILURE);     \
-    }                           \
-} while (0)
-
 static const char *type2str(enum element_type_code code)
 {
     switch (code) {

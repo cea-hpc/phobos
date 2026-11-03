@@ -1,6 +1,5 @@
 #include "config.h"
 
-#include <ftw.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -16,71 +15,8 @@
 #include "phobos_store.h"
 #include "../dss/dss_lock.h"
 
-#define PHO_TMP_DIR_TEMPLATE "/tmp/pho_XXXXXX"
 #define LOCK_OWNER "generic_lock_owner"
-#define RM_OPEN_FDS 16
 #define WAIT_UNLOCK_SLEEP 2
-
-/** Assert an rc is 0 or print a pretty error and exit.
- * The local variable must not shadow the asserted expression: the test
- * compiler would then read the uninitialized local instead of the caller's
- * variable when it is called with a same-named one (e.g. ASSERT_RC(rc)).
- */
-#define ASSERT_RC(rc_expr) do {                                         \
-        int _assert_rc = (rc_expr);                                     \
-        if (_assert_rc) {                                               \
-            pho_error(_assert_rc, "%s:%d:%s", __FILE__, __LINE__,       \
-                      #rc_expr);                                        \
-            exit(EXIT_FAILURE);                                         \
-        }                                                               \
-    } while (0)
-
-
-static char *TMP_DIR;
-
-static int rm_anything(const char *pathname, const struct stat *sbuf, int type,
-                       struct FTW *ftwb)
-{
-    if (remove(pathname) < 0) {
-        perror("ERROR: remove");
-        return -1;
-    }
-    return 0;
-}
-
-static void rm_tmp_dir(void)
-{
-    if (!TMP_DIR)
-        return;
-    /* Recursive rm */
-    nftw(TMP_DIR, rm_anything, RM_OPEN_FDS, FTW_DEPTH | FTW_MOUNT | FTW_PHYS);
-    free(TMP_DIR);
-}
-
-static char *setup_tmp_dir(void)
-{
-    TMP_DIR = xmalloc(sizeof(PHO_TMP_DIR_TEMPLATE));
-    strcpy(TMP_DIR, PHO_TMP_DIR_TEMPLATE);
-    assert(mkdtemp(TMP_DIR) != NULL);
-    atexit(rm_tmp_dir);
-    return TMP_DIR;
-}
-
-static void reinit_xfer(struct pho_xfer_desc *xfer, const char *path,
-                        const char *objpath, enum pho_xfer_op op)
-{
-    free((void *)xfer->xd_targets->xt_objid);
-    free(xfer->xd_targets->xt_objuuid);
-    close(xfer->xd_targets->xt_fd);
-
-    xfer_desc_open_path(xfer, path, op, 0);
-    xfer->xd_op = op;
-    xfer->xd_targets->xt_objid = realpath(objpath, NULL);
-    if (op == PHO_XFER_OP_PUT)
-        xfer->xd_params.put.family = PHO_RSC_INVAL;
-    else if (op == PHO_XFER_OP_GET)
-        xfer->xd_params.get.copy_name = NULL;
-}
 
 static void add_dir_or_drive(struct admin_handle *adm, struct dss_handle *dss,
                              const char *path, struct dev_info *dev,
@@ -231,6 +167,7 @@ int main(int argc, char **argv)
     struct dev_info         dev = { { {0} } };
     struct media_info       media = { { {0} } };
     char                   *tmp_dir = setup_tmp_dir();
+    char                   *objid = realpath(argv[0], NULL);
     char                   *default_family;
     char                    dst_path[256];
 
@@ -240,7 +177,7 @@ int main(int argc, char **argv)
 
     xfer.xd_targets = &target;
     xfer.xd_ntargets = 1;
-    reinit_xfer(&xfer, argv[0], argv[0], PHO_XFER_OP_PUT);
+    reinit_xfer(&xfer, argv[0], objid, PHO_XFER_OP_PUT);
 
     dss_init(&dss);
     phobos_admin_init(&adm, true, NULL);
@@ -271,7 +208,7 @@ int main(int argc, char **argv)
         test_put_retry(&xfer, &dev, &media);
 
         /* Put retry again to ensure no new error is raised */
-        reinit_xfer(&xfer, argv[0], argv[0], PHO_XFER_OP_PUT);
+        reinit_xfer(&xfer, argv[0], objid, PHO_XFER_OP_PUT);
         change_objid_first_char(&xfer, '0');
         test_put_retry(&xfer, &dev, &media);
     } else {
@@ -286,14 +223,14 @@ int main(int argc, char **argv)
 
         /* Two successive get */
         snprintf(dst_path, sizeof(dst_path), "%s/%s", tmp_dir, "dst");
-        reinit_xfer(&xfer, dst_path, argv[0], PHO_XFER_OP_GET);
+        reinit_xfer(&xfer, dst_path, objid, PHO_XFER_OP_GET);
         test_get(&xfer, dst_path);
 
-        reinit_xfer(&xfer, dst_path, argv[0], PHO_XFER_OP_GET);
+        reinit_xfer(&xfer, dst_path, objid, PHO_XFER_OP_GET);
         test_get(&xfer, dst_path);
 
         /* Test put retry */
-        reinit_xfer(&xfer, argv[0], argv[0], PHO_XFER_OP_PUT);
+        reinit_xfer(&xfer, argv[0], objid, PHO_XFER_OP_PUT);
         /* Artificially build a new object ID */
         change_objid_first_char(&xfer, '0');
         test_put_retry(&xfer, &dev, &media);
@@ -302,6 +239,7 @@ int main(int argc, char **argv)
     free(dev.rsc.model);
     free((void *)xfer.xd_targets->xt_objid);
     free(xfer.xd_targets->xt_objuuid);
+    free(objid);
     xfer_close_fd(xfer.xd_targets);
     phobos_admin_fini(&adm);
     dss_fini(&dss);

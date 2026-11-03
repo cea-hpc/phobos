@@ -31,13 +31,10 @@
  */
 #include "config.h"
 
-#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <ftw.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 
 #include "pho_common.h"
@@ -45,64 +42,8 @@
 #include "pho_test_xfer_utils.h"
 #include "phobos_store.h"
 
-#define PHO_TMP_DIR_TEMPLATE "/tmp/pho_XXXXXX"
-#define RM_OPEN_FDS 16
 #define OBJID_GET "test_bad_fd_get_obj"
 #define OBJID_PUT "test_bad_fd_put_obj"
-
-/** Assert an rc is 0 or print a pretty error and exit.
- * The local variable must not shadow the asserted expression: the test
- * compiler would then read the uninitialized local instead of the caller's
- * variable when it is called with a same-named one (e.g. ASSERT_RC(rc)).
- */
-#define ASSERT_RC(rc_expr) do {                                         \
-        int _assert_rc = (rc_expr);                                     \
-        if (_assert_rc) {                                               \
-            pho_error(_assert_rc, "%s:%d:%s", __FILE__, __LINE__,       \
-                      #rc_expr);                                        \
-            exit(EXIT_FAILURE);                                         \
-        }                                                               \
-    } while (0)
-
-/** Assert an rc equals the expected value or print a pretty error and exit */
-#define ASSERT_RC_EQ(rc_expr, expected) do {                            \
-        int _assert_rc = (rc_expr);                                     \
-        if (_assert_rc != (expected)) {                                 \
-            pho_error(_assert_rc, "%s:%d:%s: expected rc %d",           \
-                      __FILE__, __LINE__, #rc_expr, (expected));        \
-            exit(EXIT_FAILURE);                                         \
-        }                                                               \
-    } while (0)
-
-static char *TMP_DIR;
-
-static int rm_anything(const char *pathname, const struct stat *sbuf, int type,
-                       struct FTW *ftwb)
-{
-    if (remove(pathname) < 0) {
-        perror("ERROR: remove");
-        return -1;
-    }
-    return 0;
-}
-
-static void rm_tmp_dir(void)
-{
-    if (!TMP_DIR)
-        return;
-    /* Recursive rm */
-    nftw(TMP_DIR, rm_anything, RM_OPEN_FDS, FTW_DEPTH | FTW_MOUNT | FTW_PHYS);
-    free(TMP_DIR);
-}
-
-static char *setup_tmp_dir(void)
-{
-    TMP_DIR = xmalloc(sizeof(PHO_TMP_DIR_TEMPLATE));
-    strcpy(TMP_DIR, PHO_TMP_DIR_TEMPLATE);
-    assert(mkdtemp(TMP_DIR) != NULL);
-    atexit(rm_tmp_dir);
-    return TMP_DIR;
-}
 
 /**
  * Return a fd number that is guaranteed to stay closed, so that dup() on it
@@ -122,25 +63,6 @@ static int pick_closed_fd(void)
 
     pho_error(-EMFILE, "no closed fd number found below 1024");
     exit(EXIT_FAILURE);
-}
-
-static void reinit_xfer(struct pho_xfer_desc *xfer, const char *path,
-                        const char *objid, enum pho_xfer_op op)
-{
-    free((void *)xfer->xd_targets->xt_objid);
-    free(xfer->xd_targets->xt_objuuid);
-    close(xfer->xd_targets->xt_fd);
-
-    xfer_desc_open_path(xfer, path, op, 0);
-    xfer->xd_op = op;
-    /* xd_params is a union: reset it, so that the parameters of the previous
-     * operation are not read as the parameters of the new one (a put family
-     * resolved to PHO_RSC_DIR was read as the get copy_name pointer).
-     */
-    memset(&xfer->xd_params, 0, sizeof(xfer->xd_params));
-    xfer->xd_targets->xt_objid = xstrdup(objid);
-    if (op == PHO_XFER_OP_PUT)
-        xfer->xd_params.put.family = PHO_RSC_INVAL;
 }
 
 /** Replace the xfer fd with a closed fd, to make dup() fail on it */
