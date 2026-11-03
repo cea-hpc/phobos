@@ -40,6 +40,8 @@ endif
 
 TEST_EXTENSIONS=.sh
 
+EXTRA_DIST=test_ltfs_garbage.sh test_common_error.sh
+
 check_PROGRAMS=test_attrs \
                test_cfg \
                test_common \
