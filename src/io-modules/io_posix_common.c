@@ -863,6 +863,7 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
     const char *tmp_copy;
     const char *tmp_md5;
     const char *tmp_grouping;
+    const char *tmp_generation_time;
     struct pho_attrs md;
     int64_t object_size;
     char *filename;
@@ -906,6 +907,7 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
     pho_attr_set(&md, PHO_EA_EXTENT_OFFSET_NAME, NULL);
     pho_attr_set(&md, PHO_EA_COPY_NAME, NULL);
     pho_attr_set(&md, PHO_EA_GROUPING_NAME, NULL);
+    pho_attr_set(&md, PHO_EA_GENERATION_TIME_NAME, NULL);
 
     rc = pho_posix_md_get(NULL, iod->iod_fd, &md);
     if (rc)
@@ -1003,6 +1005,27 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
     tmp_grouping = pho_attr_get(&md, PHO_EA_GROUPING_NAME);
     if (tmp_grouping != NULL)
         obj_info->grouping = xstrdup(tmp_grouping);
+
+    /* the generation time is optional: extents written by older versions
+     * carry none, and their generation is dated by their creation time
+     */
+    tmp_generation_time = pho_attr_get(&md, PHO_EA_GENERATION_TIME_NAME);
+    if (tmp_generation_time != NULL) {
+        struct timeval *gt = &extent_to_insert->generation_time;
+        char trailing;
+
+        /* the value goes straight into a SQL timestamp literal: reject
+         * trailing characters and anything outside the 4-digit-year
+         * envelope of timeval2str or a microsecond part of a second
+         */
+        if (sscanf(tmp_generation_time, "%ld.%ld%c", &gt->tv_sec, &gt->tv_usec,
+                   &trailing) != 2 ||
+            gt->tv_sec <= 0 || gt->tv_sec > 253402300799L ||
+            gt->tv_usec < 0 || gt->tv_usec > 999999)
+            LOG_GOTO(free_oid_uuid, rc = -EINVAL,
+                     "Invalid generation time on file '%s': '%s'", filename,
+                     tmp_generation_time);
+    }
 
     obj_info->size = object_size;
 

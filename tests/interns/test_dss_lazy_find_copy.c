@@ -52,7 +52,7 @@ static int insert_state_copy(struct test_state *state,
     copy.copy_name = copy_name;
     copy.copy_status = copy_status;
 
-    return dss_copy_insert(state->dss, &copy, 1);
+    return dss_copy_insert(state->dss, &copy, 1, DSS_SET_INSERT);
 }
 
 static int dlfc_setup(void **state)

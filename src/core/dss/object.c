@@ -51,11 +51,13 @@ static int object_insert_query(PGconn *conn, void *void_object, int item_cnt,
         g_string_append(
             request,
             "INSERT INTO object (oid, object_uuid, version, user_md,"
-            " _grouping, size) VALUES "
+            " _grouping, size, creation_time) VALUES "
         );
 
     for (int i = 0; i < item_cnt; ++i) {
         struct object_info *object = ((struct object_info *) void_object) + i;
+        char creation_time_str[PHO_TIMEVAL_MAX_LEN] = "";
+        char *creation_time = NULL;
         char *grouping = NULL;
         char *user_md = NULL;
         char *uuid = NULL;
@@ -89,15 +91,24 @@ static int object_insert_query(PGconn *conn, void *void_object, int item_cnt,
                 goto free_info;
             }
 
-            g_string_append_printf(request, "(%s, %s, %d, %s, %s, '%ld')",
+            timeval2str(&object->creation_time, creation_time_str);
+
+            creation_time = dss_char4sql(conn, creation_time_str);
+            if (creation_time == NULL) {
+                rc = -EINVAL;
+                goto free_info;
+            }
+
+            g_string_append_printf(request, "(%s, %s, %d, %s, %s, '%ld', %s)",
                                    oid, uuid, object->version, user_md,
-                                   grouping, object->size);
+                                   grouping, object->size, creation_time);
         }
 
         if (i < item_cnt - 1)
             g_string_append(request, ", ");
 
 free_info:
+        free_dss_char4sql(creation_time);
         free_dss_char4sql(grouping);
         free_dss_char4sql(user_md);
         free_dss_char4sql(uuid);

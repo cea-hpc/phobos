@@ -365,6 +365,14 @@ int set_object_md(const struct io_adapter_module *ioa, struct pho_io_descr *iod,
 
     pho_attr_set(&iod->iod_attrs, PHO_EA_VERSION_NAME, str_buffer);
 
+    rc = snprintf(str_buffer, sizeof(str_buffer), "%ld.%06ld",
+                  extent->generation_time.tv_sec,
+                  extent->generation_time.tv_usec);
+    if (rc < 0)
+        LOG_RETURN(-errno, "Unable to construct generation time buffer");
+
+    pho_attr_set(&iod->iod_attrs, PHO_EA_GENERATION_TIME_NAME, str_buffer);
+
     pho_attr_set(&iod->iod_attrs, PHO_EA_LAYOUT_NAME, object_md->layout_name);
     pho_attr_set(&iod->iod_attrs, PHO_EA_OBJECT_UUID_NAME,
                  object_md->object_uuid);

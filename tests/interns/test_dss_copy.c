@@ -45,7 +45,7 @@ static int dc_setup(void **state)
     int rc;
 
     /* insert the copy */
-    rc = dss_copy_insert(handle, &COPY, 1);
+    rc = dss_copy_insert(handle, &COPY, 1, DSS_SET_INSERT);
     if (rc)
         return -1;
 

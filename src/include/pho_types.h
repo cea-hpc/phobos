@@ -414,6 +414,11 @@ struct extent {
     struct pho_attrs    info;
     struct timeval      creation_time;
                                     /**< extent creation time */
+    struct timeval      generation_time;
+                                    /**< creation time of the copy this
+                                     *   extent belongs to: it dates its
+                                     *   generation
+                                     */
 };
 
 /**

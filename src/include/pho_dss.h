@@ -676,12 +676,13 @@ int dss_object_rename(struct dss_handle *handle,
  * @param[in] handle        valid connection handle
  * @param[in] object_list   array of entries to store
  * @param[in] object_count  number of items in the list
+ * @param[in] action        operation code (insert or full_insert)
  *
  * @return 0 on success, negated errno on failure
  */
 int dss_deprecated_object_insert(struct dss_handle *handle,
-                              struct object_info *object_list,
-                              int object_count);
+                                 struct object_info *object_list,
+                                 int object_count, enum dss_set_action action);
 
 /**
  * Update information for one or many deprecated objects in DSS.
@@ -734,11 +735,12 @@ int dss_deprecated_object_delete(struct dss_handle *handle,
  * @param[in] handle      valid connection handle
  * @param[in] copy_list   array of entries to store
  * @param[in] copy_count  number of items in the list
+ * @param[in] action      operation code (insert or full_insert)
  *
  * @return 0 on success, negated errno on failure
  */
 int dss_copy_insert(struct dss_handle *handle, struct copy_info *copy_list,
-                    int copy_count);
+                    int copy_count, enum dss_set_action action);
 
 /**
  * Update the information of one or many copies in DSS.

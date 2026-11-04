@@ -693,6 +693,11 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
                          xfer->xt_objid);
         }
 
+        /* the new version is created now: it must not inherit the
+         * creation time of the version it replaces
+         */
+        gettimeofday(&obj_res->creation_time, NULL);
+
         rc = dss_object_insert(dss, obj_res, 1, DSS_SET_FULL_INSERT);
         obj_res->grouping = save_obj_res_grouping;
         if (rc)
@@ -717,8 +722,9 @@ out_update:
     copy.version = obj_res->version;
     copy.copy_status = PHO_COPY_STATUS_INCOMPLETE;
     copy.copy_name = copy_name;
+    copy.creation_time = obj_res->creation_time;
 
-    rc = dss_copy_insert(dss, &copy, 1);
+    rc = dss_copy_insert(dss, &copy, 1, DSS_SET_FULL_INSERT);
     if (rc)
         LOG_GOTO(out_res, rc, "Cannot insert copy");
 
@@ -1999,8 +2005,9 @@ static int store_perform_xfers(struct phobos_handle *pho)
                 copy.version = xfer->xd_targets[j].xt_version;
                 copy.copy_status = PHO_COPY_STATUS_INCOMPLETE;
                 copy.copy_name = xfer->xd_params.copy.put.copy_name;
+                gettimeofday(&copy.creation_time, NULL);
 
-                rc2 = dss_copy_insert(dss, &copy, 1);
+                rc2 = dss_copy_insert(dss, &copy, 1, DSS_SET_FULL_INSERT);
                 if (rc2) {
                     pho_error(rc2, "Cannot insert copy");
                     rc = rc ? : rc2;

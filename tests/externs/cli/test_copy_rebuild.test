@@ -144,6 +144,19 @@ function get_extent_info
         jq -r ".[0].$column[]"
 }
 
+function get_extent_ctimes
+{
+    local oid=$1
+    local copy=$2
+
+    # unlike the other fields, the CLI prints the creation times as the
+    # string representation of their list: strip it to one timestamp per
+    # line, without the spaces, so that they compare in chronological
+    # order
+    $phobos extent list -o creation_time -c "$copy" "$oid" |
+        tr -d "[]' " | tr ',' '\n'
+}
+
 function copy_extent_count
 {
     local oid=$1
@@ -260,6 +273,7 @@ function test_copy_rebuild_impl
 
     local initial_addresses=($(get_extent_info oid source address))
     local initial_media=($(get_extent_info oid source media_name))
+    local initial_ctimes=($(get_extent_ctimes oid source))
     local old_extent_list=$(dump_extent_list oid source)
     local surviving_extents=()
     local surviving_media=()
@@ -331,13 +345,38 @@ function test_copy_rebuild_impl
 
     local rebuilt_media=($(get_extent_info oid source media_name))
     local rebuilt_addresses=($(get_extent_info oid source address))
+    local rebuilt_ctimes=($(get_extent_ctimes oid source))
 
     for i in $(seq 0 $((${#lost_idxs[@]} - 1))); do
         local idx=${lost_idxs[$i]}
         local rebuilt_extent="${rebuilt_media[$idx]}/${rebuilt_addresses[$idx]}"
+        local rebuilt_xattrs
+        rebuilt_xattrs=$(extent_xattrs "$rebuilt_extent")
 
-        diff <(printf '%s\n' "${deleted_xattrs[$i]}") \
-             <(extent_xattrs "$rebuilt_extent") ||
+        # The rebuild rewrites the extent: its database creation time is
+        # its own write time, and its generation time xattr dates the copy
+        # it derives from, born before the extent it replaces was written.
+        # Check them accordingly and leave the generation time out of the
+        # xattr comparison.
+        local rebuilt_gtime
+        local deleted_gtime
+        rebuilt_gtime=$(sed -n 's/^user\.generation_time="\(.*\)"$/\1/p' \
+                        <<<"$rebuilt_xattrs")
+        deleted_gtime=$(sed -n 's/^user\.generation_time="\(.*\)"$/\1/p' \
+                        <<<"${deleted_xattrs[$i]}")
+        [[ -n "$rebuilt_gtime" && -n "$deleted_gtime" ]] ||
+            error "Missing generation time xattr on extent $idx"
+        [[ "${rebuilt_ctimes[$idx]}" > "${initial_ctimes[$idx]}" ]] ||
+            error "Rebuilt extent $idx should carry its own write time " \
+                  "and not the deleted extent's"
+        [[ "$rebuilt_gtime" < "$deleted_gtime" ]] ||
+            error "Rebuilt extent $idx generation time should precede " \
+                  "the deleted extent's write"
+
+        diff <(printf '%s\n' "${deleted_xattrs[$i]}" |
+                   sed '/^user\.generation_time=/d') \
+             <(printf '%s\n' "$rebuilt_xattrs" |
+                   sed '/^user\.generation_time=/d') ||
             error "Rebuilt extent $idx xattrs should match the deleted " \
                   "extent xattrs"
 

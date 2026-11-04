@@ -120,9 +120,9 @@ do {                                                                           \
 } while (0)
 
 int dss_copy_insert(struct dss_handle *hdl, struct copy_info *copy_lst,
-                    int copy_cnt)
+                    int copy_cnt, enum dss_set_action action)
 {
-    (void)hdl; (void)copy_lst; (void)copy_cnt;
+    (void)hdl; (void)copy_lst; (void)copy_cnt; (void)action;
 
     return (int)mock();
 }

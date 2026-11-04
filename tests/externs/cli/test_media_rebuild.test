@@ -123,17 +123,6 @@ function update_creation_time
     $PSQL -c "UPDATE extent SET creation_time = '$time' WHERE extent_uuid ='$ext_uuid'"
 }
 
-function get_timestamp
-{
-    local oid=$1
-    local dir=$2
-
-    local ts=$(get_extent_info $oid $dir creation_time)
-    ts=$(printf '%s' "$ts" | tr -d "[]'")
-
-    date -d "$ts" '+%s%N'
-}
-
 function test_media_rebuild_order_creation_time
 {
     $phobos dir lock ${DIRS[2]}
@@ -153,21 +142,17 @@ function test_media_rebuild_order_creation_time
     ts=$(date -d "@$((now + 2))" '+%Y-%m-%d %H:%M:%S')
     update_creation_time oid3 ${DIRS[0]} "$ts"
 
-    $valg_phobos dir rebuild ${DIRS[0]}
+    local output
+    output=$($valg_phobos dir rebuild ${DIRS[0]} 2>&1)
 
-    local oid1_ts=$(get_timestamp oid1 ${DIRS[2]})
-    local oid2_ts=$(get_timestamp oid2 ${DIRS[2]})
-    local oid3_ts=$(get_timestamp oid3 ${DIRS[2]})
-
-    if [[ $oid2_ts -gt $oid3_ts && $oid2_ts -gt $oid1_ts ]]; then
-        error "oid2 should be rebuilt first"
-    fi
-    if [[ $oid3_ts -lt $oid2_ts && $oid3_ts -gt $oid1_ts ]]; then
-        error "oid3 should be rebuilt second"
-    fi
-
-    if [[ $oid1_ts -lt $oid2_ts && $oid1_ts -lt $oid3_ts ]]; then
-        error "oid1 should be rebuilt last"
+    # the rebuilt extents inherit the creation time of their split extents,
+    # which says nothing of the rebuild order: check the order of the
+    # rebuild operations themselves
+    local order
+    order=$(echo "$output" | grep "REBUILD operation" | grep -o "oid[0-9]\+" |
+            tr '\n' ' ')
+    if [[ "$order" != "oid2 oid3 oid1 " ]]; then
+        error "Extents should be rebuilt in creation time order (oid2, oid3, oid1), got: $order"
     fi
 }
 

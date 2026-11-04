@@ -398,12 +398,20 @@ static void pl_enoent_with_only_object(void **state)
         .user_md = "{}",
         .grouping = NULL,
         .size = 42,
+        .creation_time = {
+            .tv_sec = 0,
+            .tv_usec = 0,
+        }
     };
     struct copy_info copy = {
         .object_uuid = uuid,
         .version = 1,
         .copy_name = "source",
         .copy_status = PHO_COPY_STATUS_INCOMPLETE,
+        .creation_time = {
+            .tv_sec = 0,
+            .tv_usec = 0,
+        }
     };
     char *hostname;
     int rc;
@@ -411,7 +419,7 @@ static void pl_enoent_with_only_object(void **state)
     rc = dss_object_insert(pl_state->dss, &obj, 1, DSS_SET_FULL_INSERT);
     assert_int_equal(rc, 0);
 
-    rc = dss_copy_insert(pl_state->dss, &copy, 1);
+    rc = dss_copy_insert(pl_state->dss, &copy, 1, DSS_SET_FULL_INSERT);
     assert_int_equal(rc, 0);
 
     /* Locate on object without any layout should gracefully fail */

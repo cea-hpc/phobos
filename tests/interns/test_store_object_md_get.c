@@ -372,7 +372,7 @@ static void omg_quote_chars(void **void_state)
     obj.version = 1;
     obj.user_md = quote_md;
 
-    rc = dss_deprecated_object_insert(state->dss, &obj, 1);
+    rc = dss_deprecated_object_insert(state->dss, &obj, 1, DSS_SET_INSERT);
     assert_return_code(rc, -rc);
 
     check_deprecated_obj_md(state->dss, "oid'dep", quote_md);

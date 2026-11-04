@@ -79,6 +79,12 @@ class Timeval(Structure): # pylint: disable=too-few-public-methods
 
     def to_string(self):
         """Return a string displaying to values of a Timeval structure."""
+        # a zero timeval means "not set" (e.g. lock_ts of an unlocked
+        # medium): timeval2str renders it as the epoch, which reads like
+        # a real date
+        if self.tv_sec == 0 and self.tv_usec == 0:
+            return "0"
+
         tv_str = (c_char * PHO_TIMEVAL_MAX_LEN)()
         LIBPHOBOS.timeval2str(byref(self), tv_str)
         return tv_str.value.decode('utf-8')
@@ -827,6 +833,7 @@ class ExtentInfo(Structure, CLIManagedResourceMixin): # pylint: disable=too-few-
         ('_md5', c_ubyte * MD5_BYTE_LENGTH),
         ('info', PhoAttrs),
         ('creation_time', Timeval),
+        ('generation_time', Timeval),
     ]
 
     def get_display_fields(self, max_width=None):

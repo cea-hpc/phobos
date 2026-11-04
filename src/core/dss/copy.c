@@ -42,14 +42,19 @@ static int copy_insert_query(PGconn *conn, void *void_copy, int item_cnt,
 {
     int rc = 0;
 
-    (void) fields;
-
-    g_string_append(request,
-                    "INSERT INTO copy (object_uuid, version, copy_name,"
-                    " copy_status) VALUES ");
+    if (fields & INSERT_OBJECT)
+        g_string_append(request,
+                        "INSERT INTO copy (object_uuid, version, copy_name,"
+                        " copy_status) VALUES ");
+    else
+        g_string_append(request,
+                        "INSERT INTO copy (object_uuid, version, copy_name,"
+                        " copy_status, creation_time) VALUES ");
 
     for (int i = 0; i < item_cnt; ++i) {
         struct copy_info *copy = ((struct copy_info *) void_copy) + i;
+        char creation_time_str[PHO_TIMEVAL_MAX_LEN] = "";
+        char *creation_time = NULL;
         char *object_uuid = NULL;
         char *copy_name = NULL;
 
@@ -74,13 +79,32 @@ static int copy_insert_query(PGconn *conn, void *void_copy, int item_cnt,
             goto free_info;
         }
 
-        g_string_append_printf(request, "(%s, '%d', %s, '%s')%s",
-                               object_uuid, copy->version,
-                               copy_name,
-                               copy_status2str(copy->copy_status),
-                               i < item_cnt - 1 ? ", " : ";");
+        if (fields & INSERT_FULL_OBJECT) {
+            timeval2str(&copy->creation_time, creation_time_str);
+
+            creation_time = dss_char4sql(conn, creation_time_str);
+            if (creation_time == NULL) {
+                rc = -EINVAL;
+                goto free_info;
+            }
+
+            g_string_append_printf(request, "(%s, '%d', %s, '%s', %s)",
+                                   object_uuid, copy->version,
+                                   copy_name,
+                                   copy_status2str(copy->copy_status),
+                                   creation_time);
+        } else {
+            g_string_append_printf(request, "(%s, '%d', %s, '%s')",
+                                   object_uuid, copy->version,
+                                   copy_name,
+                                   copy_status2str(copy->copy_status));
+        }
+
+        if (i < item_cnt - 1)
+            g_string_append(request, ", ");
 
 free_info:
+        free_dss_char4sql(creation_time);
         free_dss_char4sql(object_uuid);
         free_dss_char4sql(copy_name);
 

@@ -116,9 +116,12 @@ function cleanup
 
 ### DUMP HELPERS
 # Dump every table rebuilt by the import, skipping what cannot be recovered
-# from the media: timestamps (creation_time, deprec_time, access_time),
-# physical space stats and fullness (they depend on the host filesystem),
-# and the media tags, which are only stored in the database.
+# from the media: the creation_time of the objects, copies and deprecated
+# objects (set at metadata insert time) and of the extents (set from the
+# file ctime, which differs from the write time the lost database held),
+# deprec_time, access_time, physical space stats and fullness (they depend
+# on the host filesystem), and the media tags, which are only stored in the
+# database.
 function dump_db
 {
     echo "== media =="
@@ -148,8 +151,8 @@ layout_index, copy_name FROM layout \
 ORDER BY object_uuid, version, copy_name, layout_index"
     echo "== extent =="
     $PSQL -A -t -F '|' -c "SELECT extent_uuid, state, size, offsetof, \
-medium_family, medium_id, medium_library, address, hash, info FROM extent \
-ORDER BY extent_uuid"
+medium_family, medium_id, medium_library, address, hash, info \
+FROM extent ORDER BY extent_uuid"
 }
 
 function get_and_check

@@ -1766,7 +1766,7 @@ static void common_writer_rebuilder_split_close(struct pho_data_processor *proc,
 
     /* set extent md */
     if (!*rc) {
-        for (i = 0; i < n_extents; i++) {
+        for (i = 0; i < n_extents && !*rc; i++) {
             struct pho_io_descr *iod = &io_context->iods[i];
             struct pho_ext_loc ext_location;
 
@@ -1789,6 +1789,29 @@ static void common_writer_rebuilder_split_close(struct pho_data_processor *proc,
                 proc->write_resp->walloc->media[i]->addr_type;
             ext_location.extent = &output->extents[i];
             iod->iod_loc = &ext_location;
+
+            rc2 = gettimeofday(&output->extents[i].creation_time, NULL);
+            if (rc2) {
+                *rc = rc2;
+                pho_error(*rc,
+                          "raid: unable to get ctime of extent %d for '%s'",
+                          i, proc->xfer->xd_targets[target].xt_objid);
+                break;
+            }
+
+            /* An extent derived from an existing copy (rebuild or copy
+             * creation) also carries the creation time of that copy: it
+             * dates its generation, as a copy is only created from a
+             * living object, so an import after a database loss orders
+             * the generations by that time and not by the last rewrite
+             * of one of their extents.
+             */
+            if (is_encoder(proc))
+                output->extents[i].generation_time =
+                    output->extents[i].creation_time;
+            else
+                output->extents[i].generation_time = proc->src_copy_ctime;
+
             rc2 = set_object_md(iod->iod_ioa, iod, md);
             pho_attrs_free(&iod->iod_attrs);
             if (rc2) {
@@ -1800,16 +1823,6 @@ static void common_writer_rebuilder_split_close(struct pho_data_processor *proc,
             if (rc2) {
                 i++;
                 *rc = rc2;
-                break;
-            }
-
-            rc2 = gettimeofday(&output->extents[i].creation_time, NULL);
-            if (rc2) {
-                i++;
-                *rc = rc2;
-                pho_error(*rc,
-                          "raid: unable to get ctime of extent %d for '%s'", i,
-                          proc->xfer->xd_targets[target].xt_objid);
                 break;
             }
 

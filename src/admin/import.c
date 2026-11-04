@@ -328,11 +328,12 @@ insert_object_with_different_uuid(struct dss_handle *dss,
     }
 
     if (found_in_depr) {
-        rc = dss_deprecated_object_insert(dss, obj_to_insert, 1);
+        rc = dss_deprecated_object_insert(dss, obj_to_insert, 1,
+                                          DSS_SET_FULL_INSERT);
         if (rc)
             pho_error(rc, "Could not set deprecated object");
 
-        rc = dss_copy_insert(dss, copy_to_insert, 1);
+        rc = dss_copy_insert(dss, copy_to_insert, 1, DSS_SET_FULL_INSERT);
         if (rc)
             pho_error(rc, "Could not set copy");
 
@@ -357,7 +358,7 @@ insert_object_with_different_uuid(struct dss_handle *dss,
         LOG_RETURN(rc, "Could not get new object imported");
 
     copy_to_insert->object_uuid = obj->uuid;
-    rc = dss_copy_insert(dss, copy_to_insert, 1);
+    rc = dss_copy_insert(dss, copy_to_insert, 1, DSS_SET_FULL_INSERT);
     if (rc)
         pho_error(rc, "Could not set copy");
 
@@ -390,7 +391,7 @@ static int _add_copy_to_dss_if_missing(struct dss_handle *dss,
         return rc;
 
     if (copy_count == 0)
-        rc = dss_copy_insert(dss, copy_to_insert, 1);
+        rc = dss_copy_insert(dss, copy_to_insert, 1, DSS_SET_FULL_INSERT);
 
     dss_res_free(copy_res, copy_count);
     return rc;
@@ -477,7 +478,7 @@ static int _add_object_to_dss(struct dss_handle *dss,
                       "version '%d'", object_to_insert->oid,
                       object_to_insert->uuid, object_to_insert->version);
 
-        rc = dss_copy_insert(dss, copy_to_insert, 1);
+        rc = dss_copy_insert(dss, copy_to_insert, 1, DSS_SET_FULL_INSERT);
         if (rc)
             pho_error(rc,
                       "Could not insert copy with uuid '%s', version '%d' and "
@@ -515,14 +516,15 @@ static int _add_object_to_dss(struct dss_handle *dss,
                              "with same oid to deprecated",
                              object_to_insert->oid);
             } else {
-                rc = dss_deprecated_object_insert(dss, object_to_insert, 1);
+                rc = dss_deprecated_object_insert(dss, object_to_insert, 1,
+                                                  DSS_SET_FULL_INSERT);
                 if (rc)
                     LOG_GOTO(objects_free, rc,
                              "Could not insert deprecated object '%s'",
                              object_to_insert->oid);
             }
 
-            rc = dss_copy_insert(dss, copy_to_insert, 1);
+            rc = dss_copy_insert(dss, copy_to_insert, 1, DSS_SET_FULL_INSERT);
             if (rc)
                 LOG_GOTO(objects_free, rc, "Could not insert copy");
         }
@@ -532,12 +534,12 @@ static int _add_object_to_dss(struct dss_handle *dss,
 
     assert(objects_count == 0);
 
-    rc = dss_object_insert(dss, object_to_insert, 1, DSS_SET_INSERT);
+    rc = dss_object_insert(dss, object_to_insert, 1, DSS_SET_FULL_INSERT);
     if (rc)
         LOG_GOTO(objects_free, rc, "Could not insert deprecated object '%s'",
                  object_to_insert->oid);
 
-    rc = dss_copy_insert(dss, copy_to_insert, 1);
+    rc = dss_copy_insert(dss, copy_to_insert, 1, DSS_SET_FULL_INSERT);
     if (rc)
         LOG_GOTO(objects_free, rc, "Could not insert copy");
 
@@ -615,8 +617,25 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
     ext_to_insert.address = PHO_BUFF_NULL;
     ext_to_insert.address.buff = xstrdup(rootpath);
     ext_to_insert.state = PHO_EXT_ST_SYNC;
+
+    /* the extent file is written once: its ctime is its write time, no
+     * xattr duplicates it
+     */
     ext_to_insert.creation_time.tv_sec = f_ctime.tv_sec;
     ext_to_insert.creation_time.tv_usec = f_ctime.tv_nsec / 1000;
+
+    if (ext_to_insert.generation_time.tv_sec == 0)
+        /* extents with no generation time xattr: their generation is
+         * dated by the extent time
+         */
+        ext_to_insert.generation_time = ext_to_insert.creation_time;
+
+    /* the object and its copy are created with this extent: they carry
+     * the generation time of the extent, and not the time it was last
+     * written
+     */
+    obj_to_insert.creation_time = ext_to_insert.generation_time;
+    copy_to_insert.creation_time = ext_to_insert.generation_time;
 
     copy_to_insert.copy_name = lyt_to_insert.copy_name;
     copy_to_insert.object_uuid = obj_to_insert.uuid;

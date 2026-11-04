@@ -835,10 +835,15 @@ out_unlock:
 
 int dss_deprecated_object_insert(struct dss_handle *handle,
                                  struct object_info *object_list,
-                                 int object_count)
+                                 int object_count, enum dss_set_action action)
 {
+    if (action != DSS_SET_INSERT && action != DSS_SET_FULL_INSERT)
+        LOG_RETURN(-ENOTSUP,
+                   "Only actions available for deprecated object insert are "
+                   "normal insert and full insert");
+
     return dss_generic_set(handle, DSS_DEPREC, (void *) object_list,
-                           object_count, DSS_SET_INSERT);
+                           object_count, action);
 }
 
 int dss_deprecated_object_update(struct dss_handle *handle,
@@ -872,10 +877,15 @@ int dss_deprecated_object_delete(struct dss_handle *handle,
  * COPY FUNCTION
  */
 int dss_copy_insert(struct dss_handle *handle, struct copy_info *copy_list,
-                    int copy_count)
+                    int copy_count, enum dss_set_action action)
 {
+    if (action != DSS_SET_INSERT && action != DSS_SET_FULL_INSERT)
+        LOG_RETURN(-ENOTSUP,
+                   "Only actions available for copy insert are normal insert "
+                   "and full insert");
+
     return dss_generic_set(handle, DSS_COPY, (void *)copy_list, copy_count,
-                           DSS_SET_INSERT);
+                           action);
 }
 
 int dss_copy_update(struct dss_handle *handle, struct copy_info *src_list,
