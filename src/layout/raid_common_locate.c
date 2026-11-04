@@ -306,11 +306,20 @@ static void set_host_extent_accessibility(GHashTable *hosts, GPtrArray *extents)
             continue;
 
         if (loc->hostname) {
-            /* Since the host have a lock, it must contain at least one device
-             * compatible.
-             */
             host = g_hash_table_lookup(hosts, loc->hostname);
-            assert(host);
+
+            /* Stale lock: its owner does not own any usable device anymore
+             * (e.g. leftover from a crash). As filter_inaccessible_extents
+             * does for an extent accessible by no host, drop the extent:
+             * no host can read this medium.
+             */
+            if (!host) {
+                pho_warn("Medium ('%s', '%s') is locked by '%s' which has "
+                         "no usable device, no host can access it",
+                         loc->medium->rsc.id.library,
+                         loc->medium->rsc.id.name, loc->hostname);
+                continue;
+            }
 
             if (!has_compatible_devices(host->devices, loc)) {
                 pho_error(0, "Medium ('%s', '%s') is locked by '%s' but this "

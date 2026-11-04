@@ -827,7 +827,7 @@ class UtilClient:
             copy_name.encode('utf-8') if copy_name else None,
             byref(hostname), byref(nb_new_lock))
         if rc:
-            raise EnvironmentError(rc, "Failed to locate object by"
+            raise EnvironmentError(rc, "Failed to locate object by "
                                    f"{'oid' if oid else 'uuid'}"
                                    f"'{oid if oid else uuid}'")
 

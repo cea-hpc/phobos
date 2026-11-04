@@ -510,6 +510,69 @@ EOF
     fi
 }
 
+# Put a single-replica and a two-replica object, then let a crash leftover
+# lock the single-replica medium and one of the two replicas with a host
+# that owns no device: locating the single-replica object must fail cleanly
+# with EAGAIN (no crash on the stale lock owner), while locating the
+# two-replica object must succeed through its free copy.
+function test_locate_stale_media_lock
+{
+    local self_hostname="$(hostname -s)"
+    local drives=($(get_lto_drives 6 2))
+    local tapes=$(get_tapes L6 2)
+
+    $phobos drive add --unlock ${drives[@]}
+    $phobos tape add --type lto6 $tapes
+    $phobos tape format --unlock $tapes
+
+    local oid_repl1="oid_locate_stale_lock_1"
+    $phobos put -f tape -l raid1 --lyt-params "repl_count=1" \
+        /etc/hosts $oid_repl1
+
+    local oid_repl2="oid_locate_stale_lock_2"
+    $phobos put -f tape -l raid1 --lyt-params "repl_count=2" \
+        /etc/hosts $oid_repl2
+
+    waive_daemons
+    drain_all_drives
+
+    # media of the object extents, in layout order
+    local repl1_media=($($phobos extent list -f json -o media_name $oid_repl1 |
+                   jq -r ".[0].media_name[]"))
+
+    $PSQL << EOF
+insert into lock (type, id, owner, hostname)
+select 'media'::lock_type, id || '_' || library, 4242, 'ghost-host'
+from media
+where family = 'tape' and id = '$repl1_media';
+EOF
+
+    invoke_daemons
+
+    # the only medium of the single-replica object is stale-locked: locate
+    # must fail cleanly with EAGAIN instead of crashing on the stale owner
+    local locate_rc=0
+    $valg_phobos locate $oid_repl1 && error "Locate should have failed"
+    locate_rc=$?
+    if [ "$locate_rc" -ne 11 ]; then
+        error "Locating $oid_repl1 should fail with EAGAIN (11) on its" \
+              "stale-locked medium, got $locate_rc"
+    fi
+
+    # one replica of the two-replica object is stale-locked: locate must
+    # still succeed and return a host able to read the other copy
+    local locate_hostname=$($valg_phobos locate $oid_repl2)
+    if [ "$locate_hostname" != "$self_hostname" ]; then
+        error "Locating $oid_repl2 returned $locate_hostname instead of" \
+              "$self_hostname"
+    fi
+
+    $phobos get $oid_repl1 file && error "Phobos get should failed"
+
+    $phobos get $oid_repl2 file
+    rm -f file
+}
+
 TEST_CLEANUP=cleanup
 
 # test locate on dir
@@ -557,5 +620,8 @@ if [[ -w /dev/changer ]]; then
              tape_cleanup")
     TESTS+=("tape_init_setup; \
              test_locate_prelocking_compatibility; \
+             tape_cleanup")
+    TESTS+=("tape_init_setup; \
+             test_locate_stale_media_lock; \
              tape_cleanup")
 fi
