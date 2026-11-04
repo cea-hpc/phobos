@@ -679,8 +679,19 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_target *xfer,
         obj_res->grouping = grouping;
         ++obj_res->version;
         obj_res->size = xfer->xt_size;
-        if (!pho_attrs_is_empty(&xfer->xt_attrs))
+        if (!pho_attrs_is_empty(&xfer->xt_attrs)) {
             obj_res->user_md = md_repr->str;
+        } else if (obj_res->user_md != NULL) {
+            /* the extents of the new version must carry the inherited
+             * metadata too, as their 'user_md' xattr, so that an import
+             * after a database loss rebuilds the new version with it
+             */
+            rc = pho_json_to_attrs(&xfer->xt_attrs, obj_res->user_md);
+            if (rc)
+                LOG_GOTO(out_res, rc,
+                         "Cannot inherit the metadata of objid '%s'",
+                         xfer->xt_objid);
+        }
 
         rc = dss_object_insert(dss, obj_res, 1, DSS_SET_FULL_INSERT);
         obj_res->grouping = save_obj_res_grouping;
