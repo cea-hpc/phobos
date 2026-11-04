@@ -80,6 +80,9 @@ if (media_info->fs.status == PHO_FS_STATUS_IMPORTING && !media_rc) {
     fields |= FS_STATUS;
 }
 
+/* the exploration rebuilt the groupings from the extent xattrs */
+fields |= GROUPINGS;
+
 rc = get_fs_adapter(media_info->fs.type, &fsa);
 if (rc) {
     pho_error(rc,
@@ -553,8 +556,9 @@ objects_free:
 static int _import_file_to_dss(struct admin_handle *adm, int fd,
                                char *rootpath, char *filename, off_t fsize,
                                struct timespec f_ctime,
-                               struct pho_id med_id, size_t *size_written,
-                               long long *nb_new_obj)
+                               struct pho_id med_id,
+                               struct string_array *groupings,
+                               size_t *size_written, long long *nb_new_obj)
 {
     struct object_info obj_to_insert = {0};
     struct layout_info lyt_to_insert = {0};
@@ -599,6 +603,10 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
                  "DSS",
                  rootpath, filename);
     }
+
+    if (obj_to_insert.grouping != NULL &&
+        !string_exists(groupings, obj_to_insert.grouping))
+        string_array_add(groupings, obj_to_insert.grouping);
 
     *nb_new_obj += 1;
     *size_written += fsize;
@@ -675,8 +683,10 @@ static int _explore_from_path_aux(struct admin_handle *adm,
                                   int (*func)(struct admin_handle *, int,
                                               char *, char *, off_t,
                                               struct timespec,
-                                              struct pho_id, size_t *,
-                                              long long *),
+                                              struct pho_id,
+                                              struct string_array *,
+                                              size_t *, long long *),
+                                  struct string_array *groupings,
                                   size_t *size_written, long long *nb_new_obj)
 {
     struct dirent *entry;
@@ -732,10 +742,11 @@ static int _explore_from_path_aux(struct admin_handle *adm,
 
         if (S_ISDIR(stat_buf.st_mode))
             _explore_from_path_aux(adm, path, address_buf, height + 1,
-                                   med_id, (*func), size_written, nb_new_obj);
+                                   med_id, (*func), groupings, size_written,
+                                   nb_new_obj);
         else {
             rc = (func)(adm, fd, address_buf, entry->d_name, stat_buf.st_size,
-                        stat_buf.st_ctim, med_id, size_written,
+                        stat_buf.st_ctim, med_id, groupings, size_written,
                         nb_new_obj);
             if (rc)
                 pho_error(rc, "Could not extract information from the file,"
@@ -771,6 +782,8 @@ free_dirent:
  * @param[in]   adm          Admin handle,
  * @param[in]   root_path    Path from which the exploration starts,
  * @param[in]   func         Function to call each time a new file is found,
+ * @param[out]  groupings    Groupings of the medium, rebuilt from the
+ *                           groupings found on the extents,
  * @param[out]  size_written The total size written on this tape (sum of size of
  *                           the extents),
  * @param[out]  nb_new_obj   The number of objects written on this tape.
@@ -783,11 +796,13 @@ static int explore_from_path(struct admin_handle *adm, char *root_path,
                              int (*func)(struct admin_handle *, int, char *,
                                          char *, off_t, struct timespec,
                                          struct pho_id,
+                                         struct string_array *,
                                          size_t *, long long *),
+                             struct string_array *groupings,
                              size_t *size_written, long long *nb_new_obj)
 {
    return _explore_from_path_aux(adm, root_path, "", 0, med_id, (*func),
-                                 size_written, nb_new_obj);
+                                 groupings, size_written, nb_new_obj);
 }
 
 int import_medium(struct admin_handle *adm, struct media_info *medium)
@@ -863,11 +878,13 @@ int import_medium(struct admin_handle *adm, struct media_info *medium)
 
     // Exploration of the tape
     rc = explore_from_path(adm, root_path, id, _import_file_to_dss,
-                           &size_written, &nb_new_obj);
+                           &medium->groupings, &size_written, &nb_new_obj);
 
     // fs_df to actualize the stats of the tape
     rc = _dev_media_update(&adm->dss, medium, size_written, rc, root_path,
                            nb_new_obj);
+
+    string_array_free(&medium->groupings);
 
     // Release of the medium
     pho_srl_request_release_alloc(reqs + 1, 1, true);
