@@ -433,6 +433,14 @@ class MigratorTest(unittest.TestCase):
             ]
         )
 
+        # the ranking column is set to 0 for all media
+        self.assertEqual(
+            self.migrator.execute("""
+                SELECT ranking FROM media ORDER BY id;
+            """, output=True),
+            [(0,), (0,), (0,)]
+        )
+
         # the new indexes have been created
         self.assertEqual(
             self.migrator.execute("""
