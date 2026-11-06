@@ -55,6 +55,8 @@ void medium_set_tags(struct media_info *medium, char **tags, size_t n_tags);
 
 void create_medium(struct media_info *medium, const char *name);
 
+void fill_medium_info(struct media_info *medium_info, struct pho_id id);
+
 char *get_mount_path(struct lrs_dev *dev);
 
 /** Assert an rc is 0 or print a pretty error and exit.

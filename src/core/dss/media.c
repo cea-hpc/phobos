@@ -26,6 +26,7 @@
 
 #include <libpq-fe.h>
 #include <jansson.h>
+#include <stdarg.h>
 
 #include "pho_type_utils.h"
 
@@ -244,7 +245,7 @@ static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
         request,
         "INSERT INTO media (family, model, id, library, adm_status, fs_type, "
                            "address_type, fs_status, fs_label, stats, tags, "
-                           "put, get, delete, groupings) VALUES "
+                           "put, get, delete, groupings, ranking) VALUES "
     );
 
     for (int i = 0; i < item_cnt; ++i) {
@@ -330,7 +331,7 @@ static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
         g_string_append_printf(
             sub_request,
             "('%s', %s, %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s, %s, %s, "
-            "%s, %s)",
+            "%s, %s, %d)",
             rsc_family2str(medium->rsc.id.family),
             model,
             medium_name,
@@ -345,7 +346,8 @@ static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
             bool2sqlbool(medium->flags.put),
             bool2sqlbool(medium->flags.get),
             bool2sqlbool(medium->flags.delete),
-            groupings
+            groupings,
+            medium->ranking
         );
 
         g_string_append(request, sub_request->str);
@@ -375,24 +377,26 @@ free_info:
 }
 
 /**
- * Append the strings \p field and \p field_value to the GString \p request,
- * and adds an additional comma if there are other fields that will be inserted
- * later.
+ * Append the formatted \p field to the GString \p request, and adds an
+ * additional comma if there are other fields that will be inserted later.
  *
  * \param[out] request      The request in which to append the key/values and
  *                          comma
- * \param[in]  field        The string to insert, should contain a '%s' for a
- *                          printf call
- * \param[in]  field_value  The string that will replace the format identifier
- *                          '%s' of \p field
  * \param[in]  add_comma    Whether a comma and space should be added in \p
  *                          request
+ * \param[in]  field        The printf-like format of the field to insert,
+ *                          followed by the arguments it references
  */
-static void append_update_request(GString *request, const char *field,
-                                  const char *field_value,
-                                  bool add_comma)
+G_GNUC_PRINTF(3, 4)
+static void append_update_request(GString *request, bool add_comma,
+                                  const char *field, ...)
 {
-    g_string_append_printf(request, field, field_value);
+    va_list args;
+
+    va_start(args, field);
+    g_string_append_vprintf(request, field, args);
+    va_end(args);
+
     if (add_comma)
         g_string_append(request, ", ");
 }
@@ -421,7 +425,7 @@ static int append_label_update_request(PGconn *conn, GString *request,
                    "Failed to build FS_LABEL (%s) media update SQL "
                    "request", medium->fs.label);
 
-    append_update_request(request, "fs_label = %s", fs_label, add_comma);
+    append_update_request(request, add_comma, "fs_label = %s", fs_label);
     free_dss_char4sql(fs_label);
 
     return 0;
@@ -457,7 +461,7 @@ static int append_tags_update_request(PGconn *conn, GString *request,
         LOG_RETURN(-EINVAL,
                    "Failed to build tags media update SQL request");
 
-    append_update_request(request, "tags = %s", tags, add_comma);
+    append_update_request(request, add_comma, "tags = %s", tags);
     free_dss_char4sql(tags);
 
     return 0;
@@ -494,7 +498,7 @@ static int append_groupings_update_request(PGconn *conn, GString *request,
         LOG_RETURN(-EINVAL,
                    "Failed to build groupings media update SQL request");
 
-    append_update_request(request, "groupings = %s", groupings, add_comma);
+    append_update_request(request, add_comma, "groupings = %s", groupings);
     free_dss_char4sql(groupings);
 
     return 0;
@@ -529,7 +533,7 @@ static int append_stat_update_request(PGconn *conn, GString *request,
         LOG_RETURN(-EINVAL,
                    "Failed to build stats media update SQL request");
 
-    append_update_request(request, "stats = %s", stats, add_comma);
+    append_update_request(request, add_comma, "stats = %s", stats);
     free_dss_char4sql(stats);
 
     return 0;
@@ -559,16 +563,14 @@ static int media_update_query(PGconn *conn, void *src_med, void *dst_med,
 
         /* we check the fields parameter to select updated columns */
         if (ADM_STATUS & fields)
-            append_update_request(sub_request,
+            append_update_request(sub_request, (fields ^= ADM_STATUS) != 0,
                                   "adm_status = '%s'",
-                                  rsc_adm_status2str(dst->rsc.adm_status),
-                                  (fields ^= ADM_STATUS) != 0);
+                                  rsc_adm_status2str(dst->rsc.adm_status));
 
         if (FS_STATUS & fields)
-            append_update_request(sub_request,
+            append_update_request(sub_request, (fields ^= FS_STATUS) != 0,
                                   "fs_status = '%s'",
-                                  fs_status2str(dst->fs.status),
-                                  (fields ^= FS_STATUS) != 0);
+                                  fs_status2str(dst->fs.status));
 
         if (FS_LABEL & fields) {
             rc = append_label_update_request(conn, sub_request, dst,
@@ -591,23 +593,23 @@ static int media_update_query(PGconn *conn, void *src_med, void *dst_med,
                 goto free_sub_request;
         }
 
+        if (RANKING & fields)
+            append_update_request(sub_request, (fields ^= RANKING) != 0,
+                                  "ranking = %d", dst->ranking);
+
         if (PUT_ACCESS & fields)
-            append_update_request(sub_request,
-                                  "put = %s",
-                                  bool2sqlbool(dst->flags.put),
-                                  (fields ^= PUT_ACCESS) != 0);
+            append_update_request(sub_request, (fields ^= PUT_ACCESS) != 0,
+                                  "put = %s", bool2sqlbool(dst->flags.put));
 
         if (GET_ACCESS & fields)
-            append_update_request(sub_request,
-                                  "get = %s",
-                                  bool2sqlbool(dst->flags.get),
-                                  (fields ^= GET_ACCESS) != 0);
+            append_update_request(sub_request, (fields ^= GET_ACCESS) != 0,
+                                  "get = %s", bool2sqlbool(dst->flags.get));
 
         if (DELETE_ACCESS & fields)
             append_update_request(sub_request,
+                                  (fields ^= DELETE_ACCESS) != 0,
                                   "delete = %s",
-                                  bool2sqlbool(dst->flags.delete),
-                                  (fields ^= DELETE_ACCESS) != 0);
+                                  bool2sqlbool(dst->flags.delete));
 
         if (LIBRARY & fields) {
             library = dss_char4sql(conn, dst->rsc.id.library);
@@ -616,8 +618,8 @@ static int media_update_query(PGconn *conn, void *src_med, void *dst_med,
                 goto free_sub_request;
             }
 
-            append_update_request(sub_request, "library = %s", library,
-                                  (fields ^= LIBRARY) != 0);
+            append_update_request(sub_request, (fields ^= LIBRARY) != 0,
+                                  "library = %s", library);
         }
 
         if (IS_STAT(fields)) {
@@ -665,7 +667,7 @@ static int media_select_query(GString **conditions, int n_conditions,
     g_string_append(request,
               "SELECT family, model, media.id, media.library, adm_status,"
               " address_type, fs_type, fs_status, fs_label, stats, tags, "
-              " put, get, delete, groupings,"
+              " put, get, delete, groupings, ranking,"
               " COALESCE((stats->>'logc_spc_deprecated')::double precision / "
               "   NULLIF((stats->>'logc_spc_used')::double precision,0.0), "
               "   0.0::double precision) AS deprecated_ratio,"
@@ -761,6 +763,7 @@ static int media_from_pg_row(struct dss_handle *handle, void *void_media,
     medium->flags.get      = psqlstrbool2bool(*PQgetvalue(res, row_num, 12));
     medium->flags.delete   = psqlstrbool2bool(*PQgetvalue(res, row_num, 13));
     medium->health         = 0;
+    medium->ranking        = atoi(PQgetvalue(res, row_num, 15));
 
     /* No dynamic allocation here */
     rc = dss_media_stats_decode(&medium->stats, PQgetvalue(res, row_num, 9));
@@ -786,11 +789,11 @@ static int media_from_pg_row(struct dss_handle *handle, void *void_media,
     pho_debug("Decoded %lu groupings (%s)",
               medium->groupings.count, PQgetvalue(res, row_num, 14));
 
-    medium->stats.deprecated_ratio    = atof(PQgetvalue(res, row_num, 15));
-    medium->stats.deprecated_nb_ratio = atof(PQgetvalue(res, row_num, 16));
-    medium->stats.orphan_ratio        = atof(PQgetvalue(res, row_num, 17));
-    medium->stats.orphan_nb_ratio     = atof(PQgetvalue(res, row_num, 18));
-    medium->stats.occupancy           = atof(PQgetvalue(res, row_num, 19));
+    medium->stats.deprecated_ratio    = atof(PQgetvalue(res, row_num, 16));
+    medium->stats.deprecated_nb_ratio = atof(PQgetvalue(res, row_num, 17));
+    medium->stats.orphan_ratio        = atof(PQgetvalue(res, row_num, 18));
+    medium->stats.orphan_nb_ratio     = atof(PQgetvalue(res, row_num, 19));
+    medium->stats.occupancy           = atof(PQgetvalue(res, row_num, 20));
 
     rc = dss_lock_status(handle, DSS_MEDIA, medium, 1, &medium->lock);
     if (rc == -ENOLCK) {

@@ -27,50 +27,14 @@
 #include "dss_lock.h"
 #include "pho_dss.h"
 #include "pho_dss_wrapper.h"
+#include "pho_test_utils.h"
 #include "test_setup.h"
-
-/* standard stuff */
 
 /* cmocka stuff */
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <cmocka.h>
-
-static void fill_medium_info(struct media_info *medium_info, struct pho_id id)
-{
-    /* fill medium_info */
-    medium_info->rsc.id = id;
-    if (id.family == PHO_RSC_DIR)
-        medium_info->rsc.model = "dir";
-    else
-        medium_info->rsc.model = "LTO6";
-
-    medium_info->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
-    medium_info->addr_type = PHO_ADDR_HASH1;
-    medium_info->fs.type = PHO_FS_POSIX;
-    medium_info->fs.status = PHO_FS_STATUS_USED;
-    medium_info->fs.label[0] = '\0';
-    medium_info->stats.nb_extent = 1;
-    medium_info->stats.logc_spc_used = 7;
-    medium_info->stats.phys_spc_used = 7;
-    medium_info->stats.phys_spc_free = 7;
-    medium_info->stats.nb_load = 7;
-    medium_info->stats.nb_errors = 0;
-    medium_info->stats.last_load = 7;
-    medium_info->stats.nb_extent_deprecated = 7;
-    medium_info->stats.nb_extent_orphan = 7;
-    medium_info->stats.logc_spc_deprecated = 7;
-    medium_info->stats.logc_spc_orphan = 7;
-    medium_info->stats.last_gc_refresh = 0;
-    medium_info->tags.strings = NULL;
-    medium_info->tags.count = 0;
-    medium_info->flags.put = true;
-    medium_info->flags.get = true;
-    medium_info->flags.delete = true;
-    medium_info->groupings.strings = NULL;
-    medium_info->groupings.count = 0;
-}
 
 static void check_medium_info_correctly_filled(struct media_info *medium_info,
                                                struct pho_id id)
@@ -116,6 +80,7 @@ static void check_medium_info_correctly_filled(struct media_info *medium_info,
     assert_int_equal(medium_info->flags.put, filled_medium.flags.put);
     assert_int_equal(medium_info->flags.get, filled_medium.flags.get);
     assert_int_equal(medium_info->flags.delete, filled_medium.flags.delete);
+    assert_int_equal(medium_info->ranking, filled_medium.ranking);
 }
 
 /**
@@ -258,6 +223,64 @@ static void dml_ok_free(void **state)
 }
 
 /**
+ * dss_media_update updates the ranking of a medium, alone or with another
+ * updated field, to check the comma between them
+ */
+static struct pho_id update_ranking_medium = {
+    .family = PHO_RSC_TAPE,
+    .name = "update_ranking_medium",
+    .library = "legacy",
+};
+
+static int dml_update_ranking_setup(void **state)
+{
+    struct dss_handle *dss = (struct dss_handle *)*state;
+    struct media_info medium_info;
+
+    fill_medium_info(&medium_info, update_ranking_medium);
+
+    /* insert medium */
+    if (dss_media_insert(dss, &medium_info, 1))
+        return -1;
+
+    return 0;
+}
+
+static void check_ranking_update(struct dss_handle *dss, uint64_t fields,
+                                 int ranking, bool put)
+{
+    struct media_info medium_info;
+    struct media_info *medium;
+    char *hostname = NULL;
+    int rc;
+
+    fill_medium_info(&medium_info, update_ranking_medium);
+    medium_info.ranking = ranking;
+    medium_info.flags.put = put;
+
+    rc = dss_media_update(dss, &medium_info, &medium_info, 1, fields);
+    assert_return_code(rc, -rc);
+
+    rc = dss_medium_locate(dss, &update_ranking_medium, &hostname, &medium);
+    assert_return_code(rc, -rc);
+    assert_int_equal(medium->ranking, ranking);
+    assert_int_equal(medium->flags.put, put);
+    assert_null(hostname);
+    media_info_free(medium);
+}
+
+static void dml_update_ranking(void **state)
+{
+    struct dss_handle *dss = (struct dss_handle *)*state;
+
+    /* update the ranking alone: it must not be followed by a comma */
+    check_ranking_update(dss, RANKING, 42, true);
+
+    /* update the ranking with another field: a comma must separate them */
+    check_ranking_update(dss, RANKING | PUT_ACCESS, 43, false);
+}
+
+/**
  * successfull dss_medium_locate on a locked medium
  */
 static struct pho_id locked_medium = {
@@ -310,6 +333,7 @@ int main(void)
         cmocka_unit_test_setup(dml_eacces, dml_eacces_setup),
         cmocka_unit_test_setup(dml_eperm, dml_eperm_setup),
         cmocka_unit_test_setup(dml_ok_free, dml_ok_free_setup),
+        cmocka_unit_test_setup(dml_update_ranking, dml_update_ranking_setup),
         cmocka_unit_test_setup(dml_ok_lock, dml_ok_lock_setup),
     };
 

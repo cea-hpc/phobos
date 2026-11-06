@@ -218,6 +218,7 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::MDA::put", "put"},
     {"DSS::MDA::get", "get"},
     {"DSS::MDA::delete", "delete"},
+    {"DSS::MDA::ranking", "ranking"},
     /* Device related fields */
     {"DSS::DEV::family", "family"},
     {"DSS::DEV::serial", "id"},
@@ -284,6 +285,7 @@ static inline const char *dss_fields_pub2implem(const char *public_name)
 #define NB_EXTENT_DEPRECATED (1<<19)
 #define LOGC_SPC_DEPRECATED (1<<20)
 #define LAST_GC_REFRESH     (1<<21)
+#define RANKING             (1<<22)
 
 #define IS_STAT(_f) ((NB_EXTENT | NB_EXTENT_ADD | LOGC_SPC_USED |\
                       LOGC_SPC_USED_ADD | PHYS_SPC_USED | PHYS_SPC_FREE |\

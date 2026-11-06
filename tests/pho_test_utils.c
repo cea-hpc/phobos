@@ -168,6 +168,44 @@ void create_medium(struct media_info *medium, const char *name)
     medium_set_tags(medium, NULL, 0);
 }
 
+void fill_medium_info(struct media_info *medium_info, struct pho_id id)
+{
+    memset(medium_info, 0, sizeof(*medium_info));
+
+    /* fill medium_info */
+    medium_info->rsc.id = id;
+    if (id.family == PHO_RSC_DIR)
+        medium_info->rsc.model = "dir";
+    else
+        medium_info->rsc.model = "LTO6";
+
+    medium_info->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
+    medium_info->addr_type = PHO_ADDR_HASH1;
+    medium_info->fs.type = PHO_FS_POSIX;
+    medium_info->fs.status = PHO_FS_STATUS_USED;
+    medium_info->fs.label[0] = '\0';
+    medium_info->stats.nb_extent = 1;
+    medium_info->stats.logc_spc_used = 7;
+    medium_info->stats.phys_spc_used = 7;
+    medium_info->stats.phys_spc_free = 7;
+    medium_info->stats.nb_load = 7;
+    medium_info->stats.nb_errors = 0;
+    medium_info->stats.last_load = 7;
+    medium_info->stats.nb_extent_deprecated = 7;
+    medium_info->stats.nb_extent_orphan = 7;
+    medium_info->stats.logc_spc_deprecated = 7;
+    medium_info->stats.logc_spc_orphan = 7;
+    medium_info->stats.last_gc_refresh = 0;
+    medium_info->tags.strings = NULL;
+    medium_info->tags.count = 0;
+    medium_info->flags.put = true;
+    medium_info->flags.get = true;
+    medium_info->flags.delete = true;
+    medium_info->groupings.strings = NULL;
+    medium_info->groupings.count = 0;
+    medium_info->ranking = 7;
+}
+
 char *get_mount_path(struct lrs_dev *dev)
 {
     const char *id;

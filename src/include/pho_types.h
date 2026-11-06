@@ -566,6 +566,9 @@ struct media_info {
     struct string_array    groupings;    /**< Groupings to keep some objects
                                            *  together on this medium
                                            */
+    int                   ranking;      /**< Ranking to orient the medium
+                                          *  selection
+                                          */
 };
 
 /*

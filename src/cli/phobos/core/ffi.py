@@ -437,6 +437,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         ('flags', OperationFlags),
         ('health', c_size_t),
         ('_groupings', StringArray),
+        ('ranking', c_int),
     ]
 
     def get_display_fields(self, max_width=None):
