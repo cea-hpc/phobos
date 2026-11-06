@@ -1331,7 +1331,7 @@ free_resp:
 
 static int _get_target_medium(struct admin_handle *adm,
                               const struct pho_id *source,
-                              ssize_t total_size,
+                              ssize_t spc_needed,
                               struct string_array *tags,
                               bool empty,
                               const struct pho_id *target_medium,
@@ -1351,7 +1351,7 @@ static int _get_target_medium(struct admin_handle *adm,
     req.walloc->family = source->family;
     req.walloc->prevent_duplicate = true;
     req.walloc->no_split = true;
-    req.walloc->media[0]->size = total_size;
+    req.walloc->media[0]->size = spc_needed;
     req.walloc->media[0]->empty_medium = target_medium == NULL && empty;
     for (i = 0; i < tags->count; ++i)
         req.walloc->media[0]->tags[i] = xstrdup(tags->strings[i]);
@@ -1531,7 +1531,8 @@ free_ext:
 static int _retrieve_source_info(struct admin_handle *adm,
                                  const struct pho_id *medium,
                                  struct string_array *tags,
-                                 enum fs_type *fs_type)
+                                 enum fs_type *fs_type,
+                                 ssize_t *phys_spc_used)
 {
     struct dss_filter filter;
     struct media_info *media;
@@ -1563,6 +1564,8 @@ static int _retrieve_source_info(struct admin_handle *adm,
     string_array_dup(tags, &media->tags);
     if (fs_type)
         *fs_type = media->fs.type;
+    if (phys_spc_used)
+        *phys_spc_used = media->stats.phys_spc_used;
 
     dss_res_free(media, count);
 
@@ -1694,6 +1697,8 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     struct pho_id allocated;
     int ext_cnt_done = 0;
     ssize_t total_size;
+    ssize_t target_spc_needed;
+    ssize_t source_phys_spc_used;
     int avoid_cnt = 0;
     int ext_cnt;
     int rc;
@@ -1735,7 +1740,8 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
 
     rc = _retrieve_source_info(adm, source, &src_tags,
                                source_fs_type == PHO_FS_INVAL ?
-                                  &source_fs_type : NULL);
+                                  &source_fs_type : NULL,
+                               &source_phys_spc_used);
     if (rc)
         LOG_GOTO(free_ext, rc,
                  "Failed to retrieve info for "FMT_PHO_ID, PHO_ID(*source));
@@ -1744,11 +1750,18 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     if (total_size == 0)
         goto format;
 
-    if (target != NULL && target_spc_free <= total_size)
+    /* Cap the space required on the target medium by the physical space
+     * the data occupies on the source medium: the logical size of the
+     * extents can exceed it on a filesystem compressing the data, while
+     * the target only needs room for the physical payload.
+     */
+    target_spc_needed = min(total_size, source_phys_spc_used);
+
+    if (target != NULL && target_spc_free <= target_spc_needed)
         LOG_GOTO(free_tags, rc = -ENOSPC,
                  "Target tape '%s' does not have enough free space (%zd) to "
                  "hold the data of the repacked tape (%zd)", target->name,
-                 target_spc_free, total_size);
+                 target_spc_free, target_spc_needed);
 
     /* A medium must not receive a copy of the data it already holds: when
      * the LRS selects the target itself, compile the list of media that
@@ -1802,7 +1815,7 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
         /* Use the tags specified */
         ptr_tags = tags;
 
-    rc = _get_target_medium(adm, source, total_size, ptr_tags, empty,
+    rc = _get_target_medium(adm, source, target_spc_needed, ptr_tags, empty,
                             target != NULL ? &target_medium : NULL,
                             target != NULL ? NULL : avoid_media,
                             target != NULL ? 0 : avoid_cnt,

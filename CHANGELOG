@@ -50,6 +50,9 @@
    chunk size for instance) are now preserved: without them, the objects
    using layouts relying on these attributes became unreadable after a
    repack.
+ * Repack: the space required on the target tape of a repack is now capped
+   by the physical space the data occupies on the source tape, which can be
+   less than its logical size on a filesystem compressing the data.
 
 ## 3.4.1
  * Grouped read: queue preallocation has been improved to guarantee the

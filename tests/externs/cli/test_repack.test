@@ -45,6 +45,7 @@ function cleanup
     rm -f /tmp/oid_bis-repack*
     rm -f /tmp/oid-used*
     rm -f /tmp/oid-raid*
+    rm -f /tmp/oid-spc-cap
 }
 
 function obj_setup
@@ -470,6 +471,65 @@ function test_target_repack
     fi
 }
 
+function test_spc_cap_repack
+{
+    local size=$(stat -c %s /etc/hosts)
+
+    $phobos put -T tag_origin /etc/hosts oid-spc-cap
+
+    # No drive of the test environment compresses the data, so the medium
+    # stats are falsified in the DSS: the free space of the target medium
+    # is set between the logical size of the data and the physical usage
+    # the source medium will claim.
+    resize_medium $medium_target $((size * 3 / 4))
+
+    # The physical usage of the source medium is first set to the logical
+    # size of the data, as a filesystem without compression would report
+    # it: the target medium does not have enough free space then.
+    $PSQL << EOF
+UPDATE media SET
+    stats = '{"nb_extent":1, "logc_spc_used":${size}, "phys_spc_used":${size},\
+              "phys_spc_free":0, "nb_load":0, "nb_errors":0,\
+              "last_load":0}'
+    WHERE id = '${medium_origin}';
+EOF
+
+    repack_output=$($phobos tape repack --target $medium_target \
+                    $medium_origin 2>&1) &&
+        error "repack should have failed: the target free space is too small"
+    echo "$repack_output" | grep -q "does not have enough free space" ||
+        error "the refusal message should be about the free space"
+
+    # The physical usage of the source medium is now set to half the
+    # logical size, as a compressing filesystem would report it: the space
+    # request capped by the physical usage fits the target medium.
+    $PSQL << EOF
+UPDATE media SET
+    stats = '{"nb_extent":1, "logc_spc_used":${size},\
+              "phys_spc_used":$((size / 2)), "phys_spc_free":0, "nb_load":0,\
+              "nb_errors":0, "last_load":0}'
+    WHERE id = '${medium_origin}';
+EOF
+
+    $valg_phobos tape repack --target $medium_target $medium_origin ||
+        error "repack with the capped space request should have succeed"
+
+    nb=$($phobos extent list --degroup --name $medium_target | wc -l)
+    if (( nb != 1 )); then
+        error "repack should have copied the extent to the target medium"
+    fi
+
+    $phobos get oid-spc-cap /tmp/oid-spc-cap ||
+        error "get oid-spc-cap should have succeed"
+    diff /etc/hosts /tmp/oid-spc-cap ||
+        error "file oid-spc-cap is not correctly retrieved"
+
+    state=$($phobos tape list -o fs.status $medium_origin)
+    if [ "$state" != "empty" ]; then
+        error "repack should format source medium"
+    fi
+}
+
 function test_raid4_repack_setup
 {
     setup
@@ -828,6 +888,7 @@ TESTS=("tape_setup;test_simple_repack tape;tape_cleanup"
        "used_medium_repack_setup;test_used_medium_repack;tape_cleanup"
        "used_medium_repack_setup;test_used_medium_raid1_repack;tape_cleanup"
        "test_target_repack_setup;test_target_repack;tape_cleanup"
+       "test_target_repack_setup;test_spc_cap_repack;tape_cleanup"
        "test_raid4_repack_setup;test_raid4_repack;tape_cleanup"
        "tape_setup;test_orphan_repack tape;tape_cleanup"
        "test_dedup_repack_setup;test_dedup_repack tape;tape_cleanup"
