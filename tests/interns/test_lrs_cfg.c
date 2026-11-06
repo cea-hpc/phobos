@@ -288,6 +288,100 @@ static void gcwtv_invalid_numbers(void **state)
     assert_int_equal(rc, -ERANGE);
 }
 
+static void gcumrv_valid_multiple_tokens(void **state)
+{
+    bool res;
+    int rc;
+
+    (void)state;
+
+    rc = setenv("PHOBOS_LRS_use_media_ranking", "dir=true,tape=false", 1);
+    assert_int_equal(rc, -rc);
+
+    rc = get_cfg_use_media_ranking_value(PHO_RSC_DIR, &res);
+    assert_int_equal(rc, -rc);
+    assert_true(res);
+
+    rc = get_cfg_use_media_ranking_value(PHO_RSC_TAPE, &res);
+    assert_int_equal(rc, -rc);
+    assert_false(res);
+}
+
+static void gcumrv_valid_sole_token(void **state)
+{
+    bool res;
+    int rc;
+
+    (void)state;
+
+    rc = setenv("PHOBOS_LRS_use_media_ranking", "tape=true", 1);
+    assert_int_equal(rc, -rc);
+
+    rc = get_cfg_use_media_ranking_value(PHO_RSC_TAPE, &res);
+    assert_int_equal(rc, -rc);
+    assert_true(res);
+
+    rc = get_cfg_use_media_ranking_value(PHO_RSC_DIR, &res);
+    assert_int_equal(rc, -EINVAL);
+}
+
+static void gcumrv_valid_no_token(void **state)
+{
+    bool res;
+    int rc;
+
+    (void)state;
+
+    rc = setenv("PHOBOS_LRS_use_media_ranking", "", 1);
+    assert_int_equal(rc, -rc);
+
+    rc = get_cfg_use_media_ranking_value(PHO_RSC_DIR, &res);
+    assert_int_equal(rc, -EINVAL);
+
+    rc = get_cfg_use_media_ranking_value(PHO_RSC_TAPE, &res);
+    assert_int_equal(rc, -EINVAL);
+}
+
+static void gcumrv_invalid_strings(void **state)
+{
+    bool res;
+    int rc;
+
+    (void)state;
+
+    rc = setenv("PHOBOS_LRS_use_media_ranking", "dir=yes,tape=", 1);
+    assert_int_equal(rc, -rc);
+
+    rc = get_cfg_use_media_ranking_value(PHO_RSC_DIR, &res);
+    assert_int_equal(rc, -EINVAL);
+
+    rc = get_cfg_use_media_ranking_value(PHO_RSC_TAPE, &res);
+    assert_int_equal(rc, -EINVAL);
+}
+
+static void gcumrv_default_values(void **state)
+{
+    bool res;
+    int rc;
+
+    (void)state;
+
+    rc = unsetenv("PHOBOS_LRS_use_media_ranking");
+    assert_int_equal(rc, -rc);
+
+    rc = get_cfg_use_media_ranking_value(PHO_RSC_TAPE, &res);
+    assert_int_equal(rc, -rc);
+    assert_true(res);
+
+    rc = get_cfg_use_media_ranking_value(PHO_RSC_DIR, &res);
+    assert_int_equal(rc, -rc);
+    assert_false(res);
+
+    rc = get_cfg_use_media_ranking_value(PHO_RSC_RADOS_POOL, &res);
+    assert_int_equal(rc, -rc);
+    assert_false(res);
+}
+
 int main(void)
 {
     const struct CMUnitTest get_time_threshold_test_cases[] = {
@@ -314,10 +408,19 @@ int main(void)
         cmocka_unit_test(gcwtv_invalid_numbers),
     };
 
+    const struct CMUnitTest get_use_media_ranking_test_cases[] = {
+        cmocka_unit_test(gcumrv_valid_multiple_tokens),
+        cmocka_unit_test(gcumrv_valid_sole_token),
+        cmocka_unit_test(gcumrv_valid_no_token),
+        cmocka_unit_test(gcumrv_invalid_strings),
+        cmocka_unit_test(gcumrv_default_values),
+    };
+
     pho_context_init();
     atexit(pho_context_fini);
 
     return cmocka_run_group_tests(get_time_threshold_test_cases, NULL, NULL) +
         cmocka_run_group_tests(get_nb_req_threshold_test_cases, NULL, NULL) +
-        cmocka_run_group_tests(get_wsize_threshold_test_cases, NULL, NULL);
+        cmocka_run_group_tests(get_wsize_threshold_test_cases, NULL, NULL) +
+        cmocka_run_group_tests(get_use_media_ranking_test_cases, NULL, NULL);
 }

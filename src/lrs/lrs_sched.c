@@ -1061,6 +1061,24 @@ static bool write_avoids_medium(const pho_req_write_t *wreq,
 }
 
 /**
+ * Tell whether the ranking of \p curr breaks its exact free space tie
+ * with \p best, when the media ranking is used for the selection.
+ *
+ * The best fit is selected at byte granularity, so this can only decide
+ * between media with exactly the same free space: make sure the media
+ * have the same size before relying on the ranking to choose between
+ * them.
+ */
+static bool ranking_breaks_tie(const struct media_info *curr,
+                               const struct media_info *best,
+                               bool use_media_ranking)
+{
+    return use_media_ranking &&
+           curr->stats.phys_spc_free == best->stats.phys_spc_free &&
+           curr->ranking > best->ranking;
+}
+
+/**
  * Get a suitable medium for a write operation.
  *
  * @param[in]  sched         Current scheduler
@@ -1106,6 +1124,7 @@ int sched_select_medium(struct io_scheduler *io_sched,
     struct media_info *whole_media_best = NULL;
     struct media_info *chosen_media = NULL;
     struct media_info *pmedia_res = NULL;
+    bool use_media_ranking = false;
     char *tag_filter_json = NULL;
     struct dss_filter filter;
     size_t avail_size = 0;
@@ -1116,6 +1135,13 @@ int sched_select_medium(struct io_scheduler *io_sched,
     ENTRY;
 
     *need_new_grouping = false;
+
+    rc = get_cfg_use_media_ranking_value(family, &use_media_ranking);
+    if (rc) {
+        pho_warn("Cannot get the use_media_ranking config value for the "
+                 "family '%s', the media ranking is not used",
+                 rsc_family2str(family));
+    }
 
     if (with_tags) {
         tag_filter_json = build_tag_filter(tags);
@@ -1305,6 +1331,7 @@ int sched_select_medium(struct io_scheduler *io_sched,
 
         if (!reqc->req->walloc->no_split &&
             (split_media_best == NULL ||
+             ranking_breaks_tie(curr, split_media_best, use_media_ranking) ||
              curr->stats.phys_spc_free > split_media_best->stats.phys_spc_free))
                 split_media_best = curr;
 
@@ -1312,7 +1339,8 @@ int sched_select_medium(struct io_scheduler *io_sched,
             continue;
 
         if (whole_media_best == NULL ||
-            curr->stats.phys_spc_free < whole_media_best->stats.phys_spc_free)
+            curr->stats.phys_spc_free < whole_media_best->stats.phys_spc_free ||
+            ranking_breaks_tie(curr, whole_media_best, use_media_ranking))
             whole_media_best = curr;
     }
 

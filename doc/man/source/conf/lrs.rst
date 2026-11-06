@@ -266,3 +266,27 @@ Example:
 
     [lrs]
     nb_max_parallel_io = tape=1,dir=100,rados=10
+
+*use_media_ranking*
+-------------------
+
+The **use_media_ranking** parameter defines whether the media ranking is
+used to select the medium of a new write allocation. Its value must be a
+comma-separated list of "key=value" pairs for each family, where the value
+is either **true** or **false**.
+
+The best fit is still selected first: the ranking only breaks ties of
+free space between the candidate media. As the best fit is selected at
+byte granularity, media of different sizes are always decided by their
+free space alone: make sure the media have the same size before relying
+on the ranking to choose between them.
+
+If this parameter is not specified, Phobos defaults to the following:
+**use_media_ranking = tape=true,dir=false,rados_pool=false**.
+
+Example:
+
+.. code:: ini
+
+    [lrs]
+    use_media_ranking = tape=true,dir=false,rados_pool=false

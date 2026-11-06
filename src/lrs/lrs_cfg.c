@@ -99,6 +99,11 @@ const struct pho_config_item cfg_lrs[] = {
         .name    = "nb_max_parallel_io",
         .value   = "tape=1,dir=1,rados_pool=1"
     },
+    [PHO_CFG_LRS_use_media_ranking] = {
+        .section = "lrs",
+        .name    = "use_media_ranking",
+        .value   = "tape=true,dir=false,rados_pool=false"
+    },
 };
 
 static int _get_unsigned_long_from_string(const char *value,
@@ -209,4 +214,26 @@ int get_cfg_nb_max_parallel_io_value(enum rsc_family family,
 
     *max_parallel_io = ul_value;
     return 0;
+}
+
+int get_cfg_use_media_ranking_value(enum rsc_family family,
+                                    bool *use_media_ranking)
+{
+    char *value;
+    int rc;
+
+    rc = PHO_CFG_GET_SUBSTRING_VALUE(cfg_lrs, PHO_CFG_LRS, use_media_ranking,
+                                     family, &value);
+    if (rc)
+        return rc;
+
+    if (!strcmp(value, "true"))
+        *use_media_ranking = true;
+    else if (!strcmp(value, "false"))
+        *use_media_ranking = false;
+    else
+        rc = -EINVAL;
+
+    free(value);
+    return rc;
 }

@@ -46,8 +46,9 @@ enum pho_cfg_params_lrs {
     PHO_CFG_LRS_grouping_on_dir,
     PHO_CFG_LRS_locate_lock_expirancy,
     PHO_CFG_LRS_nb_max_parallel_io,
+    PHO_CFG_LRS_use_media_ranking,
 
-    PHO_CFG_LRS_LAST = PHO_CFG_LRS_nb_max_parallel_io,
+    PHO_CFG_LRS_LAST = PHO_CFG_LRS_use_media_ranking,
 };
 
 extern const struct pho_config_item cfg_lrs[];
@@ -93,4 +94,16 @@ int get_cfg_sync_wsize_value(enum rsc_family family, unsigned long *threshold);
  */
 int get_cfg_nb_max_parallel_io_value(enum rsc_family family,
                                      unsigned int *nb_max_parallel_io);
+
+/**
+ * Getter of use_media_ranking value for a given family.
+ *
+ * @param[in]   family            Targeted family.
+ * @param[out]  use_media_ranking Whether the media ranking is used to
+ *                                select the medium of a write allocation.
+ * @return                        0 on success,
+ *                                -errno on failure.
+ */
+int get_cfg_use_media_ranking_value(enum rsc_family family,
+                                    bool *use_media_ranking);
 #endif
