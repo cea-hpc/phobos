@@ -291,7 +291,7 @@ function test_copy_status
 function test_media
 {
     # The media fields that do not depend on the user's choice (such as the
-    # put,get,delete access, the tags) are compared before a db reset, and
+    # put,get,delete access) are compared before a db reset, and
     # after an import
     local oid="oid"
     local repl_count=1
@@ -315,8 +315,12 @@ stats.phys_spc_used)"
 
     tapes_setup "$drives"
 
+    $phobos tape import --unlock -t lto5 -T "toto" ${tapes} || error "import failed"
+
     for tape in $(nodeset -e "${tapes}"); do
-        $phobos tape import --unlock -t lto5 "${tape}" || error "import failed"
+        tags="$($phobos tape list -o tags "${tape}")"
+        [[ "$tags" == "['toto']" ]] ||
+            error "Tags of ${tape} not set after import: got '${tags}'"
     done
 
     local req2="$($phobos tape list -o addr_type,adm_status,family,model,\

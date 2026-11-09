@@ -81,6 +81,9 @@ class MediaImportOptHandler(XferOptHandler):
                             help="unlocks the tape after the import")
         parser.add_argument('-L', '--library',
                             help="Library containing each medium")
+        parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
+                            help='tags to associate with this media (comma-'
+                                 'separated: foo,bar)')
 
 
 class MediaListOptHandler(ListOptHandler):
@@ -560,16 +563,21 @@ class MediaOptHandler(BaseResourceOptHandler):
         adm_locked = not self.params.get('unlock')
         techno = self.params.get('type', '').upper()
         fstype = self.params.get('fs').upper()
+        tags = self.params.get('tags', [])
+        # Empty string means no tag and ''.split(',') == ['']
+        if tags == ['']:
+            tags = []
         set_library(self)
 
-        media = (MediaInfo * len(media_names))()
-        for index, medium_name in enumerate(media_names):
-            media[index] = MediaInfo(family=self.family, name=medium_name,
-                                     model=techno, is_adm_locked=adm_locked,
-                                     library=self.library)
+        # a plain list, not a ctypes array: the elements must stay alive
+        # until after the C call, which sets their tags in place
+        media = [MediaInfo(family=self.family, name=medium_name,
+                           model=techno, is_adm_locked=adm_locked,
+                           library=self.library)
+                 for medium_name in media_names]
         try:
             with AdminClient(lrs_required=True) as adm:
-                adm.medium_import(fstype, media)
+                adm.medium_import(fstype, media, tags)
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
