@@ -372,13 +372,10 @@ function test_import_with_live
         $phobos tape import --unlock -t lto5 "${tape}" || error "import failed"
     done
 
-    $phobos object list -o all
     $phobos object list -o all | grep $uuid2 | grep $version2
-    $phobos object list -o all | grep ${oid}.import | grep $uuid | grep $version
+    $phobos object list -o all -D | grep $uuid | grep $version
 
-    local oid_to_get="$($phobos object list -o oid | grep ${oid}.import)"
-
-    $phobos get "$oid_to_get" "$OUT_FILE"
+    $phobos get --uuid $uuid --version $version "$oid" "$OUT_FILE"
     diff "$OUT_FILE" "$IN_FILE" || error "Files differ"
     rm -f "$OUT_FILE"
 }

@@ -35,6 +35,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <string.h>
 #include <time.h>
 
@@ -306,67 +307,6 @@ lyt_info_get_free:
     return rc;
 }
 
-static int
-insert_object_with_different_uuid(struct dss_handle *dss,
-                                  struct object_info *obj_to_insert,
-                                  struct copy_info *copy_to_insert,
-                                  struct object_info *depr_obj_get,
-                                  int depr_obj_cnt)
-{
-    time_t current_time = time(NULL);
-    bool found_in_depr = false;
-    char *modified_oid = NULL;
-    struct object_info *obj;
-    int rc;
-    int i;
-
-    for (i = 0; i < depr_obj_cnt; ++i) {
-        if (strcmp(obj_to_insert->uuid, depr_obj_get[i].uuid) == 0) {
-            found_in_depr = true;
-            break;
-        }
-    }
-
-    if (found_in_depr) {
-        rc = dss_deprecated_object_insert(dss, obj_to_insert, 1,
-                                          DSS_SET_FULL_INSERT);
-        if (rc)
-            pho_error(rc, "Could not set deprecated object");
-
-        rc = dss_copy_insert(dss, copy_to_insert, 1, DSS_SET_FULL_INSERT);
-        if (rc)
-            pho_error(rc, "Could not set copy");
-
-        return rc;
-    }
-
-    // This will be freed after the extent is inserted
-    rc = asprintf(&modified_oid, "%s.import-%ld",
-                  obj_to_insert->oid, (intmax_t) current_time);
-    if (rc < 1)
-        LOG_RETURN(rc = -ENOMEM, "Could not create new object name");
-
-    // This will be changed back after the extent is inserted
-    obj_to_insert->oid = modified_oid;
-
-    rc = dss_object_insert(dss, obj_to_insert, 1, DSS_SET_FULL_INSERT);
-    if (rc)
-        pho_error(rc, "Could not create new object");
-
-    rc = dss_lazy_find_object(dss, obj_to_insert->oid, NULL, 0, &obj);
-    if (rc)
-        LOG_RETURN(rc, "Could not get new object imported");
-
-    copy_to_insert->object_uuid = obj->uuid;
-    rc = dss_copy_insert(dss, copy_to_insert, 1, DSS_SET_FULL_INSERT);
-    if (rc)
-        pho_error(rc, "Could not set copy");
-
-    object_info_free(obj);
-
-    return rc;
-}
-
 static int _add_copy_to_dss_if_missing(struct dss_handle *dss,
                                        struct copy_info *copy_to_insert)
 {
@@ -413,12 +353,14 @@ static int _add_object_to_dss(struct dss_handle *dss,
 {
     struct object_info *deprecated_objects = NULL;
     struct object_info *objects = NULL;
+    struct timeval newest_deprecated;
     int deprecated_objects_count = 0;
     char *obj_grouping = NULL;
     int objects_count = 0;
     bool in_depr;
     bool in_obj;
     int rc = 0;
+    int i;
 
     rc = _objects_with_same_uuid_version_exist(dss, object_to_insert,
                                                &in_obj, &in_depr,
@@ -489,54 +431,71 @@ static int _add_object_to_dss(struct dss_handle *dss,
     }
 
     if (objects_count == 1) {
-        if (strcmp(object_to_insert->uuid, objects->uuid)) {
-            rc = insert_object_with_different_uuid(dss, object_to_insert,
-                                                   copy_to_insert,
-                                                   deprecated_objects,
-                                                   deprecated_objects_count);
+        bool import_newer;
+
+        if (!strcmp(object_to_insert->uuid, objects->uuid)) {
+            /* same uuid: the version numbers order the generations */
+            import_newer = object_to_insert->version > objects->version;
+        } else {
+            /* different uuids: the version numbers cannot be compared,
+             * the Phobos creation times order the generations
+             */
+            import_newer = timercmp(&object_to_insert->creation_time,
+                                    &objects->creation_time, >);
+        }
+
+        if (import_newer) {
+            rc = dss_move_object_to_deprecated(dss, objects, 1);
             if (rc)
                 LOG_GOTO(objects_free, rc,
-                         "Could not insert object '%s' with different uuid: "
-                         "uuid to insert = '%s' vs uuid of object = '%s'",
-                         object_to_insert->oid, object_to_insert->uuid,
-                         objects->uuid);
-        } else {
-            if (object_to_insert->version > objects->version) {
-                rc = dss_move_object_to_deprecated(dss, objects, 1);
-                if (rc)
-                    LOG_GOTO(objects_free, rc,
-                             "Could not move old object '%s' to deprecated",
-                             objects->oid);
+                         "Could not move old object '%s' to deprecated",
+                         objects->oid);
 
-                rc = dss_object_insert(dss, object_to_insert, 1,
-                                       DSS_SET_FULL_INSERT);
-                if (rc)
-                    LOG_GOTO(objects_free, rc,
-                             "Could not insert object '%s' after moving one "
-                             "with same oid to deprecated",
-                             object_to_insert->oid);
-            } else {
-                rc = dss_deprecated_object_insert(dss, object_to_insert, 1,
-                                                  DSS_SET_FULL_INSERT);
-                if (rc)
-                    LOG_GOTO(objects_free, rc,
-                             "Could not insert deprecated object '%s'",
-                             object_to_insert->oid);
-            }
-
-            rc = dss_copy_insert(dss, copy_to_insert, 1, DSS_SET_FULL_INSERT);
+            rc = dss_object_insert(dss, object_to_insert, 1,
+                                   DSS_SET_FULL_INSERT);
             if (rc)
-                LOG_GOTO(objects_free, rc, "Could not insert copy");
+                LOG_GOTO(objects_free, rc,
+                         "Could not insert object '%s' after moving one "
+                         "with same oid to deprecated",
+                         object_to_insert->oid);
+        } else {
+            /* an older generation of this oid: it can only be deprecated */
+            rc = dss_deprecated_object_insert(dss, object_to_insert, 1,
+                                              DSS_SET_FULL_INSERT);
+            if (rc)
+                LOG_GOTO(objects_free, rc,
+                         "Could not insert deprecated object '%s'",
+                         object_to_insert->oid);
         }
+
+        rc = dss_copy_insert(dss, copy_to_insert, 1, DSS_SET_FULL_INSERT);
+        if (rc)
+            LOG_GOTO(objects_free, rc, "Could not insert copy");
 
         goto objects_free;
     }
 
     assert(objects_count == 0);
 
-    rc = dss_object_insert(dss, object_to_insert, 1, DSS_SET_FULL_INSERT);
+    /* The oid only exists as deprecated objects: the imported object only
+     * becomes living if it was created after the most recent deprecated
+     * one, comparing the Phobos creation times, not the POSIX file times.
+     */
+    newest_deprecated = deprecated_objects[0].creation_time;
+    for (i = 1; i < deprecated_objects_count; i++) {
+        if (timercmp(&deprecated_objects[i].creation_time,
+                     &newest_deprecated, >))
+            newest_deprecated = deprecated_objects[i].creation_time;
+    }
+
+    if (timercmp(&object_to_insert->creation_time, &newest_deprecated, >))
+        rc = dss_object_insert(dss, object_to_insert, 1,
+                               DSS_SET_FULL_INSERT);
+    else
+        rc = dss_deprecated_object_insert(dss, object_to_insert, 1,
+                                          DSS_SET_FULL_INSERT);
     if (rc)
-        LOG_GOTO(objects_free, rc, "Could not insert deprecated object '%s'",
+        LOG_GOTO(objects_free, rc, "Could not insert object '%s'",
                  object_to_insert->oid);
 
     rc = dss_copy_insert(dss, copy_to_insert, 1, DSS_SET_FULL_INSERT);

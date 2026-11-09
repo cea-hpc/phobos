@@ -78,15 +78,24 @@ If an object has the same oid as another in the DSS:
     moved to the `deprecated objects` table.
     - if its version number is strictly lower, then it is added to the DSS in
     the `deprecated object` table with the "incomplete" status.
-- else, then the new one is renamed with the ".import-{current-date}" suffix.\*
+- else, the version numbers cannot be compared across uuids, so the Phobos
+  creation dates order the generations: if the imported object was created
+  more recently than the living one, it is added to the DSS in the `object`
+  table with the "incomplete" status and the living object is moved to the
+  `deprecated objects` table; otherwise, the imported object is added to the
+  DSS in the `deprecated object` table with the "incomplete" status.
+If no living object of this oid is in the DSS but deprecated objects are, the
+imported object is added to the `object` table only if its creation date is
+more recent than the creation date of the most recent deprecated object of
+this oid, and to the `deprecated object` table otherwise. The creation dates
+compared here are the Phobos ones, rebuilt from the extent xattrs, not the
+POSIX file times.
 
 At the end of the import of all tapes, the `object` and `deprecated object`
 tables can be browsed to update the status of the object or deprecated object.
 If the object can be rebuilt, but some copies are missing, its status can be
 changed to "readable". Then, if all the copies of the object are found, its
 status can be changed to "complete".
-\* Note: the file renaming is for now a temporary way to deal with multiple
-oids with multiple uuids.
 
 ## Commands
 
@@ -129,25 +138,26 @@ for each tape to be imported
         if no other object with the same id in the `object` and `deprecated
         object` tables
             - create new "incomplete" object with version of extent
+        elif a living object with the same oid is in the `object` table
+            if both have same uuid and version of extent > version of obj
+                - create new "incomplete" object with version of extent
+                - move older object to the `deprecated object` table
+            elif they have different uuids and creation date of extent >
+            creation date of the living object
+                - create new "incomplete" object with version of extent
+                - move older object to the `deprecated object` table
+            else
+                - create new "incomplete" deprecated object with
+                version of extent
+            fi
         else
-            for objects and deprecated objects with the same oid
-                if both have same uuid
-                    if version of extent > version of obj
-                        - create new "incomplete" object with version of extent
-                        - move older object to the `deprecated object` table
-                    elif version of extent < version of obj
-                        - create new "incomplete" deprecated object with
-                        version of extent
-                    else
-                        if there is already one extent with the same lyt_index
-                            - ignore this extent, and raise an error message
-                        fi
-                    fi
-                else
-                    - rename the new extent with the ".import-{current-date}"
-                    suffix
-                fi
-            done
+            if creation date of extent > creation date of the most recent
+            deprecated object of this oid
+                - create new "incomplete" object with version of extent
+            else
+                - create new "incomplete" deprecated object with
+                version of extent
+            fi
         fi
         if extent was successfully inserted:
             - set `extent` status to "sync"
