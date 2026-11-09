@@ -24,6 +24,8 @@
 # loss, 'phobos dir import' and 'phobos tape import' must rebuild the
 # object, deprecated_object, copy, layout and extent tables, and the
 # groupings of the media, from the xattrs stored on the media.
+# The living or deprecated status chosen for the imported objects when
+# their oid already exists in the database is also checked.
 #
 
 test_dir=$(dirname $(readlink -e $0))
@@ -59,6 +61,11 @@ function setup
     FILE_TAPE_GROUP_V2="$DIR_TEST_IN/file_tape_group_v2"
     FILE_TAPE_GROUP2="$DIR_TEST_IN/file_tape_group2"
     FILE_DIR_GROUP="$DIR_TEST_IN/file_dir_group"
+    FILE_DELREP_V1="$DIR_TEST_IN/file_delrep_v1"
+    FILE_DELREP_V2="$DIR_TEST_IN/file_delrep_v2"
+    FILE_DEPR_V1="$DIR_TEST_IN/file_depr_v1"
+    FILE_DEPR_V2="$DIR_TEST_IN/file_depr_v2"
+    FILE_DEPR_V3="$DIR_TEST_IN/file_depr_v3"
 
     set +x
     # distinct sizes, so that extent mismatches are easy to spot in dumps
@@ -76,6 +83,11 @@ function setup
     dd if=/dev/urandom of="$FILE_TAPE_GROUP_V2" bs=1K count=27
     dd if=/dev/urandom of="$FILE_TAPE_GROUP2" bs=1K count=35
     dd if=/dev/urandom of="$FILE_DIR_GROUP" bs=1K count=39
+    dd if=/dev/urandom of="$FILE_DELREP_V1" bs=1K count=7
+    dd if=/dev/urandom of="$FILE_DELREP_V2" bs=1K count=11
+    dd if=/dev/urandom of="$FILE_DEPR_V1" bs=1K count=13
+    dd if=/dev/urandom of="$FILE_DEPR_V2" bs=1K count=15
+    dd if=/dev/urandom of="$FILE_DEPR_V3" bs=1K count=17
     set -x
 
     DIRS=(
@@ -262,8 +274,110 @@ function test_import_db_rebuild
     return 0
 }
 
+function test_import_object_generation
+{
+    # one dir medium per generation, added only now so that the first
+    # rebuild above does not import them: all the other dir media are
+    # locked while a generation is written, so every put lands on a
+    # known medium and the imports below can be ordered
+    ST_MEDIA=($(mktemp -d "$DIR_TEST_IN/test_pho.XXXX")
+              $(mktemp -d "$DIR_TEST_IN/test_pho.XXXX")
+              $(mktemp -d "$DIR_TEST_IN/test_pho.XXXX")
+              $(mktemp -d "$DIR_TEST_IN/test_pho.XXXX")
+              $(mktemp -d "$DIR_TEST_IN/test_pho.XXXX"))
+
+    $phobos dir add ${ST_MEDIA[@]}
+    $phobos dir lock "${DIRS[@]}"
+
+    # oid_delrep: put, delete (the generation only becomes deprecated
+    # in the DSS, its extents stay on their medium), then re-put: two
+    # generations of the same oid with two uuids
+    $phobos dir format --unlock "${ST_MEDIA[0]}"
+    $phobos put -f dir "$FILE_DELREP_V1" oid_delrep
+    DELREP_OLD_UUID="$($phobos object list -o uuid oid_delrep)"
+    $phobos delete oid_delrep
+    $phobos dir lock "${ST_MEDIA[0]}"
+
+    $phobos dir format --unlock "${ST_MEDIA[1]}"
+    $phobos put -f dir "$FILE_DELREP_V2" oid_delrep
+    DELREP_NEW_UUID="$($phobos object list -o uuid oid_delrep)"
+    $phobos dir lock "${ST_MEDIA[1]}"
+
+    # oid_depr_only: three versions of the same uuid, one per medium
+    $phobos dir format --unlock "${ST_MEDIA[2]}"
+    $phobos put -f dir "$FILE_DEPR_V1" oid_depr_only
+    $phobos dir lock "${ST_MEDIA[2]}"
+
+    $phobos dir format --unlock "${ST_MEDIA[3]}"
+    $phobos put -f dir --overwrite "$FILE_DEPR_V2" oid_depr_only
+    $phobos dir lock "${ST_MEDIA[3]}"
+
+    $phobos dir format --unlock "${ST_MEDIA[4]}"
+    $phobos put -f dir --overwrite "$FILE_DEPR_V3" oid_depr_only
+    $phobos dir lock "${ST_MEDIA[4]}"
+
+    DEPR_UUID="$($phobos object list -o uuid oid_depr_only)"
+
+    waive_daemons
+    drain_all_drives
+    drop_tables
+
+    setup_tables
+    invoke_daemons
+
+    # oid_delrep: the deleted generation is imported first, then deleted
+    # again, so the re-put one arrives while the oid only exists as
+    # deprecated objects: its more recent creation time must make it the
+    # living generation
+    $valg_phobos dir import --unlock "${ST_MEDIA[0]}"
+    $phobos delete oid_delrep
+    $valg_phobos dir import --unlock "${ST_MEDIA[1]}"
+
+    [[ "$($phobos object list oid_delrep | wc -l)" == "1" ]] ||
+        error "oid_delrep should have exactly one living object"
+
+    [[ "$($phobos object list -o uuid oid_delrep)" \
+        == "$DELREP_NEW_UUID" ]] ||
+        error "the living oid_delrep should be the re-put generation"
+
+    [[ "$($phobos object list -D oid_delrep | wc -l)" == "1" ]] ||
+        error "the deleted generation of oid_delrep should be deprecated"
+
+    [[ "$($phobos object list -D -o uuid oid_delrep)" \
+        == "$DELREP_OLD_UUID" ]] ||
+        error "the deprecated oid_delrep should be the deleted generation"
+
+    get_and_check oid_delrep "$FILE_DELREP_V2"
+    $phobos get --uuid "$DELREP_OLD_UUID" --version 1 oid_delrep \
+        "$DIR_TEST_OUT/oid_delrep_v1.out"
+    diff "$FILE_DELREP_V1" "$DIR_TEST_OUT/oid_delrep_v1.out"
+
+
+    $valg_phobos dir import --unlock "${ST_MEDIA[3]}"
+    $valg_phobos dir import --unlock "${ST_MEDIA[4]}"
+    $valg_phobos dir import --unlock "${ST_MEDIA[2]}"
+
+    [[ "$($phobos object list -o version oid_depr_only)" == "3" ]] ||
+        error "the newest version of oid_depr_only should be living"
+
+    [[ "$($phobos object list -o uuid oid_depr_only)" \
+        == "$DEPR_UUID" ]] ||
+        error "the living oid_depr_only should keep the uuid of its extents"
+
+    [[ "$($phobos object list -D -o version --sort version oid_depr_only)" \
+	    == $'1\n2' ]] ||
+        error "the oldest versions of oid_depr_only should be deprecated"
+
+    get_and_check oid_depr_only "$FILE_DEPR_V3"
+
+    return 0
+}
+
 if [[ ! -w /dev/changer ]]; then
     skip "Tapes are required for this test"
 fi
 
-TESTS=("setup; test_import_db_rebuild; cleanup")
+TESTS=("setup; \
+            test_import_db_rebuild; \
+            test_import_object_generation; \
+        cleanup")
