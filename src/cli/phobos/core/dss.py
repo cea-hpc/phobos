@@ -345,17 +345,6 @@ class MediaManager(BaseEntityManager):
         if rc:
             raise EnvironmentError(rc, "Cannot issue insert request")
 
-    def update(self, media, fields):
-        """Update media in DSS"""
-        if not media:
-            return
-
-        med, med_cnt = self._generic_set(media)
-        rc = LIBPHOBOS.dss_media_update(byref(self.client.handle), med, med,
-                                        med_cnt, fields)
-        if rc:
-            raise EnvironmentError(rc, "Cannot issue update request")
-
     def delete(self, media):
         """Delete media from DSS"""
         if not media:
