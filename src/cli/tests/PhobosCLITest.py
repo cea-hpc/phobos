@@ -501,6 +501,29 @@ class MediaAddTest(BasicExecutionTest):
                                               'tags', 'update0'])
         self.assertEqual(output.strip(), "['tag3']")
 
+        # A single ranking value is applied to all the targeted media
+        self.pho_execute(['tape', 'update', '--ranking', '42', 'update[0-1]'])
+
+        # A ranking nodeset provides one ranking per medium, in order
+        self.pho_execute(['tape', 'update', '--ranking', '1-2', 'update[0-1]'])
+
+        # An invalid ranking syntax is rejected by the argument parser
+        self.pho_execute(['tape', 'update', '--ranking', 'foo[', 'update0'],
+                         code=2)
+
+        # A ranking value that does not fit in a 32-bit integer is rejected
+        self.pho_execute(['tape', 'update', '--ranking', '4294967296',
+                          'update0'],
+                         code=2)
+
+        # An empty ranking value is rejected by the argument parser
+        self.pho_execute(['tape', 'update', '--ranking', '', 'update0'],
+                         code=2)
+
+        # A ranking nodeset must match the number of targeted media
+        self.pho_execute(['tape', 'update', '--ranking', '1-3', 'update0'],
+                         code=os.EX_USAGE)
+
         # Test a failed update
         def failed_update(*args, **kwargs): # pylint: disable=unused-argument
             """Emulates a failed update by raising EnvironmentError"""

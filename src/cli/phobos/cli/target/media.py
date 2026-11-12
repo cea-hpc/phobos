@@ -26,6 +26,7 @@ import sys
 from os import EX_USAGE
 
 from ClusterShell.NodeSet import NodeSet
+from ClusterShell.RangeSet import RangeSet, RangeSetParseError
 
 from phobos.cli.action import ActionOptHandler
 from phobos.cli.action.add import AddOptHandler
@@ -48,6 +49,37 @@ from phobos.core.const import (ADM_STATUS, DELETE_ACCESS, DSS_MEDIA, GET_ACCESS,
                                PUT_ACCESS, RANKING, TAGS)
 from phobos.core.ffi import (MediaInfo, ResourceFamily)
 from phobos.output import dump_object_list
+
+
+def parse_ranking(value):
+    """Parse the ranking option of the media update.
+
+    The ranking is either a single value, which will be applied to all
+    the media of the update, or a nodeset of values, which must contain
+    as many values as the command targets media: the media then receive
+    one ranking each, in the nodeset order.
+    """
+    int32_max = 2**31 - 1
+
+    try:
+        ranking = [int(value)]
+    except ValueError:
+        try:
+            ranking = [int(rank) for rank in RangeSet(value)]
+        except (RangeSetParseError, ValueError) as err:
+            raise argparse.ArgumentTypeError(
+                f"invalid ranking '{value}': {err}") from err
+
+    for rank in ranking:
+        if rank > int32_max:
+            raise argparse.ArgumentTypeError(
+                f"invalid ranking '{value}': values must not exceed "
+                f"{int32_max}")
+
+    if not ranking:
+        raise argparse.ArgumentTypeError(f"empty ranking '{value}'")
+
+    return ranking
 
 
 class MediaAddOptHandler(AddOptHandler):
@@ -216,9 +248,13 @@ class MediaUpdateOptHandler(ActionOptHandler):
                             help='New tags for this media (comma-separated, '
                                  'e.g. "-T foo,bar"), empty string to clear '
                                  'tags, new tags list overwrite current tags')
-        parser.add_argument('--ranking', type=int,
-                            help='New ranking for this media, to orient the '
-                                 'media selection (the higher, the preferred)')
+        parser.add_argument('--ranking', type=parse_ranking,
+                            help='New ranking for the media, to orient '
+                                 'their selection (the higher, the '
+                                 'preferred): a single value is applied '
+                                 'to all the updated media, while a '
+                                 'nodeset of values is attributed to the '
+                                 'targeted media, in the nodeset order')
         parser.add_argument('-L', '--library',
                             help="Library containing the medium to update")
         parser.add_argument('res', nargs='+', help='Resource(s) to update')
@@ -353,7 +389,7 @@ class MediaOptHandler(BaseResourceOptHandler):
             sys.exit(abs(err.errno))
 
     def exec_update(self):
-        """Update tags and ranking of an existing media"""
+        """Update tags and ranking of existing media"""
         set_library(self)
         tags = self.params.get('tags')
         ranking = self.params.get('ranking')
@@ -362,6 +398,7 @@ class MediaOptHandler(BaseResourceOptHandler):
             return
 
         fields = 0
+        uids = NodeSet.fromlist(self.params.get('res'))
 
         if tags is None:
             tags = []
@@ -372,15 +409,28 @@ class MediaOptHandler(BaseResourceOptHandler):
             fields += TAGS
 
         if ranking is None:
-            ranking = 0
+            # No ranking update: the neutral value is ignored by the DSS
+            # update, since the RANKING bit is not set in the fields
+            rankings = [0] * len(uids)
         else:
             fields += RANKING
 
-        uids = NodeSet.fromlist(self.params.get('res'))
+            if len(ranking) == 1:
+                # A single ranking value is applied to all the media
+                rankings = ranking * len(uids)
+            elif len(ranking) != len(uids):
+                self.logger.error(
+                    "Cannot give %d rankings to %d media: provide a single "
+                    "ranking value, or as many values as targeted media",
+                    len(ranking), len(uids))
+                sys.exit(EX_USAGE)
+            else:
+                # One ranking per medium, attributed in the nodeset order
+                rankings = ranking
 
         media = [MediaInfo(family=self.family, name=uid, tags=tags,
-                           ranking=ranking, library=self.library)
-                 for uid in uids]
+                           ranking=rank, library=self.library)
+                 for uid, rank in zip(uids, rankings)]
         self._media_update(media, fields)
 
     def exec_format(self):
