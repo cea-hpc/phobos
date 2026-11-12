@@ -488,6 +488,19 @@ class MediaAddTest(BasicExecutionTest):
                                               'tags', 'update0'])
         self.assertEqual(output.strip(), "['new-tag1', 'new-tag2']")
 
+        # Update the ranking without touching the tags
+        self.pho_execute(['tape', 'update', '--ranking', '42', 'update0'])
+        output, _ = self.pho_execute_capture(['tape', 'list', '--output',
+                                              'tags', 'update0'])
+        self.assertEqual(output.strip(), "['new-tag1', 'new-tag2']")
+
+        # Update the tags and the ranking at once
+        self.pho_execute(['tape', 'update', '-T', 'tag3', '--ranking', '7',
+                          'update0'])
+        output, _ = self.pho_execute_capture(['tape', 'list', '--output',
+                                              'tags', 'update0'])
+        self.assertEqual(output.strip(), "['tag3']")
+
         # Test a failed update
         def failed_update(*args, **kwargs): # pylint: disable=unused-argument
             """Emulates a failed update by raising EnvironmentError"""

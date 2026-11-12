@@ -45,7 +45,7 @@ from phobos.cli.common.utils import (check_output_attributes,
 from phobos.core.admin import Client as AdminClient
 from phobos.core.const import (ADM_STATUS, DELETE_ACCESS, DSS_MEDIA, GET_ACCESS, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
-                               PUT_ACCESS, TAGS)
+                               PUT_ACCESS, RANKING, TAGS)
 from phobos.core.ffi import (MediaInfo, ResourceFamily)
 from phobos.output import dump_object_list
 
@@ -216,6 +216,9 @@ class MediaUpdateOptHandler(ActionOptHandler):
                             help='New tags for this media (comma-separated, '
                                  'e.g. "-T foo,bar"), empty string to clear '
                                  'tags, new tags list overwrite current tags')
+        parser.add_argument('--ranking', type=int,
+                            help='New ranking for this media, to orient the '
+                                 'media selection (the higher, the preferred)')
         parser.add_argument('-L', '--library',
                             help="Library containing the medium to update")
         parser.add_argument('res', nargs='+', help='Resource(s) to update')
@@ -350,23 +353,35 @@ class MediaOptHandler(BaseResourceOptHandler):
             sys.exit(abs(err.errno))
 
     def exec_update(self):
-        """Update tags of an existing media"""
+        """Update tags and ranking of an existing media"""
         set_library(self)
         tags = self.params.get('tags')
-        if tags is None:
+        ranking = self.params.get('ranking')
+        if tags is None and ranking is None:
             self.logger.info("No update to be performed")
             return
 
-        # Empty string clears tag and ''.split(',') == ['']
-        if tags == ['']:
+        fields = 0
+
+        if tags is None:
             tags = []
+        else:
+            # Empty string clears tag and ''.split(',') == ['']
+            if tags == ['']:
+                tags = []
+            fields += TAGS
+
+        if ranking is None:
+            ranking = 0
+        else:
+            fields += RANKING
 
         uids = NodeSet.fromlist(self.params.get('res'))
 
         media = [MediaInfo(family=self.family, name=uid, tags=tags,
-                           library=self.library)
+                           ranking=ranking, library=self.library)
                  for uid in uids]
-        self._media_update(media, TAGS)
+        self._media_update(media, fields)
 
     def exec_format(self):
         """Format media however requested."""

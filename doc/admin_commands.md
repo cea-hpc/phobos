@@ -253,6 +253,18 @@ The following table illustrates conditions for matching tags:
 | C           | A,B        | no      |
 | A,C         | A,B        | no      |
 
+# Ranking media
+The media ranking lets administrators orient the medium selection for
+writes. When several media have exactly the same free space, the one
+with the highest ranking is preferred. This only applies to the media
+families with `use_media_ranking` enabled in the LRS configuration
+(tape by default).
+
+```
+# Set the ranking of these tapes
+phobos tape update --ranking 5 [073000-073099]L8
+```
+
 # Locating media
 Phobos allows you to locate its media by answering you on which host you should
 execute phobos commands or calls that require access to a specific medium.
