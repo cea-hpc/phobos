@@ -457,6 +457,29 @@ class MediaAddTest(BasicExecutionTest):
                                               'tags', 'TAGGED1'])
         self.assertEqual(output.strip(), "['tag-foo', 'tag-bar']")
 
+    def test_media_add_ranking(self):
+        """Test that media are added with the given ranking."""
+        self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
+                          'rank0', '--ranking', '42'])
+
+        # A single ranking value is applied to all the added media
+        output, _ = self.pho_execute_capture(['tape', 'list', '--output',
+                                              'ranking', 'rank0'])
+        self.assertEqual(output.strip(), "42")
+
+        self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
+                          'rank[1-2]', '--ranking', '1-2'])
+
+        # A ranking nodeset is attributed to the media, in order
+        for med_id, med_ranking in ("rank1", 1), ("rank2", 2):
+            output, _ = self.pho_execute_capture(['tape', 'list', '--output',
+                                                  'ranking', med_id])
+            self.assertEqual(output.strip(), str(med_ranking))
+
+        # A ranking nodeset must match the number of added media
+        self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
+                          'rank3', '--ranking', '1-3'], code=os.EX_USAGE)
+
     def test_media_update(self):
         """test updating media."""
         self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
@@ -661,6 +684,19 @@ class DeviceAddTest(BasicExecutionTest):
             output, _ = self.pho_execute_capture(['dir', 'list', '-o', 'all',
                                                  tmp_path])
             self.assertIn("['tag-foo', 'tag-bar']", output)
+
+    def test_dir_ranking(self):
+        """Test adding directories with a ranking."""
+        with tempfile.TemporaryDirectory() as tmp1, \
+                tempfile.TemporaryDirectory() as tmp2:
+            self.pho_execute(['dir', 'add', tmp1, tmp2, '--ranking', '1-2'])
+
+            # Each directory is given its ranking, in order
+            for tmp_path, tmp_ranking in (tmp1, 1), (tmp2, 2):
+                output, _ = self.pho_execute_capture(['dir', 'list',
+                                                      '--output', 'ranking',
+                                                      tmp_path])
+                self.assertEqual(output.strip(), str(tmp_ranking))
 
     def test_dir_update(self):
         """Test updating a directory."""

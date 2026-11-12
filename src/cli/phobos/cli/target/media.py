@@ -94,6 +94,13 @@ class MediaAddOptHandler(AddOptHandler):
         parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
                             help='tags to associate with this media (comma-'
                                  'separated: foo,bar)')
+        parser.add_argument('--ranking', type=parse_ranking,
+                            help='Ranking of the new media, to orient their '
+                                 'selection (the higher, the preferred): a '
+                                 'single value is applied to all the added '
+                                 'media, while a nodeset of values is '
+                                 'attributed to the added media, in the '
+                                 'nodeset order')
 
 
 class MediaImportOptHandler(XferOptHandler):
@@ -281,6 +288,33 @@ class MediaOptHandler(BaseResourceOptHandler):
     def add_medium(self, adm, medium, tags):
         """Add media method"""
 
+    def _build_rankings(self, ranking, media_count):
+        """Build the ranking of each medium from the --ranking option.
+
+        A single ranking value is applied to all the media, while a
+        nodeset of values must contain as many values as media, which
+        receive them in the nodeset order. With no ranking, the media
+        get the neutral value 0: the default ranking of an added medium,
+        and a value ignored by an update which does not update the
+        ranking field.
+        """
+        if ranking is None:
+            return [0] * media_count
+
+        # A single ranking value is applied to all the media
+        if len(ranking) == 1:
+            return ranking * media_count
+
+        # One ranking per medium, attributed in the nodeset order
+        if len(ranking) == media_count:
+            return ranking
+
+        self.logger.error(
+            "Cannot give %d rankings to %d media: provide a single ranking "
+            "value, or as many values as targeted media",
+            len(ranking), media_count)
+        sys.exit(EX_USAGE)
+
     def add_medium_and_device(self):
         """Add a new medium and a new device at once"""
         resources = self.params.get('res')
@@ -289,17 +323,20 @@ class MediaOptHandler(BaseResourceOptHandler):
         set_library(self)
         valid_count = 0
         rc = 0
+        rankings = self._build_rankings(self.params.get('ranking'),
+                                        len(resources))
 
         try:
             with AdminClient(lrs_required=False) as adm:
-                for path in resources:
+                for path, rank in zip(resources, rankings):
                     medium_is_added = False
 
                     try:
                         medium = MediaInfo(family=self.family, name=path,
                                            model=None,
                                            is_adm_locked=keep_locked,
-                                           library=self.library)
+                                           library=self.library,
+                                           ranking=rank)
 
                         self.add_medium(adm, [medium], tags)
                         medium_is_added = True
@@ -329,10 +366,12 @@ class MediaOptHandler(BaseResourceOptHandler):
         keep_locked = not self.params.get('unlock')
         set_library(self)
 
+        rankings = self._build_rankings(self.params.get('ranking'),
+                                        len(names))
         media = [MediaInfo(family=self.family, name=name,
                            model=techno, is_adm_locked=keep_locked,
-                           library=self.library)
-                 for name in names]
+                           library=self.library, ranking=rank)
+                 for name, rank in zip(names, rankings)]
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.medium_add(media, fstype, tags=tags)
@@ -408,25 +447,10 @@ class MediaOptHandler(BaseResourceOptHandler):
                 tags = []
             fields += TAGS
 
-        if ranking is None:
-            # No ranking update: the neutral value is ignored by the DSS
-            # update, since the RANKING bit is not set in the fields
-            rankings = [0] * len(uids)
-        else:
+        rankings = self._build_rankings(ranking, len(uids))
+        if ranking is not None:
+            # Only update the ranking field when a ranking value was given
             fields += RANKING
-
-            if len(ranking) == 1:
-                # A single ranking value is applied to all the media
-                rankings = ranking * len(uids)
-            elif len(ranking) != len(uids):
-                self.logger.error(
-                    "Cannot give %d rankings to %d media: provide a single "
-                    "ranking value, or as many values as targeted media",
-                    len(ranking), len(uids))
-                sys.exit(EX_USAGE)
-            else:
-                # One ranking per medium, attributed in the nodeset order
-                rankings = ranking
 
         media = [MediaInfo(family=self.family, name=uid, tags=tags,
                            ranking=rank, library=self.library)

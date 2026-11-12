@@ -260,11 +260,11 @@ with the highest ranking is preferred. This only applies to the media
 families with `use_media_ranking` enabled in the LRS configuration
 (tape by default).
 
-`--ranking` accepts either a single value, applied to all the media
-targeted by the update, or a nodeset of values: the nodeset must then
-contain as many values as the command targets media, and the values
-are attributed in the nodeset order (the i-th value to the i-th
-medium).
+`--ranking` is accepted by the media addition and update commands. It
+contains either a single value, applied to all the targeted media, or
+a nodeset of values: the nodeset must then contain as many values as
+the command targets media, and the values are attributed in the
+nodeset order (the i-th value to the i-th medium).
 
 ```
 # Set the same ranking for all these tapes
@@ -272,6 +272,9 @@ phobos tape update --ranking 5 [073000-073099]L8
 
 # Set the ranking of each tape: 073000L8=1, 073001L8=2, ... 073099L8=100
 phobos tape update --ranking 1-100 [073000-073099]L8
+
+# Add tapes with a ranking of 5
+phobos tape add --type LTO8 --ranking 5 [073000-073099]L8
 ```
 
 The ranking of the media is listed like the other media attributes:
