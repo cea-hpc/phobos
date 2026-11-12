@@ -216,7 +216,7 @@ function test_update_library()
 
     # Should not add the tag as it doesn't find the medium
     $valg_phobos $family update --tags first_tag $media_name 2>&1 |
-        grep "No rows were updated"
+        grep "Failed to find medium"
 
     local tags="$($phobos $family list -o tags $media_name)"
     if [[ "$tags" != "[]" ]]; then
@@ -301,7 +301,7 @@ function test_set_access_library()
 
     # Should not update the put_access as it doesn't found the medium
     $valg_phobos $family set-access -- -P $media_name 2>&1 |
-        grep "No rows were updated"
+        grep "Failed to find medium"
     local access="$($phobos $family list -o put_access $media_name)"
     if [[ "$access" != "True" ]]; then
         error "Should be True"

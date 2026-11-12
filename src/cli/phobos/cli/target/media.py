@@ -340,11 +340,10 @@ class MediaOptHandler(BaseResourceOptHandler):
         return (rc, len(resources), valid_count)
 
     def _media_update(self, media, fields):
-        """Calling client.media.update"""
+        """Update media and notify the LRS of the change"""
         try:
-            self.client.media.update(media, fields)
             with AdminClient(lrs_required=False) as adm:
-                adm.notify_media_update(media)
+                adm.medium_update(media, fields)
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

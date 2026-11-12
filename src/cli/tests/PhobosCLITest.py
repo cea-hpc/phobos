@@ -33,7 +33,7 @@ from socket import gethostname
 
 from phobos import HANDLERS
 from phobos.cli.common import PhobosActionContext
-from phobos.core.dss import MediaManager
+from phobos.core.admin import Client as AdminClient
 from phobos.core import cfg
 
 def gethostname_short():
@@ -493,13 +493,13 @@ class MediaAddTest(BasicExecutionTest):
             """Emulates a failed update by raising EnvironmentError"""
             raise EnvironmentError(errno.ENOENT, "Expected failed")
 
-        old_update = MediaManager.update
-        MediaManager.update = failed_update
+        old_update = AdminClient.medium_update
+        AdminClient.medium_update = failed_update
         try:
             self.pho_execute(['tape', 'update', '-T', '', 'update0'],
                              code=errno.ENOENT)
         finally:
-            MediaManager.update = old_update
+            AdminClient.medium_update = old_update
 
         # Ensure that the tape is unlocked after failure
         # Exactly one media should be returned

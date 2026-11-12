@@ -2621,6 +2621,14 @@ int phobos_admin_media_update(struct admin_handle *adm,
                             "phobos_admin_media_library_rename()");
 
     for (i = 0; i < med_cnt; i++) {
+        if (src_med[i].rsc.id.family == PHO_RSC_DIR) {
+            rc = _normalize_path(src_med[i].rsc.id.name);
+            if (rc)
+                return rc;
+        }
+    }
+
+    for (i = 0; i < med_cnt; i++) {
         struct media_info *med_res;
 
         rc = dss_one_medium_get_from_id(&adm->dss, &src_med[i].rsc.id,

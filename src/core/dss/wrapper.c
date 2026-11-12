@@ -108,7 +108,7 @@ int dss_one_medium_get_from_id(struct dss_handle *dss,
                    "Error while getting medium info "FMT_PHO_ID,
                    PHO_ID(*medium_id));
 
-    /* (family, id) is the primary key of the media table */
+    /* (family, id, library) is the primary key of the media table */
     assert(cnt <= 1);
 
     if (cnt == 0) {
