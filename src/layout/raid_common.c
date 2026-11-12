@@ -1838,6 +1838,7 @@ static void raid_writer_split_close(struct pho_data_processor *proc, int *rc)
         .layout_name = io_context->name,
         .object_uuid = proc->xfer->xd_targets[target].xt_objuuid,
         .copy_name = proc->dest_layout[target].copy_name,
+        .grouping = get_put_params(proc)->grouping,
     };
 
     ENTRY;
@@ -2385,6 +2386,7 @@ static void raid_rebuilder_split_close(struct pho_data_processor *proc, int *rc)
         .layout_name = io_context->name,
         .object_uuid = proc->src_layout->uuid,
         .copy_name = proc->src_layout->copy_name,
+        .grouping = get_put_params(proc)->grouping,
     };
 
     ENTRY;

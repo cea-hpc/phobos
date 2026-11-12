@@ -132,6 +132,8 @@ if (rc) {
  *                              version was detected in the DSS,
  * @param[out]   in_depr        True if another deprecated object with same
  *                              uuid and version was detected in the DSS.
+ * @param[out]   obj_grouping   Grouping of the existing object, NULL if it
+ *                              has none. To be freed by the caller.
  *
  * @return       0 on success,
  *               -errno on error.
@@ -139,12 +141,15 @@ if (rc) {
 static int
 _objects_with_same_uuid_version_exist(struct dss_handle *dss,
                                       struct object_info *object_to_find,
-                                      bool *in_obj, bool *in_depr)
+                                      bool *in_obj, bool *in_depr,
+                                      char **obj_grouping)
 {
     struct object_info *objects;
     struct dss_filter filter;
     int objects_count;
     int rc = 0;
+
+    *obj_grouping = NULL;
 
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
@@ -163,8 +168,10 @@ _objects_with_same_uuid_version_exist(struct dss_handle *dss,
     }
 
     *in_obj = (objects_count > 0);
-    if (*in_obj)
+    if (*in_obj) {
         object_to_find->oid = xstrdup(objects[0].oid);
+        *obj_grouping = xstrdup_safe(objects[0].grouping);
+    }
 
     dss_res_free(objects, objects_count);
 
@@ -403,18 +410,20 @@ static int _add_object_to_dss(struct dss_handle *dss,
     struct object_info *deprecated_objects = NULL;
     struct object_info *objects = NULL;
     int deprecated_objects_count = 0;
+    char *obj_grouping = NULL;
     int objects_count = 0;
     bool in_depr;
     bool in_obj;
     int rc = 0;
 
     rc = _objects_with_same_uuid_version_exist(dss, object_to_insert,
-                                               &in_obj, &in_depr);
+                                               &in_obj, &in_depr,
+                                               &obj_grouping);
     if (rc)
-        LOG_RETURN(rc,
-                   "Could not get object and depr_objects for uuid '%s' and"
-                   " version '%d'",
-                   object_to_insert->uuid, object_to_insert->version);
+        LOG_GOTO(objects_free, rc,
+                 "Could not get object and depr_objects for uuid '%s' and"
+                 " version '%d'",
+                 object_to_insert->uuid, object_to_insert->version);
 
     if (in_obj || in_depr) {
         pho_verb("Object '%s' with uuid '%s' and version '%d' already in DSS",
@@ -427,10 +436,27 @@ static int _add_object_to_dss(struct dss_handle *dss,
          */
         rc = _add_copy_to_dss_if_missing(dss, copy_to_insert);
         if (rc)
-            LOG_RETURN(rc, "Could not add copy '%s' of object '%s' to DSS",
-                       copy_to_insert->copy_name, object_to_insert->oid);
+            LOG_GOTO(objects_free, rc,
+                     "Could not add copy '%s' of object '%s' to DSS",
+                     copy_to_insert->copy_name, object_to_insert->oid);
 
-        return 0;
+        /*
+         * Extents written before the grouping xattr exists do not carry it:
+         * an import of such extents creates the object row without grouping.
+         * Backfill it when a newly imported extent provides one.
+         */
+        if (in_obj && obj_grouping == NULL &&
+            object_to_insert->grouping != NULL) {
+            int rc2 = dss_object_update(dss, object_to_insert,
+                                        object_to_insert, 1,
+                                        DSS_OBJECT_UPDATE_GROUPING);
+
+            if (rc2)
+                pho_warn("Could not set grouping '%s' of object '%s'",
+                         object_to_insert->grouping, object_to_insert->oid);
+        }
+
+        goto objects_free;
     }
 
     rc = _get_objects_with_oid(dss, object_to_insert,
@@ -513,6 +539,7 @@ static int _add_object_to_dss(struct dss_handle *dss,
         LOG_GOTO(objects_free, rc, "Could not insert copy");
 
 objects_free:
+    free(obj_grouping);
     dss_res_free(objects, objects_count);
     dss_res_free(deprecated_objects, deprecated_objects_count);
     return rc;
@@ -530,13 +557,13 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
                                long long *nb_new_obj)
 {
     struct object_info obj_to_insert = {0};
+    struct layout_info lyt_to_insert = {0};
+    struct copy_info copy_to_insert = {0};
     struct extent ext_to_insert = {0};
-    struct layout_info lyt_to_insert;
-    struct copy_info copy_to_insert;
     struct io_adapter_module *ioa;
+    const char *save_oid = NULL;
     struct pho_io_descr iod;
     struct pho_ext_loc loc;
-    const char *save_oid;
     int rc = 0;
 
     rc = get_io_adapter(PHO_FS_LTFS, &ioa);
@@ -563,12 +590,15 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
                    rootpath, filename);
 
     rc = layout_get_specific_attrs(&iod, ioa, &ext_to_insert, &lyt_to_insert);
-    if (rc)
-        LOG_RETURN(rc,
-                   "Failed to retrieve every layout specific xattrs from file "
-                   "'%s/%s', the object and extent will not be added to the "
-                   "DSS",
-                   rootpath, filename);
+    if (rc) {
+        /* the extent address still borrows the caller's filename */
+        ext_to_insert.address = PHO_BUFF_NULL;
+        LOG_GOTO(free_all, rc,
+                 "Failed to retrieve every layout specific xattrs from file "
+                 "'%s/%s', the object and extent will not be added to the "
+                 "DSS",
+                 rootpath, filename);
+    }
 
     *nb_new_obj += 1;
     *size_written += fsize;
@@ -587,14 +617,14 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
 
     rc = dss_lock(&adm->dss, DSS_OBJECT, &obj_to_insert, 1);
     if (rc)
-        LOG_GOTO(free_extent_info, rc,
+        LOG_GOTO(free_all, rc,
                  "Unable to lock object objid: '%s'", obj_to_insert.oid);
 
     save_oid = obj_to_insert.oid;
 
     rc = _add_object_to_dss(&adm->dss, &obj_to_insert, &copy_to_insert);
     if (rc)
-        LOG_GOTO(free_extent_info, rc, "Could not add object to DSS");
+        LOG_GOTO(free_all, rc, "Could not add object to DSS");
 
     lyt_to_insert.oid = obj_to_insert.oid;
     lyt_to_insert.uuid = obj_to_insert.uuid;
@@ -602,9 +632,7 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
 
     rc = _add_extent_to_dss(&adm->dss, &lyt_to_insert, &ext_to_insert);
     if (rc)
-        LOG_GOTO(free_extent_info, rc, "Could not add extent to DSS");
-
-    pho_attrs_free(&ext_to_insert.info);
+        LOG_GOTO(free_all, rc, "Could not add extent to DSS");
 
     if (obj_to_insert.oid != save_oid) {
         free((void *)obj_to_insert.oid);
@@ -614,12 +642,25 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
 
     rc = dss_unlock(&adm->dss, DSS_OBJECT, &obj_to_insert, 1, false);
     if (rc)
-        LOG_RETURN(rc, "Unable to unlock object objid: '%s'",
-                   obj_to_insert.oid);
+        LOG_GOTO(free_all, rc, "Unable to unlock object objid: '%s'",
+                 obj_to_insert.oid);
 
-    return 0;
-
-free_extent_info:
+free_all:
+    /* obj_to_insert.oid may have been replaced: free the original too */
+    if (save_oid != NULL && save_oid != obj_to_insert.oid)
+        free((void *)save_oid);
+    free((void *)obj_to_insert.oid);
+    /* lyt_to_insert.uuid aliases obj_to_insert.uuid after the object insert */
+    if (lyt_to_insert.uuid != obj_to_insert.uuid)
+        free(lyt_to_insert.uuid);
+    free(obj_to_insert.uuid);
+    free(obj_to_insert.user_md);
+    free((void *) obj_to_insert.grouping);
+    free(lyt_to_insert.copy_name);
+    free(lyt_to_insert.layout_desc.mod_name);
+    pho_attrs_free(&lyt_to_insert.layout_desc.mod_attrs);
+    free(ext_to_insert.uuid);
+    free(ext_to_insert.address.buff);
     pho_attrs_free(&ext_to_insert.info);
 
     return rc;

@@ -117,9 +117,15 @@ static inline const char *_get_user_md(void *object)
     return ((struct object_info *) object)->user_md;
 }
 
+static inline const char *_get_grouping(void *object)
+{
+    return ((struct object_info *) object)->grouping;
+}
+
 static struct dss_field FIELDS[] = {
     { DSS_OBJECT_UPDATE_USER_MD, "user_md = %s", _get_user_md },
     { DSS_OBJECT_UPDATE_OID, "oid = %s", get_oid },
+    { DSS_OBJECT_UPDATE_GROUPING, "_grouping = %s", _get_grouping },
 };
 
 static int object_update_query(PGconn *conn, void *src_object, void *dst_object,
@@ -136,7 +142,7 @@ static int object_update_query(PGconn *conn, void *src_object, void *dst_object,
 
         g_string_append(sub_request, " UPDATE object SET ");
 
-        update_fields(conn, dst, fields, FIELDS, 2, sub_request);
+        update_fields(conn, dst, fields, FIELDS, 3, sub_request);
 
         if (fields == DSS_OBJECT_UPDATE_OID) {
             src_uuid = dss_char4sql(conn, src->uuid);

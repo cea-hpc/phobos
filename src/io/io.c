@@ -370,6 +370,9 @@ int set_object_md(const struct io_adapter_module *ioa, struct pho_io_descr *iod,
                  object_md->object_uuid);
     pho_attr_set(&iod->iod_attrs, PHO_EA_COPY_NAME, object_md->copy_name);
 
+    if (object_md->grouping != NULL)
+        pho_attr_set(&iod->iod_attrs, PHO_EA_GROUPING_NAME,
+                     object_md->grouping);
 
     rc = ioa_set_md(ioa, NULL, iod);
     pho_attrs_free(&iod->iod_attrs);

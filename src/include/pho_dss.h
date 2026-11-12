@@ -82,6 +82,7 @@ enum dss_device_operations {
 enum dss_object_operations {
     DSS_OBJECT_UPDATE_USER_MD = (1 << 0),
     DSS_OBJECT_UPDATE_OID = (1 << 1),
+    DSS_OBJECT_UPDATE_GROUPING = (1 << 2),
 };
 
 /** The different types of update allowed for copies */

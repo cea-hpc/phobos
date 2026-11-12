@@ -862,6 +862,7 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
     const char *tmp_xxh128;
     const char *tmp_copy;
     const char *tmp_md5;
+    const char *tmp_grouping;
     struct pho_attrs md;
     int64_t object_size;
     char *filename;
@@ -904,6 +905,7 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
     pho_attr_set(&md, PHO_EA_XXH128_NAME, NULL);
     pho_attr_set(&md, PHO_EA_EXTENT_OFFSET_NAME, NULL);
     pho_attr_set(&md, PHO_EA_COPY_NAME, NULL);
+    pho_attr_set(&md, PHO_EA_GROUPING_NAME, NULL);
 
     rc = pho_posix_md_get(NULL, iod->iod_fd, &md);
     if (rc)
@@ -998,6 +1000,10 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
         free(xxh128_digest);
     }
 
+    tmp_grouping = pho_attr_get(&md, PHO_EA_GROUPING_NAME);
+    if (tmp_grouping != NULL)
+        obj_info->grouping = xstrdup(tmp_grouping);
+
     obj_info->size = object_size;
 
     lyt_info->version = version;
@@ -1028,6 +1034,10 @@ int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
 free_oid_uuid:
     free(oid);
     free(uuid);
+    /* do not leave the freed strings in the caller structures */
+    lyt_info->oid = NULL;
+    obj_info->oid = NULL;
+    extent_to_insert->uuid = NULL;
     pho_attrs_free(&md);
 
 free_filename:
