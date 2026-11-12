@@ -6,22 +6,29 @@ Command name: phobos
 Directories are considered as both devices and media.
 Their support is useful for testing, so they should be implemented first.
 
-* phobos dir add [--unlock] <dirs(s)>
+* phobos dir add [--unlock] [--ranking <ranking(s)>] <dirs(s)>
   * query directory information through ldm_device_query()
   * insert a 'dir' device in locked state using dss_device_insert()
   * query directory information through ldm_media_query()
   * insert a 'dir' media in locked state using dss_media_set()
   * if --unlock is specified, unlock the device and media
     using dss_{device,media}_set()
+  * if --ranking is specified, set the ranking of the new media, to orient
+    the medium selection: a single value applies to all the media, while a
+    nodeset of values gives one ranking per medium (the i-th value to the
+    i-th medium)
 * phobos dir {list|ls}
   * list directories using dss_{device,media}_get()
 * phobos dir show <dir(s)>
   * show device/media information using dss_{device,media}_get()
 * phobos dir lock/unlock
   * set device and media locking status using dss_{device,media}_set().
-* phobos dir update {-T|--tags} <tag(s)> <dir(s)>
+* phobos dir update [{-T|--tags} <tag(s)>] [--ranking <ranking(s)>] <dir(s)>
   * set a new tags list for this dir medium. Old tags are erased by this new
     list.
+  * --ranking sets the media ranking, to orient the medium selection: a
+    single value applies to all the media, while a nodeset of values gives
+    one ranking per medium (the i-th value to the i-th medium)
 
 ## Drive
 * phobos drive add </dev/foo> [--unlock]
@@ -36,11 +43,15 @@ Their support is useful for testing, so they should be implemented first.
   * use dss_device_update_adm_status()
 
 ## Tape
-* phobos tape add --type ltoX [--fs <fstype>] <label(s)>
+* phobos tape add --type ltoX [--fs <fstype>] [--ranking <ranking(s)>] <label(s)>
   * add tapes to DSS in locked mode using dss_media_set()
     * labels syntax relies on 'nodeset'
     * --type parameter is mandatory
     * if fstype is not specified, use default returned by pho_cfg_get()
+    * if --ranking is specified, set the ranking of the new media, to orient
+      the medium selection: a single value applies to all the media, while
+      a nodeset of values gives one ranking per medium (the i-th value to
+      the i-th medium)
 * phobos tape format <label(s)> [--nb_streams <nb_streams>] --unlock
   * format tapes to the given fstype:
     * call lrs_format() -> load the tape in a drive and format the tape
@@ -52,9 +63,12 @@ Their support is useful for testing, so they should be implemented first.
   * use dss_media_get()
 * phobos tape {lock|unlock}
   * use dss_media_set()
-* phobos tape update {-T|--tags} <tag(s)> <dir(s)>
+* phobos tape update [{-T|--tags} <tag(s)>] [--ranking <ranking(s)>] <dir(s)>
   * set a new tags list for this tape medium. Old tags are erased by this new
     list.
+  * --ranking sets the media ranking, to orient the medium selection: a
+    single value applies to all the media, while a nodeset of values gives
+    one ranking per medium (the i-th value to the i-th medium)
 
 ## Object store
 * phobos get [--uuid u] [--version v] <object_id> <dest_file>
