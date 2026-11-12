@@ -457,6 +457,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'delete_access': None,
             'library': None,
             'groupings': None,
+            'ranking': None,
         }
 
     def get_display_dict(self, numeric=False, max_width=None, fmt=None):

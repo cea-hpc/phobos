@@ -504,8 +504,20 @@ class MediaAddTest(BasicExecutionTest):
         # A single ranking value is applied to all the targeted media
         self.pho_execute(['tape', 'update', '--ranking', '42', 'update[0-1]'])
 
+        # Check that all the media received the single ranking value
+        for med_id, med_ranking in ("update0", 42), ("update1", 42):
+            output, _ = self.pho_execute_capture(['tape', 'list', '--output',
+                                                  'ranking', med_id])
+            self.assertEqual(output.strip(), str(med_ranking))
+
         # A ranking nodeset provides one ranking per medium, in order
         self.pho_execute(['tape', 'update', '--ranking', '1-2', 'update[0-1]'])
+
+        # Check that the i-th ranking value went to the i-th medium
+        for med_id, med_ranking in ("update0", 1), ("update1", 2):
+            output, _ = self.pho_execute_capture(['tape', 'list', '--output',
+                                                  'ranking', med_id])
+            self.assertEqual(output.strip(), str(med_ranking))
 
         # An invalid ranking syntax is rejected by the argument parser
         self.pho_execute(['tape', 'update', '--ranking', 'foo[', 'update0'],

@@ -274,6 +274,12 @@ phobos tape update --ranking 5 [073000-073099]L8
 phobos tape update --ranking 1-100 [073000-073099]L8
 ```
 
+The ranking of the media is listed like the other media attributes:
+
+```
+phobos tape list --output ranking [073000-073099]L8
+```
+
 # Locating media
 Phobos allows you to locate its media by answering you on which host you should
 execute phobos commands or calls that require access to a specific medium.
