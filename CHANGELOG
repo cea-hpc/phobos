@@ -53,6 +53,9 @@
  * Repack: the space required on the target tape of a repack is now capped
    by the physical space the data occupies on the source tape, which can be
    less than its logical size on a filesystem compressing the data.
+ * Media ranking to orient the medium selection of the write requests,
+   enabled per family with use_media_ranking (tape only by default), and
+   a default ranking for the media added with no ranking (default_ranking).
 
 ## 3.4.1
  * Grouped read: queue preallocation has been improved to guarantee the
