@@ -29,6 +29,8 @@ Different sections in configuration file
 Below are listed, all the different sections available in the configuration file
 of Phobos.
 
+.. include:: conf/admin.rst
+
 .. include:: conf/copy.rst
 
 .. include:: conf/dss.rst

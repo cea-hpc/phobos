@@ -480,6 +480,54 @@ class MediaAddTest(BasicExecutionTest):
         self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
                           'rank3', '--ranking', '1-3'], code=os.EX_USAGE)
 
+    def test_media_add_default_ranking(self):
+        """Test the default ranking of the media added with no ranking."""
+        def get_ranking(handler, res):
+            """Return the ranking of the given medium."""
+            output, _ = self.pho_execute_capture([handler, 'list', '--output',
+                                                  'ranking', res])
+            return output.strip()
+
+        # A dominant ranking, to make the test independent from the other
+        # tests, which share the same database
+        self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
+                          'defrank0', '--ranking', '100'])
+
+        # With no ranking, a medium gets the default ranking of its family:
+        # the current highest ranking with the default 'stationary' mode
+        self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
+                          'defrank1'])
+        self.assertEqual(get_ranking('tape', 'defrank1'), '100')
+
+        try:
+            # With the 'growing' mode, a medium gets the highest ranking of
+            # its family, plus one; a single default ranking is computed for
+            # all the media of one add
+            os.environ['PHOBOS_ADMIN_default_ranking'] = 'tape=growing'
+            self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
+                              'defrank[2-3]'])
+            for med_id in 'defrank2', 'defrank3':
+                self.assertEqual(get_ranking('tape', med_id), '101')
+        finally:
+            del os.environ['PHOBOS_ADMIN_default_ranking']
+
+        # The same default ranking applies to the dir family
+        with tempfile.TemporaryDirectory() as tmp_dom, \
+                tempfile.TemporaryDirectory() as tmp1, \
+                tempfile.TemporaryDirectory() as tmp2:
+            self.pho_execute(['dir', 'add', tmp_dom, '--ranking', '100'])
+            self.pho_execute(['dir', 'add', tmp1, tmp2])
+            for tmp_path in tmp1, tmp2:
+                self.assertEqual(get_ranking('dir', tmp_path), '100')
+
+        # An invalid default_ranking value is rejected
+        try:
+            os.environ['PHOBOS_ADMIN_default_ranking'] = 'tape=bad_mode'
+            self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
+                              'defrank4'], code=errno.EINVAL)
+        finally:
+            del os.environ['PHOBOS_ADMIN_default_ranking']
+
     def test_media_update(self):
         """test updating media."""
         self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',

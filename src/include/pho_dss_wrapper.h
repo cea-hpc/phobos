@@ -133,6 +133,19 @@ int dss_medium_health(struct dss_handle *dss, const struct pho_id *medium_id,
                       size_t max_health, size_t *health);
 
 /**
+ * Get the highest ranking value among the media of a family
+ *
+ * @param[in]  handle        valid connection handle
+ * @param[in]  family        family of the media to consider
+ * @param[out] max_ranking   highest ranking value, 0 if the DSS contains
+ *                           no medium of this family
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_media_get_max_ranking(struct dss_handle *handle,
+                              enum rsc_family family, int *max_ranking);
+
+/**
  * Find the corresponding object
  *
  * This function is lazy because there is no lock and the existing objects could

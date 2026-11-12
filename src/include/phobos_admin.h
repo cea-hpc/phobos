@@ -487,6 +487,14 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
 /**
  * Adds a list of media into the DSS with the "blank" fs_status
  *
+ * A negative ranking in a medium of \p med_ls means that no ranking was
+ * specified for it: it gets the default ranking of its family, as
+ * configured with the default_ranking parameter (see phobos-conf(1)).
+ * This default is the highest ranking value currently in the DSS for the
+ * family with 'stationary', and this value plus one with 'growing'. A
+ * single default ranking is computed per family, for all the media of
+ * \p med_ls.
+ *
  * @param[in]  adm          Admin handle.
  * @param[in]  med_ls       List of media to add.
  * @param[in]  med_cnt      Number of media to add.

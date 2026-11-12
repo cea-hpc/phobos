@@ -56,15 +56,53 @@
 enum pho_cfg_params_admin {
     /* Actual admin parameters */
     PHO_CFG_ADMIN_lrs_socket,
+    PHO_CFG_ADMIN_default_ranking,
 
     /* Delimiters, update when modifying options */
     PHO_CFG_ADMIN_FIRST = PHO_CFG_ADMIN_lrs_socket,
-    PHO_CFG_ADMIN_LAST  = PHO_CFG_ADMIN_lrs_socket
+    PHO_CFG_ADMIN_LAST  = PHO_CFG_ADMIN_default_ranking
 };
 
 const struct pho_config_item cfg_admin[] = {
     [PHO_CFG_ADMIN_lrs_socket] = LRS_SOCKET_CFG_ITEM,
+    [PHO_CFG_ADMIN_default_ranking] = {
+        .section = "admin",
+        .name    = "default_ranking",
+        .value   = "tape=stationary,dir=stationary,rados_pool=stationary"
+    },
 };
+
+/** Mode of the default ranking of the media added without a ranking. */
+enum default_ranking_mode {
+    DEFAULT_RANKING_STATIONARY,
+    DEFAULT_RANKING_GROWING,
+};
+
+/**
+ * Get the mode of the default ranking of the media of a family, as
+ * configured with the default_ranking parameter.
+ */
+static int get_cfg_default_ranking_mode(enum rsc_family family,
+                                        enum default_ranking_mode *mode)
+{
+    char *value;
+    int rc;
+
+    rc = PHO_CFG_GET_SUBSTRING_VALUE(cfg_admin, PHO_CFG_ADMIN,
+                                     default_ranking, family, &value);
+    if (rc)
+        return rc;
+
+    if (!strcmp(value, "stationary"))
+        *mode = DEFAULT_RANKING_STATIONARY;
+    else if (!strcmp(value, "growing"))
+        *mode = DEFAULT_RANKING_GROWING;
+    else
+        rc = -EINVAL;
+
+    free(value);
+    return rc;
+}
 
 /* ****************************************************************************/
 /* Static Communication-related Functions *************************************/
@@ -2292,21 +2330,81 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
     return rc;
 }
 
+/** Compute the default ranking of the media of a family, as configured
+ *  with default_ranking: the highest ranking currently in the DSS for
+ *  'stationary', this value plus one for 'growing'.
+ */
+static int get_default_media_ranking(struct admin_handle *adm,
+                                     enum rsc_family family,
+                                     int *default_ranking)
+{
+    enum default_ranking_mode mode;
+    int max_ranking;
+    int rc;
+
+    rc = get_cfg_default_ranking_mode(family, &mode);
+    if (rc)
+        LOG_RETURN(rc, "Invalid default_ranking value for family '%s'",
+                   rsc_family2str(family));
+
+    rc = dss_media_get_max_ranking(&adm->dss, family, &max_ranking);
+    if (rc)
+        return rc;
+
+    if (mode == DEFAULT_RANKING_GROWING) {
+        if (max_ranking == INT_MAX)
+            LOG_RETURN(-ERANGE, "Cannot grow the highest ranking of "
+                                "family '%s'", rsc_family2str(family));
+
+        *default_ranking = max_ranking + 1;
+    } else {
+        *default_ranking = max_ranking;
+    }
+
+    return 0;
+}
+
 int phobos_admin_media_add(struct admin_handle *adm, struct media_info *med_ls,
                            int med_cnt)
 {
+    bool ranking_resolved[PHO_RSC_LAST] = {false};
+    int default_rankings[PHO_RSC_LAST] = {0};
     int rc;
     int i;
 
     if (!med_cnt)
         LOG_RETURN(-EINVAL, "No media were given");
 
-    if (med_ls[0].rsc.id.family == PHO_RSC_DIR) {
-        for (i = 0; i < med_cnt; i++) {
-            rc = _normalize_path(med_ls[i].rsc.id.name);
+    for (i = 0; i < med_cnt; i++) {
+        enum rsc_family family = med_ls[i].rsc.id.family;
+        struct media_info *medium = &med_ls[i];
+
+        if (family < 0 || family >= PHO_RSC_LAST)
+            LOG_RETURN(-EINVAL, "Medium '%s' has an invalid family",
+                       medium->rsc.id.name);
+
+        if (family == PHO_RSC_DIR) {
+            rc = _normalize_path(medium->rsc.id.name);
             if (rc)
                 return rc;
         }
+
+        /* A negative ranking means that none was specified: assign to
+         * the medium the default ranking of its family.
+         */
+        if (medium->ranking >= 0)
+            continue;
+
+        if (!ranking_resolved[family]) {
+            rc = get_default_media_ranking(adm, family,
+                                           &default_rankings[family]);
+            if (rc)
+                return rc;
+
+            ranking_resolved[family] = true;
+        }
+
+        medium->ranking = default_rankings[family];
     }
 
     return dss_media_insert(&adm->dss, med_ls, med_cnt);

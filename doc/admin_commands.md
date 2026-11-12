@@ -266,6 +266,14 @@ a nodeset of values: the nodeset must then contain as many values as
 the command targets media, and the values are attributed in the
 nodeset order (the i-th value to the i-th medium).
 
+When no ranking is given to an addition command, the added media get
+the default ranking of their family, as configured with
+`default_ranking` in the `[admin]` section (see phobos-conf(1)):
+`stationary`, the default, assigns them the highest ranking value
+currently in the DSS for their family, and `growing` assigns them this
+value plus one. A single default ranking is computed for all the media
+of a single addition.
+
 ```
 # Set the same ranking for all these tapes
 phobos tape update --ranking 5 [073000-073099]L8

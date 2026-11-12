@@ -171,6 +171,35 @@ int dss_medium_health(struct dss_handle *dss, const struct pho_id *medium_id,
     return dss_resource_health(dss, medium_id, DSS_MEDIA, max_health, health);
 }
 
+int dss_media_get_max_ranking(struct dss_handle *handle,
+                              enum rsc_family family, int *max_ranking)
+{
+    PGresult *res = NULL;
+    GString *request;
+    int rc;
+
+    request = g_string_new(NULL);
+
+    g_string_append_printf(request,
+                           "SELECT COALESCE(MAX(ranking), 0) FROM media"
+                           " WHERE family = '%s'",
+                           rsc_family2str(family));
+
+    rc = execute(handle->dh_conn, request->str, &res, PGRES_TUPLES_OK);
+    g_string_free(request, true);
+    if (rc) {
+        PQclear(res);
+        return rc;
+    }
+
+    /* COALESCE ensures that exactly one non-NULL row is returned */
+    *max_ranking = atoll(PQgetvalue(res, 0, 0));
+
+    PQclear(res);
+
+    return 0;
+}
+
 /**
  * Print additional information if the retrieval of a deprecated object failed.
  */

@@ -100,7 +100,10 @@ class MediaAddOptHandler(AddOptHandler):
                                  'single value is applied to all the added '
                                  'media, while a nodeset of values is '
                                  'attributed to the added media, in the '
-                                 'nodeset order')
+                                 'nodeset order; with no ranking, the media '
+                                 'get the default ranking of their family, '
+                                 'as configured with default_ranking (see '
+                                 'phobos-conf(1))')
 
 
 class MediaImportOptHandler(XferOptHandler):
@@ -294,12 +297,13 @@ class MediaOptHandler(BaseResourceOptHandler):
         A single ranking value is applied to all the media, while a
         nodeset of values must contain as many values as media, which
         receive them in the nodeset order. With no ranking, the media
-        get the neutral value 0: the default ranking of an added medium,
-        and a value ignored by an update which does not update the
-        ranking field.
+        get the sentinel value -1: an added medium then receives the
+        default ranking of its family (see default_ranking in
+        phobos-conf(1)), while an update ignores it, as it does not
+        update the ranking field.
         """
         if ranking is None:
-            return [0] * media_count
+            return [-1] * media_count
 
         # A single ranking value is applied to all the media
         if len(ranking) == 1:

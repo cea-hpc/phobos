@@ -17,6 +17,10 @@ Their support is useful for testing, so they should be implemented first.
     the medium selection: a single value applies to all the media, while a
     nodeset of values gives one ranking per medium (the i-th value to the
     i-th medium)
+  * otherwise, the new media get the default ranking of their family, as
+    configured with default_ranking (see phobos-conf(1)): 'stationary'
+    assigns them the highest ranking value currently in the DSS for their
+    family, and 'growing' assigns them this value plus one
 * phobos dir {list|ls}
   * list directories using dss_{device,media}_get()
 * phobos dir show <dir(s)>
@@ -52,6 +56,10 @@ Their support is useful for testing, so they should be implemented first.
       the medium selection: a single value applies to all the media, while
       a nodeset of values gives one ranking per medium (the i-th value to
       the i-th medium)
+    * otherwise, the new media get the default ranking of their family, as
+      configured with default_ranking (see phobos-conf(1)): 'stationary'
+      assigns them the highest ranking value currently in the DSS for their
+      family, and 'growing' assigns them this value plus one
 * phobos tape format <label(s)> [--nb_streams <nb_streams>] --unlock
   * format tapes to the given fstype:
     * call lrs_format() -> load the tape in a drive and format the tape
