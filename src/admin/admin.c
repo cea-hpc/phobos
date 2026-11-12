@@ -2600,6 +2600,56 @@ out_free:
     return rc;
 }
 
+int phobos_admin_media_update(struct admin_handle *adm,
+                              struct media_info *src_med,
+                              struct media_info *dst_med,
+                              int med_cnt, uint64_t fields)
+{
+    struct pho_id *ids;
+    int rc;
+    int i;
+
+    if (med_cnt <= 0)
+        LOG_RETURN(-EINVAL, "Invalid number of media to update: %d",
+                   med_cnt);
+
+    if (!fields)
+        LOG_RETURN(-EINVAL, "No field to update");
+
+    if (fields & LIBRARY)
+        LOG_RETURN(-EINVAL, "The library of a medium must be changed with "
+                            "phobos_admin_media_library_rename()");
+
+    for (i = 0; i < med_cnt; i++) {
+        struct media_info *med_res;
+
+        rc = dss_one_medium_get_from_id(&adm->dss, &src_med[i].rsc.id,
+                                        &med_res);
+        if (rc)
+            LOG_RETURN(rc, "Failed to find medium "FMT_PHO_ID,
+                       PHO_ID(src_med[i].rsc.id));
+
+        dss_res_free(med_res, 1);
+    }
+
+    rc = dss_media_update(&adm->dss, src_med, dst_med, med_cnt, fields);
+    if (rc)
+        return rc;
+
+    /* Notify the LRS so that it refreshes its in-memory copy of the
+     * updated media, and report the notification error after the
+     * successful update.
+     */
+    ids = xmalloc(sizeof(*ids) * med_cnt);
+    for (i = 0; i < med_cnt; i++)
+        pho_id_copy(&ids[i], &src_med[i].rsc.id);
+
+    rc = phobos_admin_notify_media_update(adm, ids, med_cnt, NULL);
+
+    free(ids);
+    return rc;
+}
+
 int phobos_admin_lib_scan(enum lib_type lib_type, const char *library,
                           bool refresh, json_t **lib_data)
 {
@@ -3163,7 +3213,7 @@ int phobos_admin_notify_media_update(struct admin_handle *adm,
     }
 
     media = media_from_id_list(ids, count);
-    locks = xmalloc(sizeof(*locks) * count);
+    locks = xcalloc(count, sizeof(*locks));
 
     rc = dss_lock_status(&adm->dss, DSS_MEDIA, media, count, locks);
     if (rc && rc != -ENOLCK)
@@ -3179,6 +3229,12 @@ int phobos_admin_notify_media_update(struct admin_handle *adm,
             continue;
 
         if (!strcmp(myhostname, locks[i].hostname)) {
+            if (!adm->phobosd_is_online)
+                /* The daemon is offline: it will read the updated media
+                 * from the DSS when it starts.
+                 */
+                continue;
+
             /* wait for the reply as the update should be quick */
             nrc = _admin_notify(adm, &ids[i], PHO_NTFY_OP_MEDIUM_UPDATE, true);
             rc = rc ? : nrc;
@@ -3193,6 +3249,9 @@ int phobos_admin_notify_media_update(struct admin_handle *adm,
     rc = rc ? : crc;
 
 out_free:
+    for (i = 0; i < count; i++)
+        pho_lock_clean(&locks[i]);
+
     free(media);
     free(locks);
 

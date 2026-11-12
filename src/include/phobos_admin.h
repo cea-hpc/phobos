@@ -541,6 +541,38 @@ int phobos_admin_media_import(struct admin_handle *adm,
                               struct media_info *med_ls, int med_cnt);
 
 /**
+ * Update the given fields of a list of media in the DSS, and notify the
+ * LRS of the change so that it refreshes its in-memory media information.
+ *
+ * The notification error is returned after a successful update, so that
+ * the caller knows that a daemon may hold stale media information.
+ *
+ * The library of a medium cannot be updated through this function: use
+ * phobos_admin_media_library_rename(), which also updates the library
+ * of the extents written on the media.
+ *
+ * @param[in]      adm        Admin handle.
+ * @param[in,out]  src_med    List of media identifying the DSS rows to
+ *                            update, through their resource id. The path
+ *                            of a directory medium is normalized in
+ *                            place to the canonical path of the medium.
+ * @param[in,out]  dst_med    List of media carrying the updated field
+ *                            values. When the stats fields are updated,
+ *                            the stats of each medium are replaced with
+ *                            the resulting ones, merged from the current
+ *                            stats and the given values.
+ * @param[in]      med_cnt    Number of media to update.
+ * @param[in]      fields     Bitmask of the media fields to update.
+ *
+ * @return                  0 on success
+ *                          -errno on failure
+ */
+int phobos_admin_media_update(struct admin_handle *adm,
+                              struct media_info *src_med,
+                              struct media_info *dst_med,
+                              int med_cnt, uint64_t fields);
+
+/**
  * Change the library of media.
  *
  * \param[in]      adm             Admin module handler.

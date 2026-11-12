@@ -27,7 +27,7 @@ import errno
 import json
 
 from ctypes import (addressof, byref, CDLL, c_int, c_char_p, c_void_p, pointer,
-                    Structure, c_size_t, c_bool)
+                    Structure, c_size_t, c_bool, c_uint64)
 
 from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-name-in-module
                                PHO_FS_RADOS, PHO_RSC_TAPE,
@@ -442,6 +442,18 @@ class Client: # pylint: disable=too-many-public-methods
 
         if rc:
             raise EnvironmentError(rc, "Failed to import tape(s)")
+
+    def medium_update(self, media, fields):
+        """Update media in the DSS and notify the LRS of the change"""
+        c_media = MediaInfo * len(list(media))
+        media_array = c_media(*media)
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_media_update(
+            byref(self.handle), media_array, media_array, len(list(media)),
+            c_uint64(fields)
+        )
+        if rc:
+            raise EnvironmentError(rc, "Failed to update media")
 
     def dump_logs(self, fd, log_filter):
         """Dump all persistent logs to the given file"""

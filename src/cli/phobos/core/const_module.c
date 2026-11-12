@@ -389,6 +389,7 @@ PyMODINIT_FUNC PyInit_const(void)
     PyModule_AddIntMacro(mod, PUT_ACCESS);
     PyModule_AddIntMacro(mod, GET_ACCESS);
     PyModule_AddIntMacro(mod, DELETE_ACCESS);
+    PyModule_AddIntMacro(mod, RANKING);
 
     /* enum pho_xfer_flags */
     PyModule_AddIntMacro(mod, PHO_XFER_OBJ_REPLACE);
