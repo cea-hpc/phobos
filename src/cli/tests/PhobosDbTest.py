@@ -31,6 +31,8 @@ import tempfile
 import time
 import unittest
 
+import psycopg2
+
 from phobos.db import Migrator, ORDERED_SCHEMAS, CURRENT_SCHEMA_VERSION, \
                       AVAIL_SCHEMAS, FUTURE_SCHEMAS
 
@@ -440,6 +442,10 @@ class MigratorTest(unittest.TestCase):
             """, output=True),
             [(0,), (0,), (0,)]
         )
+
+        # the ranking column rejects negative values
+        with self.assertRaises(psycopg2.IntegrityError):
+            self.migrator.execute("UPDATE media SET ranking = -1;")
 
         # the new indexes have been created
         self.assertEqual(

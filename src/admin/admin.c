@@ -2718,6 +2718,15 @@ int phobos_admin_media_update(struct admin_handle *adm,
         LOG_RETURN(-EINVAL, "The library of a medium must be changed with "
                             "phobos_admin_media_library_rename()");
 
+    if (fields & RANKING) {
+        for (i = 0; i < med_cnt; i++) {
+            if (dst_med[i].ranking < 0)
+                LOG_RETURN(-EINVAL, "Cannot update medium "FMT_PHO_ID
+                           " with a negative ranking",
+                           PHO_ID(dst_med[i].rsc.id));
+        }
+    }
+
     for (i = 0; i < med_cnt; i++) {
         if (src_med[i].rsc.id.family == PHO_RSC_DIR) {
             rc = _normalize_path(src_med[i].rsc.id.name);

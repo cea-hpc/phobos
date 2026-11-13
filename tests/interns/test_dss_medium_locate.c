@@ -326,6 +326,27 @@ static void dml_ok_lock(void **state)
     media_info_free(medium);
 }
 
+/**
+ * dss_media_insert returns -EINVAL on a negative ranking: the negative
+ * values are reserved to tell that no ranking was given
+ */
+static struct pho_id negative_ranking_medium = {
+    .family = PHO_RSC_TAPE,
+    .name = "negative_ranking_medium",
+    .library = "legacy",
+};
+
+static void dml_insert_negative_ranking(void **state)
+{
+    struct dss_handle *dss = (struct dss_handle *)*state;
+    struct media_info medium_info;
+
+    fill_medium_info(&medium_info, negative_ranking_medium);
+    medium_info.ranking = -1;
+
+    assert_int_equal(dss_media_insert(dss, &medium_info, 1), -EINVAL);
+}
+
 int main(void)
 {
     const struct CMUnitTest dss_medium_locate_cases[] = {
@@ -335,6 +356,7 @@ int main(void)
         cmocka_unit_test_setup(dml_ok_free, dml_ok_free_setup),
         cmocka_unit_test_setup(dml_update_ranking, dml_update_ranking_setup),
         cmocka_unit_test_setup(dml_ok_lock, dml_ok_lock_setup),
+        cmocka_unit_test(dml_insert_negative_ranking),
     };
 
     pho_context_init();

@@ -559,6 +559,12 @@ int phobos_admin_media_import(struct admin_handle *adm,
  * phobos_admin_media_library_rename(), which also updates the library
  * of the extents written on the media.
  *
+ * The ranking of a medium must be non-negative: -EINVAL is returned when
+ * the RANKING field is updated with a negative value. A negative ranking
+ * is only accepted by phobos_admin_media_add, where it means that no
+ * ranking was given, and the medium then gets the default ranking of its
+ * family.
+ *
  * @param[in]      adm        Admin handle.
  * @param[in,out]  src_med    List of media identifying the DSS rows to
  *                            update, through their resource id. The path

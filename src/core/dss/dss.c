@@ -461,6 +461,15 @@ static int media_update_lock_retry(struct dss_handle *hdl,
 int dss_media_insert(struct dss_handle *handle, struct media_info *media_list,
                      int media_count)
 {
+    int i;
+
+    for (i = 0; i < media_count; i++) {
+        if (media_list[i].ranking < 0)
+            LOG_RETURN(-EINVAL, "Cannot insert medium "FMT_PHO_ID
+                       " with a negative ranking",
+                       PHO_ID(media_list[i].rsc.id));
+    }
+
     return dss_generic_set(handle, DSS_MEDIA, (void *) media_list,
                            media_count, DSS_SET_INSERT);
 }
@@ -475,6 +484,15 @@ int dss_media_update(struct dss_handle *handle, struct media_info *src_list,
     if (!fields) {
         pho_warn("Tried updating media without specifying any field");
         return 0;
+    }
+
+    if (fields & RANKING) {
+        for (i = 0; i < media_count; i++) {
+            if (dst_list[i].ranking < 0)
+                LOG_RETURN(-EINVAL, "Cannot update medium "FMT_PHO_ID
+                           " with a negative ranking",
+                           PHO_ID(dst_list[i].rsc.id));
+        }
     }
 
     for (i = 0; i < media_count; i++) {

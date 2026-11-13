@@ -55,7 +55,7 @@ CREATE TABLE media(
     delete          boolean DEFAULT TRUE,
     library         varchar(255) NOT NULL,
     groupings       jsonb, -- json array (optimized for searching)
-    ranking         integer DEFAULT 0 NOT NULL,
+    ranking         integer DEFAULT 0 NOT NULL CHECK (ranking >= 0),
 
     PRIMARY KEY (family, id, library)
 );

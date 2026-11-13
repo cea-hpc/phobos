@@ -826,7 +826,8 @@ class Migrator: # pylint: disable=too-many-public-methods
         DB schema changes:
         - rename the media stats key nb_obj into nb_extent
         - initialize the GC counters in the media stats
-        - add the ranking column to the media table, defaulted to 0
+        - add the non-negative ranking column to the media table,
+          defaulted to 0
         - add indexes for medium-scoped extent lookups and for the resolution
           of the object versions referencing an extent
         """
@@ -853,8 +854,9 @@ class Migrator: # pylint: disable=too-many-public-methods
                         (stats ->> 'logc_spc_orphan')::bigint, 0)
                 );
 
-            -- add the ranking column to the media table
-            ALTER TABLE media ADD ranking integer DEFAULT 0 NOT NULL;
+            -- add the non-negative ranking column to the media table
+            ALTER TABLE media ADD ranking integer DEFAULT 0 NOT NULL
+                CHECK (ranking >= 0);
 
             -- index to scope extents by medium
             CREATE INDEX IF NOT EXISTS extent_medium_family_library_id_idx

@@ -52,12 +52,14 @@ from phobos.output import dump_object_list
 
 
 def parse_ranking(value):
-    """Parse the ranking option of the media update.
+    """Parse the ranking option of the media commands.
 
     The ranking is either a single value, which will be applied to all
-    the media of the update, or a nodeset of values, which must contain
+    the media of the command, or a nodeset of values, which must contain
     as many values as the command targets media: the media then receive
-    one ranking each, in the nodeset order.
+    one ranking each, in the nodeset order. The ranking values must be
+    non-negative: a negative value is reserved internally, to tell that
+    no ranking was given.
     """
     int32_max = 2**31 - 1
 
@@ -79,6 +81,9 @@ def parse_ranking(value):
     if not ranking:
         raise argparse.ArgumentTypeError(f"empty ranking '{value}'")
 
+    if min(ranking) < 0:
+        raise argparse.ArgumentTypeError(f"negative ranking '{value}'")
+
     return ranking
 
 
@@ -95,15 +100,15 @@ class MediaAddOptHandler(AddOptHandler):
                             help='tags to associate with this media (comma-'
                                  'separated: foo,bar)')
         parser.add_argument('--ranking', type=parse_ranking,
-                            help='Ranking of the new media, to orient their '
-                                 'selection (the higher, the preferred): a '
-                                 'single value is applied to all the added '
-                                 'media, while a nodeset of values is '
-                                 'attributed to the added media, in the '
-                                 'nodeset order; with no ranking, the media '
-                                 'get the default ranking of their family, '
-                                 'as configured with default_ranking (see '
-                                 'phobos-conf(1))')
+                            help='Non-negative ranking of the new media, to '
+                                 'orient their selection (the higher, the '
+                                 'preferred): a single value is applied to '
+                                 'all the added media, while a nodeset of '
+                                 'values is attributed to the added media, '
+                                 'in the nodeset order; with no ranking, the '
+                                 'media get the default ranking of their '
+                                 'family, as configured with '
+                                 'default_ranking (see phobos-conf(1))')
 
 
 class MediaImportOptHandler(XferOptHandler):
@@ -259,12 +264,12 @@ class MediaUpdateOptHandler(ActionOptHandler):
                                  'e.g. "-T foo,bar"), empty string to clear '
                                  'tags, new tags list overwrite current tags')
         parser.add_argument('--ranking', type=parse_ranking,
-                            help='New ranking for the media, to orient '
-                                 'their selection (the higher, the '
-                                 'preferred): a single value is applied '
-                                 'to all the updated media, while a '
-                                 'nodeset of values is attributed to the '
-                                 'targeted media, in the nodeset order')
+                            help='New non-negative ranking for the media, '
+                                 'to orient their selection (the higher, '
+                                 'the preferred): a single value is '
+                                 'applied to all the updated media, while '
+                                 'a nodeset of values is attributed to '
+                                 'the targeted media, in the nodeset order')
         parser.add_argument('-L', '--library',
                             help="Library containing the medium to update")
         parser.add_argument('res', nargs='+', help='Resource(s) to update')

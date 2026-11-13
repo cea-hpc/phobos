@@ -223,6 +223,31 @@ static void paml_ok_lock(void **state)
     free(hostname);
 }
 
+/**
+ * phobos_admin_media_update returns -EINVAL on a negative ranking: the
+ * negative values are reserved to tell that no ranking was given
+ */
+static struct pho_id negative_ranking_medium = {
+    .family = PHO_RSC_TAPE,
+    .name = "negative_ranking_medium",
+    .library = "legacy",
+};
+
+static void paml_update_negative_ranking(void **state)
+{
+    struct admin_handle *adm = (struct admin_handle *)*state;
+    struct media_info medium_info;
+
+    (void) state;
+
+    fill_medium_info(&medium_info, negative_ranking_medium);
+    medium_info.ranking = -1;
+
+    assert_int_equal(phobos_admin_media_update(adm, &medium_info,
+                                               &medium_info, 1, RANKING),
+                     -EINVAL);
+}
+
 int main(void)
 {
     const struct CMUnitTest phobos_admin_medium_locate_cases[] = {
@@ -231,6 +256,7 @@ int main(void)
         cmocka_unit_test_setup(paml_eperm, paml_eperm_setup),
         cmocka_unit_test_setup(paml_ok_free, paml_ok_free_setup),
         cmocka_unit_test_setup(paml_ok_lock, paml_ok_lock_setup),
+        cmocka_unit_test(paml_update_negative_ranking),
     };
 
     pho_context_init();

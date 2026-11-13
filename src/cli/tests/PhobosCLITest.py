@@ -480,6 +480,10 @@ class MediaAddTest(BasicExecutionTest):
         self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
                           'rank3', '--ranking', '1-3'], code=os.EX_USAGE)
 
+        # A negative ranking is rejected at argument parsing
+        self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
+                          'rank4', '--ranking', '-1'], code=2)
+
     def test_media_add_default_ranking(self):
         """Test the default ranking of the media added with no ranking."""
         def get_ranking(handler, res):
@@ -606,6 +610,10 @@ class MediaAddTest(BasicExecutionTest):
         # A ranking nodeset must match the number of targeted media
         self.pho_execute(['tape', 'update', '--ranking', '1-3', 'update0'],
                          code=os.EX_USAGE)
+
+        # A negative ranking is rejected at argument parsing
+        self.pho_execute(['tape', 'update', '--ranking', '-1', 'update0'],
+                         code=2)
 
         # Test a failed update
         def failed_update(*args, **kwargs): # pylint: disable=unused-argument

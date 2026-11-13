@@ -13,10 +13,10 @@ Their support is useful for testing, so they should be implemented first.
   * insert a 'dir' media in locked state using dss_media_set()
   * if --unlock is specified, unlock the device and media
     using dss_{device,media}_set()
-  * if --ranking is specified, set the ranking of the new media, to orient
-    the medium selection: a single value applies to all the media, while a
-    nodeset of values gives one ranking per medium (the i-th value to the
-    i-th medium)
+  * if --ranking is specified, set the non-negative ranking of the new
+    media, to orient the medium selection: a single value applies to all
+    the media, while a nodeset of values gives one ranking per medium
+    (the i-th value to the i-th medium)
   * otherwise, the new media get the default ranking of their family, as
     configured with default_ranking (see phobos-conf(1)): 'stationary'
     assigns them the highest ranking value currently in the DSS for their
@@ -30,9 +30,9 @@ Their support is useful for testing, so they should be implemented first.
 * phobos dir update [{-T|--tags} <tag(s)>] [--ranking <ranking(s)>] <dir(s)>
   * set a new tags list for this dir medium. Old tags are erased by this new
     list.
-  * --ranking sets the media ranking, to orient the medium selection: a
-    single value applies to all the media, while a nodeset of values gives
-    one ranking per medium (the i-th value to the i-th medium)
+  * --ranking sets the non-negative media ranking, to orient the medium
+    selection: a single value applies to all the media, while a nodeset of
+    values gives one ranking per medium (the i-th value to the i-th medium)
 
 ## Drive
 * phobos drive add </dev/foo> [--unlock]
@@ -52,10 +52,10 @@ Their support is useful for testing, so they should be implemented first.
     * labels syntax relies on 'nodeset'
     * --type parameter is mandatory
     * if fstype is not specified, use default returned by pho_cfg_get()
-    * if --ranking is specified, set the ranking of the new media, to orient
-      the medium selection: a single value applies to all the media, while
-      a nodeset of values gives one ranking per medium (the i-th value to
-      the i-th medium)
+    * if --ranking is specified, set the non-negative ranking of the new
+      media, to orient the medium selection: a single value applies to all
+      the media, while a nodeset of values gives one ranking per medium
+      (the i-th value to the i-th medium)
     * otherwise, the new media get the default ranking of their family, as
       configured with default_ranking (see phobos-conf(1)): 'stationary'
       assigns them the highest ranking value currently in the DSS for their
@@ -74,9 +74,9 @@ Their support is useful for testing, so they should be implemented first.
 * phobos tape update [{-T|--tags} <tag(s)>] [--ranking <ranking(s)>] <dir(s)>
   * set a new tags list for this tape medium. Old tags are erased by this new
     list.
-  * --ranking sets the media ranking, to orient the medium selection: a
-    single value applies to all the media, while a nodeset of values gives
-    one ranking per medium (the i-th value to the i-th medium)
+  * --ranking sets the non-negative media ranking, to orient the medium
+    selection: a single value applies to all the media, while a nodeset of
+    values gives one ranking per medium (the i-th value to the i-th medium)
 
 ## Object store
 * phobos get [--uuid u] [--version v] <object_id> <dest_file>
