@@ -256,7 +256,7 @@ The following table illustrates conditions for matching tags:
 # Ranking media
 The media ranking lets administrators orient the medium selection for
 writes. When several media have exactly the same free space, the one
-with the highest ranking is preferred. This only applies to the media
+with the lowest ranking is preferred. This only applies to the media
 families with `use_media_ranking` enabled in the LRS configuration
 (tape by default).
 
@@ -275,8 +275,9 @@ the default ranking of their family, as configured with
 `default_ranking` in the `[admin]` section (see phobos-conf(1)):
 `stationary`, the default, assigns them the highest ranking value
 currently in the DSS for their family, and `growing` assigns them this
-value plus one. A single default ranking is computed for all the media
-of a single addition.
+value plus one. As the lowest ranking is the preferred one, these media
+are the least preferred of their family. A single default ranking is
+computed for all the media of a single addition.
 
 ```
 # Set the same ranking for all these tapes

@@ -101,7 +101,7 @@ class MediaAddOptHandler(AddOptHandler):
                                  'separated: foo,bar)')
         parser.add_argument('--ranking', type=parse_ranking,
                             help='Non-negative ranking of the new media, to '
-                                 'orient their selection (the higher, the '
+                                 'orient their selection (the lower, the '
                                  'preferred): a single value is applied to '
                                  'all the added media, while a nodeset of '
                                  'values is attributed to the added media, '
@@ -265,7 +265,7 @@ class MediaUpdateOptHandler(ActionOptHandler):
                                  'tags, new tags list overwrite current tags')
         parser.add_argument('--ranking', type=parse_ranking,
                             help='New non-negative ranking for the media, '
-                                 'to orient their selection (the higher, '
+                                 'to orient their selection (the lower, '
                                  'the preferred): a single value is '
                                  'applied to all the updated media, while '
                                  'a nodeset of values is attributed to '

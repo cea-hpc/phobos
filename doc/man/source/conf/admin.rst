@@ -15,8 +15,10 @@ comma-separated list of <family>=<mode> entries, with the mode either
 
 With "stationary", the new media get the highest ranking value currently
 in the DSS for their family. With "growing", they get this value plus
-one. A single default ranking is computed for all the media of a single
-addition, before they are inserted.
+one. As the lowest ranking is the preferred one, the media added with
+the default ranking are the least preferred of their family. A single
+default ranking is computed for all the media of a single addition,
+before they are inserted.
 
 If this parameter is not specified, Phobos defaults to the following:
 **default_ranking = tape=stationary,dir=stationary,rados_pool=stationary**.

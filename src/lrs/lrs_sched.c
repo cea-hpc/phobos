@@ -1062,7 +1062,8 @@ static bool write_avoids_medium(const pho_req_write_t *wreq,
 
 /**
  * Tell whether the ranking of \p curr breaks its exact free space tie
- * with \p best, when the media ranking is used for the selection.
+ * with \p best, when the media ranking is used for the selection: the
+ * lowest ranking is the preferred one.
  *
  * The best fit is selected at byte granularity, so this can only decide
  * between media with exactly the same free space: make sure the media
@@ -1075,7 +1076,7 @@ static bool ranking_breaks_tie(const struct media_info *curr,
 {
     return use_media_ranking &&
            curr->stats.phys_spc_free == best->stats.phys_spc_free &&
-           curr->ranking > best->ranking;
+           curr->ranking < best->ranking;
 }
 
 /**
