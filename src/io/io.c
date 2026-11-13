@@ -186,6 +186,8 @@ static void extent_common_attr_names(struct pho_attrs *attrs)
     pho_attr_set(attrs, PHO_EA_LAYOUT_NAME, NULL);
     pho_attr_set(attrs, PHO_EA_EXTENT_OFFSET_NAME, NULL);
     pho_attr_set(attrs, PHO_EA_COPY_NAME, NULL);
+    pho_attr_set(attrs, PHO_EA_GROUPING_NAME, NULL);
+    pho_attr_set(attrs, PHO_EA_GENERATION_TIME_NAME, NULL);
 }
 
 /* Add the name of the iterated attribute to \a udata, to retrieve its
