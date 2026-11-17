@@ -132,17 +132,24 @@ function cleanup
 # objects (set at metadata insert time) and of the extents (set from the
 # file ctime, which differs from the write time the lost database held),
 # deprec_time, access_time, physical space stats and fullness (they depend
-# on the host filesystem), and the media tags, which are only stored in the
-# database.
+# on the host filesystem).
 function dump_db
 {
     echo "== media =="
     # the groupings are compared as a sorted set: the import walks the
-    # extents in directory order, which may differ from their write order
+    # extents in directory order, which may differ from their write order.
+    # The tags, also compared as a sorted set, are only checked for the
+    # media that carry extents: a medium gets its tags persisted on the
+    # xattrs of its label file only while it is mounted, so a medium that
+    # never received a put cannot rebuild them.
     $PSQL -A -t -F '|' -c "SELECT family, model, id, adm_status, fs_type, \
 fs_label, address_type, fs_status, stats->>'nb_extent', \
 stats->>'logc_spc_used', put, \"get\", \"delete\", library, \
-(SELECT string_agg(g, ',' ORDER BY g) FROM jsonb_array_elements_text(groupings) g) \
+(SELECT string_agg(g, ',' ORDER BY g) FROM jsonb_array_elements_text(groupings) g), \
+CASE WHEN EXISTS (SELECT 1 FROM extent e WHERE e.medium_family = media.family \
+AND e.medium_id = media.id AND e.medium_library = media.library) \
+THEN (SELECT string_agg(t, ',' ORDER BY t) FROM jsonb_array_elements_text(tags) t) \
+END \
 FROM media ORDER BY id"
     echo "== object =="
     $PSQL -A -t -F '|' -c "SELECT oid, user_md, object_uuid, version, \
@@ -286,7 +293,7 @@ function test_import_object_generation
               $(mktemp -d "$DIR_TEST_IN/test_pho.XXXX")
               $(mktemp -d "$DIR_TEST_IN/test_pho.XXXX"))
 
-    $phobos dir add ${ST_MEDIA[@]}
+    $phobos dir add --tags gen_tag,gen_tag2,gen_tag3 ${ST_MEDIA[@]}
     $phobos dir lock "${DIRS[@]}"
 
     # oid_delrep: put, delete (the generation only becomes deprecated
@@ -329,7 +336,16 @@ function test_import_object_generation
     # again, so the re-put one arrives while the oid only exists as
     # deprecated objects: its more recent creation time must make it the
     # living generation
-    $valg_phobos dir import --unlock "${ST_MEDIA[0]}"
+
+    # --tags replaces the tags of the medium: only extra_tag remains on
+    # ST_MEDIA[0], the gen_tag* of its label file are dropped. The imports
+    # below, without --tags, rebuild the three gen_tag* of each medium from
+    # its label file, growing the final array, which used to leave a stale
+    # pointer in the array of the caller
+    $valg_phobos dir import --unlock --tags extra_tag "${ST_MEDIA[0]}"
+    tags="$($phobos dir list -o tags "${ST_MEDIA[0]}")"
+    [[ "$tags" == "['extra_tag']" ]] ||
+        error "the tags of ${ST_MEDIA[0]} should only contain extra_tag: got '${tags}'"
     $phobos delete oid_delrep
     $valg_phobos dir import --unlock "${ST_MEDIA[1]}"
 

@@ -81,8 +81,11 @@ if (media_info->fs.status == PHO_FS_STATUS_IMPORTING && !media_rc) {
     fields |= FS_STATUS;
 }
 
-/* the exploration rebuilt the groupings from the extent xattrs */
-fields |= GROUPINGS;
+/* the exploration rebuilt the groupings from the extent xattrs, and the
+ * tags come from the command line or, when it was given none, from the
+ * label file
+ */
+fields |= GROUPINGS | TAGS;
 
 rc = get_fs_adapter(media_info->fs.type, &fsa);
 if (rc) {
@@ -784,9 +787,82 @@ static int explore_from_path(struct admin_handle *adm, char *root_path,
                                  groupings, size_written, nb_new_obj);
 }
 
+/**
+ * Build in \p final_tags the tags persisted on the xattrs of the label
+ * file of \p medium, so that they survive a database loss. Only called
+ * when the command line gave no tag, as the --tags option replaces the
+ * existing tags everywhere else. Best effort: a missing or invalid xattr
+ * is only logged, leaving no tag.
+ *
+ * The tags of \p medium are only read: the CLI passes a by-value copy of
+ * the medium and frees the array itself on exit, so the C side must not
+ * reallocate it.
+ */
+static void _import_medium_tags(struct media_info *medium,
+                                const char *root_path,
+                                struct string_array *final_tags)
+{
+    const struct pho_id *med_id = &medium->rsc.id;
+    struct string_array xattr_tags = {0};
+    char *label_path = NULL;
+    char *xattr = NULL;
+    size_t i;
+    int rc;
+
+    rc = asprintf(&label_path, "%s/" PHO_MEDIA_LABEL_FILE, root_path);
+    if (rc < 0) {
+        pho_error(-ENOMEM, "Could not build the label file path of medium "
+                           "(family '%s', name '%s', library '%s')",
+                  rsc_family2str(med_id->family), med_id->name,
+                  med_id->library);
+        return;
+    }
+
+    /* the dirs formatted before the unification of the label file name
+     * carry its former name.
+     */
+    if (access(label_path, F_OK) != 0) {
+        free(label_path);
+        if (asprintf(&label_path, "%s/" PHO_MEDIA_LABEL_LEGACY,
+                     root_path) < 0) {
+            pho_error(-ENOMEM, "Could not build the label file path of "
+                               "medium (family '%s', name '%s', library "
+                               "'%s')",
+                      rsc_family2str(med_id->family), med_id->name,
+                      med_id->library);
+            return;
+        }
+    }
+
+    if (access(label_path, F_OK) == 0) {
+        rc = pho_getxattr(label_path, -1, PHO_EA_TAGS_NAME, &xattr);
+        if (!rc && xattr) {
+            rc = dss_string_array_decode(&xattr_tags, xattr);
+            if (!rc) {
+                for (i = 0; i < xattr_tags.count; i++) {
+                    if (!string_exists(final_tags, xattr_tags.strings[i]))
+                        string_array_add(final_tags,
+                                         xattr_tags.strings[i]);
+                }
+            }
+        }
+
+        if (rc)
+            pho_error(rc, "Could not read the tags xattr of '%s'",
+                      label_path);
+    }
+
+    string_array_free(&xattr_tags);
+    free(xattr);
+    free(label_path);
+}
+
 int import_medium(struct admin_handle *adm, struct media_info *medium)
 {
+    struct string_array final_tags = {0};
     struct pho_id id = medium->rsc.id;
+    struct string_array cli_tags = {0};
+    bool tags_swapped = false;
     enum address_type addr_type;
     long long nb_new_obj = 0;
     size_t size_written = 0;
@@ -855,6 +931,21 @@ int import_medium(struct admin_handle *adm, struct media_info *medium)
               resp->ralloc->media[0]->med_id->library,
               address_type2str(addr_type));
 
+    /* the tags given on the command line replace those of the medium: its
+     * label file is only read when it was given none
+     */
+    if (medium->tags.count == 0) {
+        _import_medium_tags(medium, root_path, &final_tags);
+
+        /* _dev_media_update persists medium->tags: swap in the rebuilt
+         * tags for the update only, then give the caller its array back,
+         * as it owns it.
+         */
+        cli_tags = medium->tags;
+        medium->tags = final_tags;
+        tags_swapped = true;
+    }
+
     // Exploration of the tape
     rc = explore_from_path(adm, root_path, id, _import_file_to_dss,
                            &medium->groupings, &size_written, &nb_new_obj);
@@ -862,6 +953,11 @@ int import_medium(struct admin_handle *adm, struct media_info *medium)
     // fs_df to actualize the stats of the tape
     rc = _dev_media_update(&adm->dss, medium, size_written, rc, root_path,
                            nb_new_obj);
+
+    if (tags_swapped) {
+        medium->tags = cli_tags;
+        string_array_free(&final_tags);
+    }
 
     string_array_free(&medium->groupings);
 

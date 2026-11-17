@@ -317,6 +317,8 @@ stats.phys_spc_used)"
 
     $phobos tape import --unlock -t lto5 -T "toto" ${tapes} || error "import failed"
 
+    # the tags given on the command line replace those of the tape: the
+    # tags of its label file (i/2, set in tapes_setup) are not merged in
     for tape in $(nodeset -e "${tapes}"); do
         tags="$($phobos tape list -o tags "${tape}")"
         [[ "$tags" == "['toto']" ]] ||
@@ -329,6 +331,33 @@ stats.phys_spc_used)"
 
     [[ "$req1" == "$req2" ]] || error "Media data mismatch"
     rm -f $OUT_FILE $IN_FILE
+}
+
+function test_import_tags
+{
+    # The tags set on the tapes before the database loss (i/2, set in
+    # tapes_setup and persisted on their label file at format) are
+    # imported when no --tags option is given.
+    local n_tapes=2
+    local drives="$(get_lto_drives 5 $n_tapes | nodeset -f)"
+    local tapes="$(get_tapes L5 $n_tapes)"
+    local i=0
+
+    tapes_setup "$drives" "$tapes"
+
+    db_cleanup
+    db_setup
+
+    tapes_setup "$drives"
+
+    $phobos tape import --unlock -t lto5 ${tapes} || error "import failed"
+
+    for tape in $(nodeset -e "${tapes}"); do
+        tags="$($phobos tape list -o tags "${tape}")"
+        [[ "$tags" == "['$(($i/2))']" ]] ||
+            error "Tags of ${tape} not set after import: got '${tags}'"
+        i=$((i+1))
+    done
 }
 
 function test_import_with_live
@@ -390,4 +419,5 @@ TESTS=("db_setup; test_import; db_cleanup")
 TESTS+=("db_setup; test_generation; db_cleanup")
 TESTS+=("db_setup; test_copy_status; db_cleanup")
 TESTS+=("db_setup; test_media; db_cleanup")
+TESTS+=("db_setup; test_import_tags; db_cleanup")
 TESTS+=("db_setup; test_import_with_live; db_cleanup")
