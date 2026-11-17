@@ -27,7 +27,9 @@
 #endif
 
 #include <assert.h>
+#include <fcntl.h>
 #include <stdatomic.h>
+#include <unistd.h>
 
 #include "health.h"
 #include "lrs_cache.h"
@@ -1461,6 +1463,76 @@ out_close:
     return rc;
 }
 
+/**
+ * Create the label file of a tape at format, like the dirs, with the fs
+ * label as content, so that the medium is self-descriptive. The freshly
+ * formatted tape is mounted for this only purpose and is left mounted:
+ * the file is flushed by the sync, and the LTFS index, which records it,
+ * is flushed by the unmounts of the later operations. The medium stays
+ * empty: the media update of the umount path, which is what turns an
+ * empty medium into a used one, only runs on pending sync requests, and
+ * a medium that has just been formatted has none.
+ *
+ * The mount and the sync go through the regular device operations:
+ * whatever fails, the medium is left mounted, which the next format
+ * unmounts before formatting.
+ *
+ * @return 0 on success, negative error code on failure: the format
+ *         operation fails, and the medium is left formatted without
+ *         label file.
+ */
+static int tape_format_label(struct lrs_dev *dev)
+{
+    struct media_info *medium = dev->ld_dss_media_info;
+    char *label_path = NULL;
+    size_t label_len;
+    ssize_t size;
+    int rc;
+    int fd;
+
+    /* create the label file, with the fs label as content */
+    rc = asprintf(&label_path, "%s/" PHO_MEDIA_LABEL_FILE,
+                  dev->ld_mnt_path);
+    if (rc < 0) {
+        rc = -ENOMEM;
+        goto out_free;
+    }
+
+    fd = open(label_path, O_CREAT | O_EXCL | O_WRONLY, 0600);
+    if (fd < 0) {
+        rc = -errno;
+        pho_error(rc, "Could not create the label file '%s' of medium "
+                      FMT_PHO_ID, label_path, PHO_ID(medium->rsc.id));
+        goto out_free;
+    }
+
+    label_len = strlen(medium->rsc.id.name);
+    size = write(fd, medium->rsc.id.name, label_len);
+    if (size < 0) {
+        rc = -errno;
+        close(fd);
+        pho_error(rc, "Could not write the label to '%s' of medium "
+                      FMT_PHO_ID, label_path, PHO_ID(medium->rsc.id));
+        goto out_free;
+    }
+    close(fd);
+    if (size != (ssize_t)label_len) {
+        rc = -EIO;
+        pho_error(rc, "Could not write the whole label to '%s' of medium "
+                      FMT_PHO_ID, label_path, PHO_ID(medium->rsc.id));
+        goto out_free;
+    }
+
+    /* flush the label file to the medium */
+    MUTEX_LOCK(&dev->ld_mutex);
+    rc = medium_sync(dev);
+    MUTEX_UNLOCK(&dev->ld_mutex);
+
+out_free:
+    free(label_path);
+    return rc;
+}
+
 int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
 {
     struct media_info *medium = dev->ld_dss_media_info;
@@ -1493,12 +1565,32 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
                    medium->rsc.id.name, medium->rsc.id.library);
     }
 
-    MUTEX_LOCK(&dev->ld_mutex);
-    /* Systematically use the media ID as filesystem label */
+    /* Systematically use the media ID as filesystem label: the mount of
+     * the label file creation below checks it
+     */
     strncpy(medium->fs.label, medium->rsc.id.name, sizeof(medium->fs.label));
     medium->fs.label[sizeof(medium->fs.label) - 1] = '\0';
     fields |= FS_LABEL;
 
+    rc = dev_mount(dev);
+    if (rc)
+        return rc;
+
+    /* Like the dirs, that get their label file from their own format, a
+     * tape is mounted once at format to create it.
+     */
+    if (medium->rsc.id.family == PHO_RSC_TAPE) {
+        rc = tape_format_label(dev);
+        if (rc) {
+            pho_stat_incr(dev->stats.format_errors, 1);
+            LOG_RETURN(rc,
+                       "Cannot create the label file of medium " FMT_PHO_ID
+                       " after formatting it",
+                       PHO_ID(medium->rsc.id));
+        }
+    }
+
+    MUTEX_LOCK(&dev->ld_mutex);
     medium->stats.nb_extent = 0;
     medium->stats.logc_spc_used = 0;
     medium->stats.phys_spc_used = space.spc_used;

@@ -232,6 +232,11 @@ function test_drive_selection_format
               "mounted one"
     fi
 
+    # the format leaves the formatted tape mounted, but the check below
+    # needs a loaded drive: unload it and load it back
+    $phobos drive unload ${three_lto6_drives[1]}
+    $phobos drive load ${three_lto6_drives[1]} ${four_lto6_tapes[1]}
+
     # Add a new tape
     $phobos tape add --type lto6 ${four_lto6_tapes[2]}
 
@@ -241,6 +246,10 @@ function test_drive_selection_format
         error "New format should have happened in the loaded drive, not the" \
               "mounted one"
     fi
+
+    # the check below also needs a loaded drive: unload it and load it back
+    $phobos drive unload ${three_lto6_drives[1]}
+    $phobos drive load ${three_lto6_drives[1]} ${four_lto6_tapes[2]}
 
     # Add a new tape and a new drive
     $phobos tape add --type lto6 ${four_lto6_tapes[3]}

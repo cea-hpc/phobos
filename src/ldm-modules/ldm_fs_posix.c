@@ -99,7 +99,7 @@ static char *get_label_path(const char *dir_path)
     char    *res;
     int      rc;
 
-    rc = asprintf(&res, "%s/.phobos_dir_label", dir_path);
+    rc = asprintf(&res, "%s/" PHO_MEDIA_LABEL_FILE, dir_path);
     if (rc < 0)
         return NULL;
 
@@ -120,6 +120,19 @@ static int dir_get_label(const char *mnt_path, char *fs_label, size_t llen,
         LOG_RETURN(-ENOMEM, "Cannot lookup filesystem label at '%s'", mnt_path);
 
     fd = open(label_path, O_RDONLY);
+    if (fd < 0 && errno == ENOENT) {
+        /* the dirs formatted before the unification of the label file
+         * name carry its former name
+         */
+        free(label_path);
+        label_path = NULL;
+        if (asprintf(&label_path, "%s/" PHO_MEDIA_LABEL_LEGACY,
+                     mnt_path) < 0)
+            LOG_RETURN(-ENOMEM, "Cannot lookup filesystem label at '%s'",
+                       mnt_path);
+
+        fd = open(label_path, O_RDONLY);
+    }
     if (fd < 0) {
         rc = -errno;
         pho_verb("Cannot open label: '%s'", label_path);

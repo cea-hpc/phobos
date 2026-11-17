@@ -137,7 +137,6 @@ function test_drive_status_adm_status()
     local tape=$(get_tapes L6 1)
 
     export PHOBOS_LRS_max_health=1
-    export PHOBOS_LTFS_cmd_mount=$(mount_failure_cmd)
 
     setup_tables
     invoke_daemons
@@ -147,6 +146,12 @@ function test_drive_status_adm_status()
 
     $phobos tape add --type lto6 $tape
     $phobos tape format --unlock $tape
+
+    # the format mounts the tape to create its label file: format with a
+    # working mount, only fail the mounts from now on
+    export PHOBOS_LTFS_cmd_mount=$(mount_failure_cmd)
+    waive_lrs
+    invoke_lrs
 
     $phobos put /etc/hosts oid && error "Put should have failed"
     $phobos drive unlock ${drives[1]}

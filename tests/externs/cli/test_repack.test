@@ -813,6 +813,14 @@ function test_used_repack_library_bis
     $phobos put -T origin /etc/hosts oid7
     $phobos put -T alt /etc/hosts oid6
 
+    # The format and the put above leave media mounted in the drives: the
+    # scheduler then takes any mounted compatible medium as the repack
+    # target, without running the medium selection. Unload the drives, so
+    # that the repack really selects the fullest medium.
+    for drive in $drives; do
+        $phobos drive unload $drive
+    done
+
     $valg_phobos tape repack --library library_bis $tape_bis
 
     nb=$($phobos extent list --name $medium_origin | wc -l)

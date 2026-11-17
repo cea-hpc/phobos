@@ -810,7 +810,18 @@ function test_health()
     trap waive_daemons EXIT
     invoke_daemons
 
+    # make the mount of the format (label file creation) succeed, the
+    # failures are meant for the put below
+    echo 2 > /tmp/mount_count
     $phobos tape format --unlock "$tape"
+
+    # the format leaves the tape mounted: unmount it, so that the put
+    # below really mounts it
+    waive_lrs
+    invoke_lrs
+
+    # Reset error count for mount script
+    echo 0 > /tmp/mount_count
     $phobos put /etc/hosts oid ||
         error "Put should have succeeded after 2 failures"
 
@@ -851,7 +862,18 @@ function test_health_medium_failure()
     $phobos drive add ${drives[1]}
     $phobos tape add --type LTO5 "$tape"
 
+    # make the mount of the format (label file creation) succeed, the
+    # failures are meant for the put below
+    echo 2 > /tmp/mount_count
     $phobos tape format --unlock "$tape"
+
+    # the format leaves the tape mounted: unmount it, so that the put
+    # below really mounts it
+    waive_lrs
+    invoke_lrs
+
+    # Reset error count for mount script
+    echo 0 > /tmp/mount_count
     $phobos put /etc/hosts oid ||
         error "Put should have succeeded after 2 failures"
 
@@ -895,8 +917,14 @@ function test_health_device_failure()
     $phobos drive add --unlock $drive
     $phobos tape add --type LTO5 ${tapes[@]}
 
+    # make the mounts of the format (label file creation) succeed, the
+    # failures are meant for the put below
+    echo 2 > /tmp/mount_count
     $phobos tape format ${tapes[@]}
     $phobos tape unlock ${tapes[0]}
+
+    # Reset error count for mount script
+    echo 0 > /tmp/mount_count
     $phobos put /etc/hosts oid ||
         error "Put should have succeeded after 2 failures"
 

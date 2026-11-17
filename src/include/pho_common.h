@@ -42,6 +42,16 @@
 
 #define UUID_LEN 37   // 36 + 1 for the '\0'
 
+/** Name of the label file created on a medium at format, with the fs
+ * label as content, which makes the medium self-descriptive.
+ */
+#define PHO_MEDIA_LABEL_FILE   ".phobos_media_label"
+
+/** Former name of the label file of the dirs, still read for
+ * compatibility with the media formatted before its unification.
+ */
+#define PHO_MEDIA_LABEL_LEGACY ".phobos_dir_label"
+
 enum pho_log_level {
     PHO_LOG_DISABLED = 0,
     PHO_LOG_ERROR    = 1,

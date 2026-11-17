@@ -693,7 +693,8 @@ static int _explore_from_path_aux(struct admin_handle *adm,
         int fd;
 
         if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..") ||
-            !strcmp(entry->d_name, ".phobos_dir_label"))
+            !strcmp(entry->d_name, PHO_MEDIA_LABEL_FILE) ||
+            !strcmp(entry->d_name, PHO_MEDIA_LABEL_LEGACY))
             continue;
 
         rc = asprintf(&path, "%s/%s", root_path, entry->d_name);

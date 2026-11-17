@@ -194,9 +194,22 @@ prepare_mount(struct dss_and_tlc_lib *handle, struct lrs_dev *device)
 
     setenv("PHOBOS_LTFS_cmd_format",
            "../../scripts/pho_ldm_helper format_ltfs \"%s\" \"%s\"", 0);
+    setenv("PHOBOS_LTFS_cmd_mount",
+           "../../scripts/pho_ldm_helper mount_ltfs \"%s\" \"%s\"", 0);
+    setenv("PHOBOS_LTFS_cmd_umount",
+           "../../scripts/pho_ldm_helper umount_ltfs \"%s\" \"%s\"", 0);
 
     rc = dev_format(device, fsa, true);
     assert_return_code(-rc, rc);
+
+    /* the format leaves the medium mounted: unmount it, so that the
+     * tests below really mount it, and drop the logs of the format
+     */
+    rc = dev_umount(device);
+    assert_return_code(-rc, rc);
+
+    rc = dss_logs_delete(&handle->dss, NULL);
+    assert_return_code(rc, -rc);
 
     /* create and load already has taken a reference for us */
     return medium;
