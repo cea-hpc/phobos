@@ -44,6 +44,7 @@
 #define PHO_EA_COPY_NAME            "copy_name"
 #define PHO_EA_GROUPING_NAME        "grouping"
 #define PHO_EA_GENERATION_TIME_NAME "generation_time"
+#define PHO_EA_TAGS_NAME            "tags"
 
 #define PHO_ATTR_BACKUP_JSON_FLAGS (JSON_COMPACT | JSON_SORT_KEYS)
 

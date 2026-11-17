@@ -145,8 +145,8 @@ out_decref:
  *
  * \return 0 on success, negative error code on failure.
  */
-static int dss_string_array_decode(struct string_array *string_array,
-                                   const char *json)
+int dss_string_array_decode(struct string_array *string_array,
+                            const char *json)
 {
     json_error_t     json_error;
     json_t          *array_entry;
@@ -205,7 +205,7 @@ out_free:
  * \return Return a string json object allocated with malloc. The caller must
  *     free() this string.
  */
-static char *dss_string_array_encode(const struct string_array *string_array)
+char *dss_string_array_encode(const struct string_array *string_array)
 {
     json_t  *json;
     size_t   i;

@@ -1000,6 +1000,183 @@ int medium_sync(struct lrs_dev *dev)
     return 0;
 }
 
+/* Read the tags xattr of the label file, through the io adapter of the
+ * medium. *tags is set to the current value of the xattr, in the DSS
+ * encoding, or to NULL when the xattr is not set yet.
+ */
+static int label_file_tags_get(const struct io_adapter_module *ioa,
+                               const char *mnt_path, const char *label_name,
+                               char **tags)
+{
+    struct pho_io_descr iod = {0};
+    struct pho_ext_loc loc = {0};
+    struct extent extent = {0};
+    const char *value;
+    int rc;
+
+    extent.address.buff = (char *)label_name;
+    extent.address.size = strlen(label_name);
+    loc.root_path = (char *)mnt_path;
+    loc.extent = &extent;
+    loc.addr_type = PHO_ADDR_PATH;
+
+    iod.iod_loc = &loc;
+    iod.iod_fd = -1;
+    iod.iod_flags = PHO_IO_MD_ONLY;
+    pho_attr_set(&iod.iod_attrs, PHO_EA_TAGS_NAME, "");
+
+    rc = ioa_get(ioa, NULL, &iod);
+    if (rc)
+        return rc;
+
+    value = pho_attr_get(&iod.iod_attrs, PHO_EA_TAGS_NAME);
+    *tags = value ? xstrdup(value) : NULL;
+
+    pho_attrs_free(&iod.iod_attrs);
+    return 0;
+}
+
+/* Write the tags xattr of the label file, through the io adapter of the
+ * medium. The label file must exist.
+ */
+static int label_file_tags_set(const struct io_adapter_module *ioa,
+                               const char *mnt_path, const char *label_name,
+                               const char *tags)
+{
+    struct pho_io_descr iod = {0};
+    char *label_path = NULL;
+    int rc;
+    int fd;
+
+    rc = asprintf(&label_path, "%s/%s", mnt_path, label_name);
+    if (rc < 0)
+        return -ENOMEM;
+
+    fd = open(label_path, O_WRONLY);
+    if (fd < 0) {
+        rc = -errno;
+        goto out_free;
+    }
+
+    rc = iod_from_fd(ioa, &iod, fd);
+    if (rc == 0) {
+        /* the xattr may already exist on the label file */
+        iod.iod_flags = PHO_IO_REPLACE;
+        pho_attr_set(&iod.iod_attrs, PHO_EA_TAGS_NAME, tags);
+        rc = ioa_set_md(ioa, NULL, &iod);
+    }
+
+    ioa_close(ioa, &iod);
+    pho_attrs_free(&iod.iod_attrs);
+
+out_free:
+    free(label_path);
+    return rc;
+}
+
+/**
+ * Best effort to persist the tags of the medium on the xattrs of its label
+ * file, so that they survive a database loss and are rebuilt by
+ * 'phobos media import'. Never fails: errors are only logged.
+ *
+ * The tags are re-read from the DSS, as they are edited there (phobos
+ * media update), not through the LRS. The xattr is read and written
+ * through the io adapter of the medium, and it is left untouched when it
+ * already holds the same tags, to avoid a useless LTFS index write. The
+ * label file is created at format: a medium formatted before that has
+ * none, and is skipped.
+ */
+static void medium_sync_tags(struct lrs_dev *dev)
+{
+    struct media_info *media_info = dev->ld_dss_media_info;
+    const struct pho_id *med_id = &media_info->rsc.id;
+    struct string_array xattr_tags = {0};
+    struct io_adapter_module *ioa;
+    const char *label_name;
+    char *tags_json = NULL;
+    char *xattr = NULL;
+    int rc;
+
+    if (med_id->family != PHO_RSC_DIR && med_id->family != PHO_RSC_TAPE)
+        return;
+
+    rc = get_io_adapter(media_info->fs.type, &ioa);
+    if (rc) {
+        pho_error(rc, "No suitable I/O adapter for filesystem type: '%s'",
+                  fs_type2str(media_info->fs.type));
+        goto out;
+    }
+
+    label_name = PHO_MEDIA_LABEL_FILE;
+    rc = label_file_tags_get(ioa, dev->ld_mnt_path, label_name, &xattr);
+    if (rc == -ENOENT) {
+        /* the dirs formatted before the unification of the label file
+         * name carry its former name
+         */
+        label_name = PHO_MEDIA_LABEL_LEGACY;
+        rc = label_file_tags_get(ioa, dev->ld_mnt_path, label_name, &xattr);
+        if (rc == -ENOENT) {
+            /* the medium was formatted before the label file was created
+             * at format: there is nothing to persist the tags on
+             */
+            pho_verb("No label file on medium " FMT_PHO_ID ": skipping the "
+                     "tags sync", PHO_ID(*med_id));
+            goto out;
+        }
+    }
+    if (rc) {
+        pho_error(rc, "Could not get the tags xattr of the label file of "
+                      "medium " FMT_PHO_ID, PHO_ID(*med_id));
+        goto out;
+    }
+
+    if (xattr) {
+        rc = dss_string_array_decode(&xattr_tags, xattr);
+        if (rc) {
+            pho_error(rc, "Could not parse the tags xattr of the label file "
+                          "of medium " FMT_PHO_ID ": '%s'",
+                      PHO_ID(*med_id), xattr);
+            goto out;
+        }
+
+        if (string_array_eq(&media_info->tags, &xattr_tags))
+            goto out;
+    } else if (media_info->tags.count == 0) {
+        /* nothing to persist: writing an empty tags xattr would only
+         * cost a useless LTFS index write
+         */
+        goto out;
+    }
+    /* tags to persist on a medium that carries no xattr yet, or different
+     * tags: write the DSS tags
+     */
+
+    tags_json = dss_string_array_encode(&media_info->tags);
+    if (!tags_json) {
+        pho_error(-ENOMEM, "Could not encode the tags of medium "
+                           FMT_PHO_ID, PHO_ID(*med_id));
+        goto out;
+    }
+
+    rc = label_file_tags_set(ioa, dev->ld_mnt_path, label_name, tags_json);
+    if (rc == -EROFS) {
+        /* a read-only mount, e.g. a write-protected tape, cannot take the
+         * xattr: retried at its next writable mount
+         */
+        pho_verb("Read-only mount of medium " FMT_PHO_ID ": skipping the "
+                 "tags sync", PHO_ID(*med_id));
+        goto out;
+    }
+    if (rc)
+        pho_error(rc, "Could not set the tags xattr on the label file of "
+                      "medium " FMT_PHO_ID, PHO_ID(*med_id));
+
+out:
+    string_array_free(&xattr_tags);
+    free(tags_json);
+    free(xattr);
+}
+
 /** Update media_info stats and push its new state to the DSS. Called with a
  * lock on \p dev.
  */
@@ -1102,6 +1279,8 @@ static int dev_sync(struct lrs_dev *dev)
 
     /* Do not sync on error as we don't know what happened on the tape. */
     if (client_rc == 0) {
+        /* the tags xattr is flushed by the sync below */
+        medium_sync_tags(dev);
         rc = medium_sync(dev);
 
         if (!rc) {
@@ -1182,11 +1361,22 @@ int dev_umount(struct lrs_dev *dev)
                    dev->ld_dss_media_info->rsc.id.name,
                    dev->ld_dss_media_info->rsc.id.library, dev->ld_dev_path);
 
+    MUTEX_LOCK(&dev->ld_mutex);
+
+    /*
+     * Last moment the medium filesystem is accessible: persist the tags
+     * on the label file xattrs, if it is still mounted (it may have been
+     * unmounted under our feet, e.g. by hand). The unmount itself
+     * flushes them to the medium.
+     */
+    if (ldm_fs_mounted(fsa, dev->ld_dev_path, dev->ld_mnt_path,
+                       sizeof(dev->ld_mnt_path)) == 0)
+        medium_sync_tags(dev);
+
     /* The pending sync requests are acknowledged by the unmount itself: as
      * no other sync will run on the medium once unmounted, its state is
      * updated in the DSS now, like a sync would do.
      */
-    MUTEX_LOCK(&dev->ld_mutex);
     if (dev->ld_sync_params.tosync_array->len > 0) {
         rc2 = lrs_dev_media_update(dev, dev->ld_sync_params.tosync_size, 0,
                                    dev->ld_sync_params.tosync_nb_extents,

@@ -352,6 +352,23 @@ mockable
 void dss_res_free(void *item_list, int item_cnt);
 
 /**
+ *  Decode a JSON string of an array of strings into a string_array
+ *  @param[out] string_array   string_array filled (strings allocated here)
+ *  @param[in]  json           JSON string of an array of strings
+ *  @return 0 on success, negative error code on failure.
+ */
+int dss_string_array_decode(struct string_array *string_array,
+                            const char *json);
+
+/**
+ *  Encode a string_array to a JSON string
+ *  @param[in]  string_array   string_array to encode
+ *  @return a JSON string allocated with malloc, to be freed by the caller,
+ *          NULL on failure.
+ */
+char *dss_string_array_encode(const struct string_array *string_array);
+
+/**
  * Execute a select query and store the result in item_list
  *
  * @param[in]  handle    Connection handle
