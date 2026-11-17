@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+
+#
+#  All rights reserved (c) 2014-2026 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+# Non-regression test for the tags persisted on the medium label file
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
+
+export PHOBOS_LRS_families="dir,tape"
+
+function setup
+{
+    drain_all_drives
+    setup_tables
+    setup_test_dirs
+
+    DIR_MEDIUM="$(mktemp -d "$DIR_TEST_IN/test_pho.XXXX")"
+    DRIVES="$(get_lto_drives 5 1)"
+    TAPES="$(get_tapes L5 1)"
+    TAPE="$(nodeset -e "${TAPES}")"
+
+    invoke_daemons
+
+    $phobos dir add --tags tag1 "$DIR_MEDIUM"
+    $phobos dir format --unlock "$DIR_MEDIUM"
+
+    for drive in ${DRIVES}; do
+        $phobos drive add --unlock "$drive"
+    done
+
+    $phobos tape add -t lto5 --tags tag1 "$TAPE"
+    $phobos tape format --unlock "$TAPE"
+
+    # the label file created at format leaves the tape empty
+    [[ "$($phobos tape list -o fs.status "$TAPE")" == "empty" ]] ||
+        error "fs status of the tape after its format: " \
+              "'$($phobos tape list -o fs.status "$TAPE")'"
+}
+
+function cleanup
+{
+    waive_daemons
+    drain_all_drives
+
+    cleanup_test_dirs
+    drop_tables
+}
+
+# the tags persisted on the label file of the dir medium, whitespaces
+# removed to compare a stable representation
+function dir_label_tags
+{
+    getfattr -n user.tags -e text --only-values \
+        "$DIR_MEDIUM/.phobos_media_label" | tr -d ' '
+}
+
+# the tags persisted on the label file of the mounted tape, whitespaces
+# removed to compare a stable representation
+function tape_label_tags
+{
+    local mnt
+
+    mnt="$(mount | awk '/^ltfs/ {print $3}')"
+    [[ -n "$mnt" ]] || error "the tape is not mounted"
+
+    getfattr -n user.tags -e text --only-values \
+        "$mnt/.phobos_media_label" | tr -d ' '
+}
+
+function test_dir_tags_sync
+{
+    # the sync of a first put mounts the medium and sets the tags on the
+    # label file
+    $phobos put -f dir /etc/hosts oid_dir1
+
+    [[ "$(dir_label_tags)" == '["tag1"]' ]] ||
+        error "tags of the dir label file after the put: " \
+              "got '$(dir_label_tags)'"
+
+    # a media update only writes the database: the label file is not
+    # refreshed
+    $phobos dir update --tags tag1,tag2 "$DIR_MEDIUM"
+
+    [[ "$(dir_label_tags)" == '["tag1"]' ]] ||
+        error "tags of the dir label file should not be refreshed by " \
+              "the update: got '$(dir_label_tags)'"
+
+    # the sync of the next put refreshes the label file
+    $phobos put -f dir /etc/hosts oid_dir2
+
+    [[ "$(dir_label_tags)" == '["tag1","tag2"]' ]] ||
+        error "tags of the dir label file after the update and the " \
+              "second put: got '$(dir_label_tags)'"
+
+    # an update does not refresh the label file, but the umount of the
+    # daemon shutdown does
+    $phobos dir update --tags tag1,tag2,tag3 "$DIR_MEDIUM"
+
+    [[ "$(dir_label_tags)" == '["tag1","tag2"]' ]] ||
+        error "tags of the dir label file should not be refreshed by " \
+              "the update: got '$(dir_label_tags)'"
+
+    waive_daemons
+
+    [[ "$(dir_label_tags)" == '["tag1","tag2","tag3"]' ]] ||
+        error "tags of the dir label file after the umount: " \
+              "got '$(dir_label_tags)'"
+
+    return 0
+}
+
+function test_tape_tags_sync
+{
+    invoke_daemons
+
+    $phobos put -f tape /etc/hosts oid_tape1
+
+    [[ "$(tape_label_tags)" == '["tag1"]' ]] ||
+        error "tags of the tape label file after the put: " \
+              "got '$(tape_label_tags)'"
+
+    # a media update only writes the database: the label file is not
+    # refreshed
+    $phobos tape update --tags tag1,tag2 "$TAPE" ||
+        error "update of the tape failed"
+
+    [[ "$(tape_label_tags)" == '["tag1"]' ]] ||
+        error "tags of the tape label file should not be refreshed by " \
+              "the update: got '$(tape_label_tags)'"
+
+    # the sync of the next put refreshes the label file
+    $phobos put -f tape /etc/hosts oid_tape2 ||
+        error "put of oid_tape2 failed"
+
+    [[ "$(tape_label_tags)" == '["tag1","tag2"]' ]] ||
+        error "tags of the tape label file after the update and the " \
+              "second put: got '$(tape_label_tags)'"
+
+    # an update does not refresh the label file, and a read-only mount
+    # never syncs: only the umount below can refresh it
+    $phobos tape update --tags tag1,tag2,tag3 "$TAPE" ||
+        error "update of the tape failed"
+
+    [[ "$(tape_label_tags)" == '["tag1","tag2"]' ]] ||
+        error "tags of the tape label file should not be refreshed by " \
+              "the update: got '$(tape_label_tags)'"
+
+    # the update is committed to the database, unlike the label file
+    local tags
+    tags="$($phobos tape list -o tags "$TAPE")"
+    [[ "$tags" == "['tag1', 'tag2', 'tag3']" ]] ||
+        error "tags of the tape in the database after the update: " \
+              "got '$tags'"
+
+    waive_daemons
+    drain_all_drives
+
+    # the umount refreshed the label file: the read-only mount of the
+    # get does not sync, so the third tag can only come from it
+    invoke_daemons
+
+    $phobos get oid_tape1 "$DIR_TEST_OUT/oid_tape1"
+
+    [[ "$(tape_label_tags)" == '["tag1","tag2","tag3"]' ]] ||
+        error "tags of the tape label file after the umount: " \
+              "got '$(tape_label_tags)'"
+
+    return 0
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Tapes are required for this test"
+fi
+
+TESTS=("setup; \
+            test_dir_tags_sync; \
+            test_tape_tags_sync; \
+        cleanup")

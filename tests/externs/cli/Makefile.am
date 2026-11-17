@@ -83,6 +83,7 @@ check_SCRIPTS=acceptance.test \
               test_media_ranking.test \
               test_media_rebuild.test \
               test_media_refresh_gc_stats.test \
+              test_media_tags_sync.test \
               test_multilibrary.test \
               test_mput_no_split.test \
               test_object_list.test \
