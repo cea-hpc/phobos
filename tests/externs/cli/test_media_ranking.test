@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+
+#
+#  All rights reserved (c) 2014-2026 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for the media ranking in the write allocation.
+#
+# The ranking only decides between the media with the same free space,
+# and only for the media that are neither loaded nor mounted: a loaded
+# or mounted medium is reused as is by the write scheduler. Both cases
+# are checked on two LTO tapes of the same type, whose free space after
+# the format is the same (the capacity reported by the format only
+# depends on the type of the tape):
+#
+# - with the same free space, a put must go to the tape with the lowest
+#   ranking;
+#
+# - once the tape that received this put has less free space than the
+#   other one, its ranking is raised above the other tape: a new put
+#   must select it again, as the best-fit policy prefers the medium
+#   with the least free space that fits the object, whatever its
+#   ranking.
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+function setup_media_ranking
+{
+    export PHOBOS_LRS_use_media_ranking="tape=true"
+
+    drain_all_drives
+    setup_tables
+    invoke_daemons
+}
+
+function cleanup_media_ranking
+{
+    waive_daemons
+    drop_tables
+    drain_all_drives
+}
+
+# Check that the object was written to the expected tape of the pair.
+# The message shows the rankings and the free spaces of both tapes, the
+# only inputs of the selection between unloaded media.
+function check_written_medium()
+{
+    local oid=$1
+    local expected_tape=$2
+    local other_tape=$3
+    local medium
+
+    medium=$($phobos extent list --output media_name ${oid})
+    if [[ "${medium}" != "['${expected_tape}']" ]]; then
+        local sfield="stats.phys_spc_free"
+        local expected_rank
+        local other_rank
+        local expected_free
+        local other_free
+
+        expected_rank=$($phobos tape list --output ranking ${expected_tape})
+        other_rank=$($phobos tape list --output ranking ${other_tape})
+        expected_free=$($phobos tape list --output ${sfield} ${expected_tape})
+        other_free=$($phobos tape list --output ${sfield} ${other_tape})
+
+        error "Object '${oid}' must be written to '${expected_tape}'," \
+              "not to '${medium}': rankings" \
+              "${expected_rank}/${other_rank}, free space" \
+              "${expected_free}/${other_free}"
+    fi
+}
+
+function test_ranked_tape_selection
+{
+    local tapes=($(get_tapes L6 2 | nodeset -e))
+    local drives=($(get_lto_drives 6 2))
+
+    if [ ${#tapes[@]} -ne 2 ]; then
+        error "Only ${#tapes[@]} LTO6 tapes available, 2 needed"
+    fi
+    if [ ${#drives[@]} -ne 2 ]; then
+        error "Only ${#drives[@]} LTO6 drives available, 2 needed"
+    fi
+
+    $phobos drive add --unlock ${drives[@]} ||
+        error "Failed to add the drives"
+
+    # Add the highest ranked tape first: the selection must not be
+    # driven by the order of the media
+    $phobos tape add --type lto6 --ranking 5 --unlock ${tapes[0]} ||
+        error "Failed to add ${tapes[0]}"
+    $phobos tape add --type lto6 --ranking 1 --unlock ${tapes[1]} ||
+        error "Failed to add ${tapes[1]}"
+
+    # The format leaves each tape loaded and mounted in a drive:
+    # unload them, so that the puts go through the medium selection of
+    # the DSS, where the ranking orients the selection. The two tapes
+    # of a same type have the same free space once formatted, so the
+    # lowest ranked tape must be selected.
+    $phobos tape format --unlock ${tapes[0]} ${tapes[1]} ||
+        error "Failed to format ${tapes[0]} and ${tapes[1]}"
+
+    waive_lrs
+    $phobos drive unload ${drives[0]}
+    $phobos drive unload ${drives[1]}
+    invoke_lrs
+
+    $valg_phobos put -f tape /etc/hosts obj_ranking_1 ||
+        error "Failed to put obj_ranking_1"
+    check_written_medium obj_ranking_1 ${tapes[1]} ${tapes[0]}
+
+    # The tape that received the first put has less free space than the
+    # other one now: raise its ranking above the other tape, and check
+    # that a new put selects it again, as the best-fit policy prefers
+    # the medium with the least free space that fits the object,
+    # whatever the ranking. Unload the drives again: the tape that
+    # received the first put stayed loaded in a drive, where it would
+    # be reused without any selection.
+    waive_lrs
+    $phobos drive unload ${drives[0]}
+    $phobos drive unload ${drives[1]}
+    invoke_lrs
+    $phobos tape update --ranking 10 ${tapes[1]} ||
+        error "Failed to raise the ranking of ${tapes[1]}"
+
+    $valg_phobos put -f tape /etc/hosts obj_ranking_2 ||
+        error "Failed to put obj_ranking_2"
+    check_written_medium obj_ranking_2 ${tapes[1]} ${tapes[0]}
+
+    return 0
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Drives required for this test"
+fi
+
+TESTS=("setup_media_ranking; test_ranked_tape_selection; cleanup_media_ranking")
