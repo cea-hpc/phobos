@@ -962,6 +962,8 @@ int dss_unlock(struct dss_handle *handle, enum dss_type type,
  * The function will attempt to query the status of as many locks as possible.
  * Should any query fail, the first error code obtained will be returned after
  * attempting to query all other locks's statuses (as-much-as-possible policy).
+ * Any error other than -ENOLCK supersedes -ENOLCK, which only indicates that
+ * some items are not locked.
  *
  * @param[in]   handle          DSS handle.
  * @param[in]   type            Type of the ressources's lock to query.

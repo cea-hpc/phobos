@@ -627,7 +627,8 @@ int dss_lock_status(struct dss_handle *handle, enum dss_type type,
         rc2 = basic_status(handle, type, ids[i]->str, locks ? locks + i : NULL);
 
         if (rc2) {
-            rc = rc ? : rc2;
+            /* -ENOLCK means "not locked": let hard errors supersede it */
+            rc = (rc == 0 || rc == -ENOLCK) ? rc2 : rc;
             pho_debug("Failed to status %s (%s)", ids[i]->str, strerror(-rc2));
         }
     }
