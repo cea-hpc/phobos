@@ -539,6 +539,17 @@ static int append_stat_update_request(PGconn *conn, GString *request,
     return 0;
 }
 
+#define MEDIA_UPDATE_ALL_FIELDS (ADM_STATUS | FS_STATUS | FS_LABEL | \
+                                 NB_EXTENT_ADD | LOGC_SPC_USED_ADD | \
+                                 PHYS_SPC_USED | PHYS_SPC_FREE | TAGS | \
+                                 PUT_ACCESS | GET_ACCESS | DELETE_ACCESS | \
+                                 NB_EXTENT | LOGC_SPC_USED | LIBRARY | \
+                                 GROUPINGS | LAST_LOAD | NB_ERRORS_ADD | \
+                                 NB_EXTENT_ORPHAN | LOGC_SPC_ORPHAN | \
+                                 NB_EXTENT_DEPRECATED | \
+                                 LOGC_SPC_DEPRECATED | LAST_GC_REFRESH | \
+                                 RANKING)
+
 // XXX: feels like updates could be managed the same as filters, with the caller
 // specifying what to update and the value directly
 static int media_update_query(PGconn *conn, void *src_med, void *dst_med,
@@ -547,8 +558,9 @@ static int media_update_query(PGconn *conn, void *src_med, void *dst_med,
 {
     int rc = 0;
 
-    if (update_fields == 0)
-        return -EINVAL;
+    if (update_fields == 0 || update_fields & ~MEDIA_UPDATE_ALL_FIELDS)
+        LOG_RETURN(-EINVAL, "Invalid media update fields mask: %#lx",
+                   (unsigned long) update_fields);
 
     for (int i = 0; i < item_cnt; ++i) {
         struct media_info *src = ((struct media_info *) src_med) + i;
