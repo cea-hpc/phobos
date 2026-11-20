@@ -537,6 +537,10 @@ int phobos_admin_media_delete(struct admin_handle *adm, struct pho_id *med_ids,
  * Imports non-empty media into the DSS without formatting them thus preserving
  * the data on the device.
  *
+ * A negative ranking in a medium of \p med_ls means that no ranking was
+ * specified for it: it gets the default ranking of its family, like the
+ * media added with phobos_admin_media_add().
+ *
  * @param[in]  adm          Admin handle.
  * @param[in]  med_ls       List of media to import.
  * @param[in]  n_ids        Number of media to import.
@@ -563,9 +567,9 @@ int phobos_admin_media_import(struct admin_handle *adm,
  *
  * The ranking of a medium must be non-negative: -EINVAL is returned when
  * the RANKING field is updated with a negative value. A negative ranking
- * is only accepted by phobos_admin_media_add, where it means that no
- * ranking was given, and the medium then gets the default ranking of its
- * family.
+ * is only accepted by phobos_admin_media_add and
+ * phobos_admin_media_import, where it means that no ranking was given,
+ * and the medium then gets the default ranking of its family.
  *
  * @param[in]      adm        Admin handle.
  * @param[in,out]  src_med    List of media identifying the DSS rows to

@@ -38,27 +38,101 @@
 #   with the least free space that fits the object, whatever its
 #   ranking.
 #
+# The ranking is also tested against the import feature.
 
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
 . $test_dir/setup_db.sh
 . $test_dir/test_launch_daemon.sh
 . $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
 
-function setup_media_ranking
+function setup_dir_ranking
+{
+    setup_tables
+
+    DIR1=$(make_tmp_fs 1M)
+    DIR2=$(make_tmp_fs 1M)
+    DIR3=$(make_tmp_fs 1M)
+
+    invoke_lrs
+}
+
+function cleanup_dir_ranking
+{
+    waive_lrs
+    drop_tables
+
+    cleanup_tmp_fs ${DIR1}
+    cleanup_tmp_fs ${DIR2}
+    cleanup_tmp_fs ${DIR3}
+}
+
+function setup_tape_ranking
 {
     export PHOBOS_LRS_use_media_ranking="tape=true"
 
     drain_all_drives
     setup_tables
     invoke_daemons
+
+    tapes=($(get_tapes L6 2 | nodeset -e))
+    drives=($(get_lto_drives 6 2))
+
+    if [ ${#tapes[@]} -ne 2 ]; then
+        error "Only ${#tapes[@]} LTO6 tapes available, 2 needed"
+    fi
+    if [ ${#drives[@]} -ne 2 ]; then
+        error "Only ${#drives[@]} LTO6 drives available, 2 needed"
+    fi
+
 }
 
-function cleanup_media_ranking
+function cleanup_tape_ranking
 {
     waive_daemons
     drop_tables
     drain_all_drives
+}
+
+# Check that a medium imported with no ranking gets the default ranking
+# of its family, like a medium added with no ranking, and that an
+# imported medium can be given an explicit ranking.
+function test_dir_import_ranking
+{
+    $phobos dir add ${DIR1} ${DIR2}
+    $phobos dir format ${DIR1} ${DIR2}
+
+    # simulate the loss of the database that held the media written by
+    # the previous test
+    waive_lrs
+    drop_tables
+    setup_tables
+    invoke_lrs
+
+    # a medium with a dominant ranking: the default ranking of the dir
+    # family is its ranking, not the neutral value 0
+    $phobos dir add --ranking 100 ${DIR3} ||
+        error "Failed to add ${DIR3}"
+
+    # DIR1 imported with no ranking, it must get the default ranking of its
+    # family
+    $phobos dir import --unlock ${DIR1} ||
+        error "Failed to import ${DIR1}"
+
+    local ranking=$($phobos dir list --output ranking ${DIR1})
+    [[ "${ranking}" == "100" ]] ||
+        error "Imported ${DIR1} must get the default ranking 100, not ${ranking}"
+
+    # DIR2 must get the ranking explicitly given to the import
+    $phobos dir import --unlock --ranking 7 ${DIR2} ||
+        error "Failed to import ${DIR2}"
+
+    ranking=$($phobos dir list --output ranking ${DIR2})
+    [[ "${ranking}" == "7" ]] ||
+        error "Imported ${DIR2} must get the ranking 7, not ${ranking}"
+
+    return 0
 }
 
 # Check that the object was written to the expected tape of the pair.
@@ -93,16 +167,6 @@ function check_written_medium()
 
 function test_ranked_tape_selection
 {
-    local tapes=($(get_tapes L6 2 | nodeset -e))
-    local drives=($(get_lto_drives 6 2))
-
-    if [ ${#tapes[@]} -ne 2 ]; then
-        error "Only ${#tapes[@]} LTO6 tapes available, 2 needed"
-    fi
-    if [ ${#drives[@]} -ne 2 ]; then
-        error "Only ${#drives[@]} LTO6 drives available, 2 needed"
-    fi
-
     $phobos drive add --unlock ${drives[@]} ||
         error "Failed to add the drives"
 
@@ -151,8 +215,49 @@ function test_ranked_tape_selection
     return 0
 }
 
-if [[ ! -w /dev/changer ]]; then
-    skip "Drives required for this test"
-fi
+# Check that a medium imported with no ranking gets the default ranking
+# of its family, like a medium added with no ranking, and that an
+# imported medium can be given an explicit ranking.
+# We reuse the media of the previous tape test.
+function test_tape_import_ranking
+{
+    # simulate the loss of the database that held the media written by
+    # the previous test
+    waive_daemons
+    drop_tables
+    setup_tables
+    drain_all_drives
+    invoke_daemons
 
-TESTS=("setup_media_ranking; test_ranked_tape_selection; cleanup_media_ranking")
+    $phobos drive add --unlock ${drives[@]} ||
+        error "Failed to add the drives"
+
+
+    # tape1 imported with no ranking, it must get the default ranking of its
+    # family
+    $phobos tape import --type lto6 ${tapes[0]} ||
+        error "Failed to import ${tapes[0]}"
+
+    local rank=$($phobos tape list --output ranking ${tapes[0]})
+    [[ "${rank}" == "0" ]] ||
+        error "Imported ${tapes[0]} must get the default ranking 0, not ${rank}"
+
+    # tape2 must get the ranking explicitly given to the import
+    $phobos tape import --type lto6 --ranking 7 ${tapes[1]} ||
+        error "Failed to import ${tapes[1]}"
+
+    rank=$($phobos tape list --output ranking ${tapes[1]})
+    [[ "${rank}" == "7" ]] ||
+        error "Imported ${tapes[1]} must get the ranking 7, not ${rank}"
+
+    return 0
+}
+
+TESTS=("setup_dir_ranking; test_dir_import_ranking; cleanup_dir_ranking")
+
+if [[ -w /dev/changer ]]; then
+    TESTS+=("setup_tape_ranking; \
+            test_ranked_tape_selection; \
+            test_tape_import_ranking; \
+            cleanup_tape_ranking")
+fi

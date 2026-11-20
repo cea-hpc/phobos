@@ -131,6 +131,17 @@ class MediaImportOptHandler(XferOptHandler):
         parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
                             help='tags to associate with this media (comma-'
                                  'separated: foo,bar)')
+        parser.add_argument('--ranking', type=parse_ranking,
+                            help='Non-negative ranking of the imported '
+                                 'media, to orient their selection (the '
+                                 'lower, the preferred): a single value is '
+                                 'applied to all the imported media, while '
+                                 'a nodeset of values is attributed to the '
+                                 'imported media, in the nodeset order; '
+                                 'with no ranking, the media get the '
+                                 'default ranking of their family, as '
+                                 'configured with default_ranking (see '
+                                 'phobos-conf(1))')
 
 
 class MediaListOptHandler(ListOptHandler):
@@ -666,12 +677,15 @@ class MediaOptHandler(BaseResourceOptHandler):
             tags = []
         set_library(self)
 
+        rankings = self._build_rankings(self.params.get('ranking'),
+                                        len(media_names))
+
         # a plain list, not a ctypes array: the elements must stay alive
         # until after the C call, which sets their tags in place
         media = [MediaInfo(family=self.family, name=medium_name,
                            model=techno, is_adm_locked=adm_locked,
-                           library=self.library)
-                 for medium_name in media_names]
+                           library=self.library, ranking=rank)
+                 for medium_name, rank in zip(media_names, rankings)]
         try:
             with AdminClient(lrs_required=True) as adm:
                 adm.medium_import(fstype, media, tags)

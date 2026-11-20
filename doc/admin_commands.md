@@ -260,9 +260,9 @@ with the lowest ranking is preferred. This only applies to the media
 families with `use_media_ranking` enabled in the LRS configuration
 (tape by default).
 
-`--ranking` is accepted by the media addition and update commands. It
-contains either a single value, applied to all the targeted media, or
-a nodeset of values: the nodeset must then contain as many values as
+`--ranking` is accepted by the media add, import and update commands.
+It contains either a single value, applied to all the targeted media,
+or a nodeset of values: the nodeset must then contain as many values as
 the command targets media, and the values are attributed in the
 nodeset order (the i-th value to the i-th medium).
 
@@ -270,8 +270,8 @@ The ranking values are non-negative: negative values are reserved
 internally, to tell that no ranking was given to an addition command,
 and are rejected by the ranking options.
 
-When no ranking is given to an addition command, the added media get
-the default ranking of their family, as configured with
+When no ranking is given to an addition command (add or import), the
+added media get the default ranking of their family, as configured with
 `default_ranking` in the `[admin]` section (see phobos-conf(1)):
 `stationary`, the default, assigns them the highest ranking value
 currently in the DSS for their family, and `growing` assigns them this

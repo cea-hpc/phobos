@@ -2499,6 +2499,8 @@ int phobos_admin_media_import(struct admin_handle *adm,
                               struct media_info *med_ls,
                               int med_cnt)
 {
+    bool ranking_resolved[PHO_RSC_LAST] = {false};
+    int default_rankings[PHO_RSC_LAST] = {0};
     struct dss_filter filter;
     struct copy_info *copy;
     int cpy_cnt;
@@ -2507,6 +2509,32 @@ int phobos_admin_media_import(struct admin_handle *adm,
     int i;
 
     ENTRY;
+
+    /* A negative ranking means that none was specified: assign to
+     * the medium the default ranking of its family.
+     */
+    for (i = 0; i < med_cnt; i++) {
+        enum rsc_family family = med_ls[i].rsc.id.family;
+        struct media_info *medium = &med_ls[i];
+
+        if (family < 0 || family >= PHO_RSC_LAST)
+            LOG_RETURN(-EINVAL, "Medium '%s' has an invalid family",
+                       medium->rsc.id.name);
+
+        if (medium->ranking >= 0)
+            continue;
+
+        if (!ranking_resolved[family]) {
+            rc = get_default_media_ranking(adm, family,
+                                           &default_rankings[family]);
+            if (rc)
+                return rc;
+
+            ranking_resolved[family] = true;
+        }
+
+        medium->ranking = default_rankings[family];
+    }
 
     for (i = 0; i < med_cnt; i++) {
         const struct pho_id *medium = &med_ls[i].rsc.id;
