@@ -105,10 +105,10 @@ class MediaAddOptHandler(AddOptHandler):
                                  'preferred): a single value is applied to '
                                  'all the added media, while a nodeset of '
                                  'values is attributed to the added media, '
-                                 'in the nodeset order; with no ranking, the '
-                                 'media get the default ranking of their '
-                                 'family, as configured with '
-                                 'default_ranking (see phobos-conf(1))')
+                                 'in ascending order of its distinct values; '
+                                 'with no ranking, the media get the default '
+                                 'ranking of their family, as configured '
+                                 'with default_ranking (see phobos-conf(1))')
 
 
 class MediaImportOptHandler(XferOptHandler):
@@ -137,11 +137,11 @@ class MediaImportOptHandler(XferOptHandler):
                                  'lower, the preferred): a single value is '
                                  'applied to all the imported media, while '
                                  'a nodeset of values is attributed to the '
-                                 'imported media, in the nodeset order; '
-                                 'with no ranking, the media get the '
-                                 'default ranking of their family, as '
-                                 'configured with default_ranking (see '
-                                 'phobos-conf(1))')
+                                 'imported media, in ascending order of its '
+                                 'distinct values; with no ranking, the '
+                                 'media get the default ranking of their '
+                                 'family, as configured with '
+                                 'default_ranking (see phobos-conf(1))')
 
 
 class MediaListOptHandler(ListOptHandler):
@@ -280,7 +280,8 @@ class MediaUpdateOptHandler(ActionOptHandler):
                                  'the preferred): a single value is '
                                  'applied to all the updated media, while '
                                  'a nodeset of values is attributed to '
-                                 'the targeted media, in the nodeset order')
+                                 'the targeted media, in ascending order '
+                                 'of its distinct values')
         parser.add_argument('-L', '--library',
                             help="Library containing the medium to update")
         parser.add_argument('res', nargs='+', help='Resource(s) to update')

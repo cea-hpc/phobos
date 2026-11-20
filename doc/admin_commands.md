@@ -262,9 +262,12 @@ families with `use_media_ranking` enabled in the LRS configuration
 
 `--ranking` is accepted by the media add, import and update commands.
 It contains either a single value, applied to all the targeted media,
-or a nodeset of values: the nodeset must then contain as many values as
-the command targets media, and the values are attributed in the
-nodeset order (the i-th value to the i-th medium).
+or a nodeset of values: the nodeset must then contain as many distinct
+values as the command targets media, and the values are attributed in
+ascending order (the i-th value to the i-th medium). Like any nodeset,
+it is sorted and deduplicated, regardless of the order of the input:
+`--ranking 30,10,20` is equivalent to `--ranking 10,20,30`, and
+`--ranking 3,3,5` only contains the values 3 and 5.
 
 The ranking values are non-negative: negative values are reserved
 internally, to tell that no ranking was given to an addition command,
