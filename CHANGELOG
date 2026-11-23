@@ -60,6 +60,10 @@
    a default ranking for the media added with no ranking (default_ranking).
  * Add the "--version" option to the phobos command, printing the version
    defined by configure.ac.
+ * The tapes now get their label file at format, like the dirs, and the
+   media tags are persisted on its xattrs, updated at each sync and unmount.
+   When importing media, the tags are taken from the label file, or from
+   the --tags option when it is given.
 
 ## 3.4.1
  * Grouped read: queue preallocation has been improved to guarantee the
