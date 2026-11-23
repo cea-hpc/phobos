@@ -58,7 +58,7 @@ int mnttab_foreach(mntent_cb_t cb_func, void *cb_data)
         LOG_GOTO(out_free, rc = -errno, "Failed to open mount table");
 
     while ((p_mnt = getmntent_r(fp, &mnt_ent, mnt_buff,
-                                sizeof(mnt_buff))) != NULL) {
+                                page_size)) != NULL) {
         pho_debug("mount tab: fs='%s', type='%s'", p_mnt->mnt_fsname,
                   p_mnt->mnt_type);
         rc = cb_func(p_mnt, cb_data);
