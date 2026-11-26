@@ -103,7 +103,8 @@ check_SCRIPTS=acceptance.test \
               test_tlc_status_refresh.test \
               test_undelete.test \
               test_unload_with_source_set_to_drive.test \
-              test_unlock_at_unload.test
+              test_unlock_at_unload.test \
+              test_version.test
 
 if RADOS_ENABLED
 check_SCRIPTS+=test_store_rados_commands.sh test_locate_rados.test \

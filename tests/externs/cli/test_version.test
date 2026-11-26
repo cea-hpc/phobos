@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+#
+#  All rights reserved (c) 2014-2026 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for the version of the phobos command.
+#
+# 'phobos --version' gets its version from the macros that configure.ac
+# defines for every component of phobos: it must print the very version
+# that configure.ac currently defines.
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+
+function get_version_component
+{
+    sed -n "s/^m4_define(\[PHOBOS_VERSION_$1\], \[\([0-9]\+\)\]).*/\1/p" \
+        "$test_bin_dir/../configure.ac"
+}
+
+function test_version
+{
+    local major
+    local minor
+    local patch
+    local expected
+    local output
+
+    major=$(get_version_component MAJOR)
+    minor=$(get_version_component MINOR)
+    patch=$(get_version_component PATCH)
+
+    if [[ -z "$major" || -z "$minor" || -z "$patch" ]]; then
+        error "failed to get the version from configure.ac"
+    fi
+
+    expected="phobos $major.$minor.$patch"
+    output=$($phobos --version) || error "phobos --version should succeed"
+
+    [[ "$output" == "$expected" ]] ||
+        error "phobos --version printed '$output' instead of '$expected'"
+}
+
+TESTS=(test_version)

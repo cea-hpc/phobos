@@ -299,6 +299,11 @@ PyMODINIT_FUNC PyInit_const(void)
     if (mod == NULL)
         return NULL;
 
+    /* Phobos version */
+    PyModule_AddIntMacro(mod, PHOBOS_MAJOR);
+    PyModule_AddIntMacro(mod, PHOBOS_MINOR);
+    PyModule_AddIntMacro(mod, PHOBOS_PATCH);
+
     /* Misc. constants */
     PyModule_AddIntMacro(mod, PHO_URI_MAX);
 

@@ -38,6 +38,8 @@ else:
     ARGCOMPLETE_AVAILABLE = True
 
 from phobos.core import cfg
+from phobos.core.const import (PHOBOS_MAJOR, PHOBOS_MINOR, # pylint: disable=no-name-in-module
+                               PHOBOS_PATCH)
 from phobos.core.dss import Client as DSSClient
 from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
 from phobos.core.store import XferClient
@@ -273,6 +275,11 @@ class PhobosActionContext:
         self.parser.add_argument(
             '-c', '--config',
             help='alternative configuration file'
+        )
+        self.parser.add_argument(
+            '--version',
+            action='version',
+            version=f'phobos {PHOBOS_MAJOR}.{PHOBOS_MINOR}.{PHOBOS_PATCH}',
         )
 
         sub = self.parser.add_subparsers(dest='goal')
